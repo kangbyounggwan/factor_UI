@@ -1,0 +1,15 @@
+{
+  "name": "factor-hibrid",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:host": "npm --workspace @factor/host run dev",
+    "dev:web": "npm --workspace @factor/web run dev",
+    "dev:mobile": "npm --workspace @factor/mobile run dev",
+    "build:host": "npm --workspace @factor/host run build",
+    "build:web": "npm --workspace @factor/web run build",
+    "build:mobile": "npm --workspace @factor/mobile run build"
+  }
+}

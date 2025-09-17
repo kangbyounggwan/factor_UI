@@ -1,0 +1,10 @@
+@import "@shared/styles/tokens.css";
+@import "@shared/styles/mobile-overrides.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+
+

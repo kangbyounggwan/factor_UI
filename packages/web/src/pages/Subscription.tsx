@@ -1,0 +1,453 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@shared/contexts/AuthContext";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { 
+  Crown,
+  Check,
+  Zap,
+  ArrowLeft,
+  CreditCard,
+  Calendar,
+  Users,
+  Shield,
+  Headphones,
+  Rocket,
+  Mail
+} from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+// 구독 플랜 타입
+interface SubscriptionPlan {
+  id: string;
+  name: string;
+  price: number;
+  interval: "month" | "year";
+  features: string[];
+  max_printers: number;
+  popular?: boolean;
+  current?: boolean;
+  description: string;
+  color: string;
+}
+
+// 구독 플랜 상세 정보
+const getSubscriptionPlans = (isYearly: boolean): SubscriptionPlan[] => [
+  {
+    id: "basic",
+    name: "Basic",
+    price: 0,
+    interval: isYearly ? "year" : "month",
+    max_printers: 2,
+    description: "개인 사용자를 위한 기본 플랜",
+    color: "bg-muted",
+    features: [
+      "최대 2대 프린터 연결",
+      "기본 모니터링 기능",
+      "이메일 알림",
+      "커뮤니티 지원"
+    ],
+    current: true
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    price: isYearly ? 192 : 20, // 연간 20% 할인 (월 16달러)
+    interval: isYearly ? "year" : "month",
+    max_printers: 10,
+    description: "소규모 팀과 전문가를 위한 플랜",
+    color: "bg-primary",
+    features: [
+      "최대 10대 프린터 연결",
+      "실시간 모니터링",
+      "고급 분석 및 통계",
+      "SMS 및 푸시 알림",
+      "우선 지원",
+      "API 접근 권한"
+    ],
+    popular: true
+  },
+  {
+    id: "enterprise",
+    name: "Enterprise",
+    price: -1, // Contact us
+    interval: isYearly ? "year" : "month",
+    max_printers: -1,
+    description: "대규모 조직을 위한 엔터프라이즈 플랜",
+    color: "bg-primary",
+    features: [
+      "무제한 프린터 연결",
+      "고급 팀 관리 기능",
+      "엔터프라이즈급 보안",
+      "전용 계정 매니저",
+      "24/7 전화 지원",
+      "고급 API 및 웹훅"
+    ]
+  }
+];
+
+const Subscription = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [isYearly, setIsYearly] = useState(false);
+  
+  const subscriptionPlans = getSubscriptionPlans(isYearly);
+  
+  // 로그인된 사용자일 때만 현재 플랜 표시
+  const currentPlan = user ? subscriptionPlans.find(plan => plan.current) : null;
+
+  const handleUpgrade = (planId: string) => {
+    if (planId === 'enterprise') {
+      // Enterprise는 Contact Us로 처리
+      window.open('mailto:contact@example.com?subject=Enterprise Plan Inquiry', '_blank');
+      return;
+    }
+    setSelectedPlan(planId);
+    // 여기에 결제 로직 구현
+    console.log(`Upgrading to plan: ${planId}`);
+  };
+
+  const formatPrice = (price: number) => {
+    if (price === 0) return "무료";
+    if (price === -1) return "문의";
+    return `$${price}`;
+  };
+
+  useEffect(() => {
+    const title = '구독 플랜 및 가격 | 프린터 관리 플랫폼';
+    const desc = '프린터 팜을 위한 구독 플랜과 가격을 비교하고, 가장 알맞은 요금제로 바로 업그레이드하세요.';
+    document.title = title;
+
+    let meta = document.querySelector('meta[name="description"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'description');
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute('content', desc);
+
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.setAttribute('rel', 'canonical');
+      document.head.appendChild(canonical);
+    }
+    canonical.setAttribute('href', `${window.location.origin}/subscription`);
+
+    // JSON-LD 구조화 데이터 (상품/오퍼)
+    const offers = subscriptionPlans
+      .filter((p) => p.price >= 0)
+      .map((p) => ({
+        '@type': 'Offer',
+        name: p.name,
+        price: p.price,
+        priceCurrency: 'USD',
+        availability: 'https://schema.org/InStock',
+      }));
+
+    const jsonLd = {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: '3D 프린터 관리 구독',
+      description: desc,
+      offers,
+    } as const;
+
+    const prev = document.getElementById('subscription-jsonld');
+    if (prev) prev.remove();
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.id = 'subscription-jsonld';
+    script.text = JSON.stringify(jsonLd);
+    document.head.appendChild(script);
+  }, [subscriptionPlans]);
+
+  return (
+    <div className="bg-background min-h-screen p-6">
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* 헤더 */}
+        <header className="space-y-4">
+          <Button 
+            variant="ghost" 
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            뒤로 가기
+          </Button>
+          
+          <div className="space-y-2">
+            <h1 className="text-4xl font-bold flex items-center gap-3">
+              <Crown className="h-10 w-10 text-primary" />
+              구독 플랜 및 가격
+            </h1>
+            <p className="text-lg text-muted-foreground">
+              프린터 팜을 위한 최적의 플랜을 선택하세요
+            </p>
+          </div>
+        </header>
+
+        {/* 현재 구독 정보 - 로그인된 사용자만 표시 */}
+        {currentPlan && user && (
+          <Card className="border-primary bg-primary/5 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full -translate-y-16 translate-x-16"></div>
+            <CardHeader className="relative">
+              <CardTitle className="flex items-center gap-3 text-2xl">
+                <Crown className="h-6 w-6 text-primary" />
+                현재 플랜: {currentPlan.name}
+                <Badge variant="outline" className="ml-2">활성</Badge>
+              </CardTitle>
+              <p className="text-muted-foreground">{currentPlan.description}</p>
+            </CardHeader>
+            <CardContent className="space-y-6 relative">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <div className="text-3xl font-bold">
+                    {formatPrice(currentPlan.price)}
+                  </div>
+                  {currentPlan.price > 0 && (
+                    <div className="text-sm text-muted-foreground">월간 결제</div>
+                  )}
+                </div>
+                <div className="text-right space-y-1">
+                  <div className="text-sm text-muted-foreground">다음 결제일</div>
+                  <div className="font-medium">2024년 8월 15일</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <Check className="h-4 w-4 text-success" />
+                    포함된 기능
+                  </h4>
+                  <div className="grid grid-cols-1 gap-2">
+                    {currentPlan.features.map((feature, index) => (
+                      <div key={index} className="flex items-center gap-2 text-sm">
+                        <Check className="h-3 w-3 text-success flex-shrink-0" />
+                        {feature}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="font-semibold">사용량 현황</h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>등록된 프린터</span>
+                      <span>4 / {currentPlan.max_printers === -1 ? "무제한" : currentPlan.max_printers}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>이번 달 출력 작업</span>
+                      <span>127개</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>데이터 사용량</span>
+                      <span>2.4GB / 10GB</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {currentPlan.price > 0 && (
+                <div className="flex gap-3 pt-4 border-t">
+                  <Button variant="outline" className="flex-1">
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    결제 정보 변경
+                  </Button>
+                  <Button variant="outline" className="flex-1">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    구독 취소
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 로그인된 사용자만 구분선 표시 */}
+        {user && <Separator />}
+
+        {/* 사용 가능한 플랜 */}
+        <section className="space-y-6">
+          <div className="text-center space-y-4 mb-10 md:mb-16 lg:mb-20">
+            <h2 className="text-3xl font-bold">모든 플랜 살펴보기</h2>
+            <p className="text-muted-foreground text-lg">
+              성장하는 비즈니스에 맞는 플랜을 선택하세요
+            </p>
+            
+            {/* 월간/연간 탭 */}
+            <Tabs 
+              value={isYearly ? "yearly" : "monthly"} 
+              onValueChange={(value) => setIsYearly(value === "yearly")}
+              className="w-fit mx-auto"
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="monthly" className="flex items-center gap-2">
+                  월간
+                </TabsTrigger>
+                <TabsTrigger value="yearly" className="flex items-center gap-2">
+                  연간
+                  <Badge variant="secondary" className="text-xs">20% 할인</Badge>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-16">
+            {subscriptionPlans.map((plan) => (
+              <Card 
+                key={plan.id} 
+                className={`relative transition-all duration-300 hover:shadow-2xl ${
+                  plan.popular ? "border-2 border-primary shadow-xl scale-105" : ""
+                } ${plan.current ? "opacity-75" : "hover:scale-105"}`}
+              >
+                {plan.popular && (
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-10">
+                    <Badge className="bg-primary text-primary-foreground px-4 py-1 text-sm font-medium">
+                      인기 플랜
+                    </Badge>
+                  </div>
+                )}
+                
+                {plan.current && (
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-10">
+                    <Badge variant="secondary" className="px-4 py-1 text-sm font-medium">
+                      현재 플랜
+                    </Badge>
+                  </div>
+                )}
+
+                <CardHeader className="text-center pb-4 relative overflow-hidden">
+                  <div className={`absolute inset-0 ${plan.color} opacity-5`}></div>
+                  <CardTitle className="text-2xl relative z-10">{plan.name}</CardTitle>
+                  <p className="text-muted-foreground relative z-10">{plan.description}</p>
+                  
+                  <div className="space-y-2 relative z-10">
+                    <div className="text-4xl font-bold">
+                      {formatPrice(plan.price)}
+                    </div>
+                    {plan.price > 0 && (
+                      <div className="text-sm text-muted-foreground">{isYearly ? '연간 결제' : '월간 결제'}</div>
+                    )}
+                    {isYearly && plan.price > 0 && (
+                      <div className="text-xs text-muted-foreground">월 ${ (plan.price / 12).toFixed(2) } 기준</div>
+                    )}
+                    {plan.price === -1 && (
+                      <div className="text-sm text-muted-foreground">맞춤형 가격</div>
+                    )}
+                  </div>
+                </CardHeader>
+
+                <CardContent className="space-y-6">
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-center">주요 기능</h4>
+                    <div className="space-y-2">
+                      {plan.features.map((feature, index) => (
+                        <div key={index} className="flex items-start gap-2 text-sm">
+                          <Check className="h-4 w-4 text-success flex-shrink-0 mt-0.5" />
+                          <span>{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Button 
+                    className="w-full" 
+                    variant={plan.current ? "outline" : plan.popular ? "default" : "outline"}
+                    disabled={plan.current}
+                    onClick={() => handleUpgrade(plan.id)}
+                  >
+                    {plan.current ? (
+                      <>
+                        <Crown className="h-4 w-4 mr-2" />
+                        현재 플랜
+                      </>
+                    ) : plan.price === 0 ? (
+                      <>
+                        <Rocket className="h-4 w-4 mr-2" />
+                        무료 시작
+                      </>
+                    ) : plan.price === -1 ? (
+                      <>
+                        <Mail className="h-4 w-4 mr-2" />
+                        Contact Us
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="h-4 w-4 mr-2" />
+                        업그레이드 ({formatPrice(plan.price)})
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        {/* 자주 묻는 질문 */}
+        <section className="space-y-6">
+          <h2 className="text-2xl font-bold text-center">자주 묻는 질문</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">언제든지 플랜을 변경할 수 있나요?</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  네, 언제든지 플랜을 업그레이드하거나 다운그레이드할 수 있습니다. 
+                  변경된 플랜은 다음 결제 주기부터 적용됩니다.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">환불 정책은 어떻게 되나요?</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  구독 후 7일 이내에는 전액 환불이 가능합니다. 
+                  그 이후에는 남은 기간에 대해 일할 계산하여 환불해드립니다.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">프린터 대수 제한을 초과하면?</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  플랜의 프린터 대수 제한을 초과하는 경우, 
+                  자동으로 상위 플랜으로 업그레이드를 안내해드립니다.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">기술 지원은 어떻게 받나요?</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Basic 플랜은 커뮤니티 지원, Pro 플랜은 24시간 이내 응답, 
+                  Enterprise 플랜은 24/7 전화 지원을 제공합니다.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+};
+
+export default Subscription;

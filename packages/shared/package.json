@@ -1,0 +1,12 @@
+{
+  "name": "@factor/shared",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "mqtt": "^5.14.1"
+  }
+}

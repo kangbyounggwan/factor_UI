@@ -1,0 +1,134 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* 산업용 모니터링 테마 - 청색 기반 */
+    /* safe area 변수를 사용하지 않도록 제거 */
+    --background: 210 20% 98%;
+    --foreground: 215 25% 27%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 27%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 27%;
+
+    /* 주 색상: 산업용 청색 */
+    --primary: 214 84% 56%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 214 84% 70%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 215 25% 27%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 214 32% 91%;
+    --accent-foreground: 215 25% 27%;
+
+    /* 상태 색상 */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 48 96% 53%;
+    --warning-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* 온도 그라디언트 */
+    --temperature-cold: 200 100% 70%;
+    --temperature-warm: 35 91% 65%;
+    --temperature-hot: 0 84% 60%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 214 84% 56%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    /* 더 밝은 배경색으로 개선 */
+    --background: 220 13% 9%;
+    --foreground: 210 40% 98%;
+
+    /* 더 밝은 카드 배경으로 설비 정보 강조 */
+    --card: 220 13% 20%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 220 13% 20%;
+    --popover-foreground: 210 40% 98%;
+
+    /* 다크모드에서도 시인성 좋은 primary */
+    --primary: 214 84% 65%;
+    --primary-foreground: 220 13% 9%;
+    --primary-glow: 214 84% 75%;
+
+    /* 더 대비가 좋은 secondary */
+    --secondary: 220 13% 22%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 220 13% 18%;
+    --muted-foreground: 215 20.2% 70%;
+
+    --accent: 220 13% 22%;
+    --accent-foreground: 210 40% 98%;
+
+    /* 상태 색상들도 다크모드에 맞게 조정 */
+    --success: 142 76% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 48 96% 60%;
+    --warning-foreground: 0 0% 0%;
+    --destructive: 0 84% 65%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* 더 잘 보이는 경계선 */
+    --border: 220 13% 30%;
+    --input: 220 13% 22%;
+    --ring: 214 84% 65%;
+    
+    /* 사이드바도 개선 */
+    --sidebar-background: 220 13% 9%;
+    --sidebar-foreground: 210 40% 95%;
+    --sidebar-primary: 214 84% 65%;
+    --sidebar-primary-foreground: 220 13% 9%;
+    --sidebar-accent: 220 13% 18%;
+    --sidebar-accent-foreground: 210 40% 95%;
+    --sidebar-border: 220 13% 30%;
+    --sidebar-ring: 214 84% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    /* 키보드가 나타날 때 하단 안전 패딩 적용 */
+    padding-bottom: max(16px, env(safe-area-inset-bottom), var(--kb, 0px));
+  }
+}

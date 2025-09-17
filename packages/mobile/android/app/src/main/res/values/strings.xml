@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FACTOR</string>
+    <string name="title_activity_main">FACTOR</string>
+    <string name="package_name">com.factor.app</string>
+    <string name="custom_url_scheme">com.factor.app</string>
+</resources>
