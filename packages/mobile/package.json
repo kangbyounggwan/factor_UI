@@ -9,7 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server": "node server.js",
+    "server": "node ../shared/server.js --rest --port 5000",
     "start": "npm run build && npm run server",
     "dev:full": "concurrently \"npm run dev\" \"npm run server\""
   },

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-// 대시보드와 동일한 실시간 반영을 위해 상세 내부 카드로 대체
+ // 대시보드와 동일한 실시간 반영을 위해 상세 내부 카드로 대체
 import { IoTDevicePanel } from "@/components/IoTDevicePanel";
 import { CameraFeed } from "@/components/CameraFeed";
 import { PrinterControlPad } from "@/components/PrinterControlPad";
@@ -15,7 +15,6 @@ import { WebSocketStatus } from "@/components/WebSocketStatus";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { supabase } from "@shared/integrations/supabase/client"
 import { onDashStatusMessage } from "@shared/services/mqttService";
-import { publishRequestSdList } from "@shared/component/mqtt";
 import { useToast } from "@/hooks/use-toast";
 
 // 로컬 스냅샷 퍼시스턴스 훅(한 파일 내 사용)
@@ -64,9 +63,6 @@ interface MonitoringData {
     bed: { actual: number; target: number; offset?: number };
     chamber?: { actual: number; target: number; offset?: number };
   };
-  position: {
-    x: number; y: number; z: number; e: number;
-  };
   printProgress: {
     active: boolean;
     completion: number;
@@ -94,9 +90,6 @@ const defaultData: MonitoringData = {
   temperature: {
     tool: { actual: 25, target: 0 },
     bed: { actual: 23, target: 0 }
-  },
-  position: {
-    x: 0, y: 0, z: 0, e: 0
   },
   printProgress: {
     active: false,
@@ -145,6 +138,16 @@ const PrinterDetail = () => {
   const { toast } = useToast();
   const [deviceUuid, setDeviceUuid] = useState<string | null>(null);
   const [sdFiles, setSdFiles] = useState<Array<{ name: string; size: number }>>([]);
+  // 로컬 파일 (MQTT sd_list_result의 local 객체)
+  type LocalFile = {
+    name: string;
+    display?: string;
+    size?: number;
+    date?: string | null;
+    hash?: string;
+    user?: string;
+  };
+  const [localFiles, setLocalFiles] = useState<LocalFile[]>([]);
   
   // 프린터 연결 정보 상태
   const [connectionInfo, setConnectionInfo] = useState({
@@ -158,7 +161,7 @@ const PrinterDetail = () => {
   const [availablePorts, setAvailablePorts] = useState<string[]>(['/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyACM0']);
   const [availableProfiles, setAvailableProfiles] = useState<string[]>(['ender3 evo', 'prusa i3', 'cr-10', 'custom']);
   
-  console.log('sdFiles', sdFiles);
+
   // 실제 프린터 데이터 로드
   useEffect(() => {
     if (id && user) {
@@ -290,13 +293,30 @@ const PrinterDetail = () => {
     const off = onDashStatusMessage((uuid, payload) => {
       if (uuid !== deviceUuid) return;
       setData((prev) => {
+        // connection 배열([state, port, baudrate]) 기반 UI 상태 동기화
+        const conn = payload?.connection;
+        if (conn && typeof conn.port === 'string') {
+          try {
+            setConnectionInfo((ci) => ({
+              ...ci,
+              serialPort: conn.port || ci.serialPort,
+              baudrate: String(conn.baudrate ?? ci.baudrate),
+              // 요청사항: Printer Profile은 connection[3].name을 사용 (매핑: connection.profile_name)
+              printerProfile: (conn as any).profile_name || ci.printerProfile,
+            }));
+          } catch {}
+        }
         const bed = payload?.temperature_info?.bed;
         const toolAny = payload?.temperature_info?.tool;
         const tool = toolAny?.tool0 ?? toolAny;
+        const flags = payload?.printer_status?.flags as any;
+        const nextState = flags?.ready === true
+          ? 'operational'
+          : (payload?.printer_status?.state ?? prev.printerStatus.state);
         return {
           ...prev,
           printerStatus: {
-            state: (payload?.printer_status?.state ?? prev.printerStatus.state) as any,
+            state: nextState as any,
             timestamp: Date.now(),
             connected: payload?.connected ?? prev.printerStatus.connected,
             printing: payload?.printer_status?.printing ?? prev.printerStatus.printing,
@@ -314,12 +334,6 @@ const PrinterDetail = () => {
               offset: typeof bed?.offset === 'number' ? bed.offset : prev.temperature.bed.offset,
             },
             chamber: prev.temperature.chamber,
-          },
-          position: {
-            x: payload?.position?.x ?? prev.position.x,
-            y: payload?.position?.y ?? prev.position.y,
-            z: payload?.position?.z ?? prev.position.z,
-            e: payload?.position?.e ?? prev.position.e,
           },
           printProgress: {
             active: Boolean(payload?.progress?.active ?? prev.printProgress.active),
@@ -341,21 +355,51 @@ const PrinterDetail = () => {
     return () => { off(); };
   }, [deviceUuid]);
 
-  // SD 카드 리스트: 로그인에서 전역 구독 중이므로, 상세 진입 시 요청만 퍼블리시
-  useEffect(() => {
-    if (!user || !deviceUuid) return;
-    publishRequestSdList(deviceUuid).catch(() => {});
-  }, [user, deviceUuid]);
 
-  // SD 카드 결과 수신 이벤트로 리스트 갱신
+  // SD/로컬 결과 수신 이벤트로 리스트 갱신 (포맷 구분: local=object, sdcard=array, files=array)
   useEffect(() => {
     const onSdList = (e: Event) => {
       const ce = e as CustomEvent<{ deviceSerial: string; result: any }>;
       const detail = ce?.detail;
       if (!detail || !deviceUuid || detail.deviceSerial !== deviceUuid) return;
       const res = detail.result || {};
-      if (res.ok && Array.isArray(res.files)) {
-        setSdFiles(res.files.map((f: any) => ({ name: String(f.name), size: Number(f.size) || 0 })));
+
+      // SD 카드: 우선 sdcard 배열, fallback files 배열
+      if (Array.isArray(res.sdcard)) {
+        setSdFiles(
+          res.sdcard.map((f: any) => ({
+            name: String(f.name ?? f.display ?? ''),
+            size: Number(f.size) || 0,
+          }))
+        );
+      } else if (Array.isArray(res.files)) {
+        setSdFiles(
+          res.files.map((f: any) => ({
+            name: String(f.name ?? f.display ?? ''),
+            size: Number(f.size) || 0,
+          }))
+        );
+      } else {
+        setSdFiles([]);
+      }
+
+      // 로컬: local이 객체(키-값 딕셔너리)
+      if (res.local && typeof res.local === 'object' && !Array.isArray(res.local)) {
+        const entries = Object.entries(res.local);
+        const parsed: LocalFile[] = entries.map(([key, val]: [string, any]) => {
+          const v = val || {};
+          return {
+            name: String(v.name ?? key),
+            display: v.display ? String(v.display) : undefined,
+            size: v.size != null ? Number(v.size) : undefined,
+            date: v.date ?? null,
+            hash: v.hash,
+            user: v.user,
+          };
+        });
+        setLocalFiles(parsed);
+      } else {
+        setLocalFiles([]);
       }
     };
     window.addEventListener('sd_list_result', onSdList as EventListener);
@@ -678,9 +722,8 @@ const PrinterDetail = () => {
               </div>
             </div>
             <div className="col-span-3">
-              <div className="h-[400px] space-y-3">
+              <div className="h-[400px] space-y-3 overflow-y-auto">
                 <GCodeUpload deviceUuid={deviceUuid} />
-
               </div>
             </div>
           </div>

@@ -5,6 +5,7 @@ export * from "./hooks/useWebSocket";
 
 // api
 export * from "./api/http";
+export * from "./api/auth";
 export * from "./api/printer";
 export * from "./api/system";
 export * from "./api/config";

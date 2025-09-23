@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { 
   Upload, 
   File, 
@@ -14,7 +15,7 @@ import {
   HardDrive 
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, waitForSdUploadResult } from "@shared/services/mqttService";
+import { mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, waitForSdUploadResult, onDashStatusMessage,  publishGcodePrint } from "@shared/services/mqttService";
 import { useWebSocket } from "@shared/hooks/useWebSocket";
 import { supabase } from "@shared/integrations/supabase/client";
 
@@ -44,6 +45,8 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
   
   const isPrinting = printerStatus.printing;
   const [sdFiles, setSdFiles] = useState<Array<{ name: string; size: number }>>([]);
+  const [localMqttFiles, setLocalMqttFiles] = useState<Array<{ name: string; display?: string; size?: number; date?: number | string | null; estimatedPrintTime?: number; user?: string; path?: string }>>([]);
+  const [fileSource, setFileSource] = useState<'LOCAL' | 'SDCARD'>('LOCAL');
 
   const formatFileSize = (bytes: number): string => {
     const sizes = ['B', 'KB', 'MB', 'GB'];
@@ -111,6 +114,8 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
             total_size: total,
             data_b64: toB64(slice),
             size: slice.length,
+            // sd/local 선택값을 시작 메시지에 포함
+            upload_traget: fileSource === 'SDCARD' ? 'sd' : 'local',
           });
         } else {
           await publishSdUploadChunk(deviceUuid!, {
@@ -144,8 +149,8 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
         setUploadProgress(Math.min(99, Math.round((sent / total) * 100)));
       }
 
-      // Commit
-      await publishSdUploadCommit(deviceUuid!, uploadId);
+      // Commit (end target matches start's upload_traget)
+      await publishSdUploadCommit(deviceUuid!, uploadId, fileSource === 'SDCARD' ? 'sd' : 'local');
 
       // Wait for result
       const result = await resultPromise;
@@ -233,32 +238,147 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
     loadFiles();
   }, []);
 
-  // SD 카드 리스트 이벤트 수신 → 목록 반영 (현재 디바이스만)
+  // octoprint/status 수신 → sd.local / sd.sdcard 반영 (현재 디바이스만)
   useEffect(() => {
-    const onSdList = (e: Event) => {
-      const ce = e as CustomEvent<{ deviceSerial: string; result: any }>;
-      const detail = ce?.detail;
-      if (!detail) return;
-      if (deviceUuid && detail.deviceSerial !== deviceUuid) return;
-      const res = detail.result || {};
-      if (res.ok && Array.isArray(res.files)) {
-        setSdFiles(res.files.map((f: any) => ({ name: String(f.name), size: Number(f.size) || 0 })));
-      }
-    };
-    window.addEventListener('sd_list_result', onSdList as EventListener);
-    return () => window.removeEventListener('sd_list_result', onSdList as EventListener);
+    const off = onDashStatusMessage((uuid, payload) => {
+      if (deviceUuid && uuid !== deviceUuid) return;
+      const sd = payload?.sd || {};
+      const localArr: any[] = Array.isArray(sd?.local) ? sd.local : [];
+      const sdArr: any[] = Array.isArray(sd?.sdcard) ? sd.sdcard : [];
+      setLocalMqttFiles(localArr);
+      setSdFiles(sdArr.map((f: any) => ({ name: String(f?.name ?? f?.display ?? ''), size: Number(f?.size) || 0 })));
+    });
+    return () => { off(); };
   }, [deviceUuid]);
+
+  // 초기 마운트 및 디바이스 변경 시 최신 상태 요청 (sd 리스트 강제 갱신)
+
 
   return (
     <Card className="h-full flex flex-col">{/* Remove mt-6 and add height/flex */}
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <File className="h-4 w-4" />
-          G-code 파일 관리
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <File className="h-4 w-4" />
+            G-code 파일 관리
+          </CardTitle>
+          <div className="flex items-center gap-4">
+            <RadioGroup value={fileSource} onValueChange={async (v) => {
+              const next = v as 'LOCAL' | 'SDCARD';
+              setFileSource(next);
+              try {
+                if (deviceUuid) {
+                  await mqttConnect();
+                }
+              } catch {}
+            }} className="flex flex-row gap-4">
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem id="gc-local" value="LOCAL" />
+                <Label htmlFor="gc-local" className="cursor-pointer text-xs">LOCAL</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem id="gc-sd" value="SDCARD" />
+                <Label htmlFor="gc-sd" className="cursor-pointer text-xs">SDCARD</Label>
+              </div>
+            </RadioGroup>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col space-y-4 text-xs overflow-hidden">
-        {/* 파일 업로드 */}
+        {/* 파일 목록 */}
+        <div className="flex-1 flex flex-col space-y-2 min-h-0">
+          <Label className="text-xs">업로드된 파일 ({fileSource === 'LOCAL' ? 'LOCAL' : 'SDCARD'})</Label>
+          <div className="flex-1 overflow-y-auto space-y-1 pr-2">
+            {fileSource === 'LOCAL' ? (
+              localMqttFiles.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-2">업로드된 파일이 없습니다</p>
+              ) : (
+                localMqttFiles.map((file, idx) => (
+                  <div key={`${file.name}-${idx}`} className="flex items-center gap-2 p-2 border rounded text-xs">
+                    <File className="h-3 w-3 text-muted-foreground" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{file.display || file.name}</div>
+                      <div className="text-muted-foreground flex items-center gap-2">
+                        <span>{formatFileSize(file.size)}</span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          if (!deviceUuid) {
+                            toast({ title: '디바이스 없음', description: '디바이스가 선택되지 않았습니다.', variant: 'destructive' });
+                            return;
+                          }
+                          await mqttConnect();
+                          const origin = 'local';
+                          const filename = (file as any).name || (file as any).display;
+                          if (!filename) {
+                            toast({ title: '파일 정보 오류', description: '파일 이름을 확인할 수 없습니다.', variant: 'destructive' });
+                            return;
+                          }
+                          const jobId = filename.replace(/\.[^/.]+$/, '');
+                          await publishGcodePrint(deviceUuid, { filename, origin, job_id: jobId });
+                          toast({ title: '프린트 시작', description: `${filename} (${origin})` });
+                        } catch (e: any) {
+                          console.error(e);
+                          toast({ title: '전송 실패', description: String(e?.message ?? e), variant: 'destructive' });
+                        }
+                      }}
+                      disabled={isPrinting}
+                      className="h-6 w-6 p-0"
+                    >
+                      <Play className="h-2 w-2" />
+                    </Button>
+                  </div>
+                ))
+              )
+            ) : (
+              sdFiles.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-2">업로드된 파일이 없습니다</p>
+              ) : (
+                sdFiles.map((file, idx) => (
+                  <div key={`${file.name}-${idx}`} className="flex items-center gap-2 p-2 border rounded text-xs">
+                    <File className="h-3 w-3 text-muted-foreground" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{file.name}</div>
+                      <div className="text-muted-foreground flex items-center gap-2">
+                        <span>{formatFileSize(file.size)}</span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          if (!deviceUuid) {
+                            toast({ title: '디바이스 없음', description: '디바이스가 선택되지 않았습니다.', variant: 'destructive' });
+                            return;
+                          }
+                          await mqttConnect();
+                          const origin = 'sdcard';
+                          const filename = file.name;
+                          const jobId = filename.replace(/\.[^/.]+$/, '');
+                          await publishGcodePrint(deviceUuid, { filename, origin, job_id: jobId });
+                          toast({ title: '프린트 시작', description: `${filename} (${origin})` });
+                        } catch (e: any) {
+                          console.error(e);
+                          toast({ title: '전송 실패', description: String(e?.message ?? e), variant: 'destructive' });
+                        }
+                      }}
+                      disabled={isPrinting}
+                      className="h-6 w-6 p-0"
+                    >
+                      <Play className="h-2 w-2" />
+                    </Button>
+                  </div>
+                ))
+              )
+            )}
+          </div>
+        </div>
+
         <div className="space-y-2">
           <Label className="text-xs">파일 업로드</Label>
           <div className="flex gap-2">
@@ -296,49 +416,6 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
           )}
         </div>
 
-        {/* 파일 목록 */}
-        <div className="flex-1 flex flex-col space-y-2 min-h-0">
-          <Label className="text-xs">업로드된 파일</Label>
-          <div className="flex-1 overflow-y-auto space-y-1 pr-2">
-            {sdFiles.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-2">
-                업로드된 파일이 없습니다
-              </p>
-            ) : (
-              sdFiles.map((file, idx) => (
-                <div key={idx} className="flex items-center gap-2 p-2 border rounded text-xs">
-                  <File className="h-3 w-3 text-muted-foreground" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{typeof file === 'object' ? (file as any).filename || file.name : String(file)}</div>
-                    <div className="text-muted-foreground flex items-center gap-2">
-                      <span className="flex items-center gap-1">
-                        <HardDrive className="h-2 w-2" />
-                        {formatFileSize((file as any).file_size ?? (file as any).size ?? 0)}
-                      </span>
-                      {(file as any).print_time_estimate && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-2 w-2" />
-                          {formatTime((file as any).print_time_estimate)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {/* TODO: SD 파일 프린트 시작 퍼블리시 */}}
-                    disabled={!isConnected || isPrinting}
-                    className="h-6 w-6 p-0"
-                  >
-                    <Play className="h-2 w-2" />
-                  </Button>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* 하단 별도 SD 카드 목록은 제거 (상단 목록에 통합) */}
-        </div>
       </CardContent>
     </Card>
   );

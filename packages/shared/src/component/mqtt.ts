@@ -227,7 +227,7 @@ export async function startDashStatusSubscriptionsForUser(userId: string) {
   const deviceUuids = await getUserDeviceUuidsCached(userId);
   const subscribedTopics: string[] = [];
   for (const uuid of deviceUuids) {
-    const topic = `dash_status/${uuid}`;
+    const topic = `octoprint/status/${uuid}`;
     if (dashStatusSubscribed.has(topic)) continue;
     const handler = (t: string, payload: any) => {
       let parsed: any = payload;
@@ -235,13 +235,114 @@ export async function startDashStatusSubscriptionsForUser(userId: string) {
         if (typeof payload === 'string') parsed = JSON.parse(payload);
         else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
       } catch {}
-      console.log('[MQTT][dash_status]', t, parsed);
-      // 주제에서 uuid 추출하여 리스너 호출
+      console.log('[MQTT][octoprint/status]', t, parsed);
+      // 주제에서 uuid 추출하여 리스너 호출 (마지막 세그먼트 사용)
       const parts = t.split('/');
-      const id = parts.length >= 2 ? parts[1] : uuid;
-      dashStatusListeners.forEach((fn) => {
-        try { fn(id, parsed); } catch {}
-      });
+      const id = parts[parts.length - 1] || uuid;
+      const flags = parsed?.state?.flags;
+      const isConnected = Boolean(flags && (flags.operational || flags.printing || flags.paused || flags.ready || flags.error));
+      // 온도 포맷 표준화: temperatures.{bed,chamber,tool0} 사용
+      const temps: any = parsed?.temperatures ?? parsed?.temperature ?? undefined;
+      const temperature_info = temps
+        ? {
+            bed: temps.bed ? { actual: temps.bed.actual ?? 0, target: temps.bed.target ?? 0, offset: temps.bed.offset ?? 0 } : undefined,
+            chamber: temps.chamber ? { actual: temps.chamber.actual ?? null, target: temps.chamber.target ?? null, offset: temps.chamber.offset ?? 0 } : undefined,
+            tool: temps.tool0 ? { tool0: { actual: temps.tool0.actual ?? 0, target: temps.tool0.target ?? 0, offset: temps.tool0.offset ?? 0 } } : undefined,
+          }
+        : undefined;
+
+      // 연결 정보 표준화: connection 배열([state, port, baudrate]) 지원
+      const connArr: any = Array.isArray((parsed as any)?.connection) ? (parsed as any).connection : null;
+      const connection = connArr && connArr.length >= 3
+        ? {
+            state: String(connArr[0]),
+            port: String(connArr[1]),
+            baudrate: Number(connArr[2]),
+            // 요청 사항: connection[3].name을 Printer Profile로 활용
+            profile_name: (connArr[3] && (connArr[3].name ?? connArr[3].model)) ?? undefined,
+          }
+        : undefined;
+
+      const isPrintingFlag = Boolean(flags?.printing);
+      const progressRaw: any = parsed?.progress ?? {};
+      const jobRaw: any = parsed?.job ?? {};
+
+      const sdRaw: any = parsed?.sd ?? {};
+      // sd.local: 배열 또는 object(dict) 모두 지원 → 배열로 표준화
+      let sdLocalArr: any[] = [];
+      if (Array.isArray(sdRaw?.local)) {
+        sdLocalArr = sdRaw.local.map((v: any) => ({
+          name: v?.name ? String(v.name) : undefined,
+          display: v?.display ? String(v.display) : (v?.name ? String(v.name) : undefined),
+          size: v?.size != null ? Number(v.size) : undefined,
+          date: v?.date ?? null,
+          estimatedPrintTime: typeof v?.analysis?.estimatedPrintTime === 'number' ? v.analysis.estimatedPrintTime : undefined,
+          user: v?.user,
+          path: v?.path,
+        }));
+      } else if (sdRaw && sdRaw.local && typeof sdRaw.local === 'object') {
+        sdLocalArr = Object.entries(sdRaw.local).map(([key, v]: [string, any]) => ({
+          name: String(v?.name ?? key),
+          display: v?.display ? String(v.display) : undefined,
+          size: v?.size != null ? Number(v.size) : undefined,
+          date: v?.date ?? null,
+          estimatedPrintTime: typeof v?.analysis?.estimatedPrintTime === 'number' ? v.analysis.estimatedPrintTime : undefined,
+          user: v?.user,
+          path: v?.path,
+        }));
+      }
+      // sd.sdcard: array
+      const sdCardArr = Array.isArray(sdRaw?.sdcard)
+        ? sdRaw.sdcard.map((f: any) => ({
+            name: String(f?.name ?? f?.display ?? ''),
+            size: Number(f?.size) || 0,
+            display: f?.display ? String(f.display) : undefined,
+            date: f?.date ?? null,
+          }))
+        : [];
+
+      // 진행률 보정: completion(null) → 0, 필요 시 file_pct 또는 파일 진행률로 보조 계산
+      const completionPctRaw = typeof progressRaw?.completion === 'number'
+        ? progressRaw.completion
+        : (typeof progressRaw?.file_pct === 'number' ? progressRaw.file_pct : null);
+      const completion01 = typeof completionPctRaw === 'number'
+        ? (completionPctRaw / 100)
+        : (
+            (typeof progressRaw?.filepos === 'number' && typeof jobRaw?.file?.size === 'number' && jobRaw.file.size > 0)
+              ? (progressRaw.filepos / jobRaw.file.size)
+              : 0
+          );
+
+      const mapped = {
+        connected: isConnected,
+        // 루트에도 유지하되, 상세 페이지 호환을 위해 printer_status 내부에도 동일 필드를 채움
+        printing: isPrintingFlag,
+        printer_status: {
+          state: parsed?.state?.text,
+          flags: flags ?? {},
+          current_file: jobRaw?.file?.name,
+          printing: isPrintingFlag,
+          error_message: parsed?.state?.error ?? parsed?.error ?? undefined,
+        },
+        progress: {
+          // 0..100 입력은 0..1로, null/미정은 0으로 보정
+          completion: completion01,
+          print_time_left: progressRaw?.printTimeLeft ?? progressRaw?.time_left ?? undefined,
+          print_time: progressRaw?.printTime ?? progressRaw?.time ?? undefined,
+          file_position: progressRaw?.file_position ?? progressRaw?.filepos ?? undefined,
+          file_size: jobRaw?.file?.size ?? undefined,
+          filament_used: jobRaw?.filament ?? jobRaw?.filament_used ?? undefined,
+          // 상세 화면 활성 판단용 플래그
+          active: isPrintingFlag || Boolean(progressRaw?.active),
+        },
+        sd: {
+          local: sdLocalArr,
+          sdcard: sdCardArr,
+        },
+        temperature_info,
+        connection,
+      } as any;
+      dashStatusListeners.forEach((fn) => { try { fn(id, mapped); } catch {} });
     };
     await mqttClient.subscribe(topic, handler);
     dashStatusSubscribed.add(topic);
@@ -249,44 +350,16 @@ export async function startDashStatusSubscriptionsForUser(userId: string) {
     subscribedTopics.push(topic);
   }
   if (subscribedTopics.length > 0) {
-    console.log('[MQTT][SUB] started for dash_status topics:', subscribedTopics);
+    console.log('[MQTT][SUB] started for octoprint/status topics:', subscribedTopics);
   }
 
-  // 로그인 시 1회 get_status 전송 (대시보드 진입 여부와 무관)
-  if (deviceUuids.length > 0) {
-    try {
-      await Promise.all(
-        deviceUuids.map((uuid) =>
-          mqttClient.publish(`DASHBOARD/${uuid}`, { type: "get_status" }, 1, false)
-        )
-      );
-      console.log('[MQTT][TX] initial get_status sent', { count: deviceUuids.length });
-    } catch (e) {
-      console.warn('[MQTT][TX] initial get_status failed', e);
-    }
-  }
+
 }
 
 export async function stopDashStatusSubscriptions() {
   if (dashStatusSubscribed.size === 0) return;
   const mqttClient = createSharedMqttClient();
 
-  // 세션 종료 시 1회 get_status_stop 전송
-  try {
-    const uuids = Array.from(dashStatusSubscribed)
-      .map((t) => t.split('/')[1])
-      .filter(Boolean);
-    if (uuids.length > 0) {
-      await Promise.all(
-        uuids.map((uuid) =>
-          mqttClient.publish(`DASHBOARD/${uuid}`, { type: "get_status_stop" }, 1, false)
-        )
-      );
-      console.log('[MQTT][TX] get_status_stop sent', { count: uuids.length });
-    }
-  } catch (e) {
-    console.warn('[MQTT][TX] get_status_stop failed', e);
-  }
   const topics = Array.from(dashStatusSubscribed);
   for (const topic of topics) {
     const handler = dashStatusTopicHandlers.get(topic);
@@ -430,99 +503,6 @@ export async function subscribeTopicsForUser(
 }
 
 // === SD 카드 목록 흐름 (로그인 후 전역/개별 구독에서 사용) ===
-export type SdListResult = {
-  type: "sd_list_result";
-  ok: boolean;
-  files: Array<{ name: string; size: number }>;
-  timestamp?: number;
-};
-
-export async function subscribeSdListResultAll(
-  onMessage?: (deviceSerial: string, result: SdListResult) => void,
-  qos: 0 | 1 | 2 = 1
-) {
-  const mqttClient = createSharedMqttClient();
-  await mqttClient.connect();
-  const topic = `sd_list_result/+`;
-  const handler: MqttMessageHandler = (topicStr, payload) => {
-    let parsed: any = payload;
-    try {
-      
-      if (typeof payload === 'string') parsed = JSON.parse(payload);
-      else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-    } catch {}
-    console.log('[MQTT][SdListResult]', parsed);
-    if (parsed?.type !== 'sd_list_result') return;
-    const parts = topicStr.split('/');
-    const deviceSerial = parts[parts.length - 1] || '';
-    const result = parsed as SdListResult;
-    try { console.log('[MQTT][SD][RX]', { topic: topicStr, deviceSerial, ok: result?.ok, files: Array.isArray(result?.files) ? result.files.length : undefined }); } catch {}
-    try { window.dispatchEvent(new CustomEvent('sd_list_result', { detail: { deviceSerial, result } })); } catch {}
-    if (onMessage) onMessage(deviceSerial, result);
-  };
-  await mqttClient.subscribe(topic, handler, qos);
-  try { console.log('[MQTT][SD][SUB] started wildcard', { topic, qos }); } catch {}
-  return async () => { await mqttClient.unsubscribe(topic, handler); };
-}
-
-// 사용자 기준으로 해당 사용자의 디바이스에 한해 sd_list_result 구독
-export async function subscribeSdListResultForUser(
-  userId: string,
-  qos: 0 | 1 | 2 = 1
-) {
-  return subscribeTopicsForUser(
-    userId,
-    (uuid) => `sd_list_result/${uuid}`,
-    (deviceSerial) => (_t, payload) => {
-      let parsed: any = payload;
-      try {
-        if (typeof payload === 'string') parsed = JSON.parse(payload);
-        else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-      } catch {}
-      try { window.dispatchEvent(new CustomEvent('sd_list_result', { detail: { deviceSerial, result: parsed } })); } catch {}
-    },
-    qos
-  );
-}
-
-export async function subscribeSdListResult(
-  deviceSerial: string,
-  onMessage: (result: SdListResult) => void,
-  qos: 0 | 1 | 2 = 1
-) {
-  const mqttClient = createSharedMqttClient();
-  await mqttClient.connect();
-  const topic = `sd_list_result/${deviceSerial}`;
-  const handler: MqttMessageHandler = (_t, payload) => {
-    let parsed: any = payload;
-    try {
-      if (typeof payload === 'string') parsed = JSON.parse(payload);
-      else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-    } catch {}
-    // if (parsed?.type !== 'sd_list_result') return;
-    console.log('[MQTT][SdListResult]', parsed);
-    const result = parsed as SdListResult;
-    try { window.dispatchEvent(new CustomEvent('sd_list_result', { detail: { deviceSerial, result } })); } catch {}
-    onMessage(result);
-  };
-  await mqttClient.subscribe(topic, handler, qos);
-  try { console.log('[MQTT][SD][SUB] started', { topic, qos }); } catch {}
-  return async () => { await mqttClient.unsubscribe(topic, handler); };
-}
-
-export async function publishRequestSdList(deviceSerial: string) {
-  const mqttClient = createSharedMqttClient();
-  await mqttClient.publish(`sd_list/${deviceSerial}`, { type: 'sd_list' }, 0, false);
-}
-
-export async function startSdListFlow(
-  deviceSerial: string,
-  onMessage: (result: SdListResult) => void
-) {
-  const unsubscribe = await subscribeSdListResult(deviceSerial, onMessage);
-  await publishRequestSdList(deviceSerial);
-  return unsubscribe;
-}
 
 // === 프린터 제어 결과 구독 ===
 export type ControlResult = {

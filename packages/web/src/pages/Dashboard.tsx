@@ -9,7 +9,7 @@ import { useAuth } from "@shared/contexts/AuthContext";
 import { supabase } from "@shared/integrations/supabase/client"
 import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { useToast } from "@/hooks/use-toast";
-import { publishDashboardGetStatus, onDashStatusMessage, mqttConnect } from "@shared/services/mqttService";
+import {  onDashStatusMessage, mqttConnect } from "@shared/services/mqttService";
 import {
   Select,
   SelectContent,
@@ -102,7 +102,10 @@ const formatTime = (seconds: number): string => {
 };
 
 const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; isAuthenticated: boolean }) => {
-  const config = statusConfig[printer.state];
+  const config = statusConfig[printer.state] || statusConfig.disconnected;
+  const hasGroupObject = printer.group && typeof printer.group === 'object';
+  const groupColor = hasGroupObject && (printer.group as any).color ? (printer.group as any).color : '#9CA3AF';
+  const groupName = hasGroupObject && (printer.group as any).name ? (printer.group as any).name : '연결안됨';
   
   return (
     <Link to={isAuthenticated ? `/printer/${printer.id}` : "/auth"} className="block">
@@ -112,13 +115,18 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
           <div className="space-y-1 min-w-0 flex-1 pr-4">
             <CardTitle className="text-lg font-semibold truncate">{printer.model}</CardTitle>
             <p className="text-sm text-muted-foreground truncate">{printer.model}</p>
-            {printer.group && (
+            {hasGroupObject ? (
               <div className="flex items-center gap-1">
                 <div 
                   className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: printer.group.color }}
+                  style={{ backgroundColor: groupColor }}
                 />
-                <span className="text-xs text-muted-foreground">{printer.group.name}</span>
+                <span className="text-xs text-muted-foreground">{groupName}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#9CA3AF' }} />
+                <span className="text-xs text-muted-foreground">연결안됨</span>
               </div>
             )}
           </div>
@@ -189,7 +197,7 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground flex-shrink-0">연결상태:</span>
                   <span className={`font-medium text-xs ${printer.connected ? 'text-success' : 'text-destructive'}`}>
-                    {printer.connected ? '연결됨' : '연결끊김'}
+                    {printer.connected ? '연결완료' : '연결없음'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -216,11 +224,12 @@ const Home = () => {
   const [loading, setLoading] = useState(printers.length === 0);
   const summary = useDashboardSummary();
 
-  // REST 스냅샷 폴링 제거 (MQTT 응답만 사용)
 
   // 프린터 데이터 로드
   const loadPrinters = useCallback(async (showSpinner?: boolean) => {
+    try { console.log('[DASH][LOAD] start', { userId: user?.id ?? null, showSpinner, cachedCount: printers.length }); } catch {}
     if (!user) {
+      try { console.log('[DASH][LOAD] skip: no user'); } catch {}
       setPrinters([]);
       setLoading(false);
       return;
@@ -231,9 +240,21 @@ const Home = () => {
       
       // 그룹 / 프린터 데이터 (shared service 활용)
       const groupsData = await getUserPrinterGroups(user.id);
+      try { console.log('[DASH][FETCH] groups', { count: groupsData?.length ?? 0 }); } catch {}
       setGroups(groupsData);
 
       const printersData = await getUserPrintersWithGroup(user.id);
+      try {
+        console.log('[DASH][FETCH] printers', {
+          count: printersData?.length ?? 0,
+          items: (printersData || []).map((p: any) => ({
+            id: p?.id,
+            device_uuid: p?.device_uuid ?? p?.uuid ?? null,
+            user_id: p?.user_id ?? null,
+            model: p?.model ?? null,
+          })),
+        });
+      } catch {}
 
       // 프린터 데이터를 UI 형식으로 변환 (실제 데이터 사용)
       const formattedPrinters: PrinterOverview[] = (printersData || []).map(printer => {
@@ -263,6 +284,12 @@ const Home = () => {
       });
 
       setPrinters(formattedPrinters);
+      try {
+        console.log('[DASH][SET] printers', {
+          count: formattedPrinters.length,
+          uuids: formattedPrinters.map(p => p.device_uuid ?? null)
+        });
+      } catch {}
     } catch (error) {
       console.error('Error loading printers:', error);
     } finally {
@@ -281,8 +308,6 @@ const Home = () => {
   // 초기 1회 로드: 스냅샷이 이미 있으면 서버 로드 생략
   useEffect(() => {
     if (!user) return;
-    if (printers.length > 0) return;
-    console.log('웹 대시보드 loadPrinters@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@');
     loadPrinters();
   }, [user, printers.length, loadPrinters]);
 
@@ -296,16 +321,6 @@ const Home = () => {
       printers.map(p => p.device_uuid).filter((v): v is string => Boolean(v))
     ));
     if (deviceUuids.length === 0) return;
-
-    (async () => {
-      try {
-        await mqttConnect();
-        await Promise.all(deviceUuids.map(uuid => publishDashboardGetStatus(uuid)));
-        publishedRef.current = true;
-      } catch (e) {
-        console.error('[MQTT] publish error', e);
-      }
-    })();
   }, [user, printers]);
 
   // 대시보드 이탈 시 stop 전송 제거 (세션 종료 시에만 stop 전송)
@@ -489,9 +504,11 @@ const Home = () => {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredPrinters.map((printer) => (
-                <PrinterCard key={printer.id} printer={printer} isAuthenticated={!!user} />
-              ))}
+              {filteredPrinters.map((printer) => {
+                return (
+                  <PrinterCard key={printer.id} printer={printer} isAuthenticated={!!user} />
+                );
+              })}
             </div>
           )}
         </div>

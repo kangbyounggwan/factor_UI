@@ -25,64 +25,30 @@ export function onDashStatusMessage(listener: (uuid: string, data: any) => void)
   return onDashStatus(listener);
 }
 
-export async function publishDashboardGetStatus(deviceId: string) {
-  const topic = `DASHBOARD/${deviceId}`;
-  const payload = { type: "get_status" } as const;
-  console.log('[MQTT][TX]', topic, payload);
-  await mqttPublish(topic, payload, 1, false);
-}
-
-export async function publishDashboardGetStatusStop(deviceId: string) {
-  const topic = `DASHBOARD/${deviceId}`;
-  const payload = { type: "get_status_stop" } as const;
-  console.log('[MQTT][TX]', topic, payload);
-  await mqttPublish(topic, payload, 1, false);
-}
-
-export async function publishDashboardCommand(deviceId: string, cmd: string) {
-  const topic = `dashboard/${deviceId}`;
-  const payload = { type: "command", cmd } as const;
-  await mqttPublish(topic, payload, 1, false);
-}
-
-export async function publishAdminCommand(deviceId: string, cmd: string) {
-  const topic = `ADMIN_COMMAND/${deviceId}`;
-  const payload = { type: "command", cmd } as const;
-  await mqttPublish(topic, payload, 1, false);
-}
-
-export async function publishAdminMcode(deviceId: string, cmd: string) {
-  const topic = `ADMIN_COMMAND/MCOD_MODE/${deviceId}`;
-  const payload = { type: "command", cmd } as const;
-  await mqttPublish(topic, payload, 1, false);
-}
-
-
-
 // === Control publish (facade for consumers) ===
 export async function publishControlHome(deviceSerial: string, axes: string | string[] = 'XYZ') {
   const axesString = Array.isArray(axes) ? axes.join('') : axes;
-  const topic = `control/home/${deviceSerial}`;
-  const payload = { axes: axesString } as const;
-  await mqttPublish(topic, payload, 0, false);
+  const topic = `control/${deviceSerial}`;
+  const payload = { type: 'home' as const, axes: axesString };
+  await mqttPublish(topic, payload, 1, false);
 }
 
 export async function publishControlPause(deviceSerial: string) {
-  const topic = `control/pause/${deviceSerial}`;
-  const payload = {};
-  await mqttPublish(topic, payload, 0, false);
+  const topic = `control/${deviceSerial}`;
+  const payload = { type: 'pause' as const };
+  await mqttPublish(topic, payload, 1, false);
 }
 
 export async function publishControlResume(deviceSerial: string) {
-  const topic = `control/resume/${deviceSerial}`;
-  const payload = {};
-  await mqttPublish(topic, payload, 0, false);
+  const topic = `control/${deviceSerial}`;
+  const payload = { type: 'resume' as const };
+  await mqttPublish(topic, payload, 1, false);
 }
 
 export async function publishControlCancel(deviceSerial: string) {
-  const topic = `control/cancel/${deviceSerial}`;
-  const payload = {};
-  await mqttPublish(topic, payload, 0, false);
+  const topic = `control/${deviceSerial}`;
+  const payload = { type: 'cancel' as const };
+  await mqttPublish(topic, payload, 1, false);
 }
 
 
@@ -109,7 +75,7 @@ export async function publishDashboardMove(
     feedrate?: number; // mm/min, default 1000
   }
 ) {
-  const topic = `DASHBOARD/${deviceSerial}`;
+  const topic = `control/${deviceSerial}`;
   const { mode, feedrate = 1000, x, y, z, e } = params;
   const payload: DashboardMovePayload = { type: 'move', mode };
   if (x != null) payload.x = x;
@@ -133,7 +99,7 @@ export async function publishDashboardSetTemperature(
   deviceSerial: string,
   params: { tool: number; temperature: number; wait?: boolean }
 ) {
-  const topic = `DASHBOARD/${deviceSerial}`;
+  const topic = `control/${deviceSerial}`;
   const { tool, temperature, wait = false } = params;
   const payload: SetTemperaturePayload = { type: 'set_temperature', tool, temperature };
   if (wait) payload.wait = true;
@@ -150,29 +116,92 @@ type SdUploadChunkBase = {
   size: number;
 };
 
+// New topic for G-code ingestion (prefix)
+const TOPIC_GCODE_IN = 'octoprint/gcode_in';
+
 export async function publishSdUploadChunkFirst(
   deviceSerial: string,
-  params: SdUploadChunkBase & { name: string; total_size: number }
+  params: SdUploadChunkBase & { name: string; total_size: number; upload_traget?: 'sd' | 'local' }
 ) {
-  const topic = `DASHBOARD/${deviceSerial}`;
-  const payload = params;
-  console.log('[MQTT][TX]', topic, { ...payload, data_b64: `[${payload.data_b64.length}b64]` });
-  await mqttPublish(topic, payload, 1, false);
+  // Map to new protocol: send start + first chunk (seq 0)
+  const totalChunks = Math.max(1, Math.ceil(params.total_size / Math.max(1, params.size)));
+  const startPayload = {
+    action: 'start' as const,
+    job_id: params.upload_id,
+    filename: params.name,
+    total_chunks: totalChunks,
+    // include user intention if provided (sd/local)
+    ...(params.upload_traget ? { upload_traget: params.upload_traget } : {}),
+  };
+  const topic = `${TOPIC_GCODE_IN}/${deviceSerial}`;
+  console.log('[GCODE][START]', {
+    device: deviceSerial,
+    job_id: startPayload.job_id,
+    filename: startPayload.filename,
+    total_chunks: startPayload.total_chunks,
+    upload_traget: (startPayload as any).upload_traget ?? 'sd',
+    ts: new Date().toISOString(),
+  });
+  console.log('[MQTT][TX]', topic, startPayload);
+  await mqttPublish(topic, startPayload, 1, false);
+
+  const firstChunkPayload = {
+    action: 'chunk' as const,
+    job_id: params.upload_id,
+    seq: params.index,
+    data_b64: params.data_b64,
+  };
+  console.log('[MQTT][TX]', topic, { ...firstChunkPayload, data_b64: `[${params.data_b64.length}b64]` });
+  await mqttPublish(topic, firstChunkPayload, 1, false);
 }
 
 export async function publishSdUploadChunk(
   deviceSerial: string,
   params: SdUploadChunkBase
 ) {
-  const topic = `DASHBOARD/${deviceSerial}`;
-  const payload = params;
-  console.log('[MQTT][TX]', topic, { ...payload, data_b64: `[${payload.data_b64.length}b64]` });
-  await mqttPublish(topic, payload, 1, false);
+  // Map to new protocol: chunk message
+  const chunkPayload = {
+    action: 'chunk' as const,
+    job_id: params.upload_id,
+    seq: params.index,
+    data_b64: params.data_b64,
+  };
+  const topic = `${TOPIC_GCODE_IN}/${deviceSerial}`;
+  console.log('[MQTT][TX]', topic, { ...chunkPayload, data_b64: `[${params.data_b64.length}b64]` });
+  await mqttPublish(topic, chunkPayload, 1, false);
 }
 
-export async function publishSdUploadCommit(deviceSerial: string, uploadId: string) {
-  const topic = `DASHBOARD/${deviceSerial}`;
-  const payload = { type: 'sd_upload_commit' as const, upload_id: uploadId };
+export async function publishSdUploadCommit(deviceSerial: string, uploadId: string, target: 'sd' | 'local' = 'sd') {
+  // Map to new protocol: end (target from caller, default sd)
+  const endPayload = { action: 'end' as const, job_id: uploadId, target };
+  const topic = `${TOPIC_GCODE_IN}/${deviceSerial}`;
+  console.log('[GCODE][END]', {
+    device: deviceSerial,
+    job_id: endPayload.job_id,
+    target,
+    ts: new Date().toISOString(),
+  });
+  console.log('[MQTT][TX]', topic, endPayload);
+  await mqttPublish(topic, endPayload, 1, false);
+}
+
+// Optional: cancel API for callers (kept in same file per single-file change rule)
+export async function publishSdUploadCancel(deviceSerial: string, uploadId: string) {
+  const cancelPayload = { action: 'cancel' as const, job_id: uploadId };
+  const topic = `${TOPIC_GCODE_IN}/${deviceSerial}`;
+  console.log('[MQTT][TX]', topic, cancelPayload);
+  await mqttPublish(topic, cancelPayload, 1, false);
+}
+
+// === G-code print command (trigger printing of an existing file) ===
+export async function publishGcodePrint(
+  deviceSerial: string,
+  params: { filename: string; origin: 'local' | 'sdcard'; job_id?: string }
+) {
+  const topic = `${TOPIC_GCODE_IN}/${deviceSerial}`;
+  const base = (params.filename.split('/')?.pop() || params.filename).replace(/\.[^/.]+$/, '');
+  const jobId = params.job_id ?? base;
+  const payload = { action: 'print' as const, filename: params.filename, origin: params.origin, job_id: jobId };
   console.log('[MQTT][TX]', topic, payload);
   await mqttPublish(topic, payload, 1, false);
 }

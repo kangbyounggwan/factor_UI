@@ -10,7 +10,7 @@ import { Loader2, User, Lock, Mail, Activity, Moon, Sun } from "lucide-react";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
-import { startDashStatusSubscriptionsForUser, subscribeSdListResultForUser, subscribeControlResultForUser } from "@shared/component/mqtt";
+import { startDashStatusSubscriptionsForUser, subscribeControlResultForUser } from "@shared/component/mqtt";
 
 
 const Auth = () => {
@@ -62,13 +62,7 @@ const Auth = () => {
           Promise.resolve(uid).then((id)=>{
             if (id) startDashStatusSubscriptionsForUser(id);
           });
-          // SD 리스트: 사용자 디바이스에 한해 구독 시작
-          Promise.resolve(uid).then((id)=>{
-            if (id) {
-              subscribeSdListResultForUser(id).catch(()=>{});
-              subscribeControlResultForUser(id).catch(()=>{});
-            }
-          });
+
 
 
         } catch {}

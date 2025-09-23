@@ -6,6 +6,9 @@ import react from "@vitejs/plugin-react";
 // @ts-ignore
 import tsconfigPaths from "vite-tsconfig-paths";
 import { fileURLToPath, URL } from "node:url";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - Node ESM import to shared server utility
+import { createRestMiddleware } from "../shared/server.js";
 
 export default defineConfig({
   plugins: [
@@ -17,6 +20,17 @@ export default defineConfig({
       ],
     }),
     react(),
+    {
+      name: "rest-middleware",
+      configureServer(server) {
+        try {
+          const rest = createRestMiddleware();
+          server.middlewares.use(rest);
+        } catch (e) {
+          console.warn("REST 미들웨어 등록 실패:", e);
+        }
+      },
+    },
   ],
   envDir: fileURLToPath(new URL("../../", import.meta.url)), 
   envPrefix: ["VITE_"],
@@ -31,6 +45,13 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],   
   },
   server: {
+    host: "0.0.0.0",
+    proxy: {
+      "/api": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+      },
+    },
     fs: {
       allow: [
         fileURLToPath(new URL("../../", import.meta.url)), // 루트 접근 허용

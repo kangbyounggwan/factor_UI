@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../integrations/supabase/client";
-import { startDashStatusSubscriptionsForUser, stopDashStatusSubscriptions, subscribeSdListResultForUser, subscribeControlResultForUser, clearMqttClientId } from "../component/mqtt";
+import { startDashStatusSubscriptionsForUser, stopDashStatusSubscriptions, subscribeControlResultForUser, clearMqttClientId } from "../component/mqtt";
 
 type AppVariant = "web" | "mobile";
 
@@ -29,7 +29,6 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   const [session, setSession] = useState<Session | null>(null);
   const [userRole, setUserRole] = useState<"admin" | "user" | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sdUnsub, setSdUnsub] = useState<null | (() => Promise<void>)>(null);
   const [ctrlUnsub, setCtrlUnsub] = useState<null | (() => Promise<void>)>(null);
 
   console.log('AuthProvider 렌더링:', { 
@@ -72,8 +71,6 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         try {
           startDashStatusSubscriptionsForUser(nextSession.user.id);
           // SD/Control 결과 구독 시작 (유저 장치 전체)
-          const sd = await subscribeSdListResultForUser(nextSession.user.id).catch(() => null);
-          if (sd && isMounted) setSdUnsub(() => sd);
           const cr = await subscribeControlResultForUser(nextSession.user.id).catch(() => null);
           if (cr && isMounted) setCtrlUnsub(() => cr);
         } catch {}
@@ -86,11 +83,9 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       if (event === 'SIGNED_OUT') {
         // MQTT 구독 해제
         try { await stopDashStatusSubscriptions(); } catch {}
-        try { if (sdUnsub) await sdUnsub(); } catch {}
         try { if (ctrlUnsub) await ctrlUnsub(); } catch {}
 
         if (isMounted) {
-          setSdUnsub(null);
           setCtrlUnsub(null);
         }
         
@@ -139,8 +134,6 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
           // MQTT 구독은 웹에서만 동작
           try {
             startDashStatusSubscriptionsForUser(session.user.id);
-            const sd = await subscribeSdListResultForUser(session.user.id).catch(() => null);
-            if (sd && isMounted) setSdUnsub(() => sd);
             const cr = await subscribeControlResultForUser(session.user.id).catch(() => null);
             if (cr && isMounted) setCtrlUnsub(() => cr);
           } catch {}
