@@ -5,6 +5,7 @@
     "packages/*"
   ],
   "scripts": {
+    "media:dev": "node media.server.js",
     "dev:host": "npm --workspace @factor/host run dev",
     "dev:web": "npm --workspace @factor/web run dev",
     "dev:mobile": "npm --workspace @factor/mobile run dev",
@@ -18,6 +19,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "dotenv": "^17.2.2",
+    "node-media-server": "^4.0.21",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",

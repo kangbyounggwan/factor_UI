@@ -2,11 +2,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Camera, Play, Pause, RotateCw, Maximize2 } from "lucide-react";
-import { websocketService } from "@/lib/websocketService";
+import { Camera, Play, Pause, RotateCw, Maximize2, X } from "lucide-react";
+import { mqttConnect, mqttPublish, mqttSubscribe, mqttUnsubscribe } from "@shared/services/mqttService";
+import { supabase } from "@shared/integrations/supabase/client";
 
 interface CameraFeedProps {
-  cameraId: string;
+  cameraId: string; // device uuid와 동일
   isConnected: boolean;
   resolution: string;
 }
@@ -17,196 +18,254 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date().toLocaleTimeString());
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [cameraStatus, setCameraStatus] = useState<'offline' | 'starting' | 'online' | 'error'>('offline');
+
+  // ▶︎ HLS(백업) & WebRTC URL
+  const [hlsUrl, setHlsUrl] = useState<string | null>(null);
+  const [webrtcUrl, setWebrtcUrl] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const peerRef = useRef<RTCPeerConnection | null>(null);
-  const roomIdRef = useRef<string>(`camera:${cameraId}`);
-  const joinedRef = useRef<boolean>(false);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const autoStopTimerRef = useRef<number | null>(null);
 
-  const iceServers: RTCIceServer[] = [
-    { urls: ["stun:stun.l.google.com:19302", "stun:global.stun.twilio.com:3478"] },
-  ];
-
-  // 실시간 시간 업데이트 시뮬레이션
+  // 실시간 시계
   useEffect(() => {
     if (isConnected && isPlaying && isStreaming) {
-      const interval = setInterval(() => {
-        setLastUpdate(new Date().toLocaleTimeString());
-      }, 1000);
-      return () => clearInterval(interval);
+      const t = setInterval(() => setLastUpdate(new Date().toLocaleTimeString()), 1000);
+      return () => clearInterval(t);
     }
   }, [isConnected, isPlaying, isStreaming]);
 
-  const attachMediaStream = useCallback((stream: MediaStream) => {
-    const videoElement = videoRef.current;
-    if (!videoElement) return;
-    videoElement.srcObject = stream;
-    if (isPlaying) {
-      // 자동 재생 허용을 위해 mute
-      videoElement.muted = true;
-      videoElement.play().catch(() => {
-        // 자동재생 정책으로 실패 시 사용자가 재생 버튼을 눌러야 함
-      });
+  const cleanupVideo = useCallback(() => {
+    const video = videoRef.current;
+    if (video) {
+      try { video.pause(); } catch {}
+      try { video.removeAttribute('src'); } catch {}
+      try { (video as any).srcObject = null; } catch {}
+      try { video.load(); } catch {}
     }
-  }, [isPlaying]);
-
-  const cleanupPeer = useCallback(() => {
-    try {
-      const peer = peerRef.current;
-      if (peer) {
-        peer.ontrack = null;
-        peer.onicecandidate = null;
-        peer.getSenders().forEach((s) => {
-          try { s.track?.stop(); } catch {}
-        });
-        peer.getReceivers().forEach((r) => {
-          try { r.track?.stop(); } catch {}
-        });
-        peer.close();
-      }
-    } catch {}
-    peerRef.current = null;
-
-    const videoElement = videoRef.current;
-    if (videoElement && videoElement.srcObject) {
-      const stream = videoElement.srcObject as MediaStream;
-      stream.getTracks().forEach((t) => t.stop());
-      videoElement.srcObject = null;
+    const frame = iframeRef.current;
+    if (frame) {
+      try { frame.src = 'about:blank'; } catch {}
     }
-  }, []);
-  const normalizeSessionDescriptionInit = (raw: any): RTCSessionDescriptionInit | null => {
-    if (!raw) return null;
-    // { offer: { type, sdp } }
-    if (raw.offer && typeof raw.offer === 'object' && raw.offer.sdp && raw.offer.type) {
-      return { type: raw.offer.type, sdp: raw.offer.sdp };
-    }
-    // { sdp: { type, sdp } }
-    if (raw.sdp && typeof raw.sdp === 'object' && raw.sdp.sdp && raw.sdp.type) {
-      return { type: raw.sdp.type, sdp: raw.sdp.sdp };
-    }
-    // { sdp: 'v=0...', type: 'offer' }
-    if (typeof raw.sdp === 'string') {
-      return { type: raw.type || 'offer', sdp: raw.sdp };
-    }
-    // { type, sdp }
-    if (raw.type && raw.sdp) {
-      return { type: raw.type, sdp: raw.sdp };
-    }
-    return null;
-  };
- // 2) handleOffer 교체
-  const handleOffer = useCallback(async (payload: any) => {
-    const offer = normalizeSessionDescriptionInit(payload);
-    if (!offer) {
-      console.error('수신한 offer 데이터 형식이 올바르지 않습니다:', payload);
-      setStreamError('수신한 offer 형식이 올바르지 않습니다.');
-      return;
-    }
-    if (!peerRef.current) {
-      peerRef.current = new RTCPeerConnection({ iceServers });
-      const peer = peerRef.current;
-      peer.ontrack = (event) => {
-        const [remoteStream] = event.streams;
-        if (remoteStream) attachMediaStream(remoteStream);
-      };
-      peer.onicecandidate = (event) => {
-        if (event.candidate) {
-          websocketService.send('webrtc_ice_candidate', {
-            roomId: roomIdRef.current,
-            candidate: event.candidate,
-          });
-        }
-      };
-    }
-    const peer = peerRef.current!;
-    try {
-      await peer.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await peer.createAnswer();
-      await peer.setLocalDescription(answer);
-      // answer도 퍼블리셔가 유연하게 처리할 수 있게 { sdp: 객체 } 형태 유지
-      websocketService.send('webrtc_answer', {
-        roomId: roomIdRef.current,
-        sdp: answer.sdp,
-        type: answer.type,
-      });
-    } catch (error) {
-      console.error('WebRTC offer 처리 실패', error);
-      setStreamError('스트림 연결 중 오류가 발생했습니다.');
-    }
-  }, [attachMediaStream]);
-
-  const handleRemoteIce = useCallback(async (payload: any) => {
-    const candidate: RTCIceCandidateInit = payload?.candidate;
-    if (!candidate) return;
-    try {
-      if (peerRef.current) {
-        await peerRef.current.addIceCandidate(candidate);
-      }
-    } catch (error) {
-      console.error('ICE 후보 추가 실패', error);
-    }
+    setHlsUrl(null);
+    setWebrtcUrl(null);
   }, []);
 
-  const startStreaming = useCallback(() => {
+  // DB에서 입력 URL 조회
+  async function getCameraStreamInput(deviceUuid: string): Promise<string | null> {
+    try {
+      const { data, error } = await supabase
+        .from('cameras')
+        .select('stream_url')
+        .eq('device_uuid', deviceUuid)
+        .maybeSingle();
+      if (error) {
+        console.warn('[CAM][DB] stream_url 조회 실패:', error.message);
+        return null;
+      }
+      return (data as any)?.stream_url ?? null;
+    } catch (e) {
+      console.warn('[CAM][DB] stream_url 조회 예외:', e);
+      return null;
+    }
+  }
+
+  // ── MQTT 상태 구독 (STATE_TOPIC) ──────────────────────────────────────────────
+  useEffect(() => {
+    let unsub: (() => Promise<void>) | null = null;
+    let active = true;
+
+    (async () => {
+      try {
+        await mqttConnect();
+        const topic = `camera/${cameraId}/state`;
+        const handler = (_t: string, payload: any) => {
+          try {
+            const msg = typeof payload === 'string' ? JSON.parse(payload) : payload;
+
+            // 상태 판단
+            const running = !!(msg?.running);
+            setCameraStatus(running ? 'online' : 'offline');
+
+            // URL 추출 (webrtc 우선, 없으면 .m3u8)
+            const wurl =
+              msg?.webrtc?.play_url_webrtc ||
+              msg?.play_url_webrtc ||
+              (typeof msg?.url === 'string' && !msg.url.endsWith('.m3u8') ? msg.url : null);
+
+            const hurl = typeof msg?.url === 'string' && msg.url.includes('.m3u8') ? msg.url : null;
+
+            if (wurl) setWebrtcUrl(wurl);
+            if (hurl) setHlsUrl(hurl);
+          } catch (e) {
+            console.warn('[CAM][STATE] parse error', e);
+          }
+        };
+        await mqttSubscribe(topic, handler, 1);
+        unsub = async () => { try { await mqttUnsubscribe(topic, handler); } catch {} };
+      } catch (e) {
+        console.warn('[CAM][MQTT] subscribe failed', e);
+      }
+    })();
+
+    return () => { if (unsub) unsub(); };
+  }, [cameraId]);
+
+  // ── Start: 라즈베리로 WebRTC 파이프라인 시작 명령 ────────────────────────────
+  const startStreaming = useCallback(async () => {
     if (!isConnected) {
       setStreamError('서버와의 연결이 필요합니다.');
       return;
     }
     setStreamError(null);
     setIsStreaming(true);
-    if (!joinedRef.current) {
-      websocketService.send('webrtc_join', { roomId: roomIdRef.current, role: 'viewer' });
-      joinedRef.current = true;
-    }
-  }, [isConnected]);
+    setCameraStatus('starting');
 
-  const stopStreaming = useCallback(() => {
+    try {
+      await mqttConnect();
+
+      // 입력(MJPEG/RTSP 등)
+      const input = await getCameraStreamInput(cameraId);
+      if (!input) {
+        setStreamError('카메라 입력 주소(stream_url)를 찾을 수 없습니다.');
+        setIsStreaming(false);
+        setCameraStatus('error');
+        return;
+      }
+
+      // 해상도 파싱
+      const [w, h] = (resolution || '').split('x').map((v) => Number(v));
+      const width = Number.isFinite(w) && w > 0 ? w : 1280;
+      const height = Number.isFinite(h) && h > 0 ? h : 720;
+
+      // 환경변수(없으면 라우터의 LAN 주소를 직접 기입)
+      const RTSP_BASE = (import.meta as any).env?.VITE_MEDIAMTX_RTSP_BASE || 'rtsp://192.168.200.102:8554';
+      const WEBRTC_BASE = (import.meta as any).env?.VITE_MEDIAMTX_WEBRTC_BASE || 'http://192.168.200.102:8889';
+
+      const topic = `camera/${cameraId}/cmd`;
+      const payload = {
+        type: 'camera',
+        action: 'start',
+        options: {
+          name: `cam-${cameraId}`,
+          input,                 // ex) http://<rpi>/stream 혹은 rtsp://...
+          fps: 20,
+          width,
+          height,
+          bitrateKbps: 1800,
+          encoder: 'libx264',    // 라즈베리 HW 인코더(사용 불가면 서버에서 SW로 폴백)
+          forceMjpeg: true,      // HTTP MJPEG 입력 최적화
+          lowLatency: true,
+          rtsp_base: RTSP_BASE,
+          webrtc_base: WEBRTC_BASE
+        }
+      };
+      console.log('[CAM][MQTT] start payload', payload);
+      await mqttPublish(topic, payload, 1, false);
+      // 이후 실제 재생 URL은 STATE_TOPIC에서 수신 → setWebrtcUrl()
+    } catch (e) {
+      console.error('[CAM][MQTT] start error', e);
+      setStreamError('스트리밍 시작 실패');
+      setCameraStatus('error');
+      setIsStreaming(false);
+    }
+  }, [isConnected, cameraId, resolution]);
+
+  const stopStreaming = useCallback(async () => {
     setIsStreaming(false);
     setIsPlaying(false);
-    cleanupPeer();
-    if (joinedRef.current) {
-      websocketService.send('webrtc_leave', { roomId: roomIdRef.current });
-      joinedRef.current = false;
+    cleanupVideo();
+    try {
+      const topic = `camera/${cameraId}/cmd`;
+      await mqttPublish(topic, { type:'camera', action: 'stop', options: { name: `cam-${cameraId}` } }, 1, false);
+    } catch {}
+  }, [cleanupVideo, cameraId]);
+
+  // 5분 자동 정지 타이머
+  useEffect(() => {
+    if (isStreaming) {
+      if (autoStopTimerRef.current) {
+        try { clearTimeout(autoStopTimerRef.current); } catch {}
+      }
+      autoStopTimerRef.current = window.setTimeout(() => {
+        try { stopStreaming(); } catch {}
+      }, 5 * 60 * 1000);
     }
-  }, [cleanupPeer]);
+    return () => {
+      if (autoStopTimerRef.current) {
+        try { clearTimeout(autoStopTimerRef.current); } catch {}
+        autoStopTimerRef.current = null;
+      }
+    };
+  }, [isStreaming, stopStreaming]);
 
   const togglePlayPause = useCallback(() => {
+    // WebRTC(iframe)는 일시정지를 직접 제어하기 어려움 → HLS일 때만 동작
+    if (webrtcUrl) return;
     const next = !isPlaying;
     setIsPlaying(next);
     const video = videoRef.current;
     if (video) {
-      if (next) {
-        video.play().catch(() => {});
-      } else {
-        video.pause();
-      }
+      if (next) video.play().catch(() => {});
+      else video.pause();
     }
-  }, [isPlaying]);
+  }, [isPlaying, webrtcUrl]);
 
   const toggleFullscreen = useCallback(() => {
-    setIsFullscreen(!isFullscreen);
-  }, [isFullscreen]);
+    setIsFullscreen((v) => !v);
+  }, []);
 
-  // WebSocket 시그널링 구독/해제
+  // HLS 재생 (백업 경로로 유지)
   useEffect(() => {
-    if (!isStreaming) return;
-    const onOffer = (data: any) => {
-      if (data?.roomId !== roomIdRef.current) return;
-      handleOffer(data);
-    };
-    const onIce = (data: any) => {
-      if (data?.roomId !== roomIdRef.current) return;
-      handleRemoteIce(data);
-    };
+    const video = videoRef.current as HTMLVideoElement | null;
+    if (!video || !hlsUrl) return;
+    const canNative = video.canPlayType('application/vnd.apple.mpegurl');
+    if (canNative) {
+      video.src = hlsUrl;
+      video.play().catch(() => {});
+      return;
+    }
+    let cleanup: (() => void) | null = null;
+    (async () => {
+      try {
+        if ((window as any).Hls) {
+          const HlsCtor = (window as any).Hls;
+          const hls = new HlsCtor({
+            liveSyncDuration: 2,
+            liveMaxLatencyDuration: 4,
+            maxLiveSyncPlaybackRate: 1.2,
+            enableWorker: true,
+            lowLatencyMode: true,
+          });
+          hls.loadSource(hlsUrl);
+          hls.attachMedia(video);
+          cleanup = () => { try { hls.destroy(); } catch {} };
+          return;
+        }
+        await new Promise<void>((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
+          s.async = true;
+          s.onload = () => resolve();
+          s.onerror = () => reject(new Error('hls.js load failed'));
+          document.head.appendChild(s);
+        });
+        const HlsCtor = (window as any).Hls;
+        if (!HlsCtor) return;
+        const hls = new HlsCtor();
+        hls.loadSource(hlsUrl);
+        hls.attachMedia(video);
+        cleanup = () => { try { hls.destroy(); } catch {} };
+      } catch (e) {
+        console.warn('[CAM][HLS] init failed', e);
+      }
+    })();
+    return () => { if (cleanup) cleanup(); };
+  }, [hlsUrl]);
 
-    websocketService.on('webrtc_offer', onOffer);
-    websocketService.on('webrtc_ice_candidate', onIce);
-
-    return () => {
-      websocketService.off('webrtc_offer', onOffer);
-      websocketService.off('webrtc_ice_candidate', onIce);
-    };
-  }, [isStreaming, handleOffer, handleRemoteIce]);
+  const showIframe = !!webrtcUrl && !webrtcUrl.endsWith('.m3u8');
+  const showHls = !!hlsUrl;
 
   return (
     <Card className={`h-full ${isFullscreen ? "fixed inset-4 z-50 bg-background" : ""}`}>
@@ -224,14 +283,49 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
           </div>
         </div>
       </CardHeader>
+
       <CardContent>
         <div className="space-y-4">
-          {/* 카메라 피드 영역 또는 시작 버튼 */}
           <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
             {isStreaming ? (
               isConnected ? (
                 <div className="relative w-full h-full">
-                  <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline />
+                  {/* WebRTC(iframe) 우선, 없으면 HLS(video) */}
+                  {showIframe ? (
+                    <iframe
+                      ref={iframeRef}
+                      src={`${webrtcUrl!}?autoplay=1&muted=1`}
+                      className="absolute inset-0 w-full h-full"
+                      allow="autoplay; fullscreen"
+                      allowFullScreen
+                      title="webrtc-player"
+                    />
+                  ) : showHls ? (
+                    <video
+                      ref={videoRef}
+                      className="absolute inset-0 w-full h-full object-cover"
+                      playsInline
+                      autoPlay
+                      muted
+                      controls
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-white">
+                      <p className="text-sm opacity-80">스트림 준비 중…</p>
+                    </div>
+                  )}
+
+                  {isFullscreen && (
+                    <button
+                      type="button"
+                      onClick={() => setIsFullscreen(false)}
+                      className="absolute top-4 right-4 z-50 inline-flex items-center justify-center h-8 w-8 rounded-full bg-black/60 text-white hover:bg-black/80 focus:outline-none focus:ring-2 focus:ring-white/40"
+                      aria-label="전체보기 해제"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+
                   {streamError && (
                     <div className="absolute inset-0 bg-black/60 text-white flex items-center justify-center">
                       <div className="text-center px-4">
@@ -239,15 +333,13 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
                       </div>
                     </div>
                   )}
-                  
-                  {/* 스트림 상태 오버레이 */}
+
                   <div className="absolute top-4 left-4">
                     <Badge variant="secondary" className="bg-black/50 text-white">
-                      LIVE
+                      {cameraStatus === 'online' ? 'LIVE' : cameraStatus.toUpperCase()}
                     </Badge>
                   </div>
-                  
-                  {/* 타임스탬프 */}
+
                   <div className="absolute bottom-4 right-4 text-white text-sm bg-black/50 px-2 py-1 rounded">
                     {new Date().toLocaleString()}
                   </div>
@@ -266,24 +358,16 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
                 <Camera className="h-16 w-16 text-muted-foreground" />
                 <div className="text-center">
                   <h3 className="text-lg font-medium text-white">카메라 스트리밍</h3>
-                  <p className="text-sm text-gray-300">
-                    실시간 카메라 피드를 시작하려면 버튼을 눌러주세요
-                  </p>
+                  <p className="text-sm text-gray-300">실시간 카메라 피드를 시작하려면 버튼을 눌러주세요</p>
                 </div>
-                <Button
-                  onClick={startStreaming}
-                  disabled={!isConnected}
-                  size="lg"
-                  className="bg-primary hover:bg-primary/90"
-                >
+                <Button onClick={startStreaming} disabled={!isConnected} size="lg" className="bg-primary hover:bg-primary/90">
                   <Play className="h-5 w-5 mr-2" />
                   스트리밍 시작
                 </Button>
               </div>
             )}
           </div>
-          
-          {/* 컨트롤 버튼들 */}
+
           {isStreaming && (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -291,48 +375,37 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
                   variant="outline"
                   size="sm"
                   onClick={togglePlayPause}
-                  disabled={!isConnected}
+                  disabled={!isConnected || !!webrtcUrl /* WebRTC는 일시정지 미제공 */}
                 >
-                  {isPlaying ? (
-                    <Pause className="h-4 w-4" />
-                  ) : (
-                    <Play className="h-4 w-4" />
-                  )}
+                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                   {isPlaying ? "일시정지" : "재생"}
                 </Button>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={stopStreaming}
-                  disabled={!isConnected}
-                >
+
+                <Button variant="outline" size="sm" onClick={stopStreaming} disabled={!isConnected}>
                   정지
                 </Button>
-                
+
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={() => { /* 새로고침: iframe/video 리로드 */ 
+                    if (webrtcUrl && iframeRef.current) iframeRef.current.src = `${webrtcUrl}?t=${Date.now()}&autoplay=1&muted=1`;
+                    if (hlsUrl && videoRef.current) { videoRef.current.load(); videoRef.current.play().catch(()=>{}); }
+                  }}
                   disabled={!isConnected || !isStreaming}
                 >
                   <RotateCw className="h-4 w-4" />
                   새로고침
                 </Button>
               </div>
-            
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={toggleFullscreen}
-                disabled={!isConnected || !isStreaming}
-              >
+
+              <Button variant="outline" size="sm" onClick={toggleFullscreen} disabled={!isConnected || !isStreaming}>
                 <Maximize2 className="h-4 w-4" />
                 {isFullscreen ? "축소" : "전체화면"}
               </Button>
             </div>
           )}
-          
-          {/* 카메라 정보 */}
+
           {isStreaming && (
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>

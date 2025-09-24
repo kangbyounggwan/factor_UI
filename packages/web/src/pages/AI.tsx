@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 
 const AI = () => {
   const [activeTab, setActiveTab] = useState('text-to-3d');
@@ -53,17 +54,37 @@ const AI = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
   const [generatedModels, setGeneratedModels] = useState<any[]>([]);
-  const [connectedPrinters] = useState([
-    { id: '1', name: 'Ender 3 Pro', status: 'ready', temperature: { nozzle: 25, bed: 22 } },
-    { id: '2', name: 'Prusa i3 MK3S+', status: 'printing', temperature: { nozzle: 210, bed: 60 }, progress: 45 },
-    { id: '3', name: 'Bambu Lab X1 Carbon', status: 'ready', temperature: { nozzle: 28, bed: 25 } },
-  ]);
-  const totalPrinters = connectedPrinters.length;
-  const connectedCount = connectedPrinters.filter(p => p.status === 'ready' || p.status === 'printing').length;
-  const printingCount = connectedPrinters.filter(p => p.status === 'printing').length;
+  const [printers, setPrinters] = useState<any[]>([]);
+  const totalPrinters = printers.length;
+  const connectedCount = printers.filter((p: any) => p?.status === 'ready' || p?.status === 'printing' || p?.status === 'operational').length;
+  const printingCount = printers.filter((p: any) => p?.status === 'printing').length;
   const { toast } = useToast();
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 연결된 프린터 로드 (Supabase)
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        if (!user?.id) return;
+        const rows = await getUserPrintersWithGroup(user.id);
+        if (!active) return;
+        const mapped = (rows || []).map((r: any) => ({
+          id: r.id,
+          name: r.model ?? r.device_uuid ?? 'Unknown Printer',
+          status: r.status ?? 'disconnected',
+          temperature: { nozzle: 0, bed: 0 }, // 실시간 온도는 별도 채널에서
+          progress: undefined,
+          raw: r,
+        }));
+        setPrinters(mapped);
+      } catch (e) {
+        console.error('[AI] load printers failed', e);
+      }
+    })();
+    return () => { active = false; };
+  }, [user?.id]);
 
   // SEO: Title & Meta description
   useEffect(() => {
@@ -637,27 +658,27 @@ const AI = () => {
                   </Badge>
                 </div>
                 <div className="space-y-3">
-                  {connectedPrinters.map((printer) => (
+                  {printers.map((printer: any) => (
                     <Card key={printer.id} className="p-3 cursor-pointer hover:shadow-md transition" onClick={() => openPrinterSettings(printer)}>
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-medium">{printer.name}</p>
                           <Badge 
-                            variant={printer.status === 'ready' ? 'secondary' : 'default'}
+                            variant={printer.status === 'ready' || printer.status === 'operational' ? 'secondary' : 'default'}
                             className="text-xs"
                           >
-                            {printer.status === 'ready' ? '대기중' : '프린팅중'}
+                            {printer.status === 'printing' ? '프린팅중' : (printer.status === 'ready' || printer.status === 'operational' ? '대기중' : (printer.status || '연결끊김'))}
                           </Badge>
                         </div>
                         
                         <div className="text-xs text-muted-foreground">
                           <div className="flex justify-between">
-                            <span>노즐: {printer.temperature.nozzle}°C</span>
-                            <span>베드: {printer.temperature.bed}°C</span>
+                            <span>노즐: {printer?.temperature?.nozzle ?? 0}°C</span>
+                            <span>베드: {printer?.temperature?.bed ?? 0}°C</span>
                           </div>
                         </div>
 
-                        {printer.progress && (
+                        {typeof printer.progress === 'number' && (
                           <div className="space-y-1">
                             <div className="flex justify-between text-xs">
                               <span>진행률</span>

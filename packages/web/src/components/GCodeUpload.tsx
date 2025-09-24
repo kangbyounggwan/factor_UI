@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, waitForSdUploadResult, onDashStatusMessage,  publishGcodePrint } from "@shared/services/mqttService";
-import { useWebSocket } from "@shared/hooks/useWebSocket";
 import { supabase } from "@shared/integrations/supabase/client";
 
 interface GCodeFile {
@@ -35,15 +34,13 @@ interface GCodeUploadProps {
 }
 
 export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
-  const { isConnected, printerStatus } = useWebSocket();
   const [files, setFiles] = useState<GCodeFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  
-  const isPrinting = printerStatus.printing;
+  const [isPrinting, setIsPrinting] = useState(false);
   const [sdFiles, setSdFiles] = useState<Array<{ name: string; size: number }>>([]);
   const [localMqttFiles, setLocalMqttFiles] = useState<Array<{ name: string; display?: string; size?: number; date?: number | string | null; estimatedPrintTime?: number; user?: string; path?: string }>>([]);
   const [fileSource, setFileSource] = useState<'LOCAL' | 'SDCARD'>('LOCAL');
@@ -238,7 +235,7 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
     loadFiles();
   }, []);
 
-  // octoprint/status 수신 → sd.local / sd.sdcard 반영 (현재 디바이스만)
+  // octoprint/status 수신 → sd.local / sd.sdcard, printing 상태 반영 (현재 디바이스만)
   useEffect(() => {
     const off = onDashStatusMessage((uuid, payload) => {
       if (deviceUuid && uuid !== deviceUuid) return;
@@ -247,6 +244,8 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
       const sdArr: any[] = Array.isArray(sd?.sdcard) ? sd.sdcard : [];
       setLocalMqttFiles(localArr);
       setSdFiles(sdArr.map((f: any) => ({ name: String(f?.name ?? f?.display ?? ''), size: Number(f?.size) || 0 })));
+      const printing = Boolean(payload?.printer_status?.printing);
+      setIsPrinting(printing);
     });
     return () => { off(); };
   }, [deviceUuid]);
@@ -266,11 +265,7 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
             <RadioGroup value={fileSource} onValueChange={async (v) => {
               const next = v as 'LOCAL' | 'SDCARD';
               setFileSource(next);
-              try {
-                if (deviceUuid) {
-                  await mqttConnect();
-                }
-              } catch {}
+              try { if (deviceUuid) await mqttConnect(); } catch {}
             }} className="flex flex-row gap-4">
               <div className="flex items-center space-x-2">
                 <RadioGroupItem id="gc-local" value="LOCAL" />

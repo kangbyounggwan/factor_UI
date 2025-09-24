@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Monitor, Settings, ArrowRight, Activity, Thermometer, Clock, Lock, LogIn, Filter, Plus } from "lucide-react";
+import { Monitor, Settings, ArrowRight, Activity, Thermometer, Clock, Lock, LogIn, Filter, Plus, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { supabase } from "@shared/integrations/supabase/client"
@@ -70,6 +70,7 @@ interface PrinterOverview {
   state: "idle" | "printing" | "paused" | "error" | "connecting" | "disconnected";
   connected: boolean;
   printing: boolean;
+  pending?: boolean; // MQTT 최초 수신 대기 중
   completion?: number;
   temperature: {
     tool_actual: number;
@@ -131,10 +132,19 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
             )}
           </div>
           <div className="flex items-center space-x-2 flex-shrink-0">
-            <div className={`h-3 w-3 rounded-full ${printer.connected ? 'bg-success' : 'bg-destructive'}`} />
-            <Badge className={config.color}>
-              {config.label}
-            </Badge>
+            {printer.pending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <Badge className={statusConfig.connecting.color}>연결중</Badge>
+              </>
+            ) : (
+              <>
+                <div className={`h-3 w-3 rounded-full ${printer.connected ? 'bg-success' : 'bg-destructive'}`} />
+                <Badge className={config.color}>
+                  {config.label}
+                </Badge>
+              </>
+            )}
           </div>
         </CardHeader>
         
@@ -196,9 +206,15 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground flex-shrink-0">연결상태:</span>
-                  <span className={`font-medium text-xs ${printer.connected ? 'text-success' : 'text-destructive'}`}>
-                    {printer.connected ? '연결완료' : '연결없음'}
-                  </span>
+                  {printer.pending ? (
+                    <span className="font-medium text-xs text-primary inline-flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> 확인중...
+                    </span>
+                  ) : (
+                    <span className={`font-medium text-xs ${printer.connected ? 'text-success' : 'text-destructive'}`}>
+                      {printer.connected ? '연결완료' : '연결없음'}
+                    </span>
+                  )}
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground flex-shrink-0">프린팅:</span>
@@ -267,9 +283,10 @@ const Home = () => {
           model: printer.model,
           group_id: printer.group_id,
           group: printer.group,
-          state: state,
-          connected: isConnected,
+          state: 'connecting', // 초기엔 연결중으로 표시
+          connected: false,
           printing: isPrinting,
+          pending: true, // MQTT 수신 대기
           completion: 0, // TODO: 실제 진행률 데이터 필드 추가 필요
           temperature: {
             tool_actual: 0, // TODO: 실제 온도 데이터 필드 추가 필요
@@ -327,8 +344,32 @@ const Home = () => {
 
   // MQTT: dash_status 수신 → 프린터 리스트에 반영
   useEffect(() => {
+    // 3초 타임아웃: 첫 수신이 없으면 연결없음 처리
+    const timeouts: Record<string, number> = {};
+    setPrinters((prev) => prev.map(p => {
+      if (p.pending) return p; // 이미 connecting
+      return { ...p, pending: true, state: 'connecting', connected: false };
+    }));
+
+    const startTimeoutFor = (uuid?: string) => {
+      if (!uuid) return;
+      if (timeouts[uuid]) { try { clearTimeout(timeouts[uuid]); } catch {} }
+      timeouts[uuid] = window.setTimeout(() => {
+        setPrinters((prev) => prev.map(p => (
+          p.device_uuid === uuid && p.pending
+            ? { ...p, pending: false, state: 'disconnected', connected: false }
+            : p
+        )));
+      }, 3000);
+    };
+
+    // 모든 uuid에 타임아웃 설정
+    printers.forEach(p => startTimeoutFor(p.device_uuid));
+
     // 수신 핸들러: 해당 uuid 프린터 데이터를 대체/병합
     const off = onDashStatusMessage((uuid, data) => {
+      // 수신되면 타임아웃 해제
+      if (uuid && timeouts[uuid]) { try { clearTimeout(timeouts[uuid]); } catch {} delete timeouts[uuid]; }
       setPrinters((prev) => {
         const next = [...prev];
         const idx = next.findIndex(p => p.device_uuid === uuid);
@@ -339,7 +380,9 @@ const Home = () => {
           next[idx] = {
             ...next[idx],
             // data에 따라 필요한 필드 갱신 (예: 상태/온도/진행률)
-            connected: data?.connected ?? next[idx].connected,
+            pending: false,
+            state: (data?.printer_status?.state ?? (data?.connected ? 'idle' : 'disconnected')) as any,
+            connected: Boolean(data?.connected || data?.printer_status?.flags?.operational || data?.printer_status?.flags?.printing || data?.printer_status?.flags?.paused || data?.printer_status?.flags?.ready),
             printing: data?.printer_status?.printing ?? next[idx].printing,
             completion: typeof data?.progress?.completion === 'number' ? data.progress.completion : next[idx].completion,
             temperature: {
@@ -357,8 +400,11 @@ const Home = () => {
         return next;
       });
     });
-    return () => { off(); };
-  }, []);
+    return () => {
+      off();
+      Object.values(timeouts).forEach(t => { try { clearTimeout(t); } catch {} });
+    };
+  }, [printers.length]);
 
   // 구독 로직은 로그인 시 shared에서 처리됨
 

@@ -57,6 +57,7 @@ interface MonitoringData {
     error_message?: string;
     connected: boolean;
     printing: boolean;
+    flags?: Record<string, any>;
   };
   temperature: {
     tool: { actual: number; target: number; offset?: number };
@@ -137,6 +138,10 @@ const PrinterDetail = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [deviceUuid, setDeviceUuid] = useState<string | null>(null);
+  const [streamUrl, setStreamUrl] = usePersistentState<string | null>(
+    `printer:stream:${id ?? 'unknown'}`,
+    null
+  );
   const [sdFiles, setSdFiles] = useState<Array<{ name: string; size: number }>>([]);
   // 로컬 파일 (MQTT sd_list_result의 local 객체)
   type LocalFile = {
@@ -278,7 +283,23 @@ const PrinterDetail = () => {
       });
 
       // 상세 페이지 실시간 반영을 위한 device_uuid 저장
-      setDeviceUuid((printer as any)?.device_uuid ?? null);
+      const device_uuid = (printer as any)?.device_uuid ?? null;
+      setDeviceUuid(device_uuid);
+
+      // cameras.stream_url 조회 및 퍼시스트 저장
+      if (device_uuid) {
+        const { data: cam, error: camErr } = await supabase
+          .from('cameras')
+          .select('stream_url')
+          .eq('device_uuid', device_uuid)
+          .maybeSingle();
+        if (camErr) {
+          console.warn('[CAM][DB] stream_url 조회 실패:', camErr.message);
+        }
+        setStreamUrl((cam as any)?.stream_url ?? null);
+      } else {
+        setStreamUrl(null);
+      }
 
     } catch (error) {
       console.error('Error loading printer data:', error);
@@ -286,6 +307,31 @@ const PrinterDetail = () => {
       if (showSpinner ?? !hasSnapshot) setLoading(false);
     }
   };
+
+  // MQTT dash_status 수신 → 상세 데이터에 반영
+  // deviceUuid 변경 시 cameras.stream_url 재조회
+  useEffect(() => {
+    (async () => {
+      if (!deviceUuid) {
+        setStreamUrl(null);
+        return;
+      }
+      try {
+        const { data: cam, error: camErr } = await supabase
+          .from('cameras')
+          .select('stream_url')
+          .eq('device_uuid', deviceUuid)
+          .maybeSingle();
+        if (camErr) {
+          console.warn('[CAM][DB] stream_url 재조회 실패:', camErr.message);
+          return;
+        }
+        setStreamUrl((cam as any)?.stream_url ?? null);
+      } catch (e) {
+        console.warn('[CAM][DB] stream_url 재조회 예외:', e);
+      }
+    })();
+  }, [deviceUuid]);
 
   // MQTT dash_status 수신 → 상세 데이터에 반영
   useEffect(() => {
@@ -318,9 +364,10 @@ const PrinterDetail = () => {
           printerStatus: {
             state: nextState as any,
             timestamp: Date.now(),
-            connected: payload?.connected ?? prev.printerStatus.connected,
-            printing: payload?.printer_status?.printing ?? prev.printerStatus.printing,
+            connected: Boolean(flags && (flags.operational || flags.printing || flags.paused || flags.ready || flags.error)),
+            printing: Boolean(payload?.printer_status?.printing ?? prev.printerStatus.printing),
             error_message: payload?.printer_status?.error_message ?? prev.printerStatus.error_message,
+            flags: flags || prev.printerStatus.flags,
           },
           temperature: {
             tool: {
@@ -520,7 +567,14 @@ const PrinterDetail = () => {
       disconnected: { label: '연결끊김' },
     };
     const status = data.printerStatus.state as keyof typeof map;
-    const label = map[status]?.label || '알수없음';
+    const flags: any = data.printerStatus?.flags || {};
+    // flags 우선 규칙 적용
+    let label = '연결끊김';
+    if (flags?.error) label = '오류';
+    else if (flags?.printing) label = '프린팅';
+    else if (flags?.paused) label = '일시정지';
+    else if (flags?.ready || flags?.operational) label = '대기';
+    else label = map[status]?.label || '연결끊김';
     return (
       <div className="h-full rounded-lg border bg-card text-card-foreground shadow-sm">
         <div className="p-6 border-b"><div className="text-sm font-medium">프린터 상태</div></div>
@@ -528,8 +582,10 @@ const PrinterDetail = () => {
           <div className="space-y-2">
             <div className="inline-flex items-center px-2 py-1 text-xs rounded-md bg-muted">{label}</div>
             <div className="text-xs text-muted-foreground space-y-1">
-              <div>연결: {data.printerStatus.connected ? '연결됨' : '연결끊김'}</div>
-              <div>프린팅: {data.printerStatus.printing ? '진행중' : '중지'}</div>
+              <div>
+                연결: {(data.printerStatus?.flags?.operational || data.printerStatus?.flags?.printing || data.printerStatus?.flags?.paused || data.printerStatus?.flags?.ready || data.printerStatus?.flags?.error) ? '연결됨' : '연결끊김'}
+              </div>
+              <div>프린팅: {data.printerStatus?.flags?.printing ? '진행중' : (data.printerStatus?.flags?.paused ? '중지중' : '중지')}</div>
             </div>
           </div>
           <div className="space-y-2 pt-2 border-t">
@@ -697,9 +753,9 @@ const PrinterDetail = () => {
             <div className="col-span-7">
               <div className="h-[600px]">
                 <CameraFeed
-                  cameraId="CAM-001"
-                  isConnected={true}
-                  resolution="1920x1080"
+                  cameraId={deviceUuid || 'unknown'}
+                  isConnected={data.printerStatus.connected}
+                  resolution="1280x720"
                 />
               </div>
             </div>

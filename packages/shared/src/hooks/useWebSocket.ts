@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createSharedWebSocketClient } from "../component/websocket";
+import { onDashStatusMessage, createSharedMqttClient } from "../component/mqtt";
 import { PrinterStatus, TemperatureData, PositionData, PrintProgressData } from "../types/printerType";
 
 export const useWebSocket = () => {
@@ -25,54 +25,74 @@ export const useWebSocket = () => {
     filament_used: 0,
   });
 
-  const clientRef = useRef<ReturnType<typeof createSharedWebSocketClient> | null>(null);
+  const lastMsgTsRef = useRef<number>(0);
   const heartbeatRef = useRef<number | null>(null);
 
-  const ensureClient = () => {
-    if (!clientRef.current) {
-      clientRef.current = createSharedWebSocketClient({ reconnect: true });
-    }
-    return clientRef.current;
-  };
-
   const connect = useCallback(async () => {
-    const client = ensureClient();
-    const status = client.getStatus?.();
-    if (status === 'open' || status === 'connecting') return;
-    await client.connect();
+    await createSharedMqttClient().connect();
   }, []);
 
   const disconnect = useCallback(() => {
-    clientRef.current?.disconnect();
+    createSharedMqttClient().disconnect().catch(() => {});
   }, []);
 
-  const sendMessage = useCallback((type: string, data: any) => {
-    ensureClient().safeSend({ type, payload: data });
+  const sendMessage = useCallback((_type: string, _data: any) => {
+    // MQTT 기반으로 전환됨 – 이 훅에서는 직접 전송하지 않음
   }, []);
 
   useEffect(() => {
-    const client = ensureClient();
-
-    const setConn = () => {
-      const s = client.getStatus();
-      setConnectionState(s);
-      setIsConnected(s === 'open');
+    // 연결 상태 추정: 최근 메시지 수신 여부 기반
+    const tick = () => {
+      const now = Date.now();
+      const alive = now - (lastMsgTsRef.current || 0) < 10000; // 10s
+      setIsConnected(alive);
+      setConnectionState(alive ? 'open' : 'disconnected');
     };
-    const id = window.setInterval(setConn, 1000) as unknown as number;
+    heartbeatRef.current = window.setInterval(tick, 1000) as unknown as number;
 
-    const offStatus = client.on('printer_status', (msg) => setPrinterStatus(msg.payload as PrinterStatus));
-    const offTemp = client.on('temperature_update', (msg) => setTemperature(msg.payload as TemperatureData));
-    const offPos = client.on('position_update', (msg) => setPosition(msg.payload as PositionData));
-    const offProg = client.on('print_progress', (msg) => setPrintProgress(msg.payload as PrintProgressData));
+    // MQTT 대시 상태 구독 (전역 구독이 이미 시작돼 있어도 listener만 추가)
+    const off = onDashStatusMessage((_uuid, payload: any) => {
+      lastMsgTsRef.current = Date.now();
+      // printer status
+      const flags = payload?.printer_status?.flags || {};
+      const status: PrinterStatus = {
+        status: (payload?.printer_status?.state as any) ?? 'idle',
+        connected: Boolean(payload?.connected),
+        printing: Boolean(payload?.printer_status?.printing),
+        error_message: payload?.printer_status?.error_message ?? null,
+      };
+      setPrinterStatus(status);
 
-    connect();
+      // temperature
+      const tInfo = payload?.temperature_info;
+      const toolAny = tInfo?.tool; const tool = toolAny?.tool0 ?? toolAny;
+      const nextTemp: TemperatureData = {
+        tool: { current: Number(tool?.actual) || 0, target: Number(tool?.target) || 0 },
+        bed: { current: Number(tInfo?.bed?.actual) || 0, target: Number(tInfo?.bed?.target) || 0 },
+      } as any;
+      setTemperature(nextTemp);
+
+      // position
+      if (payload?.position) setPosition(payload.position as PositionData);
+
+      // print progress
+      const p = payload?.progress || {};
+      const nextProg: PrintProgressData = {
+        completion: typeof p?.completion === 'number' ? p.completion : 0,
+        file_position: p?.file_position ?? 0,
+        file_size: p?.file_size ?? 0,
+        print_time: p?.print_time ?? 0,
+        print_time_left: p?.print_time_left ?? 0,
+        filament_used: p?.filament_used ?? 0,
+      } as any;
+      setPrintProgress(nextProg);
+    });
+
+    connect().catch(() => {});
 
     return () => {
-      clearInterval(id as unknown as number);
-      offStatus();
-      offTemp();
-      offPos();
-      offProg();
+      if (heartbeatRef.current != null) clearInterval(heartbeatRef.current as unknown as number);
+      off();
     };
   }, [connect]);
 

@@ -229,7 +229,7 @@ const PrinterDetail = () => {
         {/* 상단: 카메라 피드 + 제어 패드 (카드 자체 높이에 위임) */}
         <div className="grid grid-cols-1 gap-2 pb-8">
           <div className="min-h-[320px]">
-            <CameraFeed cameraId="CAM-001" isConnected resolution="1920x1080" />
+            <CameraFeed cameraId={deviceUuid || 'unknown'} isConnected={data.printerStatus.connected} resolution="1280x720" />
           </div>
           <div>
             <PrinterControlPad

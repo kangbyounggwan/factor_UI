@@ -67,12 +67,16 @@ function normalizePayload(p) {
   const model =  printerInput.connection[3].name ?? printerInput.connection[3].model ?? printerInput.profile?.model ?? null;
   const firmware = printerInput?.firmware ?? profile?.firmware ?? null;
   const printerUuid = p?.printer?.uuid ?? p?.printer?.UUID ?? printerInput?.uuid ?? null;
+  const streamUrl = p?.camera?.stream_url ?? p?.camera?.streamURL ?? null;
+  const registration = { is_new: p?.registration?.is_new === true };
 
   return {
     client:  { uuid: p?.client?.uuid ?? null },
     printer: { model: model, firmware, uuid: printerUuid },
     camera:  { uuid: p?.camera?.uuid ?? p?.camera?.UUID ?? null, resolution: p?.camera?.resolution ?? null },
     software:{ firmware_version: p?.software?.firmware_version ?? null, firmware: p?.software?.firmware ?? null, last_update: p?.software?.last_update ?? null, uuid: p?.software?.uuid ?? null },
+    registration,
+    extra: { camera_stream_url: streamUrl },
   };
 }
 
@@ -87,38 +91,53 @@ async function getUserIdFromToken(env, accessToken) {
 
 async function registerDeviceViaRest(env, accessToken, payload, userId) {
   // 서버 사이드에서 Supabase REST를 사용하여 upsert 수행
-  // clients upsert
-  await sbUpsert(env, accessToken, 'clients', [{
-    user_id: userId,
-    device_uuid: payload.client.uuid,
-    firmware_version: payload.software.firmware_version,
-    firmware: payload.software.firmware,
-    last_update: payload.software.last_update,
-    software_uuid: payload.software.uuid,
-    status: 'active',
-  }], 'device_uuid');
+  const isNew = payload?.registration?.is_new === true;
 
-  // printers upsert
-  const base = {
-    user_id: userId,
-    device_uuid: payload.client.uuid,
-    model: payload.printer.model,
-    firmware: payload.printer.firmware,
-    status: 'connected',
-  };
-  if (payload.client.uuid) {
-    await sbUpsert(env, accessToken, 'printers', [{ ...base, printer_uuid: payload.client.uuid }], 'printer_uuid');
-  } else {
-    await sbUpsert(env, accessToken, 'printers', [{ ...base, printer_uuid: null }], 'device_uuid');
+  if (isNew) {
+    // 신규 등록일 때만 clients/printers 생성(upsert)
+    await sbUpsert(env, accessToken, 'clients', [{
+      user_id: userId,
+      device_uuid: payload.client.uuid,
+      firmware_version: payload.software.firmware_version,
+      firmware: payload.software.firmware,
+      last_update: payload.software.last_update,
+      software_uuid: payload.software.uuid,
+      status: 'active',
+    }], 'device_uuid');
+
+    const base = {
+      user_id: userId,
+      device_uuid: payload.client.uuid,
+      model: payload.printer.model,
+      firmware: payload.printer.firmware,
+      status: 'connected',
+    };
+    if (payload.client.uuid) {
+      await sbUpsert(env, accessToken, 'printers', [{ ...base, printer_uuid: payload.client.uuid }], 'printer_uuid');
+    } else {
+      await sbUpsert(env, accessToken, 'printers', [{ ...base, printer_uuid: null }], 'device_uuid');
+    }
   }
 
-  // cameras upsert
-  await sbUpsert(env, accessToken, 'cameras', [{
-    user_id: userId,
-    device_uuid: payload.client.uuid,
-    camera_uuid: payload.camera.uuid,
-    resolution: payload.camera.resolution,
-  }], 'device_uuid');
+  // cameras: is_new면 upsert, 아니면 기존 행만 업데이트
+  const streamUrl = payload?.extra?.camera_stream_url ?? null;
+  if (isNew) {
+    await sbUpsert(env, accessToken, 'cameras', [{
+      user_id: userId,
+      device_uuid: payload.client.uuid,
+      camera_uuid: payload.camera.uuid,
+      resolution: payload.camera.resolution,
+      ...(streamUrl ? { stream_url: streamUrl } : {}),
+    }], 'device_uuid');
+  } else {
+    const values = {};
+    if (streamUrl != null) values.stream_url = streamUrl;
+    if (payload.camera?.resolution != null) values.resolution = payload.camera.resolution;
+    if (payload.camera?.uuid != null) values.camera_uuid = payload.camera.uuid;
+    if (Object.keys(values).length > 0) {
+      await sbUpdate(env, accessToken, 'cameras', { device_uuid: payload.client.uuid }, values);
+    }
+  }
 }
 
 async function sbUpsert(env, accessToken, table, rows, onConflict) {
@@ -137,6 +156,29 @@ async function sbUpsert(env, accessToken, table, rows, onConflict) {
     let text = '';
     try { text = await res.text(); } catch {}
     throw new Error(`Upsert failed for ${table}: ${res.status} ${text}`);
+  }
+}
+
+async function sbUpdate(env, accessToken, table, matchQuery, values) {
+  const qs = Object.entries(matchQuery)
+    .filter(([, v]) => v != null)
+    .map(([k, v]) => `${encodeURIComponent(k)}=eq.${encodeURIComponent(String(v))}`)
+    .join('&');
+  const url = `${String(env.url).replace(/\/$/, '')}/rest/v1/${table}?${qs}`;
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+      'Authorization': `Bearer ${accessToken}`,
+      'apikey': env.key,
+    },
+    body: JSON.stringify(values),
+  });
+  if (!res.ok) {
+    let text = '';
+    try { text = await res.text(); } catch {}
+    throw new Error(`Update failed for ${table}: ${res.status} ${text}`);
   }
 }
 
@@ -343,8 +385,6 @@ export function createApp({ staticDir, enableRest = true, enableWs = true } = {}
   const clients = new Set();
   const edgeClients = new Set();
   const webClients = new Set();
-  const rooms = new Map();
-  const clientMeta = new Map();
   let printerData = {
     status: 'idle',
     connected: false,
@@ -369,45 +409,7 @@ export function createApp({ staticDir, enableRest = true, enableWs = true } = {}
     });
   }
 
-  function broadcastToRoomExcept(roomId, exceptWs, payload) {
-    const participants = rooms.get(roomId);
-    if (!participants) return;
-    const message = JSON.stringify(payload);
-    participants.forEach((client) => {
-      if (client !== exceptWs && client.readyState === WebSocket.OPEN) client.send(message);
-    });
-  }
-
-  function joinRoom(ws, roomId, role) {
-    if (!rooms.has(roomId)) rooms.set(roomId, new Set());
-    const participants = rooms.get(roomId);
-    participants.forEach((existing) => {
-      if (existing !== ws && ws.readyState === WebSocket.OPEN) {
-        try { ws.send(JSON.stringify({ type: 'webrtc_peer_joined', data: { roomId } })); } catch {}
-      }
-    });
-    participants.add(ws);
-    const meta = clientMeta.get(ws) || { roomId: undefined, role: 'unknown' };
-    meta.roomId = roomId;
-    meta.role = role === 'publisher' || role === 'viewer' ? role : 'unknown';
-    clientMeta.set(ws, meta);
-    console.log('[WS][RTC] joinRoom:', roomId, 'role:', meta.role, 'participants:', rooms.get(roomId).size);
-  }
-
-  function leaveRoom(ws, roomId) {
-    const set = rooms.get(roomId);
-    if (set) {
-      set.delete(ws);
-      if (set.size === 0) rooms.delete(roomId);
-    }
-    const meta = clientMeta.get(ws) || { roomId: undefined, role: 'unknown' };
-    if (meta.roomId === roomId) {
-      meta.roomId = undefined;
-      meta.role = 'unknown';
-      clientMeta.set(ws, meta);
-    }
-    console.log('[WS][RTC] leaveRoom:', roomId, 'remaining:', rooms.get(roomId)?.size || 0);
-  }
+  function broadcastToRoomExcept(_roomId, _exceptWs, _payload) {}
 
   const wssOnConnection = (ws, req) => {
     const wsUrl = getWsUrlFromReq(req);
@@ -424,7 +426,7 @@ export function createApp({ staticDir, enableRest = true, enableWs = true } = {}
     console.log(' - UA      :', userAgent);
     console.log(' - Counts  :', { total: clients.size, edge: edgeClients.size, web: webClients.size });
 
-    clientMeta.set(ws, { roomId: undefined, role: 'unknown' });
+    // WebRTC 룸 메타 사용 제거됨
 
     if (isEdgeClient) {
       ws.send(JSON.stringify({ type: 'request_status', message: '현재 프린터 상태를 전송해주세요' }));
@@ -443,11 +445,7 @@ export function createApp({ staticDir, enableRest = true, enableWs = true } = {}
 
         if (isEdgeClient) {
           switch (type) {
-            case 'webrtc_join': { const { roomId, role } = data || {}; if (!roomId) return; joinRoom(ws, roomId, role); broadcastToRoomExcept(roomId, ws, { type: 'webrtc_peer_joined', data: { roomId } }); break; }
-            case 'webrtc_leave': { const { roomId } = data || {}; if (!roomId) return; leaveRoom(ws, roomId); broadcastToRoomExcept(roomId, ws, { type: 'webrtc_peer_left', data: { roomId } }); break; }
-            case 'webrtc_offer':
-            case 'webrtc_answer':
-            case 'webrtc_ice_candidate': { const { roomId } = data || {}; if (!roomId) return; broadcastToRoomExcept(roomId, ws, { type, data }); break; }
+            // WebRTC 관련 메시지 처리 제거
             case 'printer_status': printerData = { ...printerData, ...data }; broadcastToWebClients('printer_status', printerData); break;
             case 'temperature_update': printerData.temperature = { ...printerData.temperature, ...data }; broadcastToWebClients('temperature_update', printerData.temperature); break;
             case 'position_update': printerData.position = { ...printerData.position, ...data }; broadcastToWebClients('position_update', printerData.position); break;
@@ -460,11 +458,7 @@ export function createApp({ staticDir, enableRest = true, enableWs = true } = {}
         } else {
           switch (type) {
             case 'ping': if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() })); break;
-            case 'webrtc_join': { const { roomId, role } = data || {}; if (!roomId) return; joinRoom(ws, roomId, role); broadcastToRoomExcept(roomId, ws, { type: 'webrtc_peer_joined', data: { roomId } }); break; }
-            case 'webrtc_leave': { const { roomId } = data || {}; if (!roomId) return; leaveRoom(ws, roomId); broadcastToRoomExcept(roomId, ws, { type: 'webrtc_peer_left', data: { roomId } }); break; }
-            case 'webrtc_offer':
-            case 'webrtc_answer':
-            case 'webrtc_ice_candidate': { const { roomId } = data || {}; if (!roomId) return; broadcastToRoomExcept(roomId, ws, { type, data }); break; }
+            // WebRTC 관련 메시지 처리 제거
             default: console.log('웹 클라이언트 메시지:', type);
           }
         }
@@ -475,9 +469,6 @@ export function createApp({ staticDir, enableRest = true, enableWs = true } = {}
 
     ws.on('close', () => {
       clients.delete(ws); edgeClients.delete(ws); webClients.delete(ws);
-      const meta = clientMeta.get(ws);
-      if (meta?.roomId) leaveRoom(ws, meta.roomId);
-      clientMeta.delete(ws);
       console.log('[WS] Client disconnected');
       console.log(' - Counts:', { total: clients.size, edge: edgeClients.size, web: webClients.size });
     });
