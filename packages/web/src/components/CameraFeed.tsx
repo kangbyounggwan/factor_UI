@@ -140,8 +140,8 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
       const height = Number.isFinite(h) && h > 0 ? h : 720;
 
       // 환경변수(없으면 라우터의 LAN 주소를 직접 기입)
-      const RTSP_BASE = (import.meta as any).env?.VITE_MEDIAMTX_RTSP_BASE || 'rtsp://192.168.200.102:8554';
-      const WEBRTC_BASE = (import.meta as any).env?.VITE_MEDIAMTX_WEBRTC_BASE || 'http://192.168.200.102:8889';
+      const RTSP_BASE = (import.meta as any).env?.VITE_MEDIA_RTMP_URL || 'rtsp://192.168.200.102:8554';
+      const WEBRTC_BASE = (import.meta as any).env?.VITE_MEDIA_BASE_URL || 'http://192.168.200.102:8889';
 
       const topic = `camera/${cameraId}/cmd`;
       const payload = {

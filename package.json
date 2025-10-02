@@ -5,10 +5,11 @@
     "packages/*"
   ],
   "scripts": {
-    "media:dev": "node media.server.js",
+    "media:start": "docker compose up -d mediamtx",
     "dev:host": "npm --workspace @factor/host run dev",
     "dev:web": "npm --workspace @factor/web run dev",
     "dev:mobile": "npm --workspace @factor/mobile run dev",
+    "dev:stack": "npx -y concurrently -n HOST,API,MEDIA -c cyan,magenta,green \"npm --workspace @factor/host run dev\" \"node packages/shared/server.js --host 0.0.0.0 --port 5000 --ws --rest\"",
     "build:host": "npm --workspace @factor/host run build",
     "build:web": "npm --workspace @factor/web run build",
     "build:mobile": "npm --workspace @factor/mobile run build",

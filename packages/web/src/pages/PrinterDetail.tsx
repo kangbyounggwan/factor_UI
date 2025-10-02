@@ -751,21 +751,37 @@ const PrinterDetail = () => {
           {/* 카메라 피드와 컨트롤 패드 */}
           <div className="grid grid-cols-10 gap-6 mb-6">
             <div className="col-span-7">
-              <div className="h-[600px]">
+              <div className="relative h-[600px]">
                 <CameraFeed
                   cameraId={deviceUuid || 'unknown'}
                   isConnected={data.printerStatus.connected}
                   resolution="1280x720"
                 />
+                {!data.printerStatus.connected && (
+                  <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
+                    <div className="text-center">
+                      <div className="text-lg font-medium">연결 없음</div>
+                      <div className="text-xs mt-1">프린터 연결 후 이용 가능합니다</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <div className="col-span-3">
-              <div className="h-[600px]">
+              <div className="relative h-[600px]">
                 <PrinterControlPad
                   isConnected={data.printerStatus.connected}
                   isPrinting={data.printerStatus.printing}
                   deviceUuid={deviceUuid}
                 />
+                {!data.printerStatus.connected && (
+                  <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
+                    <div className="text-center">
+                      <div className="text-lg font-medium">연결 없음</div>
+                      <div className="text-xs mt-1">프린터 연결 후 이용 가능합니다</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

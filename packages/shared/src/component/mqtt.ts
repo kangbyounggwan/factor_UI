@@ -79,6 +79,8 @@ export class MqttBridge {
   private options: Required<MqttBridgeOptions>;
   private connectPromise: Promise<void> | null = null;
   private effectiveClientId: string;
+  private inert = false;
+  private readonly connectTimeoutMs = 2000;
 
   constructor(opts: MqttBridgeOptions = {}) {
     this.options = {
@@ -90,7 +92,8 @@ export class MqttBridge {
       debug: opts.debug ?? false,
     } as Required<MqttBridgeOptions>;
     if (!this.options.brokerUrl) {
-      throw new Error("VITE_MQTT_URL이 설정되어 있지 않습니다.");
+      this.inert = true;
+      try { console.warn("[MQTT] broker URL 미설정: MQTT 기능 비활성화(inert)"); } catch {}
     }
     // 고정 clientId 충돌 방지: 탭별 랜덤 suffix를 한 번만 부여
     const suffix = Math.random().toString(16).slice(2, 8);
@@ -101,59 +104,109 @@ export class MqttBridge {
     if (this.options.debug) console.log("[MQTT]", ...args);
   }
 
-  async connect(): Promise<void> {
-    if (this.connected && this.client) return;
-    if (this.connectPromise) return this.connectPromise;
+  private getDefaultPortForProtocol(protocol: string): number | undefined {
+    const proto = protocol.replace(/:$/, "");
+    switch (proto) {
+      case "ws": return 80;
+      case "wss": return 443;
+      case "mqtt": return 1883;
+      case "mqtts": return 8883;
+      default: return undefined;
+    }
+  }
 
-    const connectOpts: IClientOptions = {
-      clientId: this.effectiveClientId,
-      username: this.options.username || undefined,
-      password: this.options.password || undefined,
-      reconnectPeriod: this.options.reconnectPeriodMs,
-      clean: true,
-      keepalive: 60,
-      resubscribe: true,
-    };
+  public getBrokerInfo(): { host: string; port?: number; url: string } {
+    const url = this.options?.brokerUrl ?? "";
+    if (!url) return { host: "", port: undefined, url: "" };
+    try {
+      const u = new URL(url);
+      const host = u.hostname;
+      const parsedPort = u.port ? Number(u.port) : this.getDefaultPortForProtocol(u.protocol);
+      const port = Number.isFinite(parsedPort) ? parsedPort : undefined;
+      return { host, port, url };
+    } catch {
+      // URL 파싱 실패 시 원본을 host로 반환
+      return { host: url, port: undefined, url };
+    }
+  }
 
-    this.connectPromise = new Promise((resolve, reject) => {
+  private openClientWithTimeout(timeoutMs = this.connectTimeoutMs): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      if (this.inert) return resolve(false);
       try {
+        const connectOpts: IClientOptions = {
+          clientId: this.effectiveClientId,
+          username: this.options.username || undefined,
+          password: this.options.password || undefined,
+          reconnectPeriod: this.options.reconnectPeriodMs,
+          clean: true,
+          keepalive: 60,
+          resubscribe: true,
+        };
+
         this.client = mqtt.connect(this.options.brokerUrl, connectOpts);
 
-        this.client.on("connect", () => {
+        const onConnect = () => {
           this.connected = true;
-          this.log("connected");
-          this.connectPromise = null;
-          resolve(undefined);
-        });
+          cleanup();
+          resolve(true);
+        };
+        const onCloseOrError = () => {
+          this.connected = false;
+          cleanup();
+          resolve(false);
+        };
+        const cleanup = () => {
+          try { this.client?.off?.("connect", onConnect); } catch {}
+          try { this.client?.off?.("close", onCloseOrError); } catch {}
+          try { this.client?.off?.("offline", onCloseOrError); } catch {}
+          try { this.client?.off?.("error", onCloseOrError); } catch {}
+        };
 
+        this.client.on("connect", onConnect);
+        this.client.on("close", onCloseOrError);
+        this.client.on("offline", onCloseOrError);
         this.client.on("reconnect", () => this.log("reconnecting..."));
-        this.client.on("error", (err) => {
-          this.log("error", err);
-        });
+        this.client.on("error", (err) => { this.log("error", err); onCloseOrError(); });
 
-        // PUBACK / SUBACK 등 패킷 수신 로깅
         this.client.on("packetreceive", (packet: any) => {
           if (packet?.cmd === "puback") {
-            console.log("[MQTT][PUBACK]", { messageId: packet.messageId });
+            try { console.log("[MQTT][PUBACK]", { messageId: packet.messageId }); } catch {}
           }
         });
-
         this.client.on("message", (topic, payload) => {
           const textOrBytes = (payload as any)?.toString?.() ?? payload;
-          // 지원: 와일드카드 패턴(+, #) 매칭
           for (const [pattern, fns] of this.handlers.entries()) {
             if (topicMatches(pattern, topic)) {
-              fns.forEach((fn) => {
-                try { fn(topic, textOrBytes); } catch {}
-              });
+              fns.forEach((fn) => { try { fn(topic, textOrBytes); } catch {} });
             }
           }
         });
-      } catch (e) {
-        this.connectPromise = null;
-        reject(e);
+
+        setTimeout(() => {
+          if (!this.connected) {
+            this.log("connect timeout");
+            resolve(false);
+          }
+        }, timeoutMs);
+      } catch {
+        this.connected = false;
+        resolve(false);
       }
     });
+  }
+
+  async connect(): Promise<void> {
+    if (this.inert) return;
+    if (this.connected && this.client) return;
+    if (this.connectPromise) return this.connectPromise;
+
+    this.connectPromise = (async () => {
+      await this.openClientWithTimeout();
+      this.connectPromise = null;
+      return;
+    })();
+
     return this.connectPromise;
   }
 
@@ -176,8 +229,9 @@ export class MqttBridge {
 
   async subscribe(topic: string, handler?: MqttMessageHandler, qos: 0 | 1 | 2 = 0) {
     await this.connect();
-    await new Promise<void>((res, rej) => {
-      this.client!.subscribe(topic, { qos }, (err) => (err ? rej(err) : res()));
+    if (!this.client) { this.log("subscribe skipped (no client):", topic); return; }
+    await new Promise<void>((res) => {
+      this.client!.subscribe(topic, { qos }, (_err) => res());
     });
     if (handler) {
       if (!this.handlers.has(topic)) this.handlers.set(topic, new Set());
@@ -189,21 +243,18 @@ export class MqttBridge {
     if (handler) {
       this.handlers.get(topic)?.delete(handler);
     }
-    await new Promise<void>((res, rej) => {
-      this.client?.unsubscribe(topic, (err) => (err ? rej(err) : res()));
+    await new Promise<void>((res) => {
+      this.client?.unsubscribe(topic, (_err) => res());
     });
   }
 
   async publish(topic: string, message: unknown, qos: 0 | 1 | 2 = 0, retain = false) {
     await this.connect();
+    if (!this.client) { this.log("publish skipped (no client):", topic); return; }
     const payload = typeof message === "string" ? message : JSON.stringify(message);
-    await new Promise<void>((res, rej) => {
-      this.client!.publish(topic, payload, { qos, retain }, (err) => {
-        if (err) return rej(err);
-        // qos 1/2 완료 시 콜백 호출됨 -> puback/pubcomp 완료 의미
-        if (qos > 0) {
-          console.log("[MQTT][PUBLISH-ACKED]", { topic, qos });
-        }
+    await new Promise<void>((res) => {
+      this.client!.publish(topic, payload, { qos, retain }, (_err) => {
+        if (qos > 0) { try { console.log("[MQTT][PUBLISH-ACKED]", { topic, qos }); } catch {} }
         res();
       });
     });
@@ -489,8 +540,12 @@ export async function subscribeTopicsForUser(
   }
 
   try {
-    if (topics.length > 0) console.log('[MQTT][SUB][USER] started for topics:', topics);
-    else console.log('[MQTT][SUB][USER] no devices to subscribe', { userId });
+    const info = mqttClient.getBrokerInfo?.() ?? { host: '', port: undefined };
+    if (topics.length > 0) {
+      console.log('[MQTT][SUB][USER] started for topics:', topics, { broker_host: info.host, broker_port: info.port });
+    } else {
+      console.log('[MQTT][SUB][USER] no devices to subscribe', { userId, broker_host: info.host, broker_port: info.port });
+    }
   } catch {}
 
   return async () => {
@@ -498,7 +553,10 @@ export async function subscribeTopicsForUser(
       // eslint-disable-next-line no-await-in-loop
       await unSub().catch(() => {});
     }
-    try { if (topics.length > 0) console.log('[MQTT][SUB][USER] stopped for topics:', topics); } catch {}
+    try {
+      const info = mqttClient.getBrokerInfo?.() ?? { host: '', port: undefined };
+      if (topics.length > 0) console.log('[MQTT][SUB][USER] stopped for topics:', topics, { broker_host: info.host, broker_port: info.port });
+    } catch {}
   };
 }
 

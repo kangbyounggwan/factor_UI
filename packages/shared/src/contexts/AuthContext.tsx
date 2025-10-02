@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../integrations/supabase/client";
 import { startDashStatusSubscriptionsForUser, stopDashStatusSubscriptions, subscribeControlResultForUser, clearMqttClientId } from "../component/mqtt";
@@ -29,7 +29,13 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   const [session, setSession] = useState<Session | null>(null);
   const [userRole, setUserRole] = useState<"admin" | "user" | null>(null);
   const [loading, setLoading] = useState(true);
-  const [ctrlUnsub, setCtrlUnsub] = useState<null | (() => Promise<void>)>(null);
+  // refs to avoid stale closures and double-subscribe
+  const initializedRef = useRef(false);
+  const currentUserIdRef = useRef<string | null>(null);
+  const subscribedUserIdRef = useRef<string | null>(null);
+  const ctrlUnsubRef = useRef<null | (() => Promise<void>)>(null);
+  const lastRoleLoadedUserIdRef = useRef<string | null>(null);
+  const signOutInProgressRef = useRef(false);
 
   console.log('AuthProvider 렌더링:', { 
     variant, 
@@ -40,6 +46,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   });
 
   const loadUserRole = async (userId: string) => {
+    if (lastRoleLoadedUserIdRef.current === userId) return;
     try {
       const { data, error } = await supabase
         .from("user_roles")
@@ -47,8 +54,35 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         .eq("user_id", userId)
         .single();
       setUserRole(!error && data ? data.role : "user");
+      lastRoleLoadedUserIdRef.current = userId;
     } catch {
       setUserRole("user");
+    }
+  };
+
+  async function teardownSubscriptions() {
+    try { await stopDashStatusSubscriptions(); } catch {}
+    try { if (ctrlUnsubRef.current) await ctrlUnsubRef.current(); } catch {}
+    ctrlUnsubRef.current = null;
+    subscribedUserIdRef.current = null;
+  }
+
+  async function ensureSubscriptions(userId: string) {
+    if (!userId) return;
+    if (subscribedUserIdRef.current === userId) return; // already subscribed for this user
+    await teardownSubscriptions();
+    try { startDashStatusSubscriptionsForUser(userId); } catch {}
+    try {
+      const cr = await subscribeControlResultForUser(userId).catch(() => null);
+      if (cr) ctrlUnsubRef.current = cr;
+    } catch {}
+    subscribedUserIdRef.current = userId;
+  }
+
+  const setReadyOnce = () => {
+    if (!initializedRef.current) {
+      setLoading(false);
+      initializedRef.current = true;
     }
   };
 
@@ -63,36 +97,24 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
       
-      if (nextSession?.user) {
-        setTimeout(() => {
-          if (isMounted) loadUserRole(nextSession.user!.id);
-        }, 0);
-        
-        try {
-          startDashStatusSubscriptionsForUser(nextSession.user.id);
-          // SD/Control 결과 구독 시작 (유저 장치 전체)
-          const cr = await subscribeControlResultForUser(nextSession.user.id).catch(() => null);
-          if (cr && isMounted) setCtrlUnsub(() => cr);
-        } catch {}
+      const nextUserId = nextSession?.user?.id || null;
+      currentUserIdRef.current = nextUserId;
+
+      if (nextUserId) {
+        setTimeout(() => { if (isMounted) loadUserRole(nextUserId); }, 0);
+        await ensureSubscriptions(nextUserId);
       } else {
         if (isMounted) setUserRole(null);
       }
-      
-      if (isMounted) setLoading(false);
+      setReadyOnce();
       
       if (event === 'SIGNED_OUT') {
         // MQTT 구독 해제
-        try { await stopDashStatusSubscriptions(); } catch {}
-        try { if (ctrlUnsub) await ctrlUnsub(); } catch {}
-
-        if (isMounted) {
-          setCtrlUnsub(null);
-        }
+        await teardownSubscriptions();
         
         // 사용자별 MQTT client ID 삭제
-        if (nextSession?.user) {
-          clearMqttClientId(nextSession.user.id);
-        }
+        const lastUserId = currentUserIdRef.current;
+        if (lastUserId) { try { clearMqttClientId(lastUserId); } catch {} }
       }
     });
 
@@ -117,12 +139,22 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
           console.log('세션 에러:', error.message);
           const msg = String(error.message || "");
           if (msg.includes("Invalid Refresh Token") || msg.includes("Refresh Token Not Found")) {
-            try {
-              Object.keys(localStorage)
-                .filter((k) => k.startsWith("sb-"))
-                .forEach((k) => localStorage.removeItem(k));
-            } catch {}
-            await supabase.auth.signOut();
+            if (!signOutInProgressRef.current) {
+              signOutInProgressRef.current = true;
+              // 즉시 UI를 비로그인 상태로 전환하여 보호 라우트가 동작하도록 함
+              setUser(null);
+              setSession(null);
+              setUserRole(null);
+              setReadyOnce();
+              try {
+                Object.keys(localStorage)
+                  .filter((k) => k.startsWith("sb-"))
+                  .forEach((k) => localStorage.removeItem(k));
+              } catch {}
+              try { await supabase.auth.signOut(); } finally {
+                signOutInProgressRef.current = false;
+              }
+            }
           }
         }
         
@@ -130,13 +162,9 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         setUser(session?.user ?? null);
         
         if (session?.user) {
+          currentUserIdRef.current = session.user.id;
           await loadUserRole(session.user.id);
-          // MQTT 구독은 웹에서만 동작
-          try {
-            startDashStatusSubscriptionsForUser(session.user.id);
-            const cr = await subscribeControlResultForUser(session.user.id).catch(() => null);
-            if (cr && isMounted) setCtrlUnsub(() => cr);
-          } catch {}
+          await ensureSubscriptions(session.user.id); // idempotent
         } else {
           if (isMounted) setUserRole(null);
         }
@@ -159,7 +187,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         }
       } finally {
         if (isMounted) {
-          setLoading(false);
+          setReadyOnce();
           console.log('AuthProvider 로딩 완료:', { loading: false, user: !!user });
         }
       }
@@ -196,17 +224,25 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     setUserRole(null);
     try {
       // 현재 사용자의 MQTT client ID 삭제
-      if (user) {
-        clearMqttClientId(user.id);
-      }
+      if (user) { clearMqttClientId(user.id); }
       
-      await supabase.auth.signOut();
+      if (!signOutInProgressRef.current) {
+        signOutInProgressRef.current = true;
+        // 즉시 상태 클리어로 UI 전환
+        setUser(null);
+        setSession(null);
+        setUserRole(null);
+        setReadyOnce();
+        await supabase.auth.signOut();
+        signOutInProgressRef.current = false;
+      }
     } finally {
       try {
         Object.keys(localStorage)
           .filter((k) => k.startsWith("sb-"))
           .forEach((k) => localStorage.removeItem(k));
       } catch {}
+      await teardownSubscriptions();
     }
   };
 

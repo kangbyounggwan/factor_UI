@@ -359,6 +359,33 @@ const Settings = () => {
     }
   };
 
+  // 프린터 그룹 배정/해제 (카드에서 즉시 반영)
+  const handleAssignPrinterGroup = async (printerId: string, value: string) => {
+    if (!user) return;
+    const groupId = value === "none" ? null : value;
+    try {
+      const q = supabase
+        .from('printers')
+        .update({ group_id: groupId })
+        .eq('id', printerId)
+        .eq('user_id', user.id);
+      const { error } = await q;
+      if (error) throw error;
+
+      // 로컬 상태 업데이트
+      setPrinters(prev => prev.map(p => {
+        if (p.id !== printerId) return p;
+        const nextGroup = groupId ? groups.find(g => g.id === groupId) : undefined;
+        return { ...p, group_id: groupId ?? undefined, group: nextGroup } as any;
+      }));
+
+      toast({ title: "저장됨", description: "프린터 그룹이 업데이트되었습니다." });
+    } catch (error) {
+      console.error('Error assigning group:', error);
+      toast({ title: "오류", description: "그룹 배정 중 오류가 발생했습니다.", variant: "destructive" });
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "connected": return "bg-success text-success-foreground";
@@ -676,6 +703,30 @@ const Settings = () => {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">펌웨어:</span>
                       <span className="capitalize">{printer.firmware}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">그룹:</span>
+                      <div className="min-w-[180px]">
+                        <Select
+                          value={printer.group_id || "none"}
+                          onValueChange={(val) => handleAssignPrinterGroup(printer.id, val)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="그룹을 선택하세요" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">그룹 없음</SelectItem>
+                            {groups.map((group) => (
+                              <SelectItem key={group.id} value={group.id}>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: group.color }} />
+                                  {group.name}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     {printer.last_connected && (
                       <div className="flex justify-between">

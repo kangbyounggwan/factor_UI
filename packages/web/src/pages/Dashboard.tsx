@@ -106,7 +106,7 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
   const config = statusConfig[printer.state] || statusConfig.disconnected;
   const hasGroupObject = printer.group && typeof printer.group === 'object';
   const groupColor = hasGroupObject && (printer.group as any).color ? (printer.group as any).color : '#9CA3AF';
-  const groupName = hasGroupObject && (printer.group as any).name ? (printer.group as any).name : '연결안됨';
+  const groupName = hasGroupObject && (printer.group as any).name ? (printer.group as any).name : '그룹 없음';
   
   return (
     <Link to={isAuthenticated ? `/printer/${printer.id}` : "/auth"} className="block">
@@ -127,7 +127,7 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
             ) : (
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#9CA3AF' }} />
-                <span className="text-xs text-muted-foreground">연결안됨</span>
+                <span className="text-xs text-muted-foreground">그룹 없음</span>
               </div>
             )}
           </div>
