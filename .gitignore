@@ -96,3 +96,10 @@ ios/App/build/
 
 # Supabase
 .supabase/
+
+
+# --- 예외: Vite 앱의 public 은 추적 ---
+!packages/web/public/
+!packages/web/public/**
+!packages/mobile/public/
+!packages/mobile/public/**
