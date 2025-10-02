@@ -13,6 +13,8 @@
     "build:host": "npm --workspace @factor/host run build",
     "build:web": "npm --workspace @factor/web run build",
     "build:mobile": "npm --workspace @factor/mobile run build",
+    "build:all": "npm run build -ws --if-present",
+    "build:stack": "npm --workspace @factor/host run build && npm --workspace @factor/web run build && npm --workspace @factor/mobile run build",
     "dev": "npx -y concurrently -n VITE,API -c cyan,magenta \"vite --host 0.0.0.0\" \"node ../shared/server.js --host 0.0.0.0 --port 5000 --ws --rest\"",
     "dev:ui": "vite",
     "dev:api": "node ../shared/server.js --host 0.0.0.0 --port 5000 --ws --rest",
