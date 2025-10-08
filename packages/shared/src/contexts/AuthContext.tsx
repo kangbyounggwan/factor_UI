@@ -143,59 +143,51 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       try {
         console.log('세션 확인 시작');
         console.log('Supabase 클라이언트 상태:', supabase);
-        
-        // 타임아웃 추가
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('세션 확인 타임아웃 (5초)')), 5000)
-        );
-        
-        const result = await Promise.race([sessionPromise, timeoutPromise]) as any;
-        const { data: { session }, error } = result;
-        console.log('세션 확인 결과:', { session: !!session, error: !!error, variant });
-        
-        if (!isMounted) return; // 컴포넌트가 언마운트된 경우 중단
-        
-        if (error) {
-          console.log('세션 에러:', error.message);
-          const msg = String(error.message || "");
-          if (msg.includes("Invalid Refresh Token") || msg.includes("Refresh Token Not Found")) {
-            if (!signOutInProgressRef.current) {
-              signOutInProgressRef.current = true;
-              // 즉시 UI를 비로그인 상태로 전환하여 보호 라우트가 동작하도록 함
-              setUser(null);
-              setSession(null);
-              setUserRole(null);
-              setReadyOnce();
-              try {
-                Object.keys(localStorage)
-                  .filter((k) => k.startsWith("sb-"))
-                  .forEach((k) => localStorage.removeItem(k));
-              } catch {}
-              try { await supabase.auth.signOut(); } finally {
-                signOutInProgressRef.current = false;
+
+        const TIMEOUT_MS = 10000; // 10초로 완화
+        const result = await Promise.race([
+          supabase.auth.getSession().then((r) => ({ type: 'session', r })).catch((e) => ({ type: 'error', e })),
+          new Promise((res) => setTimeout(() => res({ type: 'timeout' }), TIMEOUT_MS)),
+        ]) as any;
+
+        if (!isMounted) return;
+
+        if (result?.type === 'session') {
+          const { data: { session }, error } = result.r || {};
+          console.log('세션 확인 결과:', { session: !!session, error: !!error, variant });
+          if (error) {
+            console.log('세션 에러:', error?.message);
+            const msg = String(error?.message || "");
+            if (msg.includes("Invalid Refresh Token") || msg.includes("Refresh Token Not Found")) {
+              if (!signOutInProgressRef.current) {
+                signOutInProgressRef.current = true;
+                setUser(null);
+                setSession(null);
+                setUserRole(null);
+                setReadyOnce();
+                try {
+                  Object.keys(localStorage)
+                    .filter((k) => k.startsWith("sb-"))
+                    .forEach((k) => localStorage.removeItem(k));
+                } catch {}
+                try { await supabase.auth.signOut(); } finally {
+                  signOutInProgressRef.current = false;
+                }
               }
             }
           }
-        }
-        
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          currentUserIdRef.current = session.user.id;
-          await loadUserRole(session.user.id);
-          await ensureSubscriptions(session.user.id); // idempotent
-        } else {
-          if (isMounted) setUserRole(null);
-        }
-      } catch (error) {
-        console.log('세션 확인 중 에러:', error);
-        
-        if (!isMounted) return; // 컴포넌트가 언마운트된 경우 중단
-        
-        // 타임아웃 에러인 경우: 이미 인증 이벤트가 도착했으면 세션 초기화하지 않음
-        if (error instanceof Error && error.message.includes('타임아웃')) {
+
+          setSession(session);
+          setUser(session?.user ?? null);
+          if (session?.user) {
+            currentUserIdRef.current = session.user.id;
+            await loadUserRole(session.user.id);
+            await ensureSubscriptions(session.user.id);
+          } else {
+            setUserRole(null);
+          }
+        } else if (result?.type === 'timeout') {
+          // 타임아웃: 이벤트가 이미 왔다면 조용히 스킵, 아니면 비로그인 처리
           if (!authEventReceivedRef.current) {
             console.log('Supabase 연결 타임아웃 - 이벤트 없음 → 세션 없음으로 처리');
             setUser(null);
@@ -203,21 +195,21 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
             setUserRole(null);
           } else {
             console.log('Supabase 연결 타임아웃 - 인증 이벤트 수신됨 → 세션 유지');
-            // 인증 이벤트가 이미 들어온 상태라면, 현재 사용자에 대해 구독을 보장
             const uid = currentUserIdRef.current;
-            if (uid) {
-              try { await ensureSubscriptions(uid); } catch {}
-            }
+            if (uid) { try { await ensureSubscriptions(uid); } catch {} }
           }
-        } else {
-          // 다른 에러인 경우 비로그인 처리
-          setUser(null);
-          setSession(null);
-          setUserRole(null);
+        } else if (result?.type === 'error') {
+          // 기타 에러: 이벤트가 없으면 비로그인 처리, 있으면 무시
+          if (!authEventReceivedRef.current) {
+            console.log('세션 확인 중 에러:', result.e);
+            setUser(null);
+            setSession(null);
+            setUserRole(null);
+          }
         }
       } finally {
         if (isMounted) {
-          setReadyOnce();
+          if (authEventReceivedRef.current) setReadyOnce();
           console.log('AuthProvider 로딩 완료:', { loading: false, user: !!user });
         }
       }
