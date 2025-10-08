@@ -80,7 +80,7 @@ export class MqttBridge {
   private connectPromise: Promise<void> | null = null;
   private effectiveClientId: string;
   private inert = false;
-  private readonly connectTimeoutMs = 2000;
+  private readonly connectTimeoutMs = 5000;
 
   constructor(opts: MqttBridgeOptions = {}) {
     this.options = {
@@ -447,6 +447,14 @@ let sharedMqtt: MqttBridge | null = null;
 export function createSharedMqttClient(options?: MqttBridgeOptions) {
   if (!sharedMqtt) sharedMqtt = new MqttBridge(options);
   return sharedMqtt;
+}
+
+// 공유 MQTT 클라이언트 강제 종료 (로그아웃 등에서 사용)
+export async function disconnectSharedMqtt() {
+  if (sharedMqtt) {
+    try { await sharedMqtt.disconnect(true); } catch {}
+    sharedMqtt = null;
+  }
 }
 
 // 사용자 ID가 포함된 MQTT client 생성 함수 (영구 저장)

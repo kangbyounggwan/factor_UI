@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from "r
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../integrations/supabase/client";
 import { startDashStatusSubscriptionsForUser, stopDashStatusSubscriptions, subscribeControlResultForUser, clearMqttClientId } from "../component/mqtt";
+import { disconnectSharedMqtt } from "../component/mqtt";
 
 type AppVariant = "web" | "mobile";
 
@@ -36,6 +37,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   const ctrlUnsubRef = useRef<null | (() => Promise<void>)>(null);
   const lastRoleLoadedUserIdRef = useRef<string | null>(null);
   const signOutInProgressRef = useRef(false);
+  const authEventReceivedRef = useRef(false);
 
   console.log('AuthProvider 렌더링:', { 
     variant, 
@@ -71,7 +73,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     if (!userId) return;
     if (subscribedUserIdRef.current === userId) return; // already subscribed for this user
     await teardownSubscriptions();
-    try { startDashStatusSubscriptionsForUser(userId); } catch {}
+    try { await startDashStatusSubscriptionsForUser(userId); } catch {}
     try {
       const cr = await subscribeControlResultForUser(userId).catch(() => null);
       if (cr) ctrlUnsubRef.current = cr;
@@ -92,12 +94,13 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       if (!isMounted) return; // 컴포넌트가 언마운트된 경우 중단
+      authEventReceivedRef.current = true; // 인증 이벤트 수신됨
       
       console.log('Auth 상태 변경:', { event, user: !!nextSession?.user, variant });
+      const prevUserId = currentUserIdRef.current;
+      const nextUserId = nextSession?.user?.id || null;
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
-      
-      const nextUserId = nextSession?.user?.id || null;
       currentUserIdRef.current = nextUserId;
 
       if (nextUserId) {
@@ -113,8 +116,8 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         await teardownSubscriptions();
         
         // 사용자별 MQTT client ID 삭제
-        const lastUserId = currentUserIdRef.current;
-        if (lastUserId) { try { clearMqttClientId(lastUserId); } catch {} }
+        if (prevUserId) { try { clearMqttClientId(prevUserId); } catch {} }
+        try { await disconnectSharedMqtt(); } catch {}
       }
     });
 
@@ -173,14 +176,18 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         
         if (!isMounted) return; // 컴포넌트가 언마운트된 경우 중단
         
-        // 타임아웃 에러인 경우 세션 없음으로 처리
+        // 타임아웃 에러인 경우: 이미 인증 이벤트가 도착했으면 세션 초기화하지 않음
         if (error instanceof Error && error.message.includes('타임아웃')) {
-          console.log('Supabase 연결 타임아웃 - 세션 없음으로 처리');
-          setUser(null);
-          setSession(null);
-          setUserRole(null);
+          if (!authEventReceivedRef.current) {
+            console.log('Supabase 연결 타임아웃 - 이벤트 없음 → 세션 없음으로 처리');
+            setUser(null);
+            setSession(null);
+            setUserRole(null);
+          } else {
+            console.log('Supabase 연결 타임아웃 - 인증 이벤트 수신됨 → 세션 유지');
+          }
         } else {
-          // 다른 에러인 경우
+          // 다른 에러인 경우 비로그인 처리
           setUser(null);
           setSession(null);
           setUserRole(null);
@@ -234,6 +241,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         setUserRole(null);
         setReadyOnce();
         await supabase.auth.signOut();
+        try { await disconnectSharedMqtt(); } catch {}
         signOutInProgressRef.current = false;
       }
     } finally {
