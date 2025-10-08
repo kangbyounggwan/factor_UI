@@ -144,7 +144,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         console.log('세션 확인 시작');
         console.log('Supabase 클라이언트 상태:', supabase);
 
-        const TIMEOUT_MS = 10000; // 10초로 완화
+        const TIMEOUT_MS = 15000; // 15초로 완화
         const result = await Promise.race([
           supabase.auth.getSession().then((r) => ({ type: 'session', r })).catch((e) => ({ type: 'error', e })),
           new Promise((res) => setTimeout(() => res({ type: 'timeout' }), TIMEOUT_MS)),
@@ -187,29 +187,19 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
             setUserRole(null);
           }
         } else if (result?.type === 'timeout') {
-          // 타임아웃: 이벤트가 이미 왔다면 조용히 스킵, 아니면 비로그인 처리
-          if (!authEventReceivedRef.current) {
-            console.log('Supabase 연결 타임아웃 - 이벤트 없음 → 세션 없음으로 처리');
-            setUser(null);
-            setSession(null);
-            setUserRole(null);
-          } else {
-            console.log('Supabase 연결 타임아웃 - 인증 이벤트 수신됨 → 세션 유지');
-            const uid = currentUserIdRef.current;
-            if (uid) { try { await ensureSubscriptions(uid); } catch {} }
+          // 비치명 처리: 세션을 지우지 않고 이벤트를 기다림
+          console.log('세션 느림 → 이벤트 대기 모드 전환 (timeout)');
+          const uid = currentUserIdRef.current;
+          if (uid && authEventReceivedRef.current) {
+            try { await ensureSubscriptions(uid); } catch {}
           }
         } else if (result?.type === 'error') {
-          // 기타 에러: 이벤트가 없으면 비로그인 처리, 있으면 무시
-          if (!authEventReceivedRef.current) {
-            console.log('세션 확인 중 에러:', result.e);
-            setUser(null);
-            setSession(null);
-            setUserRole(null);
-          }
+          // 네트워크 지연/일시 오류는 비치명 처리: 세션 클리어 금지
+          console.log('세션 확인 중 네트워크/일시 오류 → 이벤트 대기 모드 전환', result.e);
         }
       } finally {
         if (isMounted) {
-          if (authEventReceivedRef.current) setReadyOnce();
+          setReadyOnce();
           console.log('AuthProvider 로딩 완료:', { loading: false, user: !!user });
         }
       }
