@@ -80,7 +80,7 @@ export class MqttBridge {
   private connectPromise: Promise<void> | null = null;
   private effectiveClientId: string;
   private inert = false;
-  private readonly connectTimeoutMs = 6000;
+  private readonly connectTimeoutMs = 10000;
 
   constructor(opts: MqttBridgeOptions = {}) {
     this.options = {
@@ -134,6 +134,7 @@ export class MqttBridge {
     return new Promise<boolean>((resolve) => {
       if (this.inert) return resolve(false);
       try {
+        try { console.log('[MQTT] connect try', this.getBrokerInfo()); } catch {}
         const connectOpts: IClientOptions = {
           clientId: this.effectiveClientId,
           username: this.options.username || undefined,
@@ -148,6 +149,7 @@ export class MqttBridge {
 
         const onConnect = () => {
           this.connected = true;
+          try { console.log('[MQTT] connected', this.getBrokerInfo()); } catch {}
           cleanup();
           resolve(true);
         };
@@ -185,7 +187,7 @@ export class MqttBridge {
 
         setTimeout(() => {
           if (!this.connected) {
-            this.log("connect timeout");
+            try { console.log('[MQTT] connect timeout', this.getBrokerInfo()); } catch {}
             resolve(false);
           }
         }, timeoutMs);

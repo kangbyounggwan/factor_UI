@@ -75,8 +75,12 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
     if (subscribedUserIdRef.current === userId) {
       try {
+        console.log('[ENSURE] enter', { userId, subscribed: subscribedUserIdRef.current });
         const ok = await createSharedMqttClient().connect().then(() => true).catch(() => false);
-        if (ok) return; // 이미 연결되어 있으면 스킵
+        if (ok) {
+          console.log('[ENSURE] done', { userId, connected: true });
+          return; // 이미 연결되어 있으면 스킵
+        }
       } catch {}
     }
 
@@ -97,6 +101,10 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     }
 
     subscribedUserIdRef.current = userId; // 성공했을 때만 표시
+    try {
+      const ok2 = await createSharedMqttClient().connect().then(() => true).catch(() => false);
+      console.log('[ENSURE] done', { userId, connected: ok2 });
+    } catch {}
   }
 
   const setReadyOnce = () => {
@@ -109,10 +117,12 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   useEffect(() => {
     console.log('AuthProvider useEffect 시작');
     let isMounted = true; // 컴포넌트가 마운트된 상태인지 확인
+    let sessionKickTimer: number | null = null; // onAuth 이벤트가 1초 내 없으면 getSession 실행
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       if (!isMounted) return; // 컴포넌트가 언마운트된 경우 중단
       authEventReceivedRef.current = true; // 인증 이벤트 수신됨
+      if (sessionKickTimer) { try { clearTimeout(sessionKickTimer); } catch {} sessionKickTimer = null; }
       
       console.log('Auth 상태 변경:', { event, user: !!nextSession?.user, variant });
       const prevUserId = currentUserIdRef.current;
@@ -139,17 +149,17 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       }
     });
 
-    (async () => {
+    // 1초 안에 onAuth 이벤트가 안 오면 그때만 getSession 시도
+    sessionKickTimer = window.setTimeout(async () => {
+      if (!isMounted) return;
+      if (authEventReceivedRef.current) {
+        console.log('onAuthStateChange 이벤트 수신됨(지연 1초 내) → getSession 생략');
+        setReadyOnce();
+        return;
+      }
       try {
-        console.log('세션 확인 시작');
+        console.log('세션 확인 시작(지연 1초 후)');
         console.log('Supabase 클라이언트 상태:', supabase);
-        console.log('authEventReceivedRef.current:', authEventReceivedRef.current);
-        // onAuthStateChange 이벤트가 이미 세션을 제공했다면 보조 검증 생략
-        if (authEventReceivedRef.current) {
-          console.log('onAuthStateChange 이벤트 수신됨 → getSession 생략');
-          return;
-        }
-
         const TIMEOUT_MS = 15000; // 15초로 완화
         const result = await Promise.race([
           supabase.auth.getSession().then((r) => ({ type: 'session', r })).catch((e) => ({ type: 'error', e })),
@@ -183,24 +193,22 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
             }
           }
 
-          setSession(session);
-          setUser(session?.user ?? null);
-          if (session?.user) {
-            currentUserIdRef.current = session.user.id;
-            await loadUserRole(session.user.id);
-            await ensureSubscriptions(session.user.id);
-          } else {
-            setUserRole(null);
-          }
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          currentUserIdRef.current = session.user.id;
+          await loadUserRole(session.user.id);
+          await ensureSubscriptions(session.user.id);
+        } else {
+          setUserRole(null);
+        }
         } else if (result?.type === 'timeout') {
-          // 비치명 처리: 세션을 지우지 않고 이벤트를 기다림
           console.log('세션 느림 → 이벤트 대기 모드 전환 (timeout)');
           const uid = currentUserIdRef.current;
           if (uid && authEventReceivedRef.current) {
             try { await ensureSubscriptions(uid); } catch {}
           }
         } else if (result?.type === 'error') {
-          // 네트워크 지연/일시 오류는 비치명 처리: 세션 클리어 금지
           console.log('세션 확인 중 네트워크/일시 오류 → 이벤트 대기 모드 전환', result.e);
         }
       } finally {
@@ -209,11 +217,12 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
           console.log('AuthProvider 로딩 완료:', { loading: false, user: !!user });
         }
       }
-    })();
+    }, 1000);
 
     return () => {
       isMounted = false; // 컴포넌트 언마운트 시 플래그 설정
       subscription.unsubscribe();
+      if (sessionKickTimer) { try { clearTimeout(sessionKickTimer); } catch {} }
     };
   }, []);
 
