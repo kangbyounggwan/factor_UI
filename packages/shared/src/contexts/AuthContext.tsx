@@ -3,6 +3,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../integrations/supabase/client";
 import { startDashStatusSubscriptionsForUser, stopDashStatusSubscriptions, subscribeControlResultForUser, clearMqttClientId } from "../component/mqtt";
 import { disconnectSharedMqtt } from "../component/mqtt";
+import { createSharedMqttClient } from "../component/mqtt";
 
 type AppVariant = "web" | "mobile";
 
@@ -71,14 +72,31 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
   async function ensureSubscriptions(userId: string) {
     if (!userId) return;
-    if (subscribedUserIdRef.current === userId) return; // already subscribed for this user
+
+    if (subscribedUserIdRef.current === userId) {
+      try {
+        const ok = await createSharedMqttClient().connect().then(() => true).catch(() => false);
+        if (ok) return; // 이미 연결되어 있으면 스킵
+      } catch {}
+    }
+
     await teardownSubscriptions();
-    try { await startDashStatusSubscriptionsForUser(userId); } catch {}
+
+    try {
+      await startDashStatusSubscriptionsForUser(userId);
+    } catch (e) {
+      console.warn("[MQTT] startDashStatusSubscriptionsForUser failed:", e);
+      return; // 실패 시 표시 갱신 금지 → 다음 이벤트/포커스 때 재시도
+    }
+
     try {
       const cr = await subscribeControlResultForUser(userId).catch(() => null);
       if (cr) ctrlUnsubRef.current = cr;
-    } catch {}
-    subscribedUserIdRef.current = userId;
+    } catch (e) {
+      console.warn("[MQTT] subscribeControlResultForUser failed:", e);
+    }
+
+    subscribedUserIdRef.current = userId; // 성공했을 때만 표시
   }
 
   const setReadyOnce = () => {
@@ -203,6 +221,20 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     return () => {
       isMounted = false; // 컴포넌트 언마운트 시 플래그 설정
       subscription.unsubscribe();
+    };
+  }, []);
+
+  // 포커스/온라인 복귀 시 재시도 훅
+  useEffect(() => {
+    const kick = () => {
+      const uid = currentUserIdRef.current;
+      if (uid) ensureSubscriptions(uid);
+    };
+    window.addEventListener("focus", kick);
+    window.addEventListener("online", kick);
+    return () => {
+      window.removeEventListener("focus", kick);
+      window.removeEventListener("online", kick);
     };
   }, []);
 

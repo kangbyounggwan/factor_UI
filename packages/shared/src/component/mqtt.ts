@@ -80,7 +80,7 @@ export class MqttBridge {
   private connectPromise: Promise<void> | null = null;
   private effectiveClientId: string;
   private inert = false;
-  private readonly connectTimeoutMs = 5000;
+  private readonly connectTimeoutMs = 6000;
 
   constructor(opts: MqttBridgeOptions = {}) {
     this.options = {
@@ -196,18 +196,19 @@ export class MqttBridge {
     });
   }
 
-  async connect(): Promise<void> {
-    if (this.inert) return;
-    if (this.connected && this.client) return;
-    if (this.connectPromise) return this.connectPromise;
+  async connect(): Promise<boolean> {
+    if (this.inert) return false;
+    if (this.connected && this.client) return true;
+    if (this.connectPromise) { await this.connectPromise; return this.connected; }
 
     this.connectPromise = (async () => {
-      await this.openClientWithTimeout();
+      const _ok = await this.openClientWithTimeout(this.connectTimeoutMs);
       this.connectPromise = null;
       return;
     })();
 
-    return this.connectPromise;
+    await this.connectPromise;
+    return this.connected;
   }
 
   async disconnect(force = true) {
@@ -228,8 +229,8 @@ export class MqttBridge {
   }
 
   async subscribe(topic: string, handler?: MqttMessageHandler, qos: 0 | 1 | 2 = 0) {
-    await this.connect();
-    if (!this.client) { this.log("subscribe skipped (no client):", topic); return; }
+    const ok = await this.connect();
+    if (!ok || !this.client) { this.log("subscribe skipped (not connected):", topic); return; }
     await new Promise<void>((res) => {
       this.client!.subscribe(topic, { qos }, (_err) => res());
     });
@@ -249,8 +250,8 @@ export class MqttBridge {
   }
 
   async publish(topic: string, message: unknown, qos: 0 | 1 | 2 = 0, retain = false) {
-    await this.connect();
-    if (!this.client) { this.log("publish skipped (no client):", topic); return; }
+    const ok = await this.connect();
+    if (!ok || !this.client) { this.log("publish skipped (not connected):", topic); return; }
     const payload = typeof message === "string" ? message : JSON.stringify(message);
     await new Promise<void>((res) => {
       this.client!.publish(topic, payload, { qos, retain }, (_err) => {
