@@ -203,6 +203,11 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
             setUserRole(null);
           } else {
             console.log('Supabase 연결 타임아웃 - 인증 이벤트 수신됨 → 세션 유지');
+            // 인증 이벤트가 이미 들어온 상태라면, 현재 사용자에 대해 구독을 보장
+            const uid = currentUserIdRef.current;
+            if (uid) {
+              try { await ensureSubscriptions(uid); } catch {}
+            }
           }
         } else {
           // 다른 에러인 경우 비로그인 처리
