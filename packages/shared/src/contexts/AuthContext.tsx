@@ -143,7 +143,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       try {
         console.log('세션 확인 시작');
         console.log('Supabase 클라이언트 상태:', supabase);
-
+        console.log('authEventReceivedRef.current:', authEventReceivedRef.current);
         // onAuthStateChange 이벤트가 이미 세션을 제공했다면 보조 검증 생략
         if (authEventReceivedRef.current) {
           console.log('onAuthStateChange 이벤트 수신됨 → getSession 생략');
