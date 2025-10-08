@@ -377,13 +377,23 @@ const Home = () => {
           const bed = data?.temperature_info?.bed;
           const toolAny = data?.temperature_info?.tool;
           const tool = toolAny?.tool0 ?? toolAny; // tool.tool0 우선, 없으면 tool 사용
+          const flags = data?.printer_status?.flags ?? {};
+          const isConnected = Boolean(
+            data?.connected ||
+            flags.operational || flags.printing || flags.paused || flags.ready || flags.error
+          );
+          const nextState: PrinterOverview['state'] =
+            flags.printing ? 'printing' :
+            flags.paused   ? 'paused'   :
+            flags.error    ? 'error'    :
+            (isConnected   ? 'idle'     : 'disconnected');
           next[idx] = {
             ...next[idx],
             // data에 따라 필요한 필드 갱신 (예: 상태/온도/진행률)
             pending: false,
-            state: (data?.printer_status?.state ?? (data?.connected ? 'idle' : 'disconnected')) as any,
-            connected: Boolean(data?.connected || data?.printer_status?.flags?.operational || data?.printer_status?.flags?.printing || data?.printer_status?.flags?.paused || data?.printer_status?.flags?.ready),
-            printing: data?.printer_status?.printing ?? next[idx].printing,
+            state: nextState,
+            connected: isConnected,
+            printing: (flags?.printing ?? data?.printer_status?.printing) ?? next[idx].printing,
             completion: typeof data?.progress?.completion === 'number' ? data.progress.completion : next[idx].completion,
             temperature: {
               // 익스트루더: actual/offset

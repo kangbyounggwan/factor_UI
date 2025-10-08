@@ -276,16 +276,27 @@ const Home = () => {
           const bed = data?.temperature_info?.bed;
           const toolAny = data?.temperature_info?.tool;
           const tool = toolAny?.tool0 ?? toolAny;
+          const flags = data?.printer_status?.flags ?? {};
+          const isConnected = Boolean(
+            data?.connected ||
+            flags.operational || flags.printing || flags.paused || flags.ready || flags.error
+          );
+          const nextState: PrinterOverview['state'] =
+            flags.printing ? 'printing' :
+            flags.paused   ? 'paused'   :
+            flags.error    ? 'error'    :
+            (isConnected   ? 'idle'     : 'disconnected');
           next[idx] = {
             ...next[idx],
-            connected: data?.connected ?? next[idx].connected,
-            printing: data?.printer_status?.printing ?? next[idx].printing,
+            state: nextState,
+            connected: isConnected,
+            printing: (flags?.printing ?? data?.printer_status?.printing) ?? next[idx].printing,
             completion: typeof data?.progress?.completion === 'number' ? data.progress.completion : next[idx].completion,
             temperature: {
               tool_actual: typeof tool?.actual === 'number' ? tool.actual : next[idx].temperature.tool_actual,
-              tool_target: typeof tool?.offset === 'number' ? tool.offset : next[idx].temperature.tool_target,
+              tool_target: typeof tool?.target === 'number' ? tool.target : next[idx].temperature.tool_target,
               bed_actual: typeof bed?.actual === 'number' ? bed.actual : next[idx].temperature.bed_actual,
-              bed_target: typeof bed?.offset === 'number' ? bed.offset : next[idx].temperature.bed_target,
+              bed_target: typeof bed?.target === 'number' ? bed.target : next[idx].temperature.bed_target,
             },
             print_time_left: data?.progress?.print_time_left ?? next[idx].print_time_left,
             current_file: data?.printer_status?.current_file ?? next[idx].current_file,

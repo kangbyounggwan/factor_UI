@@ -154,13 +154,23 @@ const PrinterDetail = () => {
         const bed = payload?.temperature_info?.bed;
         const toolAny = payload?.temperature_info?.tool;
         const tool = toolAny?.tool0 ?? toolAny;
+        const flags = payload?.printer_status?.flags ?? {};
+        const isConnected = Boolean(
+          payload?.connected ||
+          flags.operational || flags.printing || flags.paused || flags.ready || flags.error
+        );
+        const nextState: MonitoringData['printerStatus']['state'] =
+          flags.printing ? 'printing' :
+          flags.paused   ? 'paused'   :
+          flags.error    ? 'error'    :
+          (isConnected   ? 'idle'     : 'disconnected');
         return {
           ...prev,
           printerStatus: {
-            state: (payload?.printer_status?.state ?? prev.printerStatus.state) as any,
+            state: nextState as any,
             timestamp: Date.now(),
-            connected: payload?.connected ?? prev.printerStatus.connected,
-            printing: payload?.printer_status?.printing ?? prev.printerStatus.printing,
+            connected: isConnected,
+            printing: (flags?.printing ?? payload?.printer_status?.printing) ?? prev.printerStatus.printing,
             error_message: payload?.printer_status?.error_message ?? prev.printerStatus.error_message,
           },
           temperature: {
