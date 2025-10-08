@@ -144,6 +144,12 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         console.log('세션 확인 시작');
         console.log('Supabase 클라이언트 상태:', supabase);
 
+        // onAuthStateChange 이벤트가 이미 세션을 제공했다면 보조 검증 생략
+        if (authEventReceivedRef.current) {
+          console.log('onAuthStateChange 이벤트 수신됨 → getSession 생략');
+          return;
+        }
+
         const TIMEOUT_MS = 15000; // 15초로 완화
         const result = await Promise.race([
           supabase.auth.getSession().then((r) => ({ type: 'session', r })).catch((e) => ({ type: 'error', e })),
