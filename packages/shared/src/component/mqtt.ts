@@ -624,3 +624,14 @@ export async function subscribeControlResultForUser(userId: string, qos: 0 | 1 |
 }
 
 
+// 공용: 한 번의 UUID 조회 후 상태/제어 구독을 모두 붙임
+export async function subscribeAllForUser(userId: string, qos: 0 | 1 | 2 = 1) {
+  // forceRefresh로 최초 한 번만 REST 호출하고, 이후 호출들은 캐시 사용
+  await getUserDeviceUuidsCached(userId, { forceRefresh: true }).catch(() => undefined);
+  try { await startDashStatusSubscriptionsForUser(userId); } catch {}
+  let cr: null | (() => Promise<void>) = null;
+  try { cr = await subscribeControlResultForUser(userId, qos).catch(() => null); } catch {}
+  return cr; // 제어 구독 해제 핸들러(있으면)
+}
+
+

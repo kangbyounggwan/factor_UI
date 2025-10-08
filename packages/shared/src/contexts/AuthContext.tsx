@@ -133,7 +133,19 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
       if (nextUserId) {
         setTimeout(() => { if (isMounted) loadUserRole(nextUserId); }, 0);
-        await ensureSubscriptions(nextUserId);
+        // 기다리지 말고 백그라운드 실행하여 UI 로딩을 즉시 종료
+        (async () => {
+          try {
+            // 타임박스가 필요하면 Promise.race로 감싸기
+            const ENSURE_TMO = 7000;
+            await Promise.race([
+              ensureSubscriptions(nextUserId),
+              new Promise((res) => setTimeout(res, ENSURE_TMO)),
+            ]);
+          } catch (e) {
+            console.warn('[MQTT] ensure failed', e);
+          }
+        })();
       } else {
         if (isMounted) setUserRole(null);
       }
