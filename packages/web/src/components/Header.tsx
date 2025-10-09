@@ -11,7 +11,7 @@ import { supabase } from "@shared/integrations/supabase/client";
 
 const navigation = [
   { name: "대시보드", href: "/dashboard", icon: Monitor },
-  { name: "AI 작업 공간", href: "/ai", icon: Layers },
+  // { name: "AI 작업 공간", href: "/ai", icon: Layers }, // 비활성화
   { name: "설정", href: "/settings", icon: Settings },
 ];
 
