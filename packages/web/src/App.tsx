@@ -7,7 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { Header } from "@/components/Header";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
-import { AIAssistantSidebar } from "@/components/AIAssistantSidebar";
+// import { AIAssistantSidebar } from "@/components/AIAssistantSidebar"; // AI 비활성화
 import { AISidebarProvider } from "@/contexts/AISidebarContext";
 import { useState } from "react";
 import Home from "./pages/Home";
@@ -16,7 +16,7 @@ import PrinterDetail from "./pages/PrinterDetail";
 import Settings from "./pages/Settings";
 import Subscription from "./pages/Subscription";
 import SupportedPrinters from "./pages/SupportedPrinters";
-import AI from "./pages/AI";
+// import AI from "./pages/AI"; // AI 비활성화
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
 import DeviceRegister from "./pages/DeviceRegister";
@@ -29,8 +29,8 @@ const AppContent = () => {
   const [aiSidebarCollapsed, setAiSidebarCollapsed] = useState(true);
   const [aiSidebarWidth, setAiSidebarWidth] = useState(384);
   
-  // 홈과 AI 페이지에서는 AI 사이드바를 숨김
-  const showAISidebar = location.pathname !== "/" && location.pathname !== "/ai";
+  // AI 어시스턴트/작업공간 비활성화: 사이드바 표시 끔
+  const showAISidebar = false;
   
   return (
     <div className="min-h-screen bg-background transition-colors">
@@ -64,11 +64,14 @@ const AppContent = () => {
           } />
           <Route path="/subscription" element={<Subscription />} />
           <Route path="/supported-printers" element={<SupportedPrinters />} />
+          {/** AI 작업공간 라우트 비활성화 **/}
+          {/**
           <Route path="/ai" element={
             <ProtectedRoute>
               <AI />
             </ProtectedRoute>
           } />
+          **/}
           <Route path="/admin" element={
             <AdminRoute>
               <Admin />
@@ -84,7 +87,8 @@ const AppContent = () => {
         </Routes>
       </div>
       
-      {/* AI 어시스턴트 사이드바 */}
+      {/* AI 어시스턴트 사이드바 비활성화 */}
+      {/**
       {showAISidebar && (
         <AIAssistantSidebar
           isCollapsed={aiSidebarCollapsed}
@@ -93,6 +97,7 @@ const AppContent = () => {
           onWidthChange={setAiSidebarWidth}
         />
       )}
+      **/}
     </div>
   );
 };
