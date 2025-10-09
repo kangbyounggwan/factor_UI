@@ -134,7 +134,6 @@ export class MqttBridge {
     return new Promise<boolean>((resolve) => {
       if (this.inert) return resolve(false);
       try {
-        try { console.log('[MQTT] connect try', this.getBrokerInfo()); } catch {}
         const connectOpts: IClientOptions = {
           clientId: this.effectiveClientId,
           username: this.options.username || undefined,
@@ -149,7 +148,6 @@ export class MqttBridge {
 
         const onConnect = () => {
           this.connected = true;
-          try { console.log('[MQTT] connected', this.getBrokerInfo()); } catch {}
           cleanup();
           resolve(true);
         };
@@ -289,7 +287,7 @@ export async function startDashStatusSubscriptionsForUser(userId: string) {
         if (typeof payload === 'string') parsed = JSON.parse(payload);
         else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
       } catch {}
-      console.log('[MQTT][octoprint/status]', t, parsed);
+      // console.log('[MQTT][octoprint/status]', t, parsed);
       // 주제에서 uuid 추출하여 리스너 호출 (마지막 세그먼트 사용)
       const parts = t.split('/');
       const id = parts[parts.length - 1] || uuid;

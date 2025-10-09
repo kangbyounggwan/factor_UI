@@ -75,10 +75,10 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
     if (subscribedUserIdRef.current === userId) {
       try {
-        console.log('[ENSURE] enter', { userId, subscribed: subscribedUserIdRef.current });
+        // console.log('[ENSURE] enter', { userId, subscribed: subscribedUserIdRef.current });
         const ok = await createSharedMqttClient().connect().then(() => true).catch(() => false);
         if (ok) {
-          console.log('[ENSURE] done', { userId, connected: true });
+          // console.log('[ENSURE] done', { userId, connected: true });
           return; // 이미 연결되어 있으면 스킵
         }
       } catch {}
