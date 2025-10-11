@@ -125,7 +125,6 @@ async function registerDeviceViaRest(env, accessToken, payload, userId) {
     await sbUpsert(env, accessToken, 'cameras', [{
       user_id: userId,
       device_uuid: payload.client.uuid,
-      camera_uuid: payload.camera.uuid,
       resolution: payload.camera.resolution,
       ...(streamUrl ? { stream_url: streamUrl } : {}),
     }], 'device_uuid');
@@ -133,7 +132,6 @@ async function registerDeviceViaRest(env, accessToken, payload, userId) {
     const values = {};
     if (streamUrl != null) values.stream_url = streamUrl;
     if (payload.camera?.resolution != null) values.resolution = payload.camera.resolution;
-    if (payload.camera?.uuid != null) values.camera_uuid = payload.camera.uuid;
     if (Object.keys(values).length > 0) {
       await sbUpdate(env, accessToken, 'cameras', { device_uuid: payload.client.uuid }, values);
     }

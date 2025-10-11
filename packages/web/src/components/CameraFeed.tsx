@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Camera, Play, Pause, RotateCw, Maximize2, X } from "lucide-react";
+import { Camera, Play, RotateCw, Maximize2, X } from "lucide-react";
 import { mqttConnect, mqttPublish, mqttSubscribe, mqttUnsubscribe } from "@shared/services/mqttService";
 import { supabase } from "@shared/integrations/supabase/client";
 
@@ -14,41 +14,21 @@ interface CameraFeedProps {
 
 export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProps) => {
   const [isStreaming, setIsStreaming] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState(new Date().toLocaleTimeString());
   const [streamError, setStreamError] = useState<string | null>(null);
   const [cameraStatus, setCameraStatus] = useState<'offline' | 'starting' | 'online' | 'error'>('offline');
 
-  // ▶︎ HLS(백업) & WebRTC URL
-  const [hlsUrl, setHlsUrl] = useState<string | null>(null);
+  // ▶︎ WebRTC URL만 유지
   const [webrtcUrl, setWebrtcUrl] = useState<string | null>(null);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const autoStopTimerRef = useRef<number | null>(null);
 
-  // 실시간 시계
-  useEffect(() => {
-    if (isConnected && isPlaying && isStreaming) {
-      const t = setInterval(() => setLastUpdate(new Date().toLocaleTimeString()), 1000);
-      return () => clearInterval(t);
-    }
-  }, [isConnected, isPlaying, isStreaming]);
-
   const cleanupVideo = useCallback(() => {
-    const video = videoRef.current;
-    if (video) {
-      try { video.pause(); } catch {}
-      try { video.removeAttribute('src'); } catch {}
-      try { (video as any).srcObject = null; } catch {}
-      try { video.load(); } catch {}
-    }
     const frame = iframeRef.current;
     if (frame) {
       try { frame.src = 'about:blank'; } catch {}
     }
-    setHlsUrl(null);
     setWebrtcUrl(null);
   }, []);
 
@@ -88,16 +68,12 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
             const running = !!(msg?.running);
             setCameraStatus(running ? 'online' : 'offline');
 
-            // URL 추출 (webrtc 우선, 없으면 .m3u8)
+            // URL 추출 (WebRTC만 사용)
             const wurl =
               msg?.webrtc?.play_url_webrtc ||
               msg?.play_url_webrtc ||
               (typeof msg?.url === 'string' && !msg.url.endsWith('.m3u8') ? msg.url : null);
-
-            const hurl = typeof msg?.url === 'string' && msg.url.includes('.m3u8') ? msg.url : null;
-
             if (wurl) setWebrtcUrl(wurl);
-            if (hurl) setHlsUrl(hurl);
           } catch (e) {
             console.warn('[CAM][STATE] parse error', e);
           }
@@ -142,7 +118,6 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
       // 환경변수(없으면 라우터의 LAN 주소를 직접 기입)
       const RTSP_BASE   = (import.meta as any).env?.VITE_MEDIA_RTSP_BASE   || 'rtsp://factor.io.kr:8554';
       const WEBRTC_BASE = (import.meta as any).env?.VITE_MEDIA_WEBRTC_BASE || 'https://factor.io.kr/webrtc';
-      const HLS_BASE    = (import.meta as any).env?.VITE_MEDIA_HLS_BASE    || 'https://factor.io.kr/media';
 
       const topic = `camera/${cameraId}/cmd`;
       const payload = {
@@ -175,7 +150,6 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
 
   const stopStreaming = useCallback(async () => {
     setIsStreaming(false);
-    setIsPlaying(false);
     cleanupVideo();
     try {
       const topic = `camera/${cameraId}/cmd`;
@@ -201,72 +175,12 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
     };
   }, [isStreaming, stopStreaming]);
 
-  const togglePlayPause = useCallback(() => {
-    // WebRTC(iframe)는 일시정지를 직접 제어하기 어려움 → HLS일 때만 동작
-    if (webrtcUrl) return;
-    const next = !isPlaying;
-    setIsPlaying(next);
-    const video = videoRef.current;
-    if (video) {
-      if (next) video.play().catch(() => {});
-      else video.pause();
-    }
-  }, [isPlaying, webrtcUrl]);
-
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((v) => !v);
   }, []);
 
-  // HLS 재생 (백업 경로로 유지)
-  useEffect(() => {
-    const video = videoRef.current as HTMLVideoElement | null;
-    if (!video || !hlsUrl) return;
-    const canNative = video.canPlayType('application/vnd.apple.mpegurl');
-    if (canNative) {
-      video.src = hlsUrl;
-      video.play().catch(() => {});
-      return;
-    }
-    let cleanup: (() => void) | null = null;
-    (async () => {
-      try {
-        if ((window as any).Hls) {
-          const HlsCtor = (window as any).Hls;
-          const hls = new HlsCtor({
-            liveSyncDuration: 2,
-            liveMaxLatencyDuration: 4,
-            maxLiveSyncPlaybackRate: 1.2,
-            enableWorker: true,
-            lowLatencyMode: true,
-          });
-          hls.loadSource(hlsUrl);
-          hls.attachMedia(video);
-          cleanup = () => { try { hls.destroy(); } catch {} };
-          return;
-        }
-        await new Promise<void>((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
-          s.async = true;
-          s.onload = () => resolve();
-          s.onerror = () => reject(new Error('hls.js load failed'));
-          document.head.appendChild(s);
-        });
-        const HlsCtor = (window as any).Hls;
-        if (!HlsCtor) return;
-        const hls = new HlsCtor();
-        hls.loadSource(hlsUrl);
-        hls.attachMedia(video);
-        cleanup = () => { try { hls.destroy(); } catch {} };
-      } catch (e) {
-        console.warn('[CAM][HLS] init failed', e);
-      }
-    })();
-    return () => { if (cleanup) cleanup(); };
-  }, [hlsUrl]);
-
   const showIframe = !!webrtcUrl && !webrtcUrl.endsWith('.m3u8');
-  const showHls = !!hlsUrl;
+  
 
   return (
     <Card className={`h-full ${isFullscreen ? "fixed inset-4 z-50 bg-background" : ""}`}>
@@ -291,7 +205,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
             {isStreaming ? (
               isConnected ? (
                 <div className="relative w-full h-full">
-                  {/* WebRTC(iframe) 우선, 없으면 HLS(video) */}
+                  {/* WebRTC(iframe)만 사용 */}
                   {showIframe ? (
                     <iframe
                       ref={iframeRef}
@@ -300,15 +214,6 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
                       allow="autoplay; fullscreen"
                       allowFullScreen
                       title="webrtc-player"
-                    />
-                  ) : showHls ? (
-                    <video
-                      ref={videoRef}
-                      className="absolute inset-0 w-full h-full object-cover"
-                      playsInline
-                      autoPlay
-                      muted
-                      controls
                     />
                   ) : (
                     <div className="flex items-center justify-center h-full text-white">
@@ -372,16 +277,6 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
           {isStreaming && (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={togglePlayPause}
-                  disabled={!isConnected || !!webrtcUrl /* WebRTC는 일시정지 미제공 */}
-                >
-                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                  {isPlaying ? "일시정지" : "재생"}
-                </Button>
-
                 <Button variant="outline" size="sm" onClick={stopStreaming} disabled={!isConnected}>
                   정지
                 </Button>
@@ -389,9 +284,8 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => { /* 새로고침: iframe/video 리로드 */ 
+                  onClick={() => { /* 새로고침: iframe 리로드 */ 
                     if (webrtcUrl && iframeRef.current) iframeRef.current.src = `${webrtcUrl}?t=${Date.now()}&autoplay=1&muted=1`;
-                    if (hlsUrl && videoRef.current) { videoRef.current.load(); videoRef.current.play().catch(()=>{}); }
                   }}
                   disabled={!isConnected || !isStreaming}
                 >
