@@ -12,3 +12,6 @@ Allow: /
 
 User-agent: *
 Allow: /
+
+
+#DaumWebMasterTool:6d0e89b57fec517e5caa3f4ccc5f8f052415c3b8c13b7f0f2e61fae3508d789e:ccfRm00Cg+mmcVqRks67/w==
