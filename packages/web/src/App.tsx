@@ -7,7 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { Header } from "@/components/Header";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
-// import { AIAssistantSidebar } from "@/components/AIAssistantSidebar"; // AI 비활성화
+import { AIAssistantSidebar } from "@/components/AIAssistantSidebar";
 import { AISidebarProvider } from "@/contexts/AISidebarContext";
 import { useState } from "react";
 import Home from "./pages/Home";
@@ -16,10 +16,11 @@ import PrinterDetail from "./pages/PrinterDetail";
 import Settings from "./pages/Settings";
 import Subscription from "./pages/Subscription";
 import SupportedPrinters from "./pages/SupportedPrinters";
-// import AI from "./pages/AI"; // AI 비활성화
+import AI from "./pages/AI";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
 import DeviceRegister from "./pages/DeviceRegister";
+import EmailVerification from "./pages/EmailVerification";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,8 +30,8 @@ const AppContent = () => {
   const [aiSidebarCollapsed, setAiSidebarCollapsed] = useState(true);
   const [aiSidebarWidth, setAiSidebarWidth] = useState(384);
   
-  // AI 어시스턴트/작업공간 비활성화: 사이드바 표시 끔
-  const showAISidebar = false;
+  // AI 어시스턴트/작업공간 활성화
+  const showAISidebar = true;
   
   return (
     <div className="min-h-screen bg-background transition-colors">
@@ -46,6 +47,7 @@ const AppContent = () => {
       >
         <Routes>
           <Route path="/auth" element={<Auth />} />
+          <Route path="/email-verification" element={<EmailVerification />} />
           <Route path="/" element={<Home />} />
           <Route path="/dashboard" element={
             <ProtectedRoute>
@@ -64,14 +66,11 @@ const AppContent = () => {
           } />
           <Route path="/subscription" element={<Subscription />} />
           <Route path="/supported-printers" element={<SupportedPrinters />} />
-          {/** AI 작업공간 라우트 비활성화 **/}
-          {/**
           <Route path="/ai" element={
             <ProtectedRoute>
               <AI />
             </ProtectedRoute>
           } />
-          **/}
           <Route path="/admin" element={
             <AdminRoute>
               <Admin />
@@ -87,8 +86,6 @@ const AppContent = () => {
         </Routes>
       </div>
       
-      {/* AI 어시스턴트 사이드바 비활성화 */}
-      {/**
       {showAISidebar && (
         <AIAssistantSidebar
           isCollapsed={aiSidebarCollapsed}
@@ -97,7 +94,6 @@ const AppContent = () => {
           onWidthChange={setAiSidebarWidth}
         />
       )}
-      **/}
     </div>
   );
 };

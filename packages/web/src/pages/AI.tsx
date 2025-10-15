@@ -1,31 +1,89 @@
 import { useState, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import ModelViewer from "@/components/ModelViewer";
+import TextTo3DForm from "@/components/ai/TextTo3DForm";
+import ImageTo3DForm from "@/components/ai/ImageTo3DForm";
+import ModelPreview from "@/components/ai/ModelPreview";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import ModelArchive from "@/components/ai/ModelArchive";
+import UploadArchive from "@/components/ai/UploadArchive";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { 
-  Layers, 
-  Upload, 
-  Download, 
-  Play, 
-  Pause, 
-  Image, 
-  Box, 
-  FileText, 
-  Printer, 
-  Settings, 
-  Loader2, 
-  CheckCircle, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { PrinterCard } from "@/components/PrinterCard";
+
+// 타입 정의는 shared에서 가져옴
+import type { UploadedFile } from "@shared/hooks/useAIImageUpload";
+import type { AIGeneratedModel } from "@shared/types/aiModelType";
+
+interface Printer {
+  id: string;
+  name: string;
+  status: string;
+  temperature: {
+    nozzle: number;
+    bed: number;
+  };
+  progress?: number;
+  raw?: any;
+}
+
+interface PrintSettings {
+  support_enable: boolean;
+  support_angle: number;
+  layer_height: number;
+  line_width: number;
+  speed_print: number;
+  material_diameter: number;
+  material_flow: number;
+  infill_sparse_density: number;
+  wall_line_count: number;
+  top_layers: number;
+  bottom_layers: number;
+  adhesion_type: 'none' | 'skirt' | 'brim' | 'raft';
+}
+
+type Quality = 'low' | 'medium' | 'high';
+type Model = 'flux-kontext' | 'gpt-4';
+type Style = 'realistic' | 'abstract';
+type ImageDepth = 'auto' | 'manual';
+import {
+  Layers,
+  Upload,
+  Download,
+  Play,
+  Pause,
+  Image,
+  Box,
+  FileText,
+  Printer,
+  Settings,
+  Loader2,
+  CheckCircle,
   AlertCircle,
   ArrowRight,
   Zap,
@@ -42,25 +100,83 @@ import {
   FolderOpen,
   Grid3X3,
   Image as ImageFile,
-  Shapes
+  Shapes,
+  Type
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
+import { buildCommon, postTextTo3D, postImageTo3D, extractGLBUrl, extractSTLUrl, extractMetadata, extractThumbnailUrl, pollTaskUntilComplete, AIModelResponse } from "@/lib/aiService";
+import { createAIModel, updateAIModel, listAIModels, deleteAIModel } from "@shared/services/supabaseService/aiModel";
+import { supabase } from "@shared/integrations/supabase/client";
+import { useAIImageUpload } from "@shared/hooks/useAIImageUpload";
+import { downloadAndUploadModel, downloadAndUploadSTL, downloadAndUploadThumbnail } from "@shared/services/supabaseService/aiStorage";
 
 const AI = () => {
-  const [activeTab, setActiveTab] = useState('text-to-3d');
-  const [textPrompt, setTextPrompt] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
-  const [generatedModels, setGeneratedModels] = useState<any[]>([]);
-  const [printers, setPrinters] = useState<any[]>([]);
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<string>('text-to-3d');
+  const [textPrompt, setTextPrompt] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [progress, setProgress] = useState<number>(0); // 진행률 (0-100)
+  const [progressStatus, setProgressStatus] = useState<string>(''); // 진행 상태 메시지
+  const [generatedModels, setGeneratedModels] = useState<AIGeneratedModel[]>([]);
+  const [printers, setPrinters] = useState<Printer[]>([]);
+  const [modelViewerUrl, setModelViewerUrl] = useState<string | null>(null);
+  const [currentGlbUrl, setCurrentGlbUrl] = useState<string | null>(null); // 현재 모델의 GLB URL
+  const [currentStlUrl, setCurrentStlUrl] = useState<string | null>(null); // 현재 모델의 STL URL
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null); // Text-to-Image 생성 이미지 URL
+  const [selectedImageHasModel, setSelectedImageHasModel] = useState<boolean>(false); // 선택된 이미지의 3D 모델 존재 여부
+  // 모델 아카이브 필터 상태
+  type ArchiveFilter = 'all' | 'text-to-3d' | 'image-to-3d' | 'text-to-image';
+  const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>('all');
+  // 아카이브 뷰 모드 (RAW / 3D 모델)
+  const [archiveViewMode, setArchiveViewMode] = useState<'raw' | '3d'>('3d');
+  // Text → 3D 설정 상태
+  const [textQuality, setTextQuality] = useState<Quality>('medium');
+  const [textModel, setTextModel] = useState<Model>('flux-kontext');
+  const [textStyle, setTextStyle] = useState<Style>('realistic');
+  // Image → 3D 설정 상태
+  const [imageDepth, setImageDepth] = useState<ImageDepth>('auto');
+  const [imageQuality, setImageQuality] = useState<Quality>('high');
   const totalPrinters = printers.length;
-  const connectedCount = printers.filter((p: any) => p?.status === 'ready' || p?.status === 'printing' || p?.status === 'operational').length;
-  const printingCount = printers.filter((p: any) => p?.status === 'printing').length;
+  const connectedCount = printers.filter((p) => p.status === 'ready' || p.status === 'printing' || p.status === 'operational').length;
+  const printingCount = printers.filter((p) => p.status === 'printing').length;
   const { toast } = useToast();
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Shared 훅 사용 - 이미지 업로드 관리
+  const {
+    uploadedFiles,
+    selectedImageId,
+    isUploading,
+    handleFileUpload: uploadFile,
+    removeFile: deleteFile,
+    selectImage,
+    getSelectedFile,
+  } = useAIImageUpload({
+    supabase,
+    userId: user?.id,
+    onSuccess: (file) => {
+      toast({
+        title: t('ai.fileUploadComplete'),
+        description: t('ai.fileUploaded'),
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: t('ai.uploadFailed'),
+        description: error.message || t('errors.uploadFailed'),
+        variant: "destructive"
+      });
+    },
+    onDelete: (fileId) => {
+      toast({
+        title: t('ai.fileDeleted'),
+        description: t('ai.fileDeletedDescription'),
+      });
+    }
+  });
 
   // 연결된 프린터 로드 (Supabase)
   useEffect(() => {
@@ -70,11 +186,11 @@ const AI = () => {
         if (!user?.id) return;
         const rows = await getUserPrintersWithGroup(user.id);
         if (!active) return;
-        const mapped = (rows || []).map((r: any) => ({
+        const mapped: Printer[] = (rows || []).map((r) => ({
           id: r.id,
           name: r.model ?? r.device_uuid ?? 'Unknown Printer',
           status: r.status ?? 'disconnected',
-          temperature: { nozzle: 0, bed: 0 }, // 실시간 온도는 별도 채널에서
+          temperature: { nozzle: 0, bed: 0 },
           progress: undefined,
           raw: r,
         }));
@@ -86,10 +202,31 @@ const AI = () => {
     return () => { active = false; };
   }, [user?.id]);
 
+  // Supabase Storage에서 이미지는 useAIImageUpload 훅에서 자동 로드됨
+
+  // AI 생성 모델 로드 (Supabase) - 모든 모델 로드, 필터는 UI에서 처리
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        if (!user?.id) return;
+        const result = await listAIModels(supabase, user.id, {
+          page: 1,
+          pageSize: 100, // 더 많은 모델 로드
+        });
+        if (!active) return;
+        setGeneratedModels(result.items);
+      } catch (e) {
+        console.error('[AI] load models failed', e);
+      }
+    })();
+    return () => { active = false; };
+  }, [user?.id]);
+
   // SEO: Title & Meta description
   useEffect(() => {
-    document.title = 'AI 3D 모델링 스튜디오 | 텍스트·이미지 → 3D';
-    const desc = '텍스트와 이미지를 AI로 3D 모델로 변환하고, 프린터와 연동해 즉시 출력까지 진행하세요.';
+    document.title = t('ai.title');
+    const desc = t('ai.description');
     let meta = document.querySelector('meta[name="description"]');
     if (!meta) {
       meta = document.createElement('meta');
@@ -100,9 +237,14 @@ const AI = () => {
   }, []);
 
   // 출력 설정 다이얼로그 상태
-  const [printDialogOpen, setPrintDialogOpen] = useState(false);
-  const [selectedPrinter, setSelectedPrinter] = useState<any | null>(null);
-  const [printSettings, setPrintSettings] = useState({
+  const [printDialogOpen, setPrintDialogOpen] = useState<boolean>(false);
+  const [selectedPrinter, setSelectedPrinter] = useState<Printer | null>(null);
+
+  // 이미지 삭제 확인 다이얼로그 상태
+  const [deleteImageDialogOpen, setDeleteImageDialogOpen] = useState<boolean>(false);
+  const [imageToDelete, setImageToDelete] = useState<number | null>(null);
+  const [linkedModelsCount, setLinkedModelsCount] = useState<number>(0);
+  const [printSettings, setPrintSettings] = useState<PrintSettings>({
     support_enable: true,
     support_angle: 50,
     layer_height: 0.2,
@@ -117,38 +259,28 @@ const AI = () => {
     adhesion_type: 'none' as 'none' | 'skirt' | 'brim' | 'raft',
   });
 
-  const openPrinterSettings = (printer: any) => {
+  const openPrinterSettings = (printer: Printer) => {
     setSelectedPrinter(printer);
     setPrintDialogOpen(true);
   };
 
-  const updateSetting = (key: string, value: any) => {
+  const updateSetting = (key: keyof PrintSettings, value: any) => {
     setPrintSettings((prev) => ({ ...prev, [key]: value }));
   };
 
   const startPrint = async () => {
     toast({
-      title: '출력 시작',
-      description: `${selectedPrinter?.name}에 출력 작업을 전송했습니다.`,
+      title: t('ai.printStart'),
+      description: `${selectedPrinter?.name}${t('ai.printJobSent')}`,
     });
     setPrintDialogOpen(false);
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Shared 훅의 함수를 래핑
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-      const file = files[0];
-      setUploadedFiles([...uploadedFiles, {
-        id: Date.now(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        url: URL.createObjectURL(file)
-      }]);
-      toast({
-        title: "파일 업로드 완료",
-        description: `${file.name}이 업로드되었습니다.`,
-      });
+      await uploadFile(files[0]);
     }
   };
 
@@ -156,65 +288,444 @@ const AI = () => {
     e.preventDefault();
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     const files = e.dataTransfer.files;
     if (files.length > 0) {
-      const file = files[0];
-      setUploadedFiles([...uploadedFiles, {
-        id: Date.now(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        url: URL.createObjectURL(file)
-      }]);
+      await uploadFile(files[0]);
+    }
+  };
+
+  // 이미지 삭제 핸들러 (연결된 모델 확인 후 모달 표시)
+  const handleImageDelete = async (fileId: number) => {
+    const fileToDelete = uploadedFiles.find(f => f.id === fileId);
+    if (!fileToDelete) return;
+
+    // 해당 이미지와 연결된 모델 개수 확인
+    const linkedModels = generatedModels.filter(
+      model => model.source_image_url === fileToDelete.storagePath ||
+               model.source_image_url === fileToDelete.url
+    );
+
+    setImageToDelete(fileId);
+    setLinkedModelsCount(linkedModels.length);
+    setDeleteImageDialogOpen(true);
+  };
+
+  // 이미지 및 연결된 모델 삭제 확인
+  const confirmImageDelete = async () => {
+    if (imageToDelete === null) return;
+
+    const fileToDelete = uploadedFiles.find(f => f.id === imageToDelete);
+    if (!fileToDelete) return;
+
+    try {
+      // 연결된 모든 모델 삭제
+      const linkedModels = generatedModels.filter(
+        model => model.source_image_url === fileToDelete.storagePath ||
+                 model.source_image_url === fileToDelete.url
+      );
+
+      for (const model of linkedModels) {
+        await deleteAIModel(supabase, model.id);
+      }
+
+      // 이미지 파일 삭제
+      await deleteFile(imageToDelete);
+
+      // 모델 목록 새로고침
+      await reloadModels();
+
       toast({
-        title: "파일 업로드 완료",
-        description: `${file.name}이 업로드되었습니다.`,
+        title: t('ai.fileDeleted'),
+        description: linkedModelsCount > 0
+          ? `${t('ai.imageWithModelsDeleted')} ${linkedModelsCount}${t('ai.linkedModelsWillBeDeleted')}${t('ai.linkedModelsDeleteWarning2')}`
+          : t('ai.fileDeletedDescription'),
+      });
+    } catch (error) {
+      console.error('[AI] Failed to delete image and models:', error);
+      toast({
+        title: t('ai.deleteFailed'),
+        description: t('ai.imageModelDeleteError'),
+        variant: 'destructive'
+      });
+    } finally {
+      setDeleteImageDialogOpen(false);
+      setImageToDelete(null);
+      setLinkedModelsCount(0);
+    }
+  };
+
+  // 모델 목록 다시 로드 - 모든 모델 로드
+  const reloadModels = async () => {
+    if (!user?.id) return;
+    try {
+      const result = await listAIModels(supabase, user.id, {
+        page: 1,
+        pageSize: 100,
+      });
+      setGeneratedModels(result.items);
+    } catch (e) {
+      console.error('[AI] reload models failed', e);
+    }
+  };
+
+  // 개별 모델 삭제 핸들러
+  const handleModelDelete = async (model: any) => {
+    try {
+      setModelViewerUrl(null);
+      await deleteAIModel(supabase, model.id.toString());
+      await reloadModels();
+      toast({
+        title: t('ai.modelDeleted'),
+        description: `${model.name}${t('ai.modelDeleteSuccess')}`,
+      });
+    } catch (error) {
+      console.error('[AI] Failed to delete model:', error);
+      toast({
+        title: t('ai.modelDeleteFailed'),
+        description: t('ai.modelDeleteError'),
+        variant: 'destructive'
       });
     }
   };
 
   const generateModel = async () => {
-    if (!textPrompt.trim() && uploadedFiles.length === 0) {
-      toast({
-        title: "입력 필요",
-        description: "텍스트를 입력하거나 파일을 업로드해주세요.",
-        variant: "destructive",
-      });
+    // 탭별 유효성 검사
+    if (activeTab === 'text-to-3d' && !textPrompt.trim()) {
+      toast({ title: t('ai.inputRequired'), description: t('ai.textRequired'), variant: "destructive" });
+      return;
+    }
+    if (activeTab === 'image-to-3d') {
+      if (uploadedFiles.length === 0) {
+        toast({ title: t('ai.inputRequired'), description: t('ai.imageRequired'), variant: "destructive" });
+        return;
+      }
+      // 선택된 이미지 검증
+      const fallback = uploadedFiles[uploadedFiles.length - 1];
+      const selected = selectedImageId != null ? uploadedFiles.find(f => f.id === selectedImageId) : fallback;
+
+      if (!selected || (!selected.file && !selected.url)) {
+        toast({
+          title: t('ai.inputRequired'),
+          description: t('ai.invalidImageSelected'),
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
+    if (!user?.id) {
+      toast({ title: t('ai.authRequired'), description: t('auth.loginRequired'), variant: "destructive" });
       return;
     }
 
     setIsProcessing(true);
-    
-    toast({
-      title: "AI 생성 시작",
-      description: "3D 모델을 생성하고 있습니다...",
-    });
+    toast({ title: t('ai.generating'), description: t('ai.generatingDescription') });
 
-    // 시뮬레이션 - 실제로는 AI API 호출
-    setTimeout(() => {
-      const newModel = {
-        id: Date.now(),
-        name: `Model_${Date.now()}`,
-        type: activeTab,
-        prompt: textPrompt,
-        status: 'completed',
-        thumbnail: '/placeholder.svg',
-        createdAt: new Date().toISOString()
-      };
-      
-      setGeneratedModels([newModel, ...generatedModels]);
-      setIsProcessing(false);
+    let dbModelId: string | null = null;
+
+    try {
+      if (activeTab === 'text-to-3d') {
+        // 1. DB에 레코드 생성 (status: processing)
+        const dbModel = await createAIModel(supabase, {
+          generation_type: 'text_to_3d',
+          prompt: textPrompt,
+          ai_model: textModel,
+          quality: textQuality,
+          style: textStyle,
+          model_name: `Text-to-3D: ${textPrompt.substring(0, 30)}...`,
+        }, user.id);
+
+        dbModelId = dbModel.id;
+
+        // 2. 텍스트 → 3D API 호출 (async_mode=true)
+        const payload = {
+          task: 'text_to_3d',
+          prompt: textPrompt,
+          ...buildCommon(textModel, textQuality, textStyle, user?.id),
+        };
+
+        // async_mode로 즉시 task_id 받기
+        const initialResponse = await postTextTo3D(payload, true); // async_mode=true
+        console.log('[AI.tsx] Initial response:', JSON.stringify(initialResponse, null, 2));
+
+        const taskId = initialResponse.data?.task_id || initialResponse.task_id;
+        console.log('[AI.tsx] Task ID:', taskId);
+
+        if (!taskId) {
+          throw new Error('Task ID를 받지 못했습니다.');
+        }
+
+        // 진행률 폴링
+        const result = await pollTaskUntilComplete(taskId, (progress, status) => {
+          setProgress(progress);
+          setProgressStatus(status);
+          console.log(`[AI.tsx] Progress: ${progress}% (${status})`);
+        });
+
+        console.log('[AI.tsx] Final result:', JSON.stringify(result, null, 2));
+
+        const glbUrl = extractGLBUrl(result);
+        console.log('[AI.tsx] Extracted GLB URL:', glbUrl);
+
+        const stlUrl = extractSTLUrl(result);
+        console.log('[AI.tsx] Extracted STL URL:', stlUrl);
+
+        const thumbnailUrl = extractThumbnailUrl(result);
+        console.log('[AI.tsx] Extracted thumbnail URL:', thumbnailUrl);
+
+        const metadata = extractMetadata(result);
+        console.log('[AI.tsx] Extracted metadata:', metadata);
+
+        if (glbUrl || stlUrl) {
+          // 3. Python 서버에서 모델 다운로드 → Supabase Storage에 업로드
+          let glbUploadResult = null;
+          let stlUploadResult = null;
+
+          // GLB 파일 다운로드 및 업로드
+          if (glbUrl) {
+            try {
+              console.log('[AI] Downloading and uploading GLB to Supabase...', glbUrl);
+              glbUploadResult = await downloadAndUploadModel(supabase, user.id, dbModelId, glbUrl);
+            } catch (glbError) {
+              console.error('[AI] Failed to upload GLB:', glbError);
+            }
+          }
+
+          // STL 파일 다운로드 및 업로드
+          if (stlUrl) {
+            try {
+              console.log('[AI] Downloading and uploading STL to Supabase...', stlUrl);
+              stlUploadResult = await downloadAndUploadSTL(supabase, user.id, dbModelId, stlUrl);
+            } catch (stlError) {
+              console.error('[AI] Failed to upload STL:', stlError);
+            }
+          }
+
+          // 3-1. 썸네일도 Supabase Storage에 다운로드 및 업로드
+          let thumbnailUploadResult = null;
+          if (thumbnailUrl) {
+            try {
+              console.log('[AI] Downloading and uploading thumbnail to Supabase...', thumbnailUrl);
+              thumbnailUploadResult = await downloadAndUploadThumbnail(supabase, user.id, dbModelId, thumbnailUrl);
+            } catch (thumbnailError) {
+              console.error('[AI] Failed to upload thumbnail:', thumbnailError);
+              // 썸네일 업로드 실패는 치명적이지 않으므로 계속 진행
+            }
+          }
+
+          // 4. DB 업데이트 (Supabase Storage URL 사용)
+          // STL URL을 우선적으로 렌더링에 사용
+          const renderUrl = stlUploadResult?.publicUrl || glbUploadResult?.publicUrl;
+
+          await updateAIModel(supabase, dbModelId, {
+            storage_path: glbUploadResult?.path || undefined,           // GLB Supabase Storage 경로
+            download_url: glbUploadResult?.publicUrl || undefined,     // GLB Supabase Public URL
+            stl_storage_path: stlUploadResult?.path || undefined,      // STL Supabase Storage 경로
+            stl_download_url: stlUploadResult?.publicUrl || undefined, // STL Supabase Public URL
+            thumbnail_url: thumbnailUploadResult?.publicUrl || undefined,  // Supabase Storage 썸네일 URL
+            status: 'completed',
+            generation_metadata: metadata || undefined,
+            file_format: stlUploadResult ? 'stl' : 'glb',  // STL이 있으면 STL, 없으면 GLB
+          });
+
+          // 5. Supabase Storage URL로 렌더링 (STL 우선)
+          if (renderUrl) {
+            setModelViewerUrl(renderUrl);
+            setCurrentGlbUrl(glbUploadResult?.publicUrl || null);
+            setCurrentStlUrl(stlUploadResult?.publicUrl || null);
+            toast({ title: t('ai.generationComplete'), description: t('ai.textGenerationComplete') });
+          } else {
+            throw new Error('No model files were uploaded successfully');
+          }
+
+          // 모델 목록 새로고침
+          await reloadModels();
+        } else {
+          // URL이 없으면 실패 처리
+          await updateAIModel(supabase, dbModelId, {
+            status: 'failed',
+            generation_metadata: { error: 'No model URL in response' },
+          });
+          toast({ title: t('ai.generationFailed'), description: 'No model URL in response', variant: 'destructive' });
+        }
+
+      } else if (activeTab === 'image-to-3d') {
+        // 이미지 → 3D
+        const fallback = uploadedFiles[uploadedFiles.length - 1];
+        const selected = selectedImageId != null ? uploadedFiles.find(f => f.id === selectedImageId) : fallback;
+
+        if (!selected) {
+          throw new Error(t('ai.imageRequired2'));
+        }
+
+        // File 객체가 없는 경우 (Storage에서 로드된 이미지) URL에서 fetch
+        let file: File;
+        if (selected.file) {
+          file = selected.file;
+        } else if (selected.url) {
+          toast({ title: t('ai.generating'), description: t('ai.loadingImage') });
+          const response = await fetch(selected.url);
+          const blob = await response.blob();
+          file = new File([blob], selected.name, { type: selected.type || 'image/jpeg' });
+        } else {
+          throw new Error(t('ai.imageNotFound'));
+        }
+
+        // 1. DB에 레코드 생성 (Supabase Storage 경로 저장)
+        const dbModel = await createAIModel(supabase, {
+          generation_type: 'image_to_3d',
+          source_image_url: selected.storagePath || selected.url, // Supabase Storage 경로 또는 URL
+          quality: imageQuality,
+          model_name: `Image-to-3D: ${selected.name}`,
+        }, user.id);
+
+        dbModelId = dbModel.id;
+
+        // 2. 이미지 → 3D API 호출 (async_mode=true)
+        const common = buildCommon('flux-kontext', imageQuality, undefined, user?.id);
+        const { model: _omitModel, ...meta } = { depth: imageDepth, ...common } as any;
+
+        const form = new FormData();
+        form.append('task', 'image_to_3d');
+        form.append('image_file', file, file.name);
+        form.append('json', JSON.stringify(meta));
+
+        // async_mode로 즉시 task_id 받기
+        const initialResponse = await postImageTo3D(form, true); // async_mode=true
+        console.log('[AI.tsx] Initial response:', JSON.stringify(initialResponse, null, 2));
+
+        const taskId = initialResponse.data?.task_id || initialResponse.task_id;
+        console.log('[AI.tsx] Task ID:', taskId);
+
+        if (!taskId) {
+          throw new Error('Task ID를 받지 못했습니다.');
+        }
+
+        // 진행률 폴링
+        const result = await pollTaskUntilComplete(taskId, (progress, status) => {
+          setProgress(progress);
+          setProgressStatus(status);
+          console.log(`[AI.tsx] Progress: ${progress}% (${status})`);
+        });
+
+        console.log('[AI.tsx] Final result:', JSON.stringify(result, null, 2));
+
+        const glbUrl = extractGLBUrl(result);
+        console.log('[AI.tsx] Extracted GLB URL:', glbUrl);
+
+        const thumbnailUrl = extractThumbnailUrl(result);
+        console.log('[AI.tsx] Extracted thumbnail URL:', thumbnailUrl);
+
+        const metadata = extractMetadata(result);
+        console.log('[AI.tsx] Extracted metadata:', metadata);
+
+        const stlUrl = extractSTLUrl(result);
+        console.log('[AI.tsx] Extracted STL URL:', stlUrl);
+
+        if (glbUrl || stlUrl) {
+          // 3. Python 서버에서 모델 다운로드 → Supabase Storage에 업로드
+          let glbUploadResult = null;
+          let stlUploadResult = null;
+
+          // GLB 파일 다운로드 및 업로드
+          if (glbUrl) {
+            try {
+              console.log('[AI] Downloading and uploading GLB to Supabase...', glbUrl);
+              glbUploadResult = await downloadAndUploadModel(supabase, user.id, dbModelId, glbUrl);
+            } catch (glbError) {
+              console.error('[AI] Failed to upload GLB:', glbError);
+            }
+          }
+
+          // STL 파일 다운로드 및 업로드
+          if (stlUrl) {
+            try {
+              console.log('[AI] Downloading and uploading STL to Supabase...', stlUrl);
+              stlUploadResult = await downloadAndUploadSTL(supabase, user.id, dbModelId, stlUrl);
+            } catch (stlError) {
+              console.error('[AI] Failed to upload STL:', stlError);
+            }
+          }
+
+          // 3-1. 썸네일도 Supabase Storage에 다운로드 및 업로드
+          let thumbnailUploadResult = null;
+          if (thumbnailUrl) {
+            try {
+              console.log('[AI] Downloading and uploading thumbnail to Supabase...', thumbnailUrl);
+              thumbnailUploadResult = await downloadAndUploadThumbnail(supabase, user.id, dbModelId, thumbnailUrl);
+            } catch (thumbnailError) {
+              console.error('[AI] Failed to upload thumbnail:', thumbnailError);
+              // 썸네일 업로드 실패는 치명적이지 않으므로 계속 진행
+            }
+          }
+
+          // 4. DB 업데이트 (Supabase Storage URL 사용)
+          // STL URL을 우선적으로 렌더링에 사용
+          const renderUrl = stlUploadResult?.publicUrl || glbUploadResult?.publicUrl;
+
+          await updateAIModel(supabase, dbModelId, {
+            storage_path: glbUploadResult?.path || undefined,           // GLB Supabase Storage 경로
+            download_url: glbUploadResult?.publicUrl || undefined,     // GLB Supabase Public URL
+            stl_storage_path: stlUploadResult?.path || undefined,      // STL Supabase Storage 경로
+            stl_download_url: stlUploadResult?.publicUrl || undefined, // STL Supabase Public URL
+            thumbnail_url: thumbnailUploadResult?.publicUrl || undefined,  // Supabase Storage 썸네일 URL
+            status: 'completed',
+            generation_metadata: metadata || undefined,
+            file_format: stlUploadResult ? 'stl' : 'glb',  // STL이 있으면 STL, 없으면 GLB
+            source_image_url: selected.storagePath || metadata?.uploaded_local_path || selected.url,
+          });
+
+          // 5. Supabase Storage URL로 렌더링 (STL 우선)
+          if (renderUrl) {
+            setModelViewerUrl(renderUrl);
+            setCurrentGlbUrl(glbUploadResult?.publicUrl || null);
+            setCurrentStlUrl(stlUploadResult?.publicUrl || null);
+            toast({ title: t('ai.generationComplete'), description: t('ai.imageGenerationComplete') });
+          } else {
+            throw new Error('No model files were uploaded successfully');
+          }
+
+          // 모델 목록 새로고침
+          await reloadModels();
+        } else {
+          await updateAIModel(supabase, dbModelId, {
+            status: 'failed',
+            generation_metadata: { error: 'No model URL in response' },
+          });
+          toast({ title: t('ai.generationFailed'), description: 'No model URL in response', variant: 'destructive' });
+        }
+
+      } else {
+        throw new Error(t('ai.unsupportedGenerationType'));
+      }
+
+    } catch (e: any) {
+      console.error('[AI] 생성 실패:', e);
+
+      // DB에 실패 상태 기록
+      if (dbModelId) {
+        try {
+          await updateAIModel(supabase, dbModelId, {
+            status: 'failed',
+            generation_metadata: { error: e?.message || 'Unknown error' },
+          });
+        } catch (updateError) {
+          console.error('[AI] DB 업데이트 실패:', updateError);
+        }
+      }
+
       toast({
-        title: "생성 완료",
-        description: "3D 모델이 성공적으로 생성되었습니다.",
+        title: t('ai.generationFailed'),
+        description: e?.message || t('ai.generationError'),
+        variant: 'destructive'
       });
-    }, 3000);
-  };
-
-  const removeFile = (fileId: number) => {
-    setUploadedFiles(uploadedFiles.filter(file => file.id !== fileId));
+    } finally {
+      setIsProcessing(false);
+      setProgress(0);
+      setProgressStatus('');
+    }
   };
 
   return (
@@ -228,7 +739,7 @@ const AI = () => {
               <div className="p-2 bg-primary/10 rounded-lg">
                 <Layers className="w-6 h-6 text-primary" />
               </div>
-              <h1 className="text-2xl font-bold">AI 3D 모델링 스튜디오</h1>
+              <h1 className="text-2xl font-bold">{t('ai.title')}</h1>
             </div>
           </div>
 
@@ -238,226 +749,160 @@ const AI = () => {
               <TabsList className="grid w-full grid-cols-3 mb-6 shrink-0">
                 <TabsTrigger value="text-to-3d" className="flex items-center gap-2">
                   <Wand2 className="w-4 h-4" />
-                  텍스트 → 3D
+                  {t('ai.textTo3D')}
                 </TabsTrigger>
                 <TabsTrigger value="image-to-3d" className="flex items-center gap-2">
                   <ImageIcon className="w-4 h-4" />
-                  이미지 → 3D
+                  {t('ai.imageTo3D')}
                 </TabsTrigger>
                 <TabsTrigger value="text-to-image" className="flex items-center gap-2">
                   <FileText className="w-4 h-4" />
-                  텍스트 → 이미지
+                  {t('ai.textToImage')}
                 </TabsTrigger>
               </TabsList>
 
               {/* 텍스트 → 3D 탭 */}
               <TabsContent value="text-to-3d" className="flex-1 min-h-0 overflow-hidden">
-                <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6 h-full">
-                  {/* 입력 영역 */}
-                  <Card className="lg:sticky top-4 max-h-[calc(85vh-4rem-2rem)] overflow-auto">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Wand2 className="w-5 h-5" />
-                        3D 모델 생성
-                      </CardTitle>
-                      <CardDescription>
-                        텍스트 설명으로 3D 모델을 생성하세요
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">모델 설명</label>
-                        <Textarea
-                          placeholder="예: 빨간색 스포츠카, 현대적인 의자, 귀여운 로봇..."
-                          value={textPrompt}
-                          onChange={(e) => setTextPrompt(e.target.value)}
-                          className="min-h-[120px]"
-                        />
-                      </div>
-                      
-                      {/* 생성 설정 */}
-                      <div className="space-y-4 p-4 bg-muted/5 rounded-lg">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">품질 설정</label>
-                          <div className="grid grid-cols-3 gap-2">
-                            <Button variant="outline" size="sm">낮음</Button>
-                            <Button variant="default" size="sm">보통</Button>
-                            <Button variant="outline" size="sm">높음</Button>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">AI 모델</label>
-                          <div className="grid grid-cols-2 gap-2">
-                            <Button variant="default" size="sm">Flux Kontext</Button>
-                            <Button variant="outline" size="sm">GPT-4</Button>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">스타일</label>
-                          <div className="grid grid-cols-2 gap-2">
-                            <Button variant="outline" size="sm">사실적</Button>
-                            <Button variant="outline" size="sm">추상적</Button>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <Button 
-                        onClick={generateModel}
-                        disabled={isProcessing || !textPrompt.trim()}
-                        className="w-full"
-                        size="lg"
-                      >
-                        {isProcessing ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            생성 중...
-                          </>
-                        ) : (
-                          <>
-                            <Send className="w-4 h-4 mr-2" />
-                            3D 모델 생성
-                          </>
-                        )}
-                      </Button>
-                    </CardContent>
-                  </Card>
+                <div className="grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] gap-6 h-full">
+                  {/* 입력 영역 → TextTo3DForm */}
+                  <TextTo3DForm
+                    prompt={textPrompt}
+                    quality={textQuality}
+                    model={textModel}
+                    style={textStyle}
+                    isProcessing={isProcessing}
+                    onChangePrompt={setTextPrompt}
+                    onChangeQuality={setTextQuality}
+                    onChangeModel={setTextModel}
+                    onChangeStyle={setTextStyle}
+                    onSubmit={generateModel}
+                  />
 
-                  {/* 프리뷰 영역 */}
-                  <Card className="h-fit lg:sticky top-4">
-                    <CardContent className="p-0">
-                      <div className="bg-muted rounded-lg flex items-center justify-center h-[calc(85vh-4rem-2rem)] relative overflow-hidden">
-                        {isProcessing ? (
-                          <div className="absolute inset-0 bg-gray-900/50 flex items-center justify-center">
-                            <div className="text-center space-y-4">
-                              <Loader2 className="w-20 h-20 mx-auto animate-spin text-white" />
-                              <div>
-                                <p className="text-xl font-medium text-white">AI 모델 생성 중...</p>
-                                <p className="text-lg text-gray-300">잠시만 기다려주세요</p>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <ModelViewer className="w-full h-full" />
-                        )}
-                       </div>
-                     </CardContent>
-                   </Card>
+                  {/* 프리뷰 영역 → ModelPreview */}
+                  <ModelPreview
+                    isProcessing={isProcessing}
+                    modelUrl={modelViewerUrl ?? undefined}
+                    glbDownloadUrl={currentGlbUrl ?? undefined}
+                    stlDownloadUrl={currentStlUrl ?? undefined}
+                    progress={progress}
+                    progressStatus={progressStatus}
+                  />
                 </div>
               </TabsContent>
 
               {/* 이미지 → 3D 탭 */}
               <TabsContent value="image-to-3d" className="flex-1 min-h-0 overflow-hidden">
-                <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6 h-full">
-                  {/* 업로드 영역 */}
-                  <Card className="lg:sticky top-4 max-h-[calc(85vh-4rem-2rem)] overflow-auto">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Upload className="w-5 h-5" />
-                        이미지 업로드
-                      </CardTitle>
-                      <CardDescription>
-                        JPG, PNG 이미지를 3D 모델로 변환하세요
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div 
-                        className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-12 text-center hover:border-primary/50 transition-colors cursor-pointer"
-                        onDragOver={handleDragOver}
-                        onDrop={handleDrop}
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                        <p className="text-lg font-medium mb-2">
-                          클릭하거나 여기에 이미지를 드롭하세요
-                        </p>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          JPG, PNG, WEBP 또는 GIF
-                        </p>
-                        <Button variant="outline">
-                          파일 선택
-                        </Button>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                          accept="image/*"
-                          multiple
-                        />
-                      </div>
-
-                      {/* 업로드된 이미지 목록 */}
-                      {uploadedFiles.length > 0 && (
-                        <div className="mt-6 space-y-3">
-                          <h4 className="font-medium">업로드된 이미지</h4>
-                          {uploadedFiles.map((file) => (
-                            <div key={file.id} className="flex items-center gap-3 p-3 border rounded-lg">
-                              <img 
-                                src={file.url} 
-                                alt={file.name}
-                                className="w-12 h-12 object-cover rounded"
-                              />
-                              <div className="flex-1">
-                                <p className="text-sm font-medium">{file.name}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {(file.size / 1024 / 1024).toFixed(2)} MB
-                                </p>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeFile(file.id)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* 변환 설정 */}
-                      <div className="space-y-4 p-4 bg-muted/5 rounded-lg">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">깊이 인식</label>
-                          <div className="grid grid-cols-2 gap-2">
-                            <Button variant="default" size="sm">자동</Button>
-                            <Button variant="outline" size="sm">수동</Button>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">품질</label>
-                          <div className="grid grid-cols-3 gap-2">
-                            <Button variant="outline" size="sm">낮음</Button>
-                            <Button variant="default" size="sm">보통</Button>
-                            <Button variant="outline" size="sm">높음</Button>
-                          </div>
-                        </div>
-                      </div>
-
-                      <Button onClick={generateModel} className="w-full" size="lg">
-                        {isProcessing ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            변환 중...
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-4 h-4 mr-2" />
-                            3D 모델로 변환
-                          </>
-                        )}
-                      </Button>
-                    </CardContent>
-                  </Card>
+                <div className="grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] gap-6 h-full">
+                  <ImageTo3DForm
+                    files={uploadedFiles}
+                    selectedId={selectedImageId}
+                    imageDepth={imageDepth}
+                    imageQuality={imageQuality}
+                    isProcessing={isProcessing}
+                    hasExistingModel={selectedImageHasModel}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onFileChange={handleFileUpload}
+                    onRemove={handleImageDelete}
+                    onSelect={selectImage}
+                    onChangeDepth={setImageDepth}
+                    onChangeQuality={setImageQuality}
+                    onSubmit={generateModel}
+                  />
 
                   {/* 결과 영역 */}
                   <Card className="h-fit lg:sticky top-4">
                     <CardContent className="p-0">
-                      <div className="rounded-lg overflow-hidden h-[calc(85vh-4rem-2rem)]">
-                        <ModelViewer className="w-full h-full" />
+                      <div className="rounded-lg overflow-hidden h-[calc(85vh-4rem-2rem)] relative">
+                        <ModelViewer className="w-full h-full" modelUrl={modelViewerUrl ?? undefined} modelScale={1} enableRotationControls={true} />
+
+                        {/* 다운로드 드롭다운 버튼 - 오른쪽 위 */}
+                        {(currentGlbUrl || currentStlUrl) && !isProcessing && (
+                          <div className="absolute top-4 right-4 z-20">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  className="flex items-center gap-2 shadow-lg"
+                                >
+                                  <Download className="w-4 h-4" />
+                                  Download
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {currentGlbUrl && (
+                                  <DropdownMenuItem onClick={async () => {
+                                    try {
+                                      toast({ title: t('ai.downloadStarted'), description: t('ai.downloadingGLB') });
+                                      const response = await fetch(currentGlbUrl);
+                                      const blob = await response.blob();
+                                      const url = window.URL.createObjectURL(blob);
+                                      const link = document.createElement('a');
+                                      link.href = url;
+                                      link.download = `model_${Date.now()}.glb`;
+                                      document.body.appendChild(link);
+                                      link.click();
+                                      document.body.removeChild(link);
+                                      window.URL.revokeObjectURL(url);
+                                      toast({ title: t('ai.downloadComplete'), description: t('ai.glbDownloaded') });
+                                    } catch (error) {
+                                      toast({ title: t('ai.downloadFailed'), variant: 'destructive' });
+                                    }
+                                  }}>
+                                    <Download className="w-4 h-4 mr-2" />
+                                    {t('ai.downloadGLB')}
+                                  </DropdownMenuItem>
+                                )}
+                                {currentStlUrl && (
+                                  <DropdownMenuItem onClick={async () => {
+                                    try {
+                                      toast({ title: t('ai.downloadStarted'), description: t('ai.downloadingSTL') });
+                                      const response = await fetch(currentStlUrl);
+                                      const blob = await response.blob();
+                                      const url = window.URL.createObjectURL(blob);
+                                      const link = document.createElement('a');
+                                      link.href = url;
+                                      link.download = `model_${Date.now()}.stl`;
+                                      document.body.appendChild(link);
+                                      link.click();
+                                      document.body.removeChild(link);
+                                      window.URL.revokeObjectURL(url);
+                                      toast({ title: t('ai.downloadComplete'), description: t('ai.stlDownloaded') });
+                                    } catch (error) {
+                                      toast({ title: t('ai.downloadFailed'), variant: 'destructive' });
+                                    }
+                                  }}>
+                                    <Download className="w-4 h-4 mr-2" />
+                                    {t('ai.downloadSTL')}
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        )}
+
+                        {isProcessing && (
+                          <div className="absolute inset-0 bg-gray-900/70 flex items-center justify-center z-10">
+                            <div className="text-center space-y-4">
+                              <Loader2 className="w-20 h-20 mx-auto animate-spin text-white" />
+                              <div>
+                                <p className="text-xl font-medium text-white">
+                                  {t('ai.processing')}
+                                </p>
+                                <p className="text-lg text-gray-300">{t('ai.waitForGeneration')}</p>
+                                {progress > 0 && (
+                                  <div className="mt-4">
+                                    <p className="text-2xl font-bold text-white">{progress}%</p>
+                                    {progressStatus && (
+                                      <p className="text-sm text-gray-400 mt-1">{progressStatus}</p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                        </CardContent>
                      </Card>
@@ -466,56 +911,56 @@ const AI = () => {
 
               {/* 텍스트 → 이미지 탭 */}
               <TabsContent value="text-to-image" className="flex-1 min-h-0 overflow-hidden">
-                <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6 h-full">
+                <div className="grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] gap-6 h-full">
                   <Card className="lg:sticky top-4 max-h-[calc(85vh-4rem-2rem)] overflow-auto">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <Camera className="w-5 h-5" />
-                        이미지 생성
+                        {t('ai.imageGeneration')}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">이미지 설명</label>
+                        <label className="text-sm font-medium">{t('ai.imageDescription')}</label>
                         <Textarea
-                          placeholder="생성하고 싶은 이미지를 설명하세요..."
+                          placeholder={t('ai.imageDescriptionPlaceholder')}
                           value={textPrompt}
                           onChange={(e) => setTextPrompt(e.target.value)}
                           className="min-h-[120px]"
                         />
                       </div>
-                      
+
                       {/* 이미지 설정 */}
                       <div className="space-y-4 p-4 bg-muted/5 rounded-lg">
                         <div className="space-y-2">
-                          <label className="text-sm font-medium">아트 스타일</label>
+                          <label className="text-sm font-medium">{t('ai.artStyle')}</label>
                           <div className="grid grid-cols-2 gap-2">
-                            <Button variant="default" size="sm">사실적</Button>
-                            <Button variant="outline" size="sm">카툰</Button>
-                            <Button variant="outline" size="sm">추상적</Button>
-                            <Button variant="outline" size="sm">픽셀아트</Button>
+                            <Button variant="default" size="sm">{t('ai.realistic')}</Button>
+                            <Button variant="outline" size="sm">{t('ai.cartoon')}</Button>
+                            <Button variant="outline" size="sm">{t('ai.abstract')}</Button>
+                            <Button variant="outline" size="sm">{t('ai.pixelArt')}</Button>
                           </div>
                         </div>
-                        
+
                         <div className="space-y-2">
-                          <label className="text-sm font-medium">해상도</label>
+                          <label className="text-sm font-medium">{t('ai.resolution')}</label>
                           <div className="grid grid-cols-2 gap-2">
                             <Button variant="outline" size="sm">512x512</Button>
                             <Button variant="default" size="sm">1024x1024</Button>
                           </div>
                         </div>
                       </div>
-                      
+
                       <Button onClick={generateModel} className="w-full" size="lg">
                         {isProcessing ? (
                           <>
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            이미지 생성 중...
+                            {t('ai.generatingImage')}
                           </>
                         ) : (
                           <>
                             <Camera className="w-4 h-4 mr-2" />
-                            이미지 생성
+                            {t('ai.generateImage')}
                           </>
                         )}
                       </Button>
@@ -525,13 +970,65 @@ const AI = () => {
                     <Card className="h-fit lg:sticky top-4">
                     <CardContent className="p-0">
                       <div className="bg-gray-900 rounded-lg flex items-center justify-center h-[calc(85vh-4rem-2rem)] relative overflow-hidden">
-                        <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
-                          <div className="absolute inset-0" style={{
-                            backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
-                                            linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
-                            backgroundSize: '20px 20px'
-                          }} />
-                        </div>
+                        {isProcessing ? (
+                          <div className="flex flex-col items-center justify-center gap-4 z-10">
+                            <Loader2 className="w-12 h-12 text-primary animate-spin" />
+                            <div className="text-center">
+                              <p className="text-lg font-medium text-white">{t('ai.processing')}</p>
+                              <p className="text-sm text-muted-foreground">{t('ai.pleaseWait')}</p>
+                            </div>
+                          </div>
+                        ) : generatedImageUrl ? (
+                          <img
+                            src={generatedImageUrl}
+                            alt="Generated"
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+                            <div className="absolute inset-0" style={{
+                              backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+                                              linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
+                              backgroundSize: '20px 20px'
+                            }} />
+                            <div className="text-center z-10">
+                              <Box className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                              <p className="text-sm text-muted-foreground">{t('ai.generatedImagePlaceholder')}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 이미지 다운로드 버튼 - 오른쪽 위 */}
+                        {generatedImageUrl && !isProcessing && (
+                          <div className="absolute top-4 right-4 z-20">
+                            <Button
+                              onClick={async () => {
+                                try {
+                                  toast({ title: t('ai.downloadStarted'), description: t('ai.downloadingImage') });
+                                  const response = await fetch(generatedImageUrl);
+                                  const blob = await response.blob();
+                                  const url = window.URL.createObjectURL(blob);
+                                  const link = document.createElement('a');
+                                  link.href = url;
+                                  link.download = `generated_image_${Date.now()}.png`;
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                  window.URL.revokeObjectURL(url);
+                                  toast({ title: t('ai.downloadComplete'), description: t('ai.imageDownloaded') });
+                                } catch (error) {
+                                  toast({ title: t('ai.downloadFailed'), variant: 'destructive' });
+                                }
+                              }}
+                              variant="secondary"
+                              size="sm"
+                              className="flex items-center gap-2 shadow-lg"
+                            >
+                              <Download className="w-4 h-4" />
+                              Download
+                            </Button>
+                          </div>
+                        )}
                        </div>
                      </CardContent>
                    </Card>
@@ -541,159 +1038,294 @@ const AI = () => {
            </div>
          </div>
 
-        {/* 사이드바 - 탭별 내용 */}
-        <div className="w-[340px] border-l bg-muted/5 overflow-y-auto">
-          <div className="p-6">
-            {activeTab === 'text-to-3d' && (
-              <>
-                <h2 className="text-lg font-semibold mb-4">3D 모델 생성</h2>
-                
-                {/* 생성된 3D 모델 목록 */}
-                <ScrollArea className="h-[300px] mb-6">
-                  {generatedModels.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Box className="w-8 h-8 mx-auto mb-2" />
-                      <p className="text-sm">생성된 3D 모델이 없습니다</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {generatedModels.map((model) => (
-                        <Card key={model.id} className="p-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                              <Box className="w-6 h-6 text-primary" />
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm font-medium">{model.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(model.createdAt).toLocaleString()}
-                              </p>
-                            </div>
-                            <Button variant="ghost" size="sm">
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-                </ScrollArea>
+        {/* 사이드바 - 모든 탭에서 모델 아카이브 통일 */}
+        <div className="w-[340px] border-l bg-muted/5 flex flex-col overflow-hidden">
+          {/* 모델 아카이브 영역 (75%) */}
+          <div className="flex-[3] flex flex-col p-6 overflow-hidden">
+            <div className="flex items-center justify-between mb-4">
+              {/* 제목 - 왼쪽 */}
+              <h2 className="text-lg font-semibold">{t('ai.modelArchive').toUpperCase()}</h2>
+              {/* RAW / 3D/2D 모델 토글 - 오른쪽 (탭에 따라 레이블 변경) */}
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                <Button
+                  variant={archiveViewMode === 'raw' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={() => setArchiveViewMode('raw')}
+                >
+                  RAW
+                </Button>
+                <Button
+                  variant={archiveViewMode === '3d' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={() => setArchiveViewMode('3d')}
+                >
+                  {activeTab === 'text-to-image' ? '2D' : '3D'}
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {archiveViewMode === 'raw' ? (
+                // RAW 모드: 입력 데이터 보여주기
+                (activeTab === 'image-to-3d' || archiveFilter === 'image-to-3d') ? (
+                  // 이미지→3D: 업로드된 이미지 목록
+                  <UploadArchive
+                    items={uploadedFiles.map(file => ({
+                      ...file,
+                      has3DModel: generatedModels.some(
+                        model => model.source_image_url === file.storagePath || model.source_image_url === file.url
+                      ),
+                    }))}
+                    selectedId={selectedImageId}
+                    onSelect={(fileId) => {
+                      selectImage(fileId);
+                      const file = uploadedFiles.find(f => f.id === fileId);
+                      if (file) {
+                        const linkedModel = generatedModels.find(
+                          model => model.source_image_url === file.storagePath || model.source_image_url === file.url
+                        );
+                        if (linkedModel?.download_url) {
+                          setModelViewerUrl(linkedModel.download_url);
+                          setSelectedImageHasModel(true);
+                          toast({ title: t('ai.imageSelected'), description: file.name });
+                        } else {
+                          setSelectedImageHasModel(false);
+                          setModelViewerUrl(null);
+                        }
+                      }
+                    }}
+                  />
+                ) : (
+                  // 텍스트→3D 또는 텍스트→이미지: 프롬프트 목록 표시
+                  <ModelArchive
+                    items={generatedModels
+                      .filter(model => {
+                        if (archiveFilter === 'all') return true;
+                        if (archiveFilter === 'text-to-3d') return model.generation_type === 'text_to_3d';
+                        if (archiveFilter === 'image-to-3d') return false; // 이미지는 위에서 처리
+                        if (archiveFilter === 'text-to-image') return model.generation_type === 'text_to_image';
+                        return model.generation_type !== 'image_to_3d';
+                      })
+                      .map(model => ({
+                        id: model.id,
+                        name: model.prompt || model.model_name, // 프롬프트 우선 표시
+                        createdAt: model.created_at,
+                        download_url: undefined, // RAW 모드에서는 다운로드 URL 숨김
+                        thumbnail_url: undefined,
+                      }))}
+                    onSelect={(model) => {
+                      toast({
+                        title: t('ai.rawData'),
+                        description: t('ai.inputTextPrompt')
+                      });
+                    }}
+                  />
+                )
+              ) : (
+                // 3D/2D 모드: 생성된 모델 보여주기
+                <ModelArchive
+                  items={generatedModels
+                    .filter(model => {
+                      // 타입 필터
+                      let typeMatch = false;
+                      if (archiveFilter === 'all') typeMatch = true;
+                      else if (archiveFilter === 'text-to-3d') typeMatch = model.generation_type === 'text_to_3d';
+                      else if (archiveFilter === 'image-to-3d') typeMatch = model.generation_type === 'image_to_3d';
+                      else if (archiveFilter === 'text-to-image') typeMatch = model.generation_type === 'text_to_image';
 
-                {/* 컨트롤 버튼 */}
-                <div className="flex items-center justify-center gap-2 mb-4 p-2 bg-muted/5 rounded-lg">
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                    <FolderOpen className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                    <Grid3X3 className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                    <ImageFile className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                    <Shapes className="w-4 h-4" />
-                  </Button>
-                </div>
+                      if (!typeMatch) return false;
 
-              </>
-            )}
+                      // 매핑된 입력 데이터가 있는 모델만 표시
+                      if (model.generation_type === 'image_to_3d') {
+                        // 이미지→3D: source_image_url이 있어야 함
+                        return !!model.source_image_url;
+                      } else if (model.generation_type === 'text_to_3d' || model.generation_type === 'text_to_image') {
+                        // 텍스트→3D/이미지: prompt가 있어야 함
+                        return !!model.prompt;
+                      }
+                      return true;
+                    })
+                    .map(model => {
+                      // Supabase Storage URL만 허용 (CORS 에러 방지)
+                      const isSupabaseUrl = model.download_url?.includes('supabase.co') ||
+                                           model.download_url?.includes('localhost') ||
+                                           model.download_url?.includes('127.0.0.1');
+                      const isThumbnailSupabaseUrl = model.thumbnail_url?.includes('supabase.co') ||
+                                                     model.thumbnail_url?.includes('localhost') ||
+                                                     model.thumbnail_url?.includes('127.0.0.1');
 
-            {activeTab === 'image-to-3d' && (
-              <>
-                <h2 className="text-lg font-semibold mb-4">이미지 → 3D 변환</h2>
-                
-                {/* 업로드된 이미지 미리보기 */}
-                <div className="mb-6">
-                  <h3 className="font-medium mb-3">업로드된 이미지</h3>
-                  {uploadedFiles.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <ImageIcon className="w-8 h-8 mx-auto mb-2" />
-                      <p className="text-sm">업로드된 이미지가 없습니다</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {uploadedFiles.map((file) => (
-                        <div key={file.id} className="border rounded-lg p-2">
-                          <img 
-                            src={file.url} 
-                            alt={file.name}
-                            className="w-full h-24 object-cover rounded mb-2"
-                          />
-                          <p className="text-xs font-medium">{file.name}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                      // 디버깅용 로그
+                      console.log('[AI] Model archive item:', {
+                        name: model.model_name,
+                        thumbnail_url: model.thumbnail_url,
+                        isThumbnailSupabaseUrl,
+                        download_url: model.download_url
+                      });
 
-              </>
-            )}
+                      return {
+                        id: model.id,
+                        name: model.model_name,
+                        createdAt: model.created_at,
+                        download_url: isSupabaseUrl ? model.download_url : undefined,
+                        thumbnail_url: isThumbnailSupabaseUrl ? model.thumbnail_url : undefined,
+                        _originalModel: model, // 원본 모델 정보 저장
+                      };
+                    })}
+                  onSelect={async (item: any) => {
+                    const model = item._originalModel as AIGeneratedModel;
 
-            {activeTab === 'text-to-image' && (
-              <>
-                <h2 className="text-lg font-semibold mb-4">이미지 생성</h2>
-                
-                {/* 생성된 이미지 갤러리 */}
-                <ScrollArea className="h-[300px] mb-6">
-                  <div className="text-center py-8 text-muted-foreground">
-                    <ImageIcon className="w-8 h-8 mx-auto mb-2" />
-                    <p className="text-sm">생성된 이미지가 없습니다</p>
-                  </div>
-                </ScrollArea>
-              </>
-            )}
+                    if (item.download_url) {
+                      console.log('[AI] Loading model from archive:', item.name, item.download_url);
 
-            {/* 연결된 프린터 - 3D 관련 탭에서만 표시 */}
-            {(activeTab === 'text-to-3d' || activeTab === 'image-to-3d') && (
-              <>
-                <Separator className="my-4" />
-                
-                <h3 className="font-medium mb-2">연결된 프린터</h3>
-                <div className="flex items-center gap-2 mb-3">
+                      // STL 우선, GLB 폴백으로 뷰어 URL 설정
+                      const viewerUrl = model.stl_download_url || model.download_url;
+                      setModelViewerUrl(viewerUrl);
+
+                      // 다운로드 버튼용 URL 설정
+                      setCurrentGlbUrl(model.download_url || null);
+                      setCurrentStlUrl(model.stl_download_url || null);
+
+                      // 왼쪽 사이드바에 매핑된 입력 데이터 표시
+                      if (model.generation_type === 'image_to_3d') {
+                        // 이미지→3D: 매핑된 이미지 선택
+                        const matchedFile = uploadedFiles.find(
+                          f => f.storagePath === model.source_image_url || f.url === model.source_image_url
+                        );
+                        if (matchedFile) {
+                          selectImage(matchedFile.id);
+                          setActiveTab('image-to-3d');
+                          toast({
+                            title: t('ai.modelLoad'),
+                            description: `${item.name} ${t('ai.modelAndImageSelected')}`
+                          });
+                        }
+                      } else if (model.generation_type === 'text_to_3d') {
+                        // 텍스트→3D: 텍스트 입력란에 프롬프트 넣기
+                        if (model.prompt) {
+                          setTextPrompt(model.prompt);
+                          setActiveTab('text-to-3d');
+                          toast({
+                            title: t('ai.modelLoad'),
+                            description: `${item.name} ${t('ai.modelAndPromptRestored')}`
+                          });
+                        }
+                      } else {
+                        toast({
+                          title: t('ai.modelLoad'),
+                          description: `${item.name} ${t('ai.rendering')}`
+                        });
+                      }
+                    } else {
+                      // 모델 파일을 찾을 수 없으면 자동 삭제
+                      try {
+                        setModelViewerUrl(null);
+                        await deleteAIModel(supabase, item.id.toString());
+                        await reloadModels();
+                        toast({
+                          title: t('ai.modelDeleted'),
+                          description: t('ai.modelNotFound'),
+                          variant: 'default'
+                        });
+                      } catch (error) {
+                        console.error('[AI] Failed to delete model:', error);
+                        toast({
+                          title: t('ai.modelDeleteFailed'),
+                          description: t('ai.modelDeleteError'),
+                          variant: 'destructive'
+                        });
+                      }
+                    }
+                  }}
+                  onDelete={handleModelDelete}
+                />
+              )}
+            </div>
+
+            {/* 컨트롤 버튼 */}
+            <div className="flex items-center justify-center gap-2 mt-4 p-2 bg-muted/5 rounded-lg shrink-0">
+              <Button
+                variant={'ghost'}
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => {
+                  // 폴더 버튼: 전체 보기
+                  setArchiveFilter('all');
+                }}
+                title="전체 보기"
+              >
+                <FolderOpen className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={archiveFilter === 'text-to-3d' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => {
+                  setArchiveFilter('text-to-3d');
+                  setActiveTab('text-to-3d');
+                }}
+                title="텍스트→3D"
+              >
+                <Type className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={archiveFilter === 'image-to-3d' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => {
+                  setArchiveFilter('image-to-3d');
+                  setActiveTab('image-to-3d');
+                }}
+                title="이미지→3D"
+              >
+                <ImageFile className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={archiveFilter === 'text-to-image' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => {
+                  setArchiveFilter('text-to-image');
+                  setActiveTab('text-to-image');
+                }}
+                title="텍스트→이미지"
+              >
+                <Grid3X3 className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* 연결된 프린터 영역 (25%) - 3D 관련 탭에서만 표시 */}
+          {(activeTab === 'text-to-3d' || activeTab === 'image-to-3d') && (
+            <div className="flex-[1] flex flex-col border-t p-6 overflow-hidden">
+              <div className="flex items-center justify-between mb-3 shrink-0">
+                <h3 className="font-medium">{t('ai.connectedPrinters')}</h3>
+                <div className="flex items-center gap-2">
                   <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
-                    연결: {connectedCount}/{totalPrinters}
+                    {t('ai.connection')}: {connectedCount}/{totalPrinters}
                   </Badge>
                   <Badge className="rounded-full px-3 py-1 text-xs">
-                    프린팅: {printingCount}
+                    {t('ai.printing')}: {printingCount}
                   </Badge>
                 </div>
-                <div className="space-y-3">
-                  {printers.map((printer: any) => (
-                    <Card key={printer.id} className="p-3 cursor-pointer hover:shadow-md transition" onClick={() => openPrinterSettings(printer)}>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium">{printer.name}</p>
-                          <Badge 
-                            variant={printer.status === 'ready' || printer.status === 'operational' ? 'secondary' : 'default'}
-                            className="text-xs"
-                          >
-                            {printer.status === 'printing' ? '프린팅중' : (printer.status === 'ready' || printer.status === 'operational' ? '대기중' : (printer.status || '연결끊김'))}
-                          </Badge>
-                        </div>
-                        
-                        <div className="text-xs text-muted-foreground">
-                          <div className="flex justify-between">
-                            <span>노즐: {printer?.temperature?.nozzle ?? 0}°C</span>
-                            <span>베드: {printer?.temperature?.bed ?? 0}°C</span>
-                          </div>
-                        </div>
-
-                        {typeof printer.progress === 'number' && (
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-xs">
-                              <span>진행률</span>
-                              <span>{printer.progress}%</span>
-                            </div>
-                            <Progress value={printer.progress} className="h-1" />
-                          </div>
-                        )}
-                      </div>
-                    </Card>
+              </div>
+              <ScrollArea className="flex-1">
+                <div className="space-y-3 pr-4">
+                  {printers.map((printer) => (
+                    <PrinterCard
+                      key={printer.id}
+                      id={printer.id}
+                      name={printer.name}
+                      status={printer.status}
+                      temperature={printer.temperature}
+                      progress={printer.progress}
+                      onClick={() => openPrinterSettings(printer)}
+                    />
                   ))}
                 </div>
-              </>
-            )}
-          </div>
+              </ScrollArea>
+            </div>
+          )}
         </div>
       </div>
 
@@ -715,7 +1347,7 @@ const AI = () => {
               {/* 좌: 렌더링 */}
               <Card className="overflow-hidden">
                 <CardContent className="p-0">
-                  <ModelViewer className="w-full h-[68vh]" />
+                  <ModelViewer className="w-full h-[68vh]" modelUrl={modelViewerUrl ?? undefined} modelScale={1} />
                 </CardContent>
               </Card>
 
@@ -821,6 +1453,32 @@ const AI = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 이미지 삭제 확인 다이얼로그 */}
+      <AlertDialog open={deleteImageDialogOpen} onOpenChange={setDeleteImageDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>이미지 삭제 확인</AlertDialogTitle>
+            <AlertDialogDescription>
+              {linkedModelsCount > 0 ? (
+                <>
+                  이 이미지로 생성된 <strong>{linkedModelsCount}개의 3D 모델</strong>이 함께 삭제됩니다.
+                  <br /><br />
+                  정말로 삭제하시겠습니까?
+                </>
+              ) : (
+                '이 이미지를 삭제하시겠습니까?'
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmImageDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              삭제
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

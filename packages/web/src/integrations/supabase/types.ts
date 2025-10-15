@@ -130,6 +130,87 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_generated_models: {
+        Row: {
+          id: string
+          user_id: string
+          generation_type: string
+          prompt: string | null
+          source_image_url: string | null
+          ai_model: string | null
+          quality: string | null
+          style: string | null
+          model_name: string
+          file_format: string
+          storage_path: string
+          download_url: string | null
+          file_size: number | null
+          thumbnail_url: string | null
+          model_dimensions: Json | null
+          generation_metadata: Json | null
+          status: string
+          tags: string[] | null
+          is_favorite: boolean
+          is_public: boolean
+          printed_count: number
+          last_printed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          generation_type: string
+          prompt?: string | null
+          source_image_url?: string | null
+          ai_model?: string | null
+          quality?: string | null
+          style?: string | null
+          model_name: string
+          file_format?: string
+          storage_path: string
+          download_url?: string | null
+          file_size?: number | null
+          thumbnail_url?: string | null
+          model_dimensions?: Json | null
+          generation_metadata?: Json | null
+          status?: string
+          tags?: string[] | null
+          is_favorite?: boolean
+          is_public?: boolean
+          printed_count?: number
+          last_printed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          generation_type?: string
+          prompt?: string | null
+          source_image_url?: string | null
+          ai_model?: string | null
+          quality?: string | null
+          style?: string | null
+          model_name?: string
+          file_format?: string
+          storage_path?: string
+          download_url?: string | null
+          file_size?: number | null
+          thumbnail_url?: string | null
+          model_dimensions?: Json | null
+          generation_metadata?: Json | null
+          status?: string
+          tags?: string[] | null
+          is_favorite?: boolean
+          is_public?: boolean
+          printed_count?: number
+          last_printed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       gcode_files: {
         Row: {
           filament_estimate: number | null
@@ -165,6 +246,76 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      model_print_history: {
+        Row: {
+          id: string
+          model_id: string
+          printer_id: string | null
+          user_id: string
+          print_status: string
+          print_settings: Json | null
+          gcode_file_id: string | null
+          print_time: string | null
+          filament_used: number | null
+          error_message: string | null
+          started_at: string | null
+          completed_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          model_id: string
+          printer_id?: string | null
+          user_id: string
+          print_status?: string
+          print_settings?: Json | null
+          gcode_file_id?: string | null
+          print_time?: string | null
+          filament_used?: number | null
+          error_message?: string | null
+          started_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          model_id?: string
+          printer_id?: string | null
+          user_id?: string
+          print_status?: string
+          print_settings?: Json | null
+          gcode_file_id?: string | null
+          print_time?: string | null
+          filament_used?: number | null
+          error_message?: string | null
+          started_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model_print_history_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "ai_generated_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "model_print_history_printer_id_fkey"
+            columns: ["printer_id"]
+            isOneToOne: false
+            referencedRelation: "printers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "model_print_history_gcode_file_id_fkey"
+            columns: ["gcode_file_id"]
+            isOneToOne: false
+            referencedRelation: "gcode_files"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       printer_groups: {
         Row: {

@@ -1,32 +1,72 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+ // 대시보드와 동일한 실시간 반영을 위해 상세 내부 카드로 대체
+import { IoTDevicePanel } from "@/components/IoTDevicePanel";
 import { CameraFeed } from "@/components/CameraFeed";
 import { PrinterControlPad } from "@/components/PrinterControlPad";
+import { GCodeUpload } from "@/components/GCodeUpload";
+import { WebSocketStatus } from "@/components/WebSocketStatus";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { supabase } from "@shared/integrations/supabase/client"
 import { onDashStatusMessage } from "@shared/services/mqttService";
+import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "react-i18next";
 
+// 로컬 스냅샷 퍼시스턴스 훅(한 파일 내 사용)
+function usePersistentState<T>(key: string, fallback: T) {
+  const [state, setState] = useState<T>(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(state));
+    } catch {}
+  }, [key, state]);
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === key && e.newValue) {
+        try {
+          setState(JSON.parse(e.newValue) as T);
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [key]);
+
+  return [state, setState] as const;
+}
 
 // 모니터링 데이터 타입 정의
 interface MonitoringData {
   printerStatus: {
-    state: "idle" | "printing" | "paused" | "error" | "connecting" | "disconnected";
+    state: "idle" | "printing" | "paused" | "error" | "connecting" | "disconnected" | "disconnect" | "operational";
     timestamp: number;
     error_message?: string;
     connected: boolean;
     printing: boolean;
+    flags?: Record<string, any>;
   };
   temperature: {
     tool: { actual: number; target: number; offset?: number };
     bed: { actual: number; target: number; offset?: number };
     chamber?: { actual: number; target: number; offset?: number };
   };
-  position: {
-    x: number; y: number; z: number; e: number;
-  };
   printProgress: {
+    active: boolean;
     completion: number;
     file_position: number;
     file_size: number;
@@ -53,10 +93,8 @@ const defaultData: MonitoringData = {
     tool: { actual: 25, target: 0 },
     bed: { actual: 23, target: 0 }
   },
-  position: {
-    x: 0, y: 0, z: 0, e: 0
-  },
   printProgress: {
+    active: false,
     completion: 0,
     file_position: 0,
     file_size: 0,
@@ -92,23 +130,130 @@ interface PrinterIoTDevice {
 const defaultIoTDevices: PrinterIoTDevice[] = [];
 
 const PrinterDetail = () => {
+  const { t } = useTranslation();
   const { id } = useParams();
-  const [data, setData] = useState<MonitoringData>(defaultData);
+  const storageKey = `printer:detail:${id ?? 'unknown'}`;
+  const hasSnapshot = typeof window !== 'undefined' ? !!localStorage.getItem(storageKey) : false;
+  const [data, setData] = usePersistentState<MonitoringData>(storageKey, defaultData);
   const [iotDevices, setIoTDevices] = useState<PrinterIoTDevice[]>(defaultIoTDevices);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!hasSnapshot);
   const { user } = useAuth();
+  const { toast } = useToast();
   const [deviceUuid, setDeviceUuid] = useState<string | null>(null);
+  const [streamUrl, setStreamUrl] = usePersistentState<string | null>(
+    `printer:stream:${id ?? 'unknown'}`,
+    null
+  );
+  const [sdFiles, setSdFiles] = useState<Array<{ name: string; size: number }>>([]);
+  // 로컬 파일 (MQTT sd_list_result의 local 객체)
+  type LocalFile = {
+    name: string;
+    display?: string;
+    size?: number;
+    date?: string | null;
+    hash?: string;
+    user?: string;
+  };
+  const [localFiles, setLocalFiles] = useState<LocalFile[]>([]);
+  
+  // 프린터 연결 정보 상태
+  const [connectionInfo, setConnectionInfo] = useState({
+    serialPort: '/dev/ttyUSB0',
+    baudrate: '115200',
+    printerProfile: 'ender3 evo',
+    saveSettings: false,
+    autoConnect: false
+  });
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [availablePorts, setAvailablePorts] = useState<string[]>(['/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyACM0']);
+  const [availableProfiles, setAvailableProfiles] = useState<string[]>(['ender3 evo', 'prusa i3', 'cr-10', 'custom']);
+  
 
   // 실제 프린터 데이터 로드
   useEffect(() => {
     if (id && user) {
-      loadPrinterData();
+      loadPrinterData(!hasSnapshot);
     }
   }, [id, user]);
 
-  const loadPrinterData = async () => {
+  // 프린터 연결/연결끊기 함수들
+  const handleConnect = async () => {
+    setIsConnecting(true);
     try {
-      setLoading(true);
+      // TODO: 실제 프린터 연결 API 호출
+      await new Promise(resolve => setTimeout(resolve, 2000)); // 시뮬레이션
+      
+      setData(prev => ({
+        ...prev,
+        printerStatus: {
+          ...prev.printerStatus,
+          connected: true,
+          state: 'idle'
+        }
+      }));
+      
+      toast({
+        title: t('printerDetail.connectSuccess'),
+        description: t('printerDetail.connectSuccessDesc', { port: connectionInfo.serialPort }),
+      });
+    } catch (error) {
+      toast({
+        title: t('printerDetail.connectFailed'),
+        description: t('printerDetail.connectFailedDesc'),
+        variant: "destructive",
+      });
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      // TODO: 실제 프린터 연결 해제 API 호출
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 시뮬레이션
+      
+      setData(prev => ({
+        ...prev,
+        printerStatus: {
+          ...prev.printerStatus,
+          connected: false,
+          state: 'disconnected'
+        }
+      }));
+      
+      toast({
+        title: t('printerDetail.disconnectSuccess'),
+        description: t('printerDetail.disconnectSuccessDesc'),
+      });
+    } catch (error) {
+      toast({
+        title: t('printerDetail.disconnectFailed'),
+        description: t('printerDetail.disconnectFailedDesc'),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const refreshPorts = async () => {
+    try {
+      // TODO: 실제 시리얼 포트 스캔 API 호출
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 시뮬레이션
+      toast({
+        title: t('printerDetail.portRefresh'),
+        description: t('printerDetail.portRefreshDesc'),
+      });
+    } catch (error) {
+      toast({
+        title: t('printerDetail.portScanFailed'),
+        description: t('printerDetail.portScanFailedDesc'),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const loadPrinterData = async (showSpinner?: boolean) => {
+    try {
+      if (showSpinner ?? !hasSnapshot) setLoading(true);
       
       // 프린터 기본 정보 로드
       const { data: printer, error } = await supabase
@@ -123,55 +268,108 @@ const PrinterDetail = () => {
         return;
       }
 
-      // TODO: 실제 프린터 API에서 실시간 데이터 가져오기
-      // 현재는 기본값으로 설정
-      setData({
-        ...defaultData,
-        printerStatus: {
-          state: printer.status as any,
-          timestamp: Date.now(),
-          connected: printer.status !== 'disconnected',
-          printing: printer.status === 'printing'
-        }
+      // 기존 스냅샷에 병합만 수행(초기화 금지)
+      // 스냅샷이 있을 경우, 서버의 상태값으로 덮어쓰지 않음 → 깜빡임 방지
+      setData((prev) => {
+        if (hasSnapshot) return prev;
+        return {
+          ...prev,
+          printerStatus: {
+            ...prev.printerStatus,
+            state: (printer.status as any) ?? prev.printerStatus.state,
+            timestamp: Date.now(),
+            connected: (printer.status !== 'disconnected' && printer.status !== 'disconnect') ?? prev.printerStatus.connected,
+            printing: (printer.status === 'printing') || prev.printProgress.active === true,
+          },
+        };
       });
 
-      // 실시간 MQTT 반영을 위한 device_uuid 저장
-      setDeviceUuid((printer as any)?.device_uuid ?? null);
+      // 상세 페이지 실시간 반영을 위한 device_uuid 저장
+      const device_uuid = (printer as any)?.device_uuid ?? null;
+      setDeviceUuid(device_uuid);
+
+      // cameras.stream_url 조회 및 퍼시스트 저장
+      if (device_uuid) {
+        const { data: cam, error: camErr } = await supabase
+          .from('cameras')
+          .select('stream_url')
+          .eq('device_uuid', device_uuid)
+          .maybeSingle();
+        if (camErr) {
+          console.warn('[CAM][DB] stream_url 조회 실패:', camErr.message);
+        }
+        setStreamUrl((cam as any)?.stream_url ?? null);
+      } else {
+        setStreamUrl(null);
+      }
 
     } catch (error) {
       console.error('Error loading printer data:', error);
     } finally {
-      setLoading(false);
+      if (showSpinner ?? !hasSnapshot) setLoading(false);
     }
   };
 
-  // MQTT dash_status 수신 → 데이터 반영 (UI는 그대로)
+  // MQTT dash_status 수신 → 상세 데이터에 반영
+  // deviceUuid 변경 시 cameras.stream_url 재조회
+  useEffect(() => {
+    (async () => {
+      if (!deviceUuid) {
+        setStreamUrl(null);
+        return;
+      }
+      try {
+        const { data: cam, error: camErr } = await supabase
+          .from('cameras')
+          .select('stream_url')
+          .eq('device_uuid', deviceUuid)
+          .maybeSingle();
+        if (camErr) {
+          console.warn('[CAM][DB] stream_url 재조회 실패:', camErr.message);
+          return;
+        }
+        setStreamUrl((cam as any)?.stream_url ?? null);
+      } catch (e) {
+        console.warn('[CAM][DB] stream_url 재조회 예외:', e);
+      }
+    })();
+  }, [deviceUuid]);
+
+  // MQTT dash_status 수신 → 상세 데이터에 반영
   useEffect(() => {
     if (!deviceUuid) return;
     const off = onDashStatusMessage((uuid, payload) => {
       if (uuid !== deviceUuid) return;
       setData((prev) => {
+        // connection 배열([state, port, baudrate]) 기반 UI 상태 동기화
+        const conn = payload?.connection;
+        if (conn && typeof conn.port === 'string') {
+          try {
+            setConnectionInfo((ci) => ({
+              ...ci,
+              serialPort: conn.port || ci.serialPort,
+              baudrate: String(conn.baudrate ?? ci.baudrate),
+              // 요청사항: Printer Profile은 connection[3].name을 사용 (매핑: connection.profile_name)
+              printerProfile: (conn as any).profile_name || ci.printerProfile,
+            }));
+          } catch {}
+        }
         const bed = payload?.temperature_info?.bed;
         const toolAny = payload?.temperature_info?.tool;
         const tool = toolAny?.tool0 ?? toolAny;
-        const flags = payload?.printer_status?.flags ?? {};
-        const isConnected = Boolean(
-          payload?.connected ||
-          flags.operational || flags.printing || flags.paused || flags.ready || flags.error
-        );
-        const nextState: MonitoringData['printerStatus']['state'] =
-          flags.printing ? 'printing' :
-          flags.paused   ? 'paused'   :
-          flags.error    ? 'error'    :
-          (isConnected   ? 'idle'     : 'disconnected');
+        const flags = payload?.printer_status?.flags as any;
+        const nextState = flags?.ready === true
+          ? 'operational'
+          : (payload?.printer_status?.state ?? prev.printerStatus.state);
         return {
           ...prev,
           printerStatus: {
             state: nextState as any,
             timestamp: Date.now(),
-            connected: isConnected,
-            printing: (flags?.printing ?? payload?.printer_status?.printing) ?? prev.printerStatus.printing,
+            connected: Boolean(flags && (flags.operational || flags.printing || flags.paused || flags.ready || flags.error)),
+            printing: Boolean(payload?.printer_status?.printing ?? prev.printerStatus.printing),
             error_message: payload?.printer_status?.error_message ?? prev.printerStatus.error_message,
+            flags: flags || prev.printerStatus.flags,
           },
           temperature: {
             tool: {
@@ -186,13 +384,8 @@ const PrinterDetail = () => {
             },
             chamber: prev.temperature.chamber,
           },
-          position: {
-            x: payload?.position?.x ?? prev.position.x,
-            y: payload?.position?.y ?? prev.position.y,
-            z: payload?.position?.z ?? prev.position.z,
-            e: payload?.position?.e ?? prev.position.e,
-          },
           printProgress: {
+            active: Boolean(payload?.progress?.active ?? prev.printProgress.active),
             completion: typeof payload?.progress?.completion === 'number' ? payload.progress.completion : prev.printProgress.completion,
             file_position: payload?.progress?.file_position ?? prev.printProgress.file_position,
             file_size: payload?.progress?.file_size ?? prev.printProgress.file_size,
@@ -211,42 +404,421 @@ const PrinterDetail = () => {
     return () => { off(); };
   }, [deviceUuid]);
 
-  const completionPercent = Math.min(
-    100,
-    Math.max(
-      0,
-      Math.round(((data.printProgress?.completion ?? 0) <= 1
-        ? (data.printProgress?.completion ?? 0) * 100
-        : (data.printProgress?.completion ?? 0)))
-    )
-  );
+
+  // SD/로컬 결과 수신 이벤트로 리스트 갱신 (포맷 구분: local=object, sdcard=array, files=array)
+  useEffect(() => {
+    const onSdList = (e: Event) => {
+      const ce = e as CustomEvent<{ deviceSerial: string; result: any }>;
+      const detail = ce?.detail;
+      if (!detail || !deviceUuid || detail.deviceSerial !== deviceUuid) return;
+      const res = detail.result || {};
+
+      // SD 카드: 우선 sdcard 배열, fallback files 배열
+      if (Array.isArray(res.sdcard)) {
+        setSdFiles(
+          res.sdcard.map((f: any) => ({
+            name: String(f.name ?? f.display ?? ''),
+            size: Number(f.size) || 0,
+          }))
+        );
+      } else if (Array.isArray(res.files)) {
+        setSdFiles(
+          res.files.map((f: any) => ({
+            name: String(f.name ?? f.display ?? ''),
+            size: Number(f.size) || 0,
+          }))
+        );
+      } else {
+        setSdFiles([]);
+      }
+
+      // 로컬: local이 객체(키-값 딕셔너리)
+      if (res.local && typeof res.local === 'object' && !Array.isArray(res.local)) {
+        const entries = Object.entries(res.local);
+        const parsed: LocalFile[] = entries.map(([key, val]: [string, any]) => {
+          const v = val || {};
+          return {
+            name: String(v.name ?? key),
+            display: v.display ? String(v.display) : undefined,
+            size: v.size != null ? Number(v.size) : undefined,
+            date: v.date ?? null,
+            hash: v.hash,
+            user: v.user,
+          };
+        });
+        setLocalFiles(parsed);
+      } else {
+        setLocalFiles([]);
+      }
+    };
+    window.addEventListener('sd_list_result', onSdList as EventListener);
+    return () => window.removeEventListener('sd_list_result', onSdList as EventListener);
+  }, [deviceUuid]);
+
+  // control_result 토스트 알림 (글로벌 이벤트 수신 → 현재 디바이스만 처리)
+  useEffect(() => {
+    const onControlResult = (e: Event) => {
+      const ce = e as CustomEvent<{ deviceSerial: string; result: any }>;
+      const detail = ce?.detail;
+      if (!detail || !deviceUuid || detail.deviceSerial !== deviceUuid) return;
+      const result = detail.result || {};
+      const action: string = result.action || 'control';
+      const labelMap: Record<string, string> = {
+        home: '홈 이동',
+        pause: '일시 정지',
+        resume: '재개',
+        cancel: '완전 취소',
+      };
+      const label = labelMap[action] || '제어';
+      if (result.ok) {
+        toast({ title: `${label} 성공`, description: result.message ?? undefined });
+      } else {
+        toast({ title: `${label} 실패`, description: result.message ?? '오류가 발생했습니다.', variant: 'destructive' });
+      }
+    };
+    window.addEventListener('control_result', onControlResult as EventListener);
+    return () => window.removeEventListener('control_result', onControlResult as EventListener);
+  }, [deviceUuid, toast]);
+
+  // 상세 화면용 카드 컴포넌트들
+  const PrintProgressCard = () => {
+    const completionPercent = Math.round((data.printProgress.completion || 0) * 100);
+    const formatTime = (seconds: number): string => {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+      return h > 0 ? `${h}${t('printerDetail.hours')} ${m}${t('printerDetail.minutes')} ${s}${t('printerDetail.seconds')}` : `${m}${t('printerDetail.minutes')} ${s}${t('printerDetail.seconds')}`;
+    };
+    const formatFileSize = (bytes: number): string => {
+      if (!bytes) return '0 B';
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(1024));
+      return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
+    };
+    const fileProgress = data.printProgress.file_size > 0
+      ? (data.printProgress.file_position / data.printProgress.file_size) * 100
+      : 0;
+
+    // 진행상황 카드 상단 상태 배지 (파랑=대기중, 초록=출력중, 빨강=연결없음)
+    // 상태 매핑 규칙
+    // - 연결없음: printerStatus.state === 'disconnect' | 'disconnected'
+    // - 대기중:   printerStatus.state === 'operational'
+    // - 출력중:   printProgress.active === true
+    const isPrinting = !!data.printProgress.active;
+    const stateStr = (data.printerStatus.state || '').toString();
+    const isDisconnected = stateStr === 'disconnect' || stateStr === 'disconnected';
+    const isOperational = stateStr === 'operational';
+
+    let stateLabel = t('printerDetail.noConnection');
+    let stateClass = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80';
+
+    if (isPrinting) {
+      stateLabel = t('printerDetail.printing');
+      stateClass = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-success text-success-foreground hover:bg-success/80';
+    } else if (isOperational) {
+      stateLabel = t('printerDetail.standby');
+      stateClass = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-primary text-primary-foreground hover:bg-primary/80';
+    }
+    return (
+      <div className="h-full rounded-lg border bg-card text-card-foreground shadow-sm">
+        <div className="p-6 border-b flex items-center justify-between">
+          <div className="text-sm font-medium">{t('printerDetail.printProgress')}</div>
+          <span className={stateClass}>{stateLabel}</span>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">{t('printerDetail.overallProgress')}</span>
+              <span className="text-2xl font-bold text-primary">{completionPercent}%</span>
+            </div>
+            <div className="h-3 w-full bg-muted rounded-full">
+              <div className="h-3 bg-primary rounded-full" style={{ width: `${completionPercent}%` }} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">{t('printerDetail.fileProgress')}</span>
+              <span className="text-sm text-muted-foreground">{formatFileSize(data.printProgress.file_position)} / {formatFileSize(data.printProgress.file_size)}</span>
+            </div>
+            <div className="h-2 w-full bg-muted rounded-full">
+              <div className="h-2 bg-primary rounded-full" style={{ width: `${fileProgress}%` }} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div><div className="text-muted-foreground">{t('printerDetail.elapsedTime')}</div><div className="font-medium">{formatTime(data.printProgress.print_time || 0)}</div></div>
+            <div><div className="text-muted-foreground">{t('printerDetail.remainingTime')}</div><div className="font-medium">{formatTime(data.printProgress.print_time_left || 0)}</div></div>
+          </div>
+          <div className="pt-2 border-t">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">{t('printerDetail.filamentUsed')}</span>
+              <span className="font-medium">{((data.printProgress.filament_used || 0) / 1000).toFixed(2)}m</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const PrinterStatusCard = () => {
+    const map: any = {
+      idle: { label: t('printerDetail.idle') },
+      printing: { label: t('printer.statusPrinting') },
+      paused: { label: t('printerDetail.paused') },
+      error: { label: t('printerDetail.error') },
+      connecting: { label: t('printerDetail.connecting') },
+      disconnected: { label: t('printerDetail.disconnected') },
+    };
+    const status = data.printerStatus.state as keyof typeof map;
+    const flags: any = data.printerStatus?.flags || {};
+    // flags 우선 규칙 적용
+    let label = t('printerDetail.disconnected');
+    if (flags?.error) label = t('printerDetail.error');
+    else if (flags?.printing) label = t('printer.statusPrinting');
+    else if (flags?.paused) label = t('printerDetail.paused');
+    else if (flags?.ready || flags?.operational) label = t('printerDetail.idle');
+    else label = map[status]?.label || t('printerDetail.disconnected');
+    return (
+      <div className="h-full rounded-lg border bg-card text-card-foreground shadow-sm">
+        <div className="p-6 border-b"><div className="text-sm font-medium">{t('printerDetail.printerStatus')}</div></div>
+        <div className="p-6 space-y-4">
+          <div className="space-y-2">
+            <div className="inline-flex items-center px-2 py-1 text-xs rounded-md bg-muted">{label}</div>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div>
+                {t('printerDetail.connection')}: {(data.printerStatus?.flags?.operational || data.printerStatus?.flags?.printing || data.printerStatus?.flags?.paused || data.printerStatus?.flags?.ready || data.printerStatus?.flags?.error) ? t('printerDetail.connected') : t('printerDetail.disconnected')}
+              </div>
+              <div>{t('printer.statusPrinting')}: {data.printerStatus?.flags?.printing ? t('printerDetail.inProgress') : (data.printerStatus?.flags?.paused ? t('printerDetail.pausing') : t('printerDetail.stopped'))}</div>
+            </div>
+          </div>
+          <div className="space-y-2 pt-2 border-t">
+            <div className="text-xs font-medium mb-2">{t('printerDetail.temperatureMonitoring')}</div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-muted-foreground">{t('printerDetail.extruder')}</span><span className="font-mono">{(data.temperature.tool.actual || 0).toFixed(1)}°C / {(data.temperature.tool.target || 0).toFixed(1)}°C</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t('printerDetail.heatingBed')}</span><span className="font-mono">{(data.temperature.bed.actual || 0).toFixed(1)}°C / {(data.temperature.bed.target || 0).toFixed(1)}°C</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const PrinterConnectionCard = () => {
+    return (
+      <div className="h-full rounded-lg border bg-card text-card-foreground shadow-sm">
+        <div className="p-6 border-b">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {data.printerStatus.connected ? (
+                <Wifi className="h-4 w-4 text-green-500" />
+              ) : (
+                <WifiOff className="h-4 w-4 text-red-500" />
+              )}
+              <div className="text-sm font-medium">Connection</div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={refreshPorts}
+              className="h-4 w-6 p-0"
+            >
+              <RefreshCw className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+        <div className="p-6 space-y-5 text-sm">
+          {/* Serial Port */}
+          <div className="space-y-2">
+            <Label htmlFor="serial-port" className="text-sm font-medium">Serial Port</Label>
+            <Select
+              value={connectionInfo.serialPort}
+              onValueChange={(value) => setConnectionInfo(prev => ({ ...prev, serialPort: value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="포트를 선택하세요" />
+              </SelectTrigger>
+              <SelectContent>
+                {availablePorts.map((port) => (
+                  <SelectItem key={port} value={port}>
+                    {port}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Baudrate */}
+          <div className="space-y-2">
+            <Label htmlFor="baudrate" className="text-sm font-medium">Baudrate</Label>
+            <Select
+              value={connectionInfo.baudrate}
+              onValueChange={(value) => setConnectionInfo(prev => ({ ...prev, baudrate: value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="보드레이트를 선택하세요" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="9600">9600</SelectItem>
+                <SelectItem value="19200">19200</SelectItem>
+                <SelectItem value="38400">38400</SelectItem>
+                <SelectItem value="57600">57600</SelectItem>
+                <SelectItem value="115200">115200</SelectItem>
+                <SelectItem value="230400">230400</SelectItem>
+                <SelectItem value="460800">460800</SelectItem>
+                <SelectItem value="921600">921600</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Printer Profile */}
+          <div className="space-y-2">
+            <Label htmlFor="printer-profile" className="text-sm font-medium">Printer Profile</Label>
+            <Select
+              value={connectionInfo.printerProfile}
+              onValueChange={(value) => setConnectionInfo(prev => ({ ...prev, printerProfile: value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="프로필을 선택하세요" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableProfiles.map((profile) => (
+                  <SelectItem key={profile} value={profile}>
+                    {profile}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Checkboxes */}
+          <div className="space-y-4 pt-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="save-settings"
+                checked={connectionInfo.saveSettings}
+                onCheckedChange={(checked) => setConnectionInfo(prev => ({ ...prev, saveSettings: !!checked }))}
+              />
+              <Label htmlFor="save-settings" className="text-sm">Save connection settings</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="auto-connect"
+                checked={connectionInfo.autoConnect}
+                onCheckedChange={(checked) => setConnectionInfo(prev => ({ ...prev, autoConnect: !!checked }))}
+              />
+              <Label htmlFor="auto-connect" className="text-sm">Auto-connect on server startup</Label>
+            </div>
+          </div>
+
+          {/* Connect/Disconnect Button */}
+          <div className="pt-3 pb-4">
+            {data.printerStatus.connected ? (
+              <Button
+                onClick={handleDisconnect}
+                variant="outline"
+                className="w-full"
+                disabled={isConnecting}
+              >
+                Disconnect
+              </Button>
+            ) : (
+              <Button
+                onClick={handleConnect}
+                className="w-full"
+                disabled={isConnecting}
+              >
+                {isConnecting ? "Connecting..." : "Connect"}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="bg-background p-3 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
+    <div className="bg-background p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
         {/* 뒤로가기 버튼 */}
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
           <Button asChild variant="outline" size="sm">
             <Link to="/" className="flex items-center gap-2">
               <ArrowLeft className="h-4 w-4" />
-              전체 현황으로 돌아가기
+              {t('printerDetail.backToDashboard')}
             </Link>
           </Button>
-          <div className="text-sm text-muted-foreground">
-            진행률: <span className="font-medium text-primary">{completionPercent}%</span> / 100%
-          </div>
         </div>
-        {/* 상단: 카메라 피드 + 제어 패드 (카드 자체 높이에 위임) */}
-        <div className="grid grid-cols-1 gap-2 pb-8">
-          <div className="min-h-[320px]">
-            <CameraFeed cameraId={deviceUuid || 'unknown'} isConnected={data.printerStatus.connected} resolution="1280x720" />
+
+
+        <div className="grid grid-cols-1 gap-6">
+          {/* 카메라 피드와 컨트롤 패드 */}
+          <div className="grid grid-cols-10 gap-6 mb-6">
+            <div className="col-span-7">
+              <div className="relative h-[600px]">
+                <CameraFeed
+                  cameraId={deviceUuid || 'unknown'}
+                  isConnected={data.printerStatus.connected}
+                  resolution="1280x720"
+                />
+                {!data.printerStatus.connected && (
+                  <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
+                    <div className="text-center">
+                      <div className="text-lg font-medium">{t('printerDetail.noConnection')}</div>
+                      <div className="text-xs mt-1">{t('printerDetail.noConnectionDesc')}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="col-span-3">
+              <div className="relative h-[600px]">
+                <PrinterControlPad
+                  isConnected={data.printerStatus.connected}
+                  isPrinting={data.printerStatus.printing}
+                  deviceUuid={deviceUuid}
+                />
+                {!data.printerStatus.connected && (
+                  <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
+                    <div className="text-center">
+                      <div className="text-lg font-medium">{t('printerDetail.noConnection')}</div>
+                      <div className="text-xs mt-1">{t('printerDetail.noConnectionDesc')}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-          <div>
-            <PrinterControlPad
-              isConnected={data.printerStatus.connected}
-              isPrinting={data.printerStatus.printing}
-            />
+
+          {/* 프린트 진행상황과 G-code 파일 관리 (실시간 반영 카드) */}
+          <div className="grid grid-cols-10 gap-6">
+            <div className="col-span-7">
+              <div className="h-[400px]">
+                <PrintProgressCard />
+              </div>
+            </div>
+            <div className="col-span-3">
+              <div className="h-[400px] space-y-3 overflow-y-auto">
+                <GCodeUpload deviceUuid={deviceUuid} />
+              </div>
+            </div>
           </div>
+
+          {/* 프린터 상태와 위치 및 설정 (실시간 반영 카드) */}
+          <div className="grid grid-cols-10 gap-6">
+            <div className="col-span-7">
+              <div className="h-[300px]">
+                <PrinterStatusCard />
+              </div>
+              <div className="h-[250px] mt-6">
+                <IoTDevicePanel devices={iotDevices} />
+              </div>
+            </div>
+            <div className="col-span-3">
+              <div className="h-[523px]">
+                <PrinterConnectionCard />
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>

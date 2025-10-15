@@ -2,69 +2,90 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Monitor, Play, Bell, BarChart3, Settings, Zap, Shield, Smartphone, ShoppingCart, Code2, Wand2, Image, Box, Layers } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { useTranslation } from "react-i18next";
+import { useEffect } from "react";
 
 
 const Home = () => {
   const { user } = useAuth();
+  const { t } = useTranslation();
+  const location = useLocation();
+
+  // 해시 변경 시 스크롤 처리
+  useEffect(() => {
+    if (location.hash) {
+      const id = location.hash.replace('#', '');
+      const element = document.getElementById(id);
+      if (element) {
+        // 약간의 지연을 두고 스크롤 (페이지 렌더링 완료 대기)
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+      }
+    } else {
+      // 해시가 없으면 페이지 최상단으로 스크롤
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [location.hash]);
 
   const features = [
     {
       icon: Monitor,
-      title: "실시간 모니터링",
-      description: "모든 기기에서 실시간으로 프린트를 추적하고 진행 상황과 상태를 확인하세요."
+      title: t('home.realtimeMonitoring'),
+      description: t('home.realtimeMonitoringDesc')
     },
     {
       icon: Play,
-      title: "원격 제어",
-      description: "원격으로 일시정지, 중지하거나 설정을 조정하여 안심하고 사용하세요."
+      title: t('home.remoteControl'),
+      description: t('home.remoteControlDesc')
     },
     {
       icon: Bell,
-      title: "오류 알림",
-      description: "문제 발생 시 즉시 알림을 받아 놓치지 않고 대응할 수 있습니다."
+      title: t('home.errorNotifications'),
+      description: t('home.errorNotificationsDesc')
     }
   ];
 
   const aiFeatures = [
     {
       icon: Wand2,
-      title: "텍스트 → 3D 모델링",
-      description: "간단한 텍스트 설명만으로 전문적인 3D 모델을 생성하고 즉시 프린팅하세요."
+      title: t('home.textTo3D'),
+      description: t('home.textTo3DDesc')
     },
     {
       icon: Image,
-      title: "이미지 → 3D 변환",
-      description: "2D 이미지를 업로드하면 AI가 자동으로 3D 모델로 변환해드립니다."
+      title: t('home.imageTo3D'),
+      description: t('home.imageTo3DDesc')
     },
     {
       icon: Layers,
-      title: "텍스트 → 이미지",
-      description: "원하는 이미지를 텍스트로 설명하면 AI가 고품질 이미지를 생성합니다."
+      title: t('home.textToImage'),
+      description: t('home.textToImageDesc')
     },
     {
       icon: Box,
-      title: "스마트 G-code 변환",
-      description: "생성된 3D 모델을 자동으로 최적화하고 프린터에 맞는 G-code로 변환합니다."
+      title: t('home.smartGcode'),
+      description: t('home.smartGcodeDesc')
     }
   ];
 
   const additionalFeatures = [
     {
       icon: BarChart3,
-      title: "상세 분석",
-      description: "프린터 성능과 사용 패턴을 분석하여 효율성을 높이세요."
+      title: t('home.detailedAnalytics'),
+      description: t('home.detailedAnalyticsDesc')
     },
     {
       icon: Settings,
-      title: "그룹 관리",
-      description: "여러 프린터를 그룹으로 구성하여 체계적으로 관리하세요."
+      title: t('home.groupManagement'),
+      description: t('home.groupManagementDesc')
     },
     {
       icon: Zap,
-      title: "빠른 응답",
-      description: "실시간 데이터 동기화로 즉각적인 상태 확인이 가능합니다."
+      title: t('home.fastResponse'),
+      description: t('home.fastResponseDesc')
     }
   ];
 
@@ -76,10 +97,10 @@ const Home = () => {
           <div className="space-y-6">
             <div className="space-y-4">
               <h1 className="text-6xl md:text-7xl font-bold tracking-tight">
-                3D 프린터를 <span className="text-primary">모니터링</span>하세요
+                {t('home.heroTitle')} <span className="text-primary">{t('home.heroTitleHighlight')}</span>{t('home.heroTitleEnd')}
               </h1>
               <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto">
-                실시간 제어. 투명한 인사이트.
+                {t('home.heroSubtitle')}
               </p>
             </div>
 
@@ -87,13 +108,13 @@ const Home = () => {
               <Button asChild size="lg" className="text-lg px-8 py-6">
                 <Link to={user ? "/dashboard" : "/auth"}>
                   <Monitor className="h-5 w-5 mr-2" />
-                  {user ? "대시보드로 이동" : "지금 시작하기"}
+                  {user ? t('home.goToDashboard') : t('home.getStarted')}
                 </Link>
               </Button>
               <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6">
                 <Link to="/subscription">
                   <Zap className="h-5 w-5 mr-2" />
-                  요금제 보기
+                  {t('home.viewPricing')}
                 </Link>
               </Button>
             </div>
@@ -112,9 +133,9 @@ const Home = () => {
       <section id="features" className="scroll-mt-16 py-24 px-6 bg-muted/30">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">핵심 기능</h2>
+            <h2 className="text-4xl font-bold mb-4">{t('home.featuresTitle')}</h2>
             <p className="text-xl text-muted-foreground">
-              전문적인 3D 프린터 모니터링을 위한 모든 기능을 제공합니다
+              {t('home.featuresSubtitle')}
             </p>
           </div>
 
@@ -140,9 +161,9 @@ const Home = () => {
       <section id="ai-features" className="scroll-mt-16 py-24 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">AI 3D 모델링 스튜디오</h2>
+            <h2 className="text-4xl font-bold mb-4">{t('home.aiFeaturesTitle')}</h2>
             <p className="text-xl text-muted-foreground">
-              텍스트와 이미지에서 3D 모델까지, AI로 창작의 새로운 경험을 만나보세요
+              {t('home.aiFeaturesSubtitle')}
             </p>
           </div>
 
@@ -166,7 +187,7 @@ const Home = () => {
             <Button asChild size="lg" className="text-lg px-8 py-6">
               <Link to="/ai">
                 <Layers className="h-5 w-5 mr-2" />
-                AI 스튜디오 체험하기
+                {t('home.tryAIStudio')}
               </Link>
             </Button>
           </div>
@@ -177,9 +198,9 @@ const Home = () => {
       <section id="marketplace" className="scroll-mt-16 py-24 px-6 bg-muted/30">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">마켓플레이스</h2>
+            <h2 className="text-4xl font-bold mb-4">{t('home.marketplaceTitle')}</h2>
             <p className="text-xl text-muted-foreground">
-              다양한 3D 모델과 프린팅 서비스를 만나보세요
+              {t('home.marketplaceSubtitle')}
             </p>
           </div>
 
@@ -187,10 +208,9 @@ const Home = () => {
             <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
               <ShoppingCart className="h-8 w-8 text-primary" />
             </div>
-            <h3 className="text-xl font-semibold mb-4">곧 출시 예정</h3>
+            <h3 className="text-xl font-semibold mb-4">{t('home.comingSoon')}</h3>
             <p className="text-muted-foreground leading-relaxed max-w-2xl mx-auto">
-              프리미엄 3D 모델 라이브러리, 맞춤형 프린팅 서비스, 
-              그리고 전문가들이 검증한 프린팅 설정을 제공할 마켓플레이스가 곧 출시됩니다.
+              {t('home.marketplaceDesc')}
             </p>
           </div>
         </div>
@@ -200,9 +220,9 @@ const Home = () => {
       <section id="printers" className="scroll-mt-16 py-24 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">지원 프린터</h2>
+            <h2 className="text-4xl font-bold mb-4">{t('home.supportedPrintersTitle')}</h2>
             <p className="text-xl text-muted-foreground">
-              다양한 3D 프린터 펌웨어와 호환되는 모니터링 솔루션
+              {t('home.supportedPrintersSubtitle')}
             </p>
           </div>
 
@@ -212,9 +232,9 @@ const Home = () => {
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <Settings className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">Marlin</h3>
-                <p className="text-sm text-muted-foreground mb-2">FDM/SLA 공통</p>
-                <Badge variant="secondary" className="text-xs">완전 지원</Badge>
+                <h3 className="text-lg font-semibold mb-2">{t('home.marlin')}</h3>
+                <p className="text-sm text-muted-foreground mb-2">{t('home.marlinDesc')}</p>
+                <Badge variant="secondary" className="text-xs">{t('home.fullySupported')}</Badge>
               </CardContent>
             </Card>
 
@@ -223,9 +243,9 @@ const Home = () => {
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <Zap className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">Klipper</h3>
-                <p className="text-sm text-muted-foreground mb-2">고성능 FDM</p>
-                <Badge variant="secondary" className="text-xs">완전 지원</Badge>
+                <h3 className="text-lg font-semibold mb-2">{t('home.klipper')}</h3>
+                <p className="text-sm text-muted-foreground mb-2">{t('home.klipperDesc')}</p>
+                <Badge variant="secondary" className="text-xs">{t('home.fullySupported')}</Badge>
               </CardContent>
             </Card>
 
@@ -234,9 +254,9 @@ const Home = () => {
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <Shield className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">RepRap</h3>
-                <p className="text-sm text-muted-foreground mb-2">Duet 보드</p>
-                <Badge variant="secondary" className="text-xs">완전 지원</Badge>
+                <h3 className="text-lg font-semibold mb-2">{t('home.reprap')}</h3>
+                <p className="text-sm text-muted-foreground mb-2">{t('home.reprapDesc')}</p>
+                <Badge variant="secondary" className="text-xs">{t('home.fullySupported')}</Badge>
               </CardContent>
             </Card>
 
@@ -245,9 +265,9 @@ const Home = () => {
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <Smartphone className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">SLA</h3>
-                <p className="text-sm text-muted-foreground mb-2">레진 프린터</p>
-                <Badge variant="outline" className="text-xs">부분 지원</Badge>
+                <h3 className="text-lg font-semibold mb-2">{t('home.sla')}</h3>
+                <p className="text-sm text-muted-foreground mb-2">{t('home.slaDesc')}</p>
+                <Badge variant="outline" className="text-xs">{t('home.partialSupport')}</Badge>
               </CardContent>
             </Card>
           </div>
@@ -256,7 +276,7 @@ const Home = () => {
             <Button asChild size="lg" variant="outline">
               <Link to="/supported-printers">
                 <Monitor className="h-5 w-5 mr-2" />
-                전체 지원 목록 보기
+                {t('home.viewFullList')}
               </Link>
             </Button>
           </div>
@@ -267,9 +287,9 @@ const Home = () => {
       <section className="py-24 px-6 bg-muted/30">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">연결 상태를 유지하세요</h2>
+            <h2 className="text-4xl font-bold mb-4">{t('home.stayConnectedTitle')}</h2>
             <p className="text-xl text-muted-foreground">
-              언제 어디서나 프린터 상태를 확인하고 제어하세요
+              {t('home.stayConnectedSubtitle')}
             </p>
           </div>
 
@@ -293,9 +313,9 @@ const Home = () => {
       <section id="api" className="scroll-mt-16 py-24 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">API 통합</h2>
+            <h2 className="text-4xl font-bold mb-4">{t('home.apiTitle')}</h2>
             <p className="text-xl text-muted-foreground">
-              강력한 API로 시스템을 확장하고 자동화하세요
+              {t('home.apiSubtitle')}
             </p>
           </div>
 
@@ -305,38 +325,37 @@ const Home = () => {
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
                   <Code2 className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-2xl font-semibold">RESTful API</h3>
+                <h3 className="text-2xl font-semibold">{t('home.restfulAPI')}</h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  모든 프린터 제어 및 모니터링 기능을 API로 제공합니다. 
-                  자동화된 워크플로우 구축과 타사 시스템 통합이 가능합니다.
+                  {t('home.apiDescription')}
                 </p>
               </div>
-              
+
               <div className="space-y-3">
-                <h4 className="text-lg font-medium">주요 기능</h4>
+                <h4 className="text-lg font-medium">{t('home.keyFeatures')}</h4>
                 <ul className="space-y-2 text-muted-foreground">
                   <li className="flex items-center space-x-2">
                     <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
-                    <span>실시간 프린터 상태 조회</span>
+                    <span>{t('home.apiFeature1')}</span>
                   </li>
                   <li className="flex items-center space-x-2">
                     <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
-                    <span>원격 프린터 제어</span>
+                    <span>{t('home.apiFeature2')}</span>
                   </li>
                   <li className="flex items-center space-x-2">
                     <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
-                    <span>G-code 파일 관리</span>
+                    <span>{t('home.apiFeature3')}</span>
                   </li>
                   <li className="flex items-center space-x-2">
                     <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
-                    <span>웹훅 알림</span>
+                    <span>{t('home.apiFeature4')}</span>
                   </li>
                 </ul>
               </div>
             </div>
 
             <div className="bg-muted/30 rounded-lg p-6">
-              <div className="text-sm text-muted-foreground mb-2">API 예제</div>
+              <div className="text-sm text-muted-foreground mb-2">{t('home.apiExample')}</div>
               <pre className="text-sm bg-background/50 rounded p-4 overflow-x-auto">
                 <code>{`// 프린터 상태 조회
 GET /api/v1/printers/status
@@ -360,24 +379,24 @@ POST /api/v1/printers/{id}/print
       <section className="py-24 px-6 bg-primary text-primary-foreground">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-4xl font-bold mb-6">
-            쉽게 모니터링을 시작하세요
+            {t('home.ctaTitle')}
           </h2>
           <p className="text-xl mb-8 opacity-90">
-            지금 가입하고 전문적인 3D 프린터 관리를 경험해보세요
+            {t('home.ctaSubtitle')}
           </p>
-          
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button asChild size="lg" variant="secondary" className="text-lg px-8 py-6">
               <Link to={user ? "/dashboard" : "/auth"}>
                 <Monitor className="h-5 w-5 mr-2" />
-                {user ? "대시보드로 이동" : "무료로 시작하기"}
+                {user ? t('home.goToDashboard') : t('home.startFree')}
               </Link>
             </Button>
           </div>
 
           {!user && (
             <p className="text-sm mt-4 opacity-80">
-              신용카드가 필요하지 않습니다 • 언제든 취소 가능
+              {t('home.noCreditCard')} • {t('home.cancelAnytime')}
             </p>
           )}
         </div>

@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { chatService, type ChatSession } from "@/lib/chatService";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@shared/contexts/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 
 interface AIChatSidebarProps {

@@ -17,6 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, waitForSdUploadResult, onDashStatusMessage,  publishGcodePrint } from "@shared/services/mqttService";
 import { supabase } from "@shared/integrations/supabase/client";
+import { useTranslation } from "react-i18next";
 
 interface GCodeFile {
   id: string;
@@ -34,6 +35,7 @@ interface GCodeUploadProps {
 }
 
 export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
+  const { t } = useTranslation();
   const [files, setFiles] = useState<GCodeFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -53,10 +55,10 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
   };
 
   const formatTime = (seconds?: number): string => {
-    if (!seconds) return "미정";
+    if (!seconds) return t('gcode.noFiles');
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    return hours > 0 ? `${hours}시간 ${minutes}분` : `${minutes}분`;
+    return hours > 0 ? `${hours}${t('printerDetail.hours')} ${minutes}${t('printerDetail.minutes')}` : `${minutes}${t('printerDetail.minutes')}`;
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,15 +68,15 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
     // Check file extension
     if (!/\.(gcode|gco)$/i.test(file.name)) {
       toast({
-        title: "파일 형식 오류",
-        description: "G-code 파일(.gcode, .gco)만 업로드 가능합니다.",
+        title: t('errors.unsupportedFormat'),
+        description: t('errors.unsupportedFormat'),
         variant: "destructive"
       });
       return;
     }
 
     setSelectedFile(file);
-    toast({ title: '파일 선택됨', description: `${file.name}` });
+    toast({ title: t('gcode.selectFile'), description: `${file.name}` });
   };
 
   const handleUpload = async (file: File) => {
@@ -153,16 +155,16 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
       const result = await resultPromise;
       setUploadProgress(100);
       if (result.ok) {
-        toast({ title: '업로드 완료', description: `${file.name} 전송이 완료되었습니다.` });
+        toast({ title: t('gcode.uploadSuccess'), description: `${file.name}` });
       } else {
-        toast({ title: '업로드 실패', description: result.message || '업로드 처리 중 오류가 발생했습니다.', variant: 'destructive' });
+        toast({ title: t('gcode.uploadFailed'), description: result.message || t('gcode.uploadFailed'), variant: 'destructive' });
       }
-      
+
     } catch (error) {
       console.error('Upload error:', error);
       toast({
-        title: "업로드 실패",
-        description: "파일 업로드 중 오류가 발생했습니다.",
+        title: t('gcode.uploadFailed'),
+        description: t('gcode.uploadFailed'),
         variant: "destructive"
       });
     } finally {
@@ -192,8 +194,8 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
   const handlePrintFile = (file: GCodeFile) => {
     console.log(`Starting print for file: ${file.filename}`);
     toast({
-      title: "프린트 시작",
-      description: `${file.filename} 파일로 프린트를 시작합니다.`,
+      title: t('gcode.printStart'),
+      description: t('gcode.printStartDesc', { file: file.filename }),
     });
   };
 
@@ -215,16 +217,16 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
       if (dbError) throw dbError;
 
       toast({
-        title: "파일 삭제",
-        description: `${file.filename}이 삭제되었습니다.`,
+        title: t('gcode.deleteSuccess'),
+        description: `${file.filename}`,
       });
 
       loadFiles();
     } catch (error) {
       console.error('Delete error:', error);
       toast({
-        title: "삭제 실패",
-        description: "파일 삭제 중 오류가 발생했습니다.",
+        title: t('gcode.deleteFailed'),
+        description: t('gcode.deleteFailed'),
         variant: "destructive"
       });
     }
@@ -259,7 +261,7 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <File className="h-4 w-4" />
-            G-code 파일 관리
+            {t('gcode.title')}
           </CardTitle>
           <div className="flex items-center gap-4">
             <RadioGroup value={fileSource} onValueChange={async (v) => {
@@ -269,11 +271,11 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
             }} className="flex flex-row gap-4">
               <div className="flex items-center space-x-2">
                 <RadioGroupItem id="gc-local" value="LOCAL" />
-                <Label htmlFor="gc-local" className="cursor-pointer text-xs">LOCAL</Label>
+                <Label htmlFor="gc-local" className="cursor-pointer text-xs">{t('gcode.localFiles')}</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem id="gc-sd" value="SDCARD" />
-                <Label htmlFor="gc-sd" className="cursor-pointer text-xs">SDCARD</Label>
+                <Label htmlFor="gc-sd" className="cursor-pointer text-xs">{t('gcode.sdCard')}</Label>
               </div>
             </RadioGroup>
           </div>
@@ -282,11 +284,11 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
       <CardContent className="flex-1 flex flex-col space-y-4 text-xs overflow-hidden">
         {/* 파일 목록 */}
         <div className="flex-1 flex flex-col space-y-2 min-h-0">
-          <Label className="text-xs">업로드된 파일 ({fileSource === 'LOCAL' ? 'LOCAL' : 'SDCARD'})</Label>
+          <Label className="text-xs">{t('gcode.uploadGcode')} ({fileSource === 'LOCAL' ? t('gcode.localFiles') : t('gcode.sdCard')})</Label>
           <div className="flex-1 overflow-y-auto space-y-1 pr-2">
             {fileSource === 'LOCAL' ? (
               localMqttFiles.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-2">업로드된 파일이 없습니다</p>
+                <p className="text-xs text-muted-foreground text-center py-2">{t('gcode.noFiles')}</p>
               ) : (
                 localMqttFiles.map((file, idx) => (
                   <div key={`${file.name}-${idx}`} className="flex items-center gap-2 p-2 border rounded text-xs">
@@ -303,22 +305,22 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
                       onClick={async () => {
                         try {
                           if (!deviceUuid) {
-                            toast({ title: '디바이스 없음', description: '디바이스가 선택되지 않았습니다.', variant: 'destructive' });
+                            toast({ title: t('errors.general'), description: t('errors.general'), variant: 'destructive' });
                             return;
                           }
                           await mqttConnect();
                           const origin = 'local';
                           const filename = (file as any).name || (file as any).display;
                           if (!filename) {
-                            toast({ title: '파일 정보 오류', description: '파일 이름을 확인할 수 없습니다.', variant: 'destructive' });
+                            toast({ title: t('errors.general'), description: t('errors.fileNotSelected'), variant: 'destructive' });
                             return;
                           }
                           const jobId = filename.replace(/\.[^/.]+$/, '');
                           await publishGcodePrint(deviceUuid, { filename, origin, job_id: jobId });
-                          toast({ title: '프린트 시작', description: `${filename} (${origin})` });
+                          toast({ title: t('gcode.printStart'), description: `${filename} (${origin})` });
                         } catch (e: any) {
                           console.error(e);
-                          toast({ title: '전송 실패', description: String(e?.message ?? e), variant: 'destructive' });
+                          toast({ title: t('errors.uploadFailed'), description: String(e?.message ?? e), variant: 'destructive' });
                         }
                       }}
                       disabled={isPrinting}
@@ -331,7 +333,7 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
               )
             ) : (
               sdFiles.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-2">업로드된 파일이 없습니다</p>
+                <p className="text-xs text-muted-foreground text-center py-2">{t('gcode.noFiles')}</p>
               ) : (
                 sdFiles.map((file, idx) => (
                   <div key={`${file.name}-${idx}`} className="flex items-center gap-2 p-2 border rounded text-xs">
@@ -348,7 +350,7 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
                       onClick={async () => {
                         try {
                           if (!deviceUuid) {
-                            toast({ title: '디바이스 없음', description: '디바이스가 선택되지 않았습니다.', variant: 'destructive' });
+                            toast({ title: t('errors.general'), description: t('errors.general'), variant: 'destructive' });
                             return;
                           }
                           await mqttConnect();
@@ -356,10 +358,10 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
                           const filename = file.name;
                           const jobId = filename.replace(/\.[^/.]+$/, '');
                           await publishGcodePrint(deviceUuid, { filename, origin, job_id: jobId });
-                          toast({ title: '프린트 시작', description: `${filename} (${origin})` });
+                          toast({ title: t('gcode.printStart'), description: `${filename} (${origin})` });
                         } catch (e: any) {
                           console.error(e);
-                          toast({ title: '전송 실패', description: String(e?.message ?? e), variant: 'destructive' });
+                          toast({ title: t('errors.uploadFailed'), description: String(e?.message ?? e), variant: 'destructive' });
                         }
                       }}
                       disabled={isPrinting}
@@ -374,8 +376,7 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label className="text-xs">파일 업로드</Label>
+        <div className="space-y-2 flex-shrink-0">
           <div className="flex gap-2">
             <Input
               ref={fileInputRef}
@@ -383,7 +384,7 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
               accept=".gcode,.gco"
               onChange={handleFileSelect}
               disabled={uploading}
-              className="h-8 text-xs"
+              className="h-8 text-xs flex-1"
             />
             <Button
               size="sm"
@@ -396,17 +397,17 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
                 }
               }}
               disabled={uploading}
-              className="h-8 px-3"
+              className="h-8 px-3 whitespace-nowrap flex-shrink-0"
             >
               <Upload className="h-3 w-3 mr-1" />
-              {selectedFile ? '전송' : '선택'}
+              {selectedFile ? t('common.upload') : t('common.search')}
             </Button>
           </div>
-          
+
           {uploading && (
             <div className="space-y-1">
               <Progress value={uploadProgress} className="h-1" />
-              <p className="text-xs text-muted-foreground">업로드 중... {uploadProgress}%</p>
+              <p className="text-xs text-muted-foreground">{t('common.uploading')} {uploadProgress}%</p>
             </div>
           )}
         </div>

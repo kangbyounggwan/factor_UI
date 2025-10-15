@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -83,30 +84,34 @@ interface PrinterOverview {
   device_uuid?: string;
 }
 
-const statusConfig = {
-  idle: { color: "bg-muted text-muted-foreground", label: "대기" },
-  printing: { color: "bg-success text-success-foreground", label: "프린팅" },
-  paused: { color: "bg-warning text-warning-foreground", label: "일시정지" },
-  error: { color: "bg-destructive text-destructive-foreground", label: "오류" },
-  connecting: { color: "bg-primary text-primary-foreground", label: "연결중" },
-  disconnected: { color: "bg-muted text-muted-foreground", label: "연결끊김" }
-};
-
-const formatTime = (seconds: number): string => {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  
-  if (hours > 0) {
-    return `${hours}시간 ${minutes}분`;
-  }
-  return `${minutes}분`;
-};
+// statusConfig는 컴포넌트 내부로 이동 (useTranslation 필요)
 
 const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; isAuthenticated: boolean }) => {
+  const { t } = useTranslation();
+
+  const statusConfig = {
+    idle: { color: "bg-muted text-muted-foreground", label: t('dashboard.status.idle') },
+    printing: { color: "bg-success text-success-foreground", label: t('dashboard.status.printing') },
+    paused: { color: "bg-warning text-warning-foreground", label: t('dashboard.status.paused') },
+    error: { color: "bg-destructive text-destructive-foreground", label: t('dashboard.status.error') },
+    connecting: { color: "bg-primary text-primary-foreground", label: t('dashboard.status.connecting') },
+    disconnected: { color: "bg-muted text-muted-foreground", label: t('dashboard.status.disconnected') }
+  };
+
+  const formatTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    if (hours > 0) {
+      return `${hours}${t('dashboard.time.hours')} ${minutes}${t('dashboard.time.minutes')}`;
+    }
+    return `${minutes}${t('dashboard.time.minutes')}`;
+  };
+
   const config = statusConfig[printer.state] || statusConfig.disconnected;
   const hasGroupObject = printer.group && typeof printer.group === 'object';
   const groupColor = hasGroupObject && (printer.group as any).color ? (printer.group as any).color : '#9CA3AF';
-  const groupName = hasGroupObject && (printer.group as any).name ? (printer.group as any).name : '그룹 없음';
+  const groupName = hasGroupObject && (printer.group as any).name ? (printer.group as any).name : t('dashboard.printer.noGroup');
   
   return (
     <Link to={isAuthenticated ? `/printer/${printer.id}` : "/auth"} className="block">
@@ -127,7 +132,7 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
             ) : (
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#9CA3AF' }} />
-                <span className="text-xs text-muted-foreground">그룹 없음</span>
+                <span className="text-xs text-muted-foreground">{t('dashboard.printer.noGroup')}</span>
               </div>
             )}
           </div>
@@ -135,7 +140,7 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
             {printer.pending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                <Badge className={statusConfig.connecting.color}>연결중</Badge>
+                <Badge className={statusConfig.connecting.color}>{t('dashboard.status.connecting')}</Badge>
               </>
             ) : (
               <>
@@ -151,12 +156,12 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
         <CardContent className="flex-1 flex flex-col justify-between space-y-4">
           {/* 2. 진행률 - 고정 높이 */}
           <div className="space-y-3">
-            <h4 className="text-sm font-medium text-muted-foreground">프린트 진행률</h4>
+            <h4 className="text-sm font-medium text-muted-foreground">{t('dashboard.printer.printProgress')}</h4>
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium flex items-center gap-1">
                   <Activity className="h-4 w-4" />
-                  완료율
+                  {t('dashboard.printer.completion')}
                 </span>
                 <span className="text-lg font-bold text-primary">
                   {printer.completion ? Math.round(printer.completion * 100) : 0}%
@@ -170,12 +175,12 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
               </div>
               <div className="text-xs text-muted-foreground space-y-1">
                 <div className="truncate">
-                  📁 {printer.current_file || "파일 없음"}
+                  📁 {printer.current_file || t('dashboard.printer.noFile')}
                 </div>
                 <div className="flex justify-between">
-                  <span>남은 시간:</span>
+                  <span>{t('dashboard.printer.remainingTime')}</span>
                   <span className="font-medium">
-                    {printer.print_time_left ? formatTime(printer.print_time_left) : "0분"}
+                    {printer.print_time_left ? formatTime(printer.print_time_left) : `0${t('dashboard.time.minutes')}`}
                   </span>
                 </div>
               </div>
@@ -184,20 +189,20 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
 
           {/* 3. 데이터 써머리 - 고정 높이 */}
           <div className="space-y-3 border-t pt-4">
-            <h4 className="text-sm font-medium text-muted-foreground">온도 및 상태</h4>
+            <h4 className="text-sm font-medium text-muted-foreground">{t('dashboard.printer.temperatureStatus')}</h4>
             <div className="grid grid-cols-1 gap-3 text-sm">
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground flex items-center gap-1 flex-shrink-0">
                     <Thermometer className="h-3 w-3" />
-                    익스트루더:
+                    {t('dashboard.printer.extruder')}
                   </span>
                   <span className="font-mono text-xs text-right">
                     {(printer.temperature.tool_actual ?? 0).toFixed(0)}°C / {(printer.temperature.tool_target ?? 0).toFixed(0)}°C
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground flex-shrink-0">히팅베드:</span>
+                  <span className="text-muted-foreground flex-shrink-0">{t('dashboard.printer.heatingBed')}</span>
                   <span className="font-mono text-xs text-right">
                     {(printer.temperature.bed_actual ?? 0).toFixed(0)}°C / {(printer.temperature.bed_target ?? 0).toFixed(0)}°C
                   </span>
@@ -205,21 +210,21 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground flex-shrink-0">연결상태:</span>
+                  <span className="text-muted-foreground flex-shrink-0">{t('dashboard.printer.connectionStatus')}</span>
                   {printer.pending ? (
                     <span className="font-medium text-xs text-primary inline-flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" /> 확인중...
+                      <Loader2 className="h-3 w-3 animate-spin" /> {t('dashboard.printer.verifying')}
                     </span>
                   ) : (
                     <span className={`font-medium text-xs ${printer.connected ? 'text-success' : 'text-destructive'}`}>
-                      {printer.connected ? '연결완료' : '연결없음'}
+                      {printer.connected ? t('dashboard.printer.connected') : t('dashboard.printer.disconnected')}
                     </span>
                   )}
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground flex-shrink-0">프린팅:</span>
+                  <span className="text-muted-foreground flex-shrink-0">{t('dashboard.printer.printing')}</span>
                   <span className={`font-medium text-xs ${printer.printing ? 'text-primary' : 'text-muted-foreground'}`}>
-                    {printer.printing ? '진행중' : '중지'}
+                    {printer.printing ? t('dashboard.printer.inProgress') : t('dashboard.printer.stopped')}
                   </span>
                 </div>
               </div>
@@ -232,6 +237,7 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
 };
 
 const Home = () => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();
   const [printers, setPrinters] = usePersistentState<PrinterOverview[]>('web:dashboard:printers', []);
@@ -436,7 +442,7 @@ const Home = () => {
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">프린터 데이터를 불러오는 중...</p>
+            <p className="mt-4 text-muted-foreground">{t('dashboard.loading')}</p>
           </div>
         </div>
       </div>
@@ -452,11 +458,11 @@ const Home = () => {
           <Alert className="bg-primary/10 border-primary">
             <LogIn className="h-4 w-4" />
             <AlertDescription className="flex items-center justify-between">
-              <span>프린터 상세 모니터링 및 제어 기능을 사용하려면 로그인이 필요합니다.</span>
+              <span>{t('dashboard.loginRequired')}</span>
               <Button asChild size="sm" className="ml-4">
                 <Link to="/auth">
                   <LogIn className="h-3 w-3 mr-1" />
-                  로그인
+                  {t('auth.login')}
                 </Link>
               </Button>
             </AlertDescription>
@@ -467,13 +473,13 @@ const Home = () => {
         {user && groups.length > 0 && (
           <div className="flex items-center gap-4">
             <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">그룹별 필터:</span>
+            <span className="text-sm font-medium">{t('dashboard.groupFilter')}</span>
             <Select value={selectedGroup} onValueChange={setSelectedGroup}>
               <SelectTrigger className="w-48">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">전체 프린터</SelectItem>
+                <SelectItem value="all">{t('dashboard.allPrinters')}</SelectItem>
                 {groups.map((group) => (
                   <SelectItem key={group.id} value={group.id}>
                     <div className="flex items-center gap-2">
@@ -495,25 +501,25 @@ const Home = () => {
           <Card>
             <CardContent className="flex flex-col items-center justify-center p-6">
               <div className="text-2xl font-bold text-primary">{summary.total}</div>
-              <div className="text-sm text-muted-foreground">총 프린터</div>
+              <div className="text-sm text-muted-foreground">{t('dashboard.stats.totalPrinters')}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="flex flex-col items-center justify-center p-6">
               <div className="text-2xl font-bold text-success">{summary.connected}</div>
-              <div className="text-sm text-muted-foreground">연결됨</div>
+              <div className="text-sm text-muted-foreground">{t('dashboard.stats.connected')}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="flex flex-col items-center justify-center p-6">
               <div className="text-2xl font-bold text-primary">{summary.printing}</div>
-              <div className="text-sm text-muted-foreground">프린팅 중</div>
+              <div className="text-sm text-muted-foreground">{t('dashboard.stats.printing')}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="flex flex-col items-center justify-center p-6">
               <div className="text-2xl font-bold text-destructive">{summary.error}</div>
-              <div className="text-sm text-muted-foreground">오류</div>
+              <div className="text-sm text-muted-foreground">{t('dashboard.stats.errors')}</div>
             </CardContent>
           </Card>
         </div>
@@ -522,7 +528,7 @@ const Home = () => {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-semibold">
-              프린터 목록 
+              {t('dashboard.printerList')}
               {selectedGroup !== "all" && (
                 <span className="text-lg font-normal text-muted-foreground ml-2">
                   - {groups.find(g => g.id === selectedGroup)?.name}
@@ -532,7 +538,7 @@ const Home = () => {
             <Button asChild variant="outline" className="flex items-center gap-2">
               <Link to="/settings">
                 <Settings className="h-4 w-4" />
-                관리
+                {t('dashboard.manage')}
               </Link>
             </Button>
           </div>
@@ -541,18 +547,18 @@ const Home = () => {
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Monitor className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">프린터가 없습니다</h3>
+                <h3 className="text-lg font-medium mb-2">{t('dashboard.noPrinters')}</h3>
                 <p className="text-muted-foreground text-center mb-4">
-                  {selectedGroup === "all" 
-                    ? "아직 등록된 프린터가 없습니다." 
-                    : "이 그룹에 속한 프린터가 없습니다."
+                  {selectedGroup === "all"
+                    ? t('dashboard.noRegisteredPrinters')
+                    : t('dashboard.noGroupPrinters')
                   }
                 </p>
                 {user && (
                   <Button asChild>
                     <Link to="/settings">
                       <Plus className="h-4 w-4 mr-2" />
-                      프린터 추가
+                      {t('dashboard.addPrinter')}
                     </Link>
                   </Button>
                 )}

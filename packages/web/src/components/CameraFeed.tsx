@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Camera, Play, RotateCw, Maximize2, X } from "lucide-react";
 import { mqttConnect, mqttPublish, mqttSubscribe, mqttUnsubscribe } from "@shared/services/mqttService";
 import { supabase } from "@shared/integrations/supabase/client";
+import { useTranslation } from "react-i18next";
 
 interface CameraFeedProps {
   cameraId: string; // device uuid와 동일
@@ -13,6 +14,7 @@ interface CameraFeedProps {
 }
 
 export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProps) => {
+  const { t } = useTranslation();
   const [isStreaming, setIsStreaming] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -91,7 +93,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
   // ── Start: 라즈베리로 WebRTC 파이프라인 시작 명령 ────────────────────────────
   const startStreaming = useCallback(async () => {
     if (!isConnected) {
-      setStreamError('서버와의 연결이 필요합니다.');
+      setStreamError(t('camera.serverConnectionRequired'));
       return;
     }
     setStreamError(null);
@@ -104,7 +106,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
       // 입력(MJPEG/RTSP 등)
       const input = await getCameraStreamInput(cameraId);
       if (!input) {
-        setStreamError('카메라 입력 주소(stream_url)를 찾을 수 없습니다.');
+        setStreamError(t('camera.inputNotFound'));
         setIsStreaming(false);
         setCameraStatus('error');
         return;
@@ -142,7 +144,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
       // 이후 실제 재생 URL은 STATE_TOPIC에서 수신 → setWebrtcUrl()
     } catch (e) {
       console.error('[CAM][MQTT] start error', e);
-      setStreamError('스트리밍 시작 실패');
+      setStreamError(t('camera.startFailed'));
       setCameraStatus('error');
       setIsStreaming(false);
     }
@@ -157,7 +159,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
     } catch {}
   }, [cleanupVideo, cameraId]);
 
-  // 5분 자동 정지 타이머
+  // 5분 자동 {t("camera.stop")}} 타이머
   useEffect(() => {
     if (isStreaming) {
       if (autoStopTimerRef.current) {
@@ -188,11 +190,11 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Camera className="h-5 w-5" />
-            실시간 카메라 피드
+            {t('camera.title')}
           </CardTitle>
           <div className="flex items-center gap-2">
             <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent ${isConnected ? 'bg-primary text-primary-foreground hover:bg-primary/80' : 'bg-muted text-muted-foreground'}`}>
-              {isConnected ? '연결됨' : '연결 끊김'}
+              {isConnected ? t('camera.connected') : t('camera.disconnected')}
             </span>
             <span className="text-sm text-muted-foreground">{resolution}</span>
           </div>
@@ -217,7 +219,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
                     />
                   ) : (
                     <div className="flex items-center justify-center h-full text-white">
-                      <p className="text-sm opacity-80">스트림 준비 중…</p>
+                      <p className="text-sm opacity-80">{t("camera.streamPreparation")}</p>
                     </div>
                   )}
 
@@ -226,7 +228,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
                       type="button"
                       onClick={() => setIsFullscreen(false)}
                       className="absolute top-4 right-4 z-50 inline-flex items-center justify-center h-8 w-8 rounded-full bg-black/60 text-white hover:bg-black/80 focus:outline-none focus:ring-2 focus:ring-white/40"
-                      aria-label="전체보기 해제"
+                      aria-label={t("camera.exitFullscreen")}
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -254,8 +256,8 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
                 <div className="flex items-center justify-center h-full text-white">
                   <div className="text-center">
                     <Camera className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p className="text-lg">카메라 연결 끊김</p>
-                    <p className="text-sm opacity-75">카메라 연결을 확인해주세요</p>
+                    <p className="text-lg">{t("camera.cameraDisconnected")}</p>
+                    <p className="text-sm opacity-75">{t("camera.checkConnection")}</p>
                   </div>
                 </div>
               )
@@ -263,12 +265,12 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
               <div className="flex flex-col items-center justify-center h-full text-white space-y-4">
                 <Camera className="h-16 w-16 text-muted-foreground" />
                 <div className="text-center">
-                  <h3 className="text-lg font-medium text-white">카메라 스트리밍</h3>
-                  <p className="text-sm text-gray-300">실시간 카메라 피드를 시작하려면 버튼을 눌러주세요</p>
+                  <h3 className="text-lg font-medium text-white">{t("camera.cameraStreaming")}</h3>
+                  <p className="text-sm text-gray-300">{t("camera.startStreamingDesc")}</p>
                 </div>
                 <Button onClick={startStreaming} disabled={!isConnected} size="lg" className="bg-primary hover:bg-primary/90">
                   <Play className="h-5 w-5 mr-2" />
-                  스트리밍 시작
+                  {t("camera.startStreaming")}
                 </Button>
               </div>
             )}
@@ -278,25 +280,25 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={stopStreaming} disabled={!isConnected}>
-                  정지
+                  {t("camera.stop")}
                 </Button>
 
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => { /* 새로고침: iframe 리로드 */ 
+                  onClick={() => { /* {t("camera.refresh")}}: iframe 리로드 */ 
                     if (webrtcUrl && iframeRef.current) iframeRef.current.src = `${webrtcUrl}?t=${Date.now()}&autoplay=1&muted=1`;
                   }}
                   disabled={!isConnected || !isStreaming}
                 >
                   <RotateCw className="h-4 w-4" />
-                  새로고침
+                {t("camera.refresh")}
                 </Button>
               </div>
 
               <Button variant="outline" size="sm" onClick={toggleFullscreen} disabled={!isConnected || !isStreaming}>
                 <Maximize2 className="h-4 w-4" />
-                {isFullscreen ? "축소" : "전체화면"}
+                {isFullscreen ? t("camera.minimize") : t("camera.fullscreen")}
               </Button>
             </div>
           )}
@@ -304,11 +306,11 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
           {isStreaming && (
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="text-muted-foreground">카메라 ID:</span>
+                <span className="text-muted-foreground">{t("camera.cameraId")}</span>
                 <span className="ml-2 font-mono">{cameraId}</span>
               </div>
               <div>
-                <span className="text-muted-foreground">해상도:</span>
+                <span className="text-muted-foreground">{t("camera.resolution")}</span>
                 <span className="ml-2">{resolution}</span>
               </div>
             </div>

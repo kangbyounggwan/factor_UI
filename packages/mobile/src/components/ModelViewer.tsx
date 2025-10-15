@@ -1,8 +1,10 @@
 // 3D 모델 뷰어 담당 컴포넌트
-// 
-import { Canvas } from "@react-three/fiber";
+//
+import { Canvas, useLoader } from "@react-three/fiber";
 import { OrbitControls, Grid, Environment } from "@react-three/drei";
-import { Suspense, useMemo } from "react";
+import { Suspense, useMemo, useEffect, useState } from "react";
+import { STLLoader } from "three-stdlib";
+import * as THREE from "three";
 
 interface ModelViewerProps {
   className?: string;
@@ -12,6 +14,8 @@ interface ModelViewerProps {
   showDemo?: boolean;
   // 모델이 없을 때 표시할 안내 문구
   placeholderMessage?: string;
+  // STL 파일 URL (선택적)
+  stlUrl?: string;
 }
 
 function SpinningObject() {
@@ -25,12 +29,45 @@ function SpinningObject() {
   );
 }
 
-export default function ModelViewer({ className, height, showDemo = false, placeholderMessage = "모델을 생성하거나 불러오세요" }: ModelViewerProps) {
+function STLModel({ url }: { url: string }) {
+  const geometry = useLoader(STLLoader, url);
+
+  useEffect(() => {
+    if (geometry) {
+      // 지오메트리 중심 및 정규화
+      geometry.computeBoundingBox();
+      const boundingBox = geometry.boundingBox!;
+      const center = new THREE.Vector3();
+      boundingBox.getCenter(center);
+      geometry.translate(-center.x, -center.y, -center.z);
+
+      // 스케일 계산 (모델을 화면에 맞춤)
+      const size = new THREE.Vector3();
+      boundingBox.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const scale = 2 / maxDim;
+      geometry.scale(scale, scale, scale);
+
+      // 노멀 계산
+      geometry.computeVertexNormals();
+    }
+  }, [geometry]);
+
+  return (
+    <mesh geometry={geometry} castShadow receiveShadow>
+      <meshStandardMaterial color="#6ee7b7" metalness={0.3} roughness={0.4} />
+    </mesh>
+  );
+}
+
+export default function ModelViewer({ className, height, showDemo = false, placeholderMessage = "모델을 생성하거나 불러오세요", stlUrl }: ModelViewerProps) {
   const style: React.CSSProperties = { width: '100%' };
   if (height !== undefined) {
     style.height = typeof height === 'number' ? `${height}px` : height;
   }
   style.position = 'relative';
+
+  const hasContent = showDemo || stlUrl;
 
   return (
     <div className={className} style={style}>
@@ -40,12 +77,13 @@ export default function ModelViewer({ className, height, showDemo = false, place
         <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
         <Suspense fallback={null}>
           {showDemo && <SpinningObject />}
+          {stlUrl && <STLModel url={stlUrl} />}
           <Environment preset="city" />
         </Suspense>
         <Grid infiniteGrid cellColor="#2a2f3a" sectionColor="#3b4252" args={[20, 20]} />
         <OrbitControls enableDamping dampingFactor={0.05} />
       </Canvas>
-      {!showDemo && (
+      {!hasContent && (
         <div
           style={{
             position: 'absolute',

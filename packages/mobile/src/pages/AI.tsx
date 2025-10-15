@@ -183,15 +183,15 @@ const AI = () => {
             <Card>
               <CardContent className="p-0">
                 <div className="bg-muted rounded-lg flex items-center justify-center h-[52vh] relative overflow-hidden">
-                  {isProcessing ? (
-                    <div className="absolute inset-0 bg-gray-900/50 flex items-center justify-center">
+                  <ModelViewer className="w-full h-full" />
+                  {isProcessing && (
+                    <div className="absolute inset-0 bg-gray-900/70 flex items-center justify-center z-10">
                       <div className="text-center space-y-3">
                         <Loader2 className="w-10 h-10 mx-auto animate-spin text-white" />
-                        <p className="text-sm text-white">AI 모델 생성 중...</p>
+                        <p className="text-sm text-white font-medium">AI 모델 생성 중...</p>
+                        <p className="text-xs text-gray-300">잠시만 기다려주세요</p>
                       </div>
                     </div>
-                  ) : (
-                    <ModelViewer className="w-full h-full" />
                   )}
                 </div>
               </CardContent>
@@ -208,7 +208,7 @@ const AI = () => {
               <CardContent>
                 <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer" onDragOver={handleDragOver} onDrop={handleDrop} onClick={()=>fileInputRef.current?.click()}>
                   <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-                  <p className="text-sm">클릭하거나 여기에 이미지를 드롭하세요</p>
+                  <p className="text-sm">여기에 이미지를 드롭하세요</p>
                   <Button variant="outline" size="sm" className="mt-3">파일 선택</Button>
                   <input ref={fileInputRef} type="file" onChange={handleFileUpload} className="hidden" accept="image/*" multiple />
                 </div>
@@ -237,8 +237,17 @@ const AI = () => {
 
             <Card>
               <CardContent className="p-0">
-                <div className="rounded-lg overflow-hidden h-[52vh]">
+                <div className="rounded-lg overflow-hidden h-[52vh] relative">
                   <ModelViewer className="w-full h-full" />
+                  {isProcessing && (
+                    <div className="absolute inset-0 bg-gray-900/70 flex items-center justify-center z-10">
+                      <div className="text-center space-y-3">
+                        <Loader2 className="w-10 h-10 mx-auto animate-spin text-white" />
+                        <p className="text-sm text-white font-medium">3D 변환 중...</p>
+                        <p className="text-xs text-gray-300">잠시만 기다려주세요</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

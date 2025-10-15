@@ -15,6 +15,13 @@ export default defineConfig(({ mode }) => {
     server: {
       host: env.VITE_DEV_HOST || "::",
       port: parseInt(env.VITE_DEV_PORT) || 8080,
+      fs: {
+        // 루트(monorepo) 경로까지 파일 서빙 허용 (/@fs 사용)
+        allow: [
+          path.resolve(__dirname, "."),
+          path.resolve(__dirname, "../../"),
+        ],
+      },
     },
     plugins: [
       react(),

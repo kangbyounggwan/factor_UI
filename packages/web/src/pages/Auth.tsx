@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Navigate, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { Navigate, Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,9 +15,11 @@ import { useTheme } from "next-themes";
 
 
 const Auth = () => {
+  const { t } = useTranslation();
   const { user, signIn, signUp, loading } = useAuth();
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string>("");
   const [signInData, setSignInData] = useState({
@@ -45,16 +48,16 @@ const Auth = () => {
       
       if (error) {
         if (error.message.includes("Invalid login credentials")) {
-          setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+          setError(t('auth.invalidCredentials', 'Invalid email or password.'));
         } else if (error.message.includes("Email not confirmed")) {
-          setError("이메일 인증이 필요합니다. 이메일을 확인해주세요.");
+          setError(t('auth.emailNotConfirmed', 'Email verification required. Please check your inbox.'));
         } else {
           setError(error.message);
         }
       } else {
         toast({
-          title: "로그인 성공",
-          description: "환영합니다!",
+          title: t('auth.loginSuccess', 'Login successful'),
+          description: t('auth.welcome', 'Welcome!'),
         });
         // 로그인 성공 시점: MQTT dash_status 구독 시작 + SD 전역 구독
         try {
@@ -68,7 +71,7 @@ const Auth = () => {
         } catch {}
       }
     } catch (err) {
-      setError("로그인 중 오류가 발생했습니다.");
+      setError(t('auth.loginFailed', 'Login failed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -80,13 +83,13 @@ const Auth = () => {
     setError("");
 
     if (signUpData.password !== signUpData.confirmPassword) {
-      setError("비밀번호가 일치하지 않습니다.");
+      setError(t('auth.passwordMismatch', 'Passwords do not match.'));
       setIsSubmitting(false);
       return;
     }
 
     if (signUpData.password.length < 6) {
-      setError("비밀번호는 6자 이상이어야 합니다.");
+      setError(t('auth.passwordTooShort', 'Password must be at least 6 characters.'));
       setIsSubmitting(false);
       return;
     }
@@ -100,22 +103,18 @@ const Auth = () => {
       
       if (error) {
         if (error.message.includes("User already registered")) {
-          setError("이미 등록된 이메일입니다.");
+          setError(t('auth.userAlreadyRegistered', 'This email is already registered.'));
         } else if (error.message.includes("Password should be at least 6 characters")) {
-          setError("비밀번호는 6자 이상이어야 합니다.");
+          setError(t('auth.passwordTooShort', 'Password must be at least 6 characters.'));
         } else {
           setError(error.message);
         }
       } else {
-        toast({
-          title: "회원가입 성공",
-          description: "이메일 인증 후 로그인해주세요.",
-        });
-        // 회원가입 성공 시 로그인 탭으로 이동
-        setSignUpData({ email: "", password: "", confirmPassword: "", displayName: "" });
+        // 회원가입 성공 시 메일 인증 페이지로 이동
+        navigate(`/email-verification?email=${encodeURIComponent(signUpData.email)}`);
       }
     } catch (err) {
-      setError("회원가입 중 오류가 발생했습니다.");
+      setError(t('auth.signupFailed', 'Sign up failed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -143,10 +142,10 @@ const Auth = () => {
                 <Lock className="w-6 h-6 text-primary" />
               </div>
               <h1 className="text-3xl font-bold tracking-tight">
-                Welcome back
+                {t('auth.welcomeBack', 'Welcome back')}
               </h1>
               <p className="text-muted-foreground">
-                Sign in to your FACTOR account
+                {t('auth.signInSubtitle', 'Sign in to your FACTOR account')}
               </p>
             </div>
 
@@ -160,14 +159,14 @@ const Auth = () => {
               <CardContent className="p-8">
                 <Tabs defaultValue="signin" className="space-y-6">
                   <TabsList className="grid w-full grid-cols-2 h-12 bg-muted/50">
-                    <TabsTrigger value="signin" className="h-10 text-sm font-medium">로그인</TabsTrigger>
-                    <TabsTrigger value="signup" className="h-10 text-sm font-medium">회원가입</TabsTrigger>
+                    <TabsTrigger value="signin" className="h-10 text-sm font-medium">{t('auth.login', 'Login')}</TabsTrigger>
+                    <TabsTrigger value="signup" className="h-10 text-sm font-medium">{t('auth.signup', 'Sign Up')}</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="signin" className="space-y-6 mt-6">
                     <form onSubmit={handleSignIn} className="space-y-5">
                   <div className="space-y-2">
-                    <Label htmlFor="signin-email">Email</Label>
+                    <Label htmlFor="signin-email">{t('auth.email', 'Email')}</Label>
                     <Input
                       id="signin-email"
                       type="email"
@@ -182,12 +181,12 @@ const Auth = () => {
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="signin-password">Password</Label>
+                      <Label htmlFor="signin-password">{t('auth.password', 'Password')}</Label>
                       <button
                         type="button"
                         className="text-sm text-muted-foreground hover:text-foreground"
                       >
-                        Forgot Password?
+                        {t('auth.forgotPassword', 'Forgot Password?')}
                       </button>
                     </div>
                     <Input
@@ -206,10 +205,10 @@ const Auth = () => {
                     {isSubmitting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Signing in...
+                        {t('auth.signingIn', 'Signing in...')}
                       </>
                     ) : (
-                      "Sign In"
+                      t('auth.login', 'Sign In')
                     )}
                   </Button>
                 </form>
@@ -218,7 +217,7 @@ const Auth = () => {
                   <TabsContent value="signup" className="space-y-6 mt-6">
                     <form onSubmit={handleSignUp} className="space-y-5">
                       <div className="space-y-2">
-                        <Label htmlFor="signup-email">Email</Label>
+                        <Label htmlFor="signup-email">{t('auth.email', 'Email')}</Label>
                         <Input
                           id="signup-email"
                           type="email"
@@ -232,7 +231,7 @@ const Auth = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="signup-displayname">사용자명</Label>
+                        <Label htmlFor="signup-displayname">{t('auth.displayName', 'Display Name')}</Label>
                         <Input
                           id="signup-displayname"
                           type="text"
@@ -245,7 +244,7 @@ const Auth = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="signup-password">Password</Label>
+                        <Label htmlFor="signup-password">{t('auth.password', 'Password')}</Label>
                         <Input
                           id="signup-password"
                           type="password"
@@ -259,7 +258,7 @@ const Auth = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="signup-confirm-password">Confirm Password</Label>
+                        <Label htmlFor="signup-confirm-password">{t('auth.confirmPassword', 'Confirm Password')}</Label>
                         <Input
                           id="signup-confirm-password"
                           type="password"
@@ -279,10 +278,10 @@ const Auth = () => {
                         {isSubmitting ? (
                           <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Creating account...
+                            {t('auth.creatingAccount', 'Creating account...')}
                           </>
                         ) : (
-                          "Sign Up"
+                          t('auth.signup', 'Sign Up')
                         )}
                       </Button>
                     </form>
@@ -293,13 +292,13 @@ const Auth = () => {
 
             <div className="text-center text-sm text-muted-foreground">
               <p>
-                By continuing, you agree to our{" "}
+                {t('auth.byContinuing', 'By continuing, you agree to our')}{" "}
                 <a href="#" className="underline hover:text-foreground">
-                  Terms of Service
+                  {t('auth.termsOfService', 'Terms of Service')}
                 </a>{" "}
-                and{" "}
+                {t('auth.and', 'and')}{" "}
                 <a href="#" className="underline hover:text-foreground">
-                  Privacy Policy
+                  {t('auth.privacyPolicy', 'Privacy Policy')}
                 </a>
                 .
               </p>
@@ -315,33 +314,33 @@ const Auth = () => {
                 <Activity className="w-8 h-8 text-primary-foreground" />
               </div>
               <h2 className="text-3xl font-bold text-foreground">
-                3D 프린터 팜의<br />
-                새로운 경험
+                {t('auth.marketing.titleLine1', 'A new experience for')}<br />
+                {t('auth.marketing.titleLine2', '3D printer farms')}
               </h2>
             </div>
             
             <div className="space-y-4 text-muted-foreground">
               <p className="text-lg">
-                실시간 모니터링과 원격 제어로<br />
-                더 스마트한 3D 프린팅을 시작하세요
+                {t('auth.marketing.subtitleLine1', 'Start smarter 3D printing with')}<br />
+                {t('auth.marketing.subtitleLine2', 'real-time monitoring and remote control')}
               </p>
               
               <div className="space-y-3 text-sm">
                 <div className="flex items-center gap-3">
                   <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span>실시간 온도 및 진행상황 모니터링</span>
+                  <span>{t('auth.marketing.feature1', 'Real-time temperature and progress monitoring')}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span>원격 프린터 제어 및 G-code 업로드</span>
+                  <span>{t('auth.marketing.feature2', 'Remote printer control and G-code upload')}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span>라이브 카메라 피드로 실시간 확인</span>
+                  <span>{t('auth.marketing.feature3', 'Live camera feed for real-time view')}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span>IoT 센서를 통한 환경 모니터링</span>
+                  <span>{t('auth.marketing.feature4', 'Environment monitoring via IoT sensors')}</span>
                 </div>
               </div>
             </div>
@@ -352,11 +351,11 @@ const Auth = () => {
                   <div className="w-8 h-8 bg-success rounded-full flex items-center justify-center">
                     <span className="text-xs font-bold text-success-foreground">✓</span>
                   </div>
-                  <span className="font-medium">지금 무료로 시작하세요</span>
+                  <span className="font-medium">{t('auth.marketing.ctaTitle', 'Start free now')}</span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  복잡한 설정 없이 바로 사용할 수 있는<br />
-                  클라우드 기반 3D 프린터 관리 솔루션
+                  {t('auth.marketing.ctaDescLine1', 'Cloud-based 3D printer management solution')}<br />
+                  {t('auth.marketing.ctaDescLine2', 'ready to use without complex setup')}
                 </p>
               </div>
             </div>

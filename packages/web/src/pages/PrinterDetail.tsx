@@ -16,6 +16,7 @@ import { useAuth } from "@shared/contexts/AuthContext";
 import { supabase } from "@shared/integrations/supabase/client"
 import { onDashStatusMessage } from "@shared/services/mqttService";
 import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "react-i18next";
 
 // 로컬 스냅샷 퍼시스턴스 훅(한 파일 내 사용)
 function usePersistentState<T>(key: string, fallback: T) {
@@ -129,6 +130,7 @@ interface PrinterIoTDevice {
 const defaultIoTDevices: PrinterIoTDevice[] = [];
 
 const PrinterDetail = () => {
+  const { t } = useTranslation();
   const { id } = useParams();
   const storageKey = `printer:detail:${id ?? 'unknown'}`;
   const hasSnapshot = typeof window !== 'undefined' ? !!localStorage.getItem(storageKey) : false;
@@ -191,13 +193,13 @@ const PrinterDetail = () => {
       }));
       
       toast({
-        title: "연결 성공",
-        description: `프린터가 ${connectionInfo.serialPort}에 연결되었습니다.`,
+        title: t('printerDetail.connectSuccess'),
+        description: t('printerDetail.connectSuccessDesc', { port: connectionInfo.serialPort }),
       });
     } catch (error) {
       toast({
-        title: "연결 실패",
-        description: "프린터 연결에 실패했습니다. 설정을 확인해주세요.",
+        title: t('printerDetail.connectFailed'),
+        description: t('printerDetail.connectFailedDesc'),
         variant: "destructive",
       });
     } finally {
@@ -220,13 +222,13 @@ const PrinterDetail = () => {
       }));
       
       toast({
-        title: "연결 해제",
-        description: "프린터 연결이 해제되었습니다.",
+        title: t('printerDetail.disconnectSuccess'),
+        description: t('printerDetail.disconnectSuccessDesc'),
       });
     } catch (error) {
       toast({
-        title: "연결 해제 실패",
-        description: "프린터 연결 해제에 실패했습니다.",
+        title: t('printerDetail.disconnectFailed'),
+        description: t('printerDetail.disconnectFailedDesc'),
         variant: "destructive",
       });
     }
@@ -237,13 +239,13 @@ const PrinterDetail = () => {
       // TODO: 실제 시리얼 포트 스캔 API 호출
       await new Promise(resolve => setTimeout(resolve, 1000)); // 시뮬레이션
       toast({
-        title: "포트 새로고침",
-        description: "사용 가능한 포트를 다시 스캔했습니다.",
+        title: t('printerDetail.portRefresh'),
+        description: t('printerDetail.portRefreshDesc'),
       });
     } catch (error) {
       toast({
-        title: "포트 스캔 실패",
-        description: "포트 스캔에 실패했습니다.",
+        title: t('printerDetail.portScanFailed'),
+        description: t('printerDetail.portScanFailedDesc'),
         variant: "destructive",
       });
     }
@@ -462,21 +464,21 @@ const PrinterDetail = () => {
       const result = detail.result || {};
       const action: string = result.action || 'control';
       const labelMap: Record<string, string> = {
-        home: '홈 이동',
-        pause: '일시 정지',
-        resume: '재개',
-        cancel: '완전 취소',
+        home: t('printerDetail.homeMove'),
+        pause: t('printerDetail.pause'),
+        resume: t('printerDetail.resume'),
+        cancel: t('printerDetail.cancel'),
       };
-      const label = labelMap[action] || '제어';
+      const label = labelMap[action] || t('printerDetail.control');
       if (result.ok) {
-        toast({ title: `${label} 성공`, description: result.message ?? undefined });
+        toast({ title: t('printerDetail.controlSuccess', { action: label }), description: result.message ?? undefined });
       } else {
-        toast({ title: `${label} 실패`, description: result.message ?? '오류가 발생했습니다.', variant: 'destructive' });
+        toast({ title: t('printerDetail.controlFailed', { action: label }), description: result.message ?? t('printerDetail.controlError'), variant: 'destructive' });
       }
     };
     window.addEventListener('control_result', onControlResult as EventListener);
     return () => window.removeEventListener('control_result', onControlResult as EventListener);
-  }, [deviceUuid, toast]);
+  }, [deviceUuid, toast, t]);
 
   // 상세 화면용 카드 컴포넌트들
   const PrintProgressCard = () => {
@@ -485,7 +487,7 @@ const PrinterDetail = () => {
       const h = Math.floor(seconds / 3600);
       const m = Math.floor((seconds % 3600) / 60);
       const s = Math.floor(seconds % 60);
-      return h > 0 ? `${h}시간 ${m}분 ${s}초` : `${m}분 ${s}초`;
+      return h > 0 ? `${h}${t('printerDetail.hours')} ${m}${t('printerDetail.minutes')} ${s}${t('printerDetail.seconds')}` : `${m}${t('printerDetail.minutes')} ${s}${t('printerDetail.seconds')}`;
     };
     const formatFileSize = (bytes: number): string => {
       if (!bytes) return '0 B';
@@ -507,26 +509,26 @@ const PrinterDetail = () => {
     const isDisconnected = stateStr === 'disconnect' || stateStr === 'disconnected';
     const isOperational = stateStr === 'operational';
 
-    let stateLabel = '연결없음';
+    let stateLabel = t('printerDetail.noConnection');
     let stateClass = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80';
 
     if (isPrinting) {
-      stateLabel = '출력중';
+      stateLabel = t('printerDetail.printing');
       stateClass = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-success text-success-foreground hover:bg-success/80';
     } else if (isOperational) {
-      stateLabel = '대기중';
+      stateLabel = t('printerDetail.standby');
       stateClass = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-primary text-primary-foreground hover:bg-primary/80';
     }
     return (
       <div className="h-full rounded-lg border bg-card text-card-foreground shadow-sm">
         <div className="p-6 border-b flex items-center justify-between">
-          <div className="text-sm font-medium">프린트 진행상황</div>
+          <div className="text-sm font-medium">{t('printerDetail.printProgress')}</div>
           <span className={stateClass}>{stateLabel}</span>
         </div>
         <div className="p-6 space-y-4">
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">전체 진행률</span>
+              <span className="text-sm font-medium">{t('printerDetail.overallProgress')}</span>
               <span className="text-2xl font-bold text-primary">{completionPercent}%</span>
             </div>
             <div className="h-3 w-full bg-muted rounded-full">
@@ -535,7 +537,7 @@ const PrinterDetail = () => {
           </div>
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">파일 진행률</span>
+              <span className="text-sm font-medium">{t('printerDetail.fileProgress')}</span>
               <span className="text-sm text-muted-foreground">{formatFileSize(data.printProgress.file_position)} / {formatFileSize(data.printProgress.file_size)}</span>
             </div>
             <div className="h-2 w-full bg-muted rounded-full">
@@ -543,12 +545,12 @@ const PrinterDetail = () => {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div><div className="text-muted-foreground">경과 시간</div><div className="font-medium">{formatTime(data.printProgress.print_time || 0)}</div></div>
-            <div><div className="text-muted-foreground">남은 시간</div><div className="font-medium">{formatTime(data.printProgress.print_time_left || 0)}</div></div>
+            <div><div className="text-muted-foreground">{t('printerDetail.elapsedTime')}</div><div className="font-medium">{formatTime(data.printProgress.print_time || 0)}</div></div>
+            <div><div className="text-muted-foreground">{t('printerDetail.remainingTime')}</div><div className="font-medium">{formatTime(data.printProgress.print_time_left || 0)}</div></div>
           </div>
           <div className="pt-2 border-t">
             <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">사용된 필라멘트</span>
+              <span className="text-muted-foreground">{t('printerDetail.filamentUsed')}</span>
               <span className="font-medium">{((data.printProgress.filament_used || 0) / 1000).toFixed(2)}m</span>
             </div>
           </div>
@@ -559,40 +561,40 @@ const PrinterDetail = () => {
 
   const PrinterStatusCard = () => {
     const map: any = {
-      idle: { label: '대기' },
-      printing: { label: '프린팅' },
-      paused: { label: '일시정지' },
-      error: { label: '오류' },
-      connecting: { label: '연결중' },
-      disconnected: { label: '연결끊김' },
+      idle: { label: t('printerDetail.idle') },
+      printing: { label: t('printer.statusPrinting') },
+      paused: { label: t('printerDetail.paused') },
+      error: { label: t('printerDetail.error') },
+      connecting: { label: t('printerDetail.connecting') },
+      disconnected: { label: t('printerDetail.disconnected') },
     };
     const status = data.printerStatus.state as keyof typeof map;
     const flags: any = data.printerStatus?.flags || {};
     // flags 우선 규칙 적용
-    let label = '연결끊김';
-    if (flags?.error) label = '오류';
-    else if (flags?.printing) label = '프린팅';
-    else if (flags?.paused) label = '일시정지';
-    else if (flags?.ready || flags?.operational) label = '대기';
-    else label = map[status]?.label || '연결끊김';
+    let label = t('printerDetail.disconnected');
+    if (flags?.error) label = t('printerDetail.error');
+    else if (flags?.printing) label = t('printer.statusPrinting');
+    else if (flags?.paused) label = t('printerDetail.paused');
+    else if (flags?.ready || flags?.operational) label = t('printerDetail.idle');
+    else label = map[status]?.label || t('printerDetail.disconnected');
     return (
       <div className="h-full rounded-lg border bg-card text-card-foreground shadow-sm">
-        <div className="p-6 border-b"><div className="text-sm font-medium">프린터 상태</div></div>
+        <div className="p-6 border-b"><div className="text-sm font-medium">{t('printerDetail.printerStatus')}</div></div>
         <div className="p-6 space-y-4">
           <div className="space-y-2">
             <div className="inline-flex items-center px-2 py-1 text-xs rounded-md bg-muted">{label}</div>
             <div className="text-xs text-muted-foreground space-y-1">
               <div>
-                연결: {(data.printerStatus?.flags?.operational || data.printerStatus?.flags?.printing || data.printerStatus?.flags?.paused || data.printerStatus?.flags?.ready || data.printerStatus?.flags?.error) ? '연결됨' : '연결끊김'}
+                {t('printerDetail.connection')}: {(data.printerStatus?.flags?.operational || data.printerStatus?.flags?.printing || data.printerStatus?.flags?.paused || data.printerStatus?.flags?.ready || data.printerStatus?.flags?.error) ? t('printerDetail.connected') : t('printerDetail.disconnected')}
               </div>
-              <div>프린팅: {data.printerStatus?.flags?.printing ? '진행중' : (data.printerStatus?.flags?.paused ? '중지중' : '중지')}</div>
+              <div>{t('printer.statusPrinting')}: {data.printerStatus?.flags?.printing ? t('printerDetail.inProgress') : (data.printerStatus?.flags?.paused ? t('printerDetail.pausing') : t('printerDetail.stopped'))}</div>
             </div>
           </div>
           <div className="space-y-2 pt-2 border-t">
-            <div className="text-xs font-medium mb-2">온도 모니터링</div>
+            <div className="text-xs font-medium mb-2">{t('printerDetail.temperatureMonitoring')}</div>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">익스트루더</span><span className="font-mono">{(data.temperature.tool.actual || 0).toFixed(1)}°C / {(data.temperature.tool.target || 0).toFixed(1)}°C</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">히팅베드</span><span className="font-mono">{(data.temperature.bed.actual || 0).toFixed(1)}°C / {(data.temperature.bed.target || 0).toFixed(1)}°C</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t('printerDetail.extruder')}</span><span className="font-mono">{(data.temperature.tool.actual || 0).toFixed(1)}°C / {(data.temperature.tool.target || 0).toFixed(1)}°C</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t('printerDetail.heatingBed')}</span><span className="font-mono">{(data.temperature.bed.actual || 0).toFixed(1)}°C / {(data.temperature.bed.target || 0).toFixed(1)}°C</span></div>
             </div>
           </div>
         </div>
@@ -611,7 +613,7 @@ const PrinterDetail = () => {
               ) : (
                 <WifiOff className="h-4 w-4 text-red-500" />
               )}
-              <div className="text-sm font-medium">Connection</div>
+              <div className="text-sm font-medium">{t('printerDetail.connectionSettings')}</div>
             </div>
             <Button
               variant="ghost"
@@ -626,13 +628,13 @@ const PrinterDetail = () => {
         <div className="p-6 space-y-5 text-sm">
           {/* Serial Port */}
           <div className="space-y-2">
-            <Label htmlFor="serial-port" className="text-sm font-medium">Serial Port</Label>
+            <Label htmlFor="serial-port" className="text-sm font-medium">{t('printerDetail.serialPort')}</Label>
             <Select
               value={connectionInfo.serialPort}
               onValueChange={(value) => setConnectionInfo(prev => ({ ...prev, serialPort: value }))}
             >
               <SelectTrigger>
-                <SelectValue placeholder="포트를 선택하세요" />
+                <SelectValue placeholder={t('printerDetail.selectPort')} />
               </SelectTrigger>
               <SelectContent>
                 {availablePorts.map((port) => (
@@ -646,13 +648,13 @@ const PrinterDetail = () => {
 
           {/* Baudrate */}
           <div className="space-y-2">
-            <Label htmlFor="baudrate" className="text-sm font-medium">Baudrate</Label>
+            <Label htmlFor="baudrate" className="text-sm font-medium">{t('printerDetail.baudrate')}</Label>
             <Select
               value={connectionInfo.baudrate}
               onValueChange={(value) => setConnectionInfo(prev => ({ ...prev, baudrate: value }))}
             >
               <SelectTrigger>
-                <SelectValue placeholder="보드레이트를 선택하세요" />
+                <SelectValue placeholder={t('printerDetail.selectBaudrate')} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="9600">9600</SelectItem>
@@ -669,13 +671,13 @@ const PrinterDetail = () => {
 
           {/* Printer Profile */}
           <div className="space-y-2">
-            <Label htmlFor="printer-profile" className="text-sm font-medium">Printer Profile</Label>
+            <Label htmlFor="printer-profile" className="text-sm font-medium">{t('printerDetail.printerProfile')}</Label>
             <Select
               value={connectionInfo.printerProfile}
               onValueChange={(value) => setConnectionInfo(prev => ({ ...prev, printerProfile: value }))}
             >
               <SelectTrigger>
-                <SelectValue placeholder="프로필을 선택하세요" />
+                <SelectValue placeholder={t('printerDetail.selectProfile')} />
               </SelectTrigger>
               <SelectContent>
                 {availableProfiles.map((profile) => (
@@ -695,7 +697,7 @@ const PrinterDetail = () => {
                 checked={connectionInfo.saveSettings}
                 onCheckedChange={(checked) => setConnectionInfo(prev => ({ ...prev, saveSettings: !!checked }))}
               />
-              <Label htmlFor="save-settings" className="text-sm">Save connection settings</Label>
+              <Label htmlFor="save-settings" className="text-sm">{t('printerDetail.saveConnectionSettings')}</Label>
             </div>
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -703,7 +705,7 @@ const PrinterDetail = () => {
                 checked={connectionInfo.autoConnect}
                 onCheckedChange={(checked) => setConnectionInfo(prev => ({ ...prev, autoConnect: !!checked }))}
               />
-              <Label htmlFor="auto-connect" className="text-sm">Auto-connect on server startup</Label>
+              <Label htmlFor="auto-connect" className="text-sm">{t('printerDetail.autoConnectOnStartup')}</Label>
             </div>
           </div>
 
@@ -716,7 +718,7 @@ const PrinterDetail = () => {
                 className="w-full"
                 disabled={isConnecting}
               >
-                Disconnect
+                {t('printerDetail.disconnect')}
               </Button>
             ) : (
               <Button
@@ -724,7 +726,7 @@ const PrinterDetail = () => {
                 className="w-full"
                 disabled={isConnecting}
               >
-                {isConnecting ? "Connecting..." : "Connect"}
+                {isConnecting ? t('printerDetail.connecting') : t('printerDetail.connect')}
               </Button>
             )}
           </div>
@@ -741,7 +743,7 @@ const PrinterDetail = () => {
           <Button asChild variant="outline" size="sm">
             <Link to="/" className="flex items-center gap-2">
               <ArrowLeft className="h-4 w-4" />
-              전체 현황으로 돌아가기
+              {t('printerDetail.backToDashboard')}
             </Link>
           </Button>
         </div>
@@ -760,8 +762,8 @@ const PrinterDetail = () => {
                 {!data.printerStatus.connected && (
                   <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
                     <div className="text-center">
-                      <div className="text-lg font-medium">연결 없음</div>
-                      <div className="text-xs mt-1">프린터 연결 후 이용 가능합니다</div>
+                      <div className="text-lg font-medium">{t('printerDetail.noConnection')}</div>
+                      <div className="text-xs mt-1">{t('printerDetail.noConnectionDesc')}</div>
                     </div>
                   </div>
                 )}
@@ -777,8 +779,8 @@ const PrinterDetail = () => {
                 {!data.printerStatus.connected && (
                   <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
                     <div className="text-center">
-                      <div className="text-lg font-medium">연결 없음</div>
-                      <div className="text-xs mt-1">프린터 연결 후 이용 가능합니다</div>
+                      <div className="text-lg font-medium">{t('printerDetail.noConnection')}</div>
+                      <div className="text-xs mt-1">{t('printerDetail.noConnectionDesc')}</div>
                     </div>
                   </div>
                 )}

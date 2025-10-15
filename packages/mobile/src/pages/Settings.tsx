@@ -33,9 +33,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { supabase } from "@shared/integrations/supabase/client";
+import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { useAuth } from "@shared/contexts/AuthContext";
-import { supabase } from "@shared/integrations/supabase/client"
 import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "react-i18next";
 
 // 프린터 그룹 타입
 interface PrinterGroup {
@@ -50,7 +52,7 @@ interface PrinterGroup {
 // 프린터 설정 타입
 interface PrinterConfig {
   id: string;
-  name?: string;
+  name: string;
   model: string;
   group_id?: string;
   group?: PrinterGroup;
@@ -81,20 +83,22 @@ const colorPalette = [
   "#f97316", "#6366f1", "#14b8a6", "#eab308"
 ];
 
-// 구독 플랜
-const subscriptionPlans: SubscriptionPlan[] = [
+// 구독 플랜 features keys
+const planFeaturesKeys = {
+  basic: ["planFeature1", "planFeature2", "planFeature3", "planFeature4"],
+  pro: ["planFeature5", "planFeature6", "planFeature7", "planFeature8", "planFeature9", "planFeature10"],
+  enterprise: ["planFeature11", "planFeature12", "planFeature13", "planFeature14", "planFeature15", "planFeature16"]
+};
+
+// 구독 플랜 (features는 번역 키로 참조)
+const getSubscriptionPlans = (t: (key: string) => string): SubscriptionPlan[] => [
   {
     id: "basic",
     name: "Basic",
     price: 0,
     interval: "month",
     max_printers: 2,
-    features: [
-      "최대 2대 프린터",
-      "기본 모니터링",
-      "이메일 알림",
-      "커뮤니티 지원"
-    ],
+    features: planFeaturesKeys.basic.map(key => t(`settings.${key}`)),
     current: true
   },
   {
@@ -103,14 +107,7 @@ const subscriptionPlans: SubscriptionPlan[] = [
     price: 19900,
     interval: "month",
     max_printers: 10,
-    features: [
-      "최대 10대 프린터",
-      "실시간 모니터링",
-      "고급 분석",
-      "SMS 알림",
-      "우선 지원",
-      "API 접근"
-    ],
+    features: planFeaturesKeys.pro.map(key => t(`settings.${key}`)),
     popular: true
   },
   {
@@ -119,21 +116,18 @@ const subscriptionPlans: SubscriptionPlan[] = [
     price: 49900,
     interval: "month",
     max_printers: -1, // 무제한
-    features: [
-      "무제한 프린터",
-      "팀 관리",
-      "고급 보안",
-      "사용자 정의 대시보드",
-      "전용 지원",
-      "온프레미스 배포"
-    ]
+    features: planFeaturesKeys.enterprise.map(key => t(`settings.${key}`))
   }
 ];
 
 const Settings = () => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();
-  
+
+  // 구독 플랜 (번역 적용)
+  const subscriptionPlans = getSubscriptionPlans(t);
+
   // 상태 관리
   const [groups, setGroups] = useState<PrinterGroup[]>([]);
   const [printers, setPrinters] = useState<PrinterConfig[]>([]);
@@ -167,29 +161,16 @@ const Settings = () => {
     try {
       setLoading(true);
       
-      // 그룹 데이터 로드
-      const { data: groupsData, error: groupsError } = await supabase
-        .from('printer_groups')
-        .select('*')
-        .order('name');
-
-      if (groupsError) throw groupsError;
+      // 그룹/프린터 데이터 로드 (공용 서비스 재사용)
+      const groupsData = await getUserPrinterGroups(user.id);
       setGroups(groupsData || []);
 
-      // 프린터 데이터 로드
-      const { data: printersData, error: printersError } = await supabase
-        .from('printers')
-        .select(`
-          *,
-          group:printer_groups(*)
-        `)
-        .order('model');
-
-      if (printersError) throw printersError;
+      const printersData = await getUserPrintersWithGroup(user.id);
       
       // 타입 변환 및 안전한 할당
       const formattedPrinters: PrinterConfig[] = (printersData || []).map(printer => ({
         id: printer.id,
+        name: (printer as any).name ?? printer.model,
         model: printer.model,
         group_id: printer.group_id,
         group: printer.group?.[0] || undefined,
@@ -205,8 +186,8 @@ const Settings = () => {
     } catch (error) {
       console.error('Error loading data:', error);
       toast({
-        title: "오류",
-        description: "데이터를 불러오는 중 오류가 발생했습니다.",
+        title: t('settings.error'),
+        description: t('settings.loadError'),
         variant: "destructive",
       });
     } finally {
@@ -241,14 +222,14 @@ const Settings = () => {
       setShowAddGroup(false);
       
       toast({
-        title: "성공",
-        description: "그룹이 추가되었습니다.",
+        title: t('settings.success'),
+        description: t('settings.groupAdded'),
       });
     } catch (error) {
       console.error('Error adding group:', error);
       toast({
-        title: "오류",
-        description: "그룹 추가 중 오류가 발생했습니다.",
+        title: t('settings.error'),
+        description: t('settings.addGroupError'),
         variant: "destructive",
       });
     }
@@ -268,14 +249,14 @@ const Settings = () => {
       setGroups(groups.filter(g => g.id !== groupId));
       
       toast({
-        title: "성공",
-        description: "그룹이 삭제되었습니다.",
+        title: t('settings.success'),
+        description: t('settings.groupDeleted'),
       });
     } catch (error) {
       console.error('Error deleting group:', error);
       toast({
-        title: "오류",
-        description: "그룹 삭제 중 오류가 발생했습니다.",
+        title: t('settings.error'),
+        description: t('settings.deleteGroupError'),
         variant: "destructive",
       });
     }
@@ -289,6 +270,7 @@ const Settings = () => {
         .from('printers')
         .insert([{
           user_id: user.id,
+          name: newPrinter.name,
           model: newPrinter.model || "Unknown",
           group_id: newPrinter.group_id || null,
           ip_address: newPrinter.ip_address,
@@ -330,14 +312,14 @@ const Settings = () => {
       setShowAddPrinter(false);
       
       toast({
-        title: "성공",
-        description: "프린터가 추가되었습니다.",
+        title: t('settings.success'),
+        description: t('settings.printerAdded'),
       });
     } catch (error) {
       console.error('Error adding printer:', error);
       toast({
-        title: "오류",
-        description: "프린터 추가 중 오류가 발생했습니다.",
+        title: t('settings.error'),
+        description: t('settings.addPrinterError'),
         variant: "destructive",
       });
     }
@@ -357,16 +339,43 @@ const Settings = () => {
       setPrinters(printers.filter(p => p.id !== printerId));
       
       toast({
-        title: "성공",
-        description: "프린터가 삭제되었습니다.",
+        title: t('settings.success'),
+        description: t('settings.printerDeleted'),
       });
     } catch (error) {
       console.error('Error deleting printer:', error);
       toast({
-        title: "오류",
-        description: "프린터 삭제 중 오류가 발생했습니다.",
+        title: t('settings.error'),
+        description: t('settings.deletePrinterError'),
         variant: "destructive",
       });
+    }
+  };
+
+  // 프린터 그룹 배정/해제 (카드에서 즉시 반영)
+  const handleAssignPrinterGroup = async (printerId: string, value: string) => {
+    if (!user) return;
+    const groupId = value === "none" ? null : value;
+    try {
+      const q = supabase
+        .from('printers')
+        .update({ group_id: groupId })
+        .eq('id', printerId)
+        .eq('user_id', user.id);
+      const { error } = await q;
+      if (error) throw error;
+
+      // 로컬 상태 업데이트
+      setPrinters(prev => prev.map(p => {
+        if (p.id !== printerId) return p;
+        const nextGroup = groupId ? groups.find(g => g.id === groupId) : undefined;
+        return { ...p, group_id: groupId ?? undefined, group: nextGroup } as any;
+      }));
+
+      toast({ title: t('settings.saved'), description: t('settings.groupUpdated') });
+    } catch (error) {
+      console.error('Error assigning group:', error);
+      toast({ title: t('settings.error'), description: t('settings.assignGroupError'), variant: "destructive" });
     }
   };
 
@@ -381,10 +390,10 @@ const Settings = () => {
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case "connected": return "연결됨";
-      case "disconnected": return "연결끊김";
-      case "error": return "오류";
-      default: return "알 수 없음";
+      case "connected": return t('settings.statusConnected');
+      case "disconnected": return t('settings.statusDisconnected');
+      case "error": return t('settings.statusError');
+      default: return t('settings.statusUnknown');
     }
   };
 
@@ -395,12 +404,12 @@ const Settings = () => {
       <div className="bg-background p-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-12">
-            <h1 className="text-2xl font-bold mb-4">로그인이 필요합니다</h1>
+            <h1 className="text-2xl font-bold mb-4">{t('settings.loginRequired')}</h1>
             <p className="text-muted-foreground mb-6">
-              프린터 및 그룹 관리 기능을 사용하려면 로그인해주세요.
+              {t('settings.loginRequiredDescription')}
             </p>
             <Button asChild>
-              <a href="/auth">로그인</a>
+              <a href="/auth">{t('auth.login')}</a>
             </Button>
           </div>
         </div>
@@ -414,7 +423,7 @@ const Settings = () => {
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">데이터를 불러오는 중...</p>
+            <p className="mt-4 text-muted-foreground">{t('settings.loading')}</p>
           </div>
         </div>
       </div>
@@ -428,50 +437,50 @@ const Settings = () => {
         <header className="space-y-2">
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <SettingsIcon className="h-8 w-8" />
-            시스템 설정
+            {t('settings.title')}
           </h1>
           <p className="text-muted-foreground">
-            프린터 그룹 및 프린터 관리, 구독 플랜을 설정하세요
+            {t('settings.description')}
           </p>
         </header>
 
         {/* 프린터 그룹 관리 섹션 */}
         <section className="space-y-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold">프린터 그룹 관리</h2>
+            <h2 className="text-2xl font-semibold">{t('settings.groupManagement')}</h2>
             <Dialog open={showAddGroup} onOpenChange={setShowAddGroup}>
               <DialogTrigger asChild>
                 <Button className="flex items-center gap-2">
                   <FolderPlus className="h-4 w-4" />
-                  그룹 추가
+                  {t('settings.addGroup')}
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                  <DialogTitle>새 프린터 그룹 추가</DialogTitle>
+                  <DialogTitle>{t('settings.newGroup')}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="group-name">그룹 이름</Label>
+                    <Label htmlFor="group-name">{t('settings.groupName')}</Label>
                     <Input
                       id="group-name"
-                      placeholder="예: Creality 프린터, FDM 프린터"
+                      placeholder={t('settings.groupNamePlaceholder')}
                       value={newGroup.name}
                       onChange={(e) => setNewGroup({...newGroup, name: e.target.value})}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="group-description">설명 (선택사항)</Label>
+                    <Label htmlFor="group-description">{t('settings.groupDescription')}</Label>
                     <Textarea
                       id="group-description"
-                      placeholder="그룹에 대한 설명을 입력하세요"
+                      placeholder={t('settings.groupDescriptionPlaceholder')}
                       value={newGroup.description}
                       onChange={(e) => setNewGroup({...newGroup, description: e.target.value})}
                       rows={3}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>그룹 색상</Label>
+                    <Label>{t('settings.groupColor')}</Label>
                     <div className="flex gap-2 flex-wrap">
                       {colorPalette.map((color) => (
                         <button
@@ -487,10 +496,10 @@ const Settings = () => {
                   </div>
                   <div className="flex gap-2">
                     <Button onClick={handleAddGroup} className="flex-1">
-                      추가
+                      {t('settings.add')}
                     </Button>
                     <Button variant="outline" onClick={() => setShowAddGroup(false)} className="flex-1">
-                      취소
+                      {t('settings.cancel')}
                     </Button>
                   </div>
                 </div>
@@ -502,9 +511,9 @@ const Settings = () => {
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <FolderPlus className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">프린터 그룹이 없습니다</h3>
+                <h3 className="text-lg font-medium mb-2">{t('settings.noGroups')}</h3>
                 <p className="text-muted-foreground text-center mb-4">
-                  프린터를 체계적으로 관리하기 위해 그룹을 만들어보세요.
+                  {t('settings.noGroupsDescription')}
                 </p>
               </CardContent>
             </Card>
@@ -529,20 +538,20 @@ const Settings = () => {
                   <CardContent className="space-y-3">
                     <div className="text-sm">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">프린터 수:</span>
+                        <span className="text-muted-foreground">{t('settings.printerCount')}</span>
                         <span className="font-medium">
-                          {printers.filter(p => p.group_id === group.id).length}대
+                          {printers.filter(p => p.group_id === group.id).length}
                         </span>
                       </div>
                     </div>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" className="flex-1">
                         <Edit className="h-3 w-3 mr-1" />
-                        수정
+                        {t('settings.edit')}
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleDeleteGroup(group.id)}
                         className="text-destructive hover:text-destructive"
                       >
@@ -561,48 +570,48 @@ const Settings = () => {
         {/* 프린터 관리 섹션 */}
         <section className="space-y-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold">프린터 관리</h2>
+            <h2 className="text-2xl font-semibold">{t('settings.printerManagement')}</h2>
             <Dialog open={showAddPrinter} onOpenChange={setShowAddPrinter}>
               <DialogTrigger asChild>
                 <Button className="flex items-center gap-2">
                   <Plus className="h-4 w-4" />
-                  프린터 추가
+                  {t('settings.addPrinter')}
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                  <DialogTitle>새 프린터 추가</DialogTitle>
+                  <DialogTitle>{t('settings.newPrinter')}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">프린터 이름</Label>
+                    <Label htmlFor="name">{t('settings.printerName')}</Label>
                     <Input
                       id="name"
-                      placeholder="예: Ender 3 Pro #1"
+                      placeholder={t('settings.printerNamePlaceholder')}
                       value={newPrinter.name || ""}
                       onChange={(e) => setNewPrinter({...newPrinter, name: e.target.value})}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="model">모델명</Label>
+                    <Label htmlFor="model">{t('settings.modelName')}</Label>
                     <Input
                       id="model"
-                      placeholder="예: Creality Ender 3 Pro"
+                      placeholder={t('settings.modelNamePlaceholder')}
                       value={newPrinter.model || ""}
                       onChange={(e) => setNewPrinter({...newPrinter, model: e.target.value})}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="group">그룹 (선택사항)</Label>
+                    <Label htmlFor="group">{t('settings.groupOptional')}</Label>
                     <Select
                       value={newPrinter.group_id || "none"}
                       onValueChange={(value) => setNewPrinter({...newPrinter, group_id: value === "none" ? undefined : value})}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="그룹을 선택하세요" />
+                        <SelectValue placeholder={t('settings.selectGroup')} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">그룹 없음</SelectItem>
+                        <SelectItem value="none">{t('settings.noGroup')}</SelectItem>
                         {groups.map((group) => (
                           <SelectItem key={group.id} value={group.id}>
                             <div className="flex items-center gap-2">
@@ -618,16 +627,16 @@ const Settings = () => {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="ip">IP 주소</Label>
+                    <Label htmlFor="ip">{t('settings.ipAddress')}</Label>
                     <Input
                       id="ip"
-                      placeholder="예: 192.168.1.100"
+                      placeholder={t('settings.ipAddressPlaceholder')}
                       value={newPrinter.ip_address || ""}
                       onChange={(e) => setNewPrinter({...newPrinter, ip_address: e.target.value})}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="port">포트</Label>
+                    <Label htmlFor="port">{t('settings.port')}</Label>
                     <Input
                       id="port"
                       type="number"
@@ -637,7 +646,7 @@ const Settings = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="firmware">펌웨어</Label>
+                    <Label htmlFor="firmware">{t('settings.firmware')}</Label>
                     <Select
                       value={newPrinter.firmware || "marlin"}
                       onValueChange={(value) => setNewPrinter({...newPrinter, firmware: value as any})}
@@ -655,10 +664,10 @@ const Settings = () => {
                   </div>
                   <div className="flex gap-2">
                     <Button onClick={handleAddPrinter} className="flex-1">
-                      추가
+                      {t('settings.add')}
                     </Button>
                     <Button variant="outline" onClick={() => setShowAddPrinter(false)} className="flex-1">
-                      취소
+                      {t('settings.cancel')}
                     </Button>
                   </div>
                 </div>
@@ -681,16 +690,40 @@ const Settings = () => {
                 <CardContent className="space-y-3">
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">IP 주소:</span>
+                      <span className="text-muted-foreground">{t('settings.ipAddress')}:</span>
                       <span className="font-mono">{printer.ip_address}:{printer.port}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">펌웨어:</span>
+                      <span className="text-muted-foreground">{t('settings.firmware')}:</span>
                       <span className="capitalize">{printer.firmware}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">{t('settings.group')}:</span>
+                      <div className="min-w-[180px]">
+                        <Select
+                          value={printer.group_id || "none"}
+                          onValueChange={(val) => handleAssignPrinterGroup(printer.id, val)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder={t('settings.selectGroup')} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">{t('settings.noGroup')}</SelectItem>
+                            {groups.map((group) => (
+                              <SelectItem key={group.id} value={group.id}>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: group.color }} />
+                                  {group.name}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     {printer.last_connected && (
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">마지막 연결:</span>
+                        <span className="text-muted-foreground">{t('settings.lastConnected')}</span>
                         <span>{printer.last_connected.toLocaleTimeString()}</span>
                       </div>
                     )}
@@ -698,11 +731,11 @@ const Settings = () => {
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" className="flex-1">
                       <Edit className="h-3 w-3 mr-1" />
-                      수정
+                      {t('settings.edit')}
                     </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleDeletePrinter(printer.id)}
                       className="text-destructive hover:text-destructive"
                     >
@@ -720,9 +753,9 @@ const Settings = () => {
         {/* 구독 관리 섹션 */}
         <section className="space-y-6">
           <div className="space-y-2">
-            <h2 className="text-2xl font-semibold">구독 관리</h2>
+            <h2 className="text-2xl font-semibold">{t('settings.subscriptionManagement')}</h2>
             <p className="text-muted-foreground">
-              현재 플랜을 확인하고 필요에 따라 업그레이드하세요
+              {t('settings.subscriptionDescription')}
             </p>
           </div>
 
@@ -732,20 +765,20 @@ const Settings = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Crown className="h-5 w-5 text-primary" />
-                  현재 플랜: {currentPlan.name}
+                  {t('settings.currentPlan')} {currentPlan.name}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-2xl font-bold">
-                    {currentPlan.price === 0 ? "무료" : `₩${currentPlan.price.toLocaleString()}`}
+                    {currentPlan.price === 0 ? t('settings.free') : `₩${currentPlan.price.toLocaleString()}`}
                   </span>
                   {currentPlan.price > 0 && (
-                    <Badge variant="outline">월간 결제</Badge>
+                    <Badge variant="outline">{t('settings.monthlyPayment')}</Badge>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <h4 className="font-medium">포함된 기능:</h4>
+                  <h4 className="font-medium">{t('settings.includedFeatures')}</h4>
                   <ul className="space-y-1">
                     {currentPlan.features.map((feature, index) => (
                       <li key={index} className="flex items-center gap-2 text-sm">
@@ -757,11 +790,11 @@ const Settings = () => {
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t">
                   <span className="text-sm text-muted-foreground">
-                    등록된 프린터: {printers.length} / {currentPlan.max_printers === -1 ? "무제한" : currentPlan.max_printers}
+                    {t('settings.registeredPrinters')} {printers.length} / {currentPlan.max_printers === -1 ? t('settings.unlimited') : currentPlan.max_printers}
                   </span>
                   {currentPlan.price > 0 && (
                     <Button variant="outline" size="sm">
-                      구독 관리
+                      {t('settings.manageSubscription')}
                     </Button>
                   )}
                 </div>
@@ -771,17 +804,17 @@ const Settings = () => {
 
           {/* 사용 가능한 플랜 */}
           <div className="space-y-4">
-            <h3 className="text-xl font-semibold">사용 가능한 플랜</h3>
+            <h3 className="text-xl font-semibold">{t('settings.availablePlans')}</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {subscriptionPlans.map((plan) => (
-                <Card 
-                  key={plan.id} 
+                <Card
+                  key={plan.id}
                   className={`relative ${plan.popular ? "border-primary shadow-lg" : ""} ${plan.current ? "opacity-60" : ""}`}
                 >
                   {plan.popular && (
                     <div className="absolute -top-2 left-1/2 transform -translate-x-1/2">
                       <Badge className="bg-primary text-primary-foreground">
-                        인기 플랜
+                        {t('settings.popularPlan')}
                       </Badge>
                     </div>
                   )}
@@ -789,10 +822,10 @@ const Settings = () => {
                     <CardTitle className="text-2xl">{plan.name}</CardTitle>
                     <div className="space-y-1">
                       <div className="text-3xl font-bold">
-                        {plan.price === 0 ? "무료" : `₩${plan.price.toLocaleString()}`}
+                        {plan.price === 0 ? t('settings.free') : `₩${plan.price.toLocaleString()}`}
                       </div>
                       {plan.price > 0 && (
-                        <div className="text-sm text-muted-foreground">월간 결제</div>
+                        <div className="text-sm text-muted-foreground">{t('settings.monthlyPayment')}</div>
                       )}
                     </div>
                   </CardHeader>
@@ -805,20 +838,20 @@ const Settings = () => {
                         </li>
                       ))}
                     </ul>
-                    <Button 
-                      className="w-full" 
+                    <Button
+                      className="w-full"
                       variant={plan.current ? "outline" : "default"}
                       disabled={plan.current}
                       onClick={() => window.location.href = '/subscription'}
                     >
                       {plan.current ? (
-                        "현재 플랜"
+                        t('settings.currentPlanButton')
                       ) : plan.price === 0 ? (
-                        "무료 시작"
+                        t('settings.freeStart')
                       ) : (
                         <>
                           <Zap className="h-4 w-4 mr-2" />
-                          상세보기
+                          {t('settings.viewDetails')}
                         </>
                       )}
                     </Button>

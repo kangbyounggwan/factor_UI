@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
@@ -8,22 +9,10 @@ import { useAuth } from "@shared/contexts/AuthContext";
 import { useDashboardSummary } from "@shared/component/dashboardSummary";
 import { useTheme } from "next-themes";
 import { supabase } from "@shared/integrations/supabase/client";
-
-const navigation = [
-  { name: "대시보드", href: "/dashboard", icon: Monitor },
-  // { name: "AI 작업 공간", href: "/ai", icon: Layers }, // 비활성화
-  { name: "설정", href: "/settings", icon: Settings },
-];
-
-const homeNavigation = [
-  { name: "제품 소개", href: "#features", icon: BookOpen },
-  { name: "지원 프린터", href: "#printers", icon: Settings },
-  { name: "마켓플레이스", href: "#marketplace", icon: ShoppingCart },
-  { name: "요금제", href: "/subscription", icon: CreditCard },
-  { name: "API", href: "#api", icon: Code2 },
-];
+import LanguageSwitcher from "./LanguageSwitcher";
 
 export const Header = () => {
+  const { t } = useTranslation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [systemStatus, setSystemStatus] = useState({
     connectedPrinters: 0,
@@ -34,6 +23,21 @@ export const Header = () => {
   const { user, signOut, isAdmin } = useAuth();
   const { theme, setTheme } = useTheme();
   const summary = useDashboardSummary();
+
+  // 동적 네비게이션 메뉴
+  const navigation = [
+    { name: t('nav.dashboard'), href: "/dashboard", icon: Monitor },
+    { name: t('nav.ai'), href: "/ai", icon: Layers },
+    { name: t('nav.settings'), href: "/settings", icon: Settings },
+  ];
+
+  const homeNavigation = [
+    { name: t('nav.features'), href: "#features", icon: BookOpen },
+    { name: t('nav.supportedPrinters'), href: "#printers", icon: Settings },
+    { name: t('nav.marketplace'), href: "#marketplace", icon: ShoppingCart },
+    { name: t('nav.pricing'), href: "/subscription", icon: CreditCard },
+    { name: t('nav.api'), href: "#api", icon: Code2 },
+  ];
 
   // 실제 프린터 상태 로드
   useEffect(() => {
@@ -78,7 +82,8 @@ export const Header = () => {
 
   const isHomePage = location.pathname === "/";
   const isAuthPage = location.pathname === "/auth";
-  const currentNavigation = isHomePage ? homeNavigation : navigation;
+  const isSubscriptionPage = location.pathname === "/subscription";
+  const currentNavigation = (isHomePage || isSubscriptionPage) ? homeNavigation : navigation;
 
 
   // 로그인 페이지일 때는 간단한 헤더 표시
@@ -102,6 +107,9 @@ export const Header = () => {
           </Link>
 
           <div className="flex items-center gap-4">
+            {/* 언어 전환 */}
+            <LanguageSwitcher />
+
             {/* 테마 토글 버튼 */}
             <Button
               variant="ghost"
@@ -113,11 +121,11 @@ export const Header = () => {
               <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
               <span className="sr-only">Toggle theme</span>
             </Button>
-            
+
             {/* 홈으로 돌아가기 버튼 */}
             <Button asChild variant="outline" size="sm">
               <Link to="/" className="flex items-center gap-2">
-                홈으로 돌아가기
+                {t('nav.backToHome')}
               </Link>
             </Button>
           </div>
@@ -149,20 +157,23 @@ export const Header = () => {
           {currentNavigation.map((item) => {
             const Icon = item.icon;
             const isHashLink = item.href.startsWith('#');
-            
+
             if (isHashLink) {
+              // 홈 페이지가 아닌 곳에서는 해시링크를 홈으로 이동
+              const linkHref = isHomePage ? item.href : `/${item.href}`;
+
               return (
-                <a
+                <Link
                   key={item.name}
-                  href={item.href}
+                  to={linkHref}
                   className="flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-accent"
                 >
                   <Icon className="w-4 h-4" />
                   <span>{item.name}</span>
-                </a>
+                </Link>
               );
             }
-            
+
             return (
               <Link
                 key={item.name}
@@ -190,27 +201,30 @@ export const Header = () => {
               }`}
             >
               <Shield className="w-4 h-4" />
-              <span>관리자</span>
+              <span>{t('nav.admin')}</span>
             </Link>
           )}
         </nav>
 
         {/* 상태 표시 및 사용자 메뉴 */}
         <div className="hidden lg:flex items-center space-x-4 pl-6">
-          {!isHomePage && (
+          {!isHomePage && !isSubscriptionPage && (
             <div className="flex items-center space-x-2">
               <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground text-xs">
-                연결: {summary.connected}/{summary.total}
+                {t('nav.connected')}: {summary.connected}/{summary.total}
               </div>
               <Badge className="text-xs" variant={summary.printing > 0 ? 'default' : 'secondary'}>
-                프린팅: {summary.printing}
+                {t('nav.printing')}: {summary.printing}
               </Badge>
               <Badge className="text-xs" variant={summary.error > 0 ? 'destructive' : 'secondary'}>
-                오류: {summary.error}
+                {t('nav.error')}: {summary.error}
               </Badge>
             </div>
           )}
           
+          {/* 언어 전환 */}
+          <LanguageSwitcher />
+
           {/* 테마 토글 버튼 */}
           <Button
             variant="ghost"
@@ -222,21 +236,21 @@ export const Header = () => {
             <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             <span className="sr-only">Toggle theme</span>
           </Button>
-          
+
           {/* 사용자 정보 및 로그아웃 */}
           {user ? (
             <div className="flex items-center space-x-2 pl-4 border-l">
               <span className="text-sm text-muted-foreground">
                 {user?.email}
               </span>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={signOut}
                 className="text-xs"
               >
                 <LogOut className="h-3 w-3 mr-1" />
-                로그아웃
+                {t('nav.logout')}
               </Button>
             </div>
           ) : (
@@ -244,7 +258,7 @@ export const Header = () => {
               <Button asChild variant="outline" size="sm">
                 <Link to="/auth" className="text-xs">
                   <LogOut className="h-3 w-3 mr-1" />
-                  로그인
+                  {t('nav.login')}
                 </Link>
               </Button>
             </div>
@@ -256,7 +270,7 @@ export const Header = () => {
           <SheetTrigger asChild>
             <Button variant="outline" size="icon" className="md:hidden">
               <Menu className="h-4 w-4" />
-              <span className="sr-only">메뉴 열기</span>
+              <span className="sr-only">{t('nav.openMenu')}</span>
             </Button>
           </SheetTrigger>
           <SheetContent side="right" className="w-[300px] sm:w-[400px]">
@@ -281,18 +295,18 @@ export const Header = () => {
               </Link>
 
               {/* 모바일 상태 표시 */}
-              {!isHomePage && (
+              {!isHomePage && !isSubscriptionPage && (
                 <div className="flex flex-col space-y-2 pb-4 border-b">
-                  <h3 className="text-sm font-medium">시스템 상태</h3>
+                  <h3 className="text-sm font-medium">{t('nav.systemStatus')}</h3>
                   <div className="flex flex-wrap gap-2">
                     <Badge variant="outline" className="text-xs">
-                      연결: {systemStatus.connectedPrinters}/{systemStatus.totalPrinters}
+                      {t('nav.connected')}: {systemStatus.connectedPrinters}/{systemStatus.totalPrinters}
                     </Badge>
-                    <Badge 
-                      variant={systemStatus.activePrints > 0 ? "default" : "secondary"} 
+                    <Badge
+                      variant={systemStatus.activePrints > 0 ? "default" : "secondary"}
                       className="text-xs"
                     >
-                      프린팅: {systemStatus.activePrints}
+                      {t('nav.printing')}: {systemStatus.activePrints}
                     </Badge>
                   </div>
                 </div>
@@ -303,21 +317,24 @@ export const Header = () => {
                 {currentNavigation.map((item) => {
                   const Icon = item.icon;
                   const isHashLink = item.href.startsWith('#');
-                  
+
                   if (isHashLink) {
+                    // 홈 페이지가 아닌 곳에서는 해시링크를 홈으로 이동
+                    const linkHref = isHomePage ? item.href : `/${item.href}`;
+
                     return (
-                      <a
+                      <Link
                         key={item.name}
-                        href={item.href}
+                        to={linkHref}
                         onClick={() => setMobileMenuOpen(false)}
                         className="flex items-center space-x-3 px-3 py-3 rounded-md text-sm font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-accent"
                       >
                         <Icon className="w-5 h-5" />
                         <span>{item.name}</span>
-                      </a>
+                      </Link>
                     );
                   }
-                  
+
                   return (
                     <Link
                       key={item.name}
@@ -347,7 +364,7 @@ export const Header = () => {
                       }`}
                     >
                       <Shield className="w-5 h-5" />
-                      <span>관리자</span>
+                      <span>{t('nav.admin')}</span>
                     </Link>
                   )}
                 </nav>
@@ -359,9 +376,9 @@ export const Header = () => {
                       <div className="text-sm text-muted-foreground">
                         {user?.email}
                       </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => {
                           signOut();
                           setMobileMenuOpen(false);
@@ -369,35 +386,40 @@ export const Header = () => {
                         className="w-full justify-start"
                       >
                         <LogOut className="h-4 w-4 mr-2" />
-                        로그아웃
+                        {t('nav.logout')}
                       </Button>
                     </div>
                   ) : (
-                    <Button 
+                    <Button
                       asChild
-                      variant="outline" 
-                      size="sm" 
+                      variant="outline"
+                      size="sm"
                       onClick={() => setMobileMenuOpen(false)}
                       className="w-full justify-start"
                     >
                       <Link to="/auth">
                         <LogOut className="h-4 w-4 mr-2" />
-                        로그인
+                        {t('nav.login')}
                       </Link>
                     </Button>
                   )}
                   
+                  {/* 모바일 언어 전환 */}
+                  <div className="pt-2">
+                    <LanguageSwitcher />
+                  </div>
+
                   {/* 모바일 테마 토글 */}
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                    className="w-full justify-start"
+                    className="w-full justify-start mt-2"
                   >
                     <Sun className="h-4 w-4 mr-2 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
                     <Moon className="absolute ml-2 h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
                     <span className="ml-2">
-                      {theme === "dark" ? "라이트 모드" : "다크 모드"}
+                      {theme === "dark" ? t('nav.lightMode') : t('nav.darkMode')}
                     </span>
                   </Button>
                 </div>
