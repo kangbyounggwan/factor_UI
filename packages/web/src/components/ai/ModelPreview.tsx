@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Download } from "lucide-react";
+import { Loader2, Download, Sparkles } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -159,23 +159,46 @@ export default function ModelPreview({
             )}
 
             {isProcessing && (
-              <div className="absolute inset-0 bg-gray-900/70 flex items-center justify-center z-10">
-                <div className="text-center space-y-4">
-                  <Loader2 className="w-20 h-20 mx-auto animate-spin text-white" />
-                  <div>
-                    <p className="text-xl font-medium text-white">
-                      {getWorkflowMessage()}
-                    </p>
-                    <p className="text-lg text-gray-300">{t('ai.waitForGeneration')}</p>
-                    {progress > 0 && (
-                      <div className="mt-4">
-                        <p className="text-2xl font-bold text-white">{progress}%</p>
-                        {progressStatus && (
-                          <p className="text-sm text-gray-400 mt-1">{progressStatus}</p>
-                        )}
-                      </div>
-                    )}
+              <div className="absolute inset-0 bg-gray-900/95 flex items-center justify-center z-10">
+                <div className="text-center space-y-6 max-w-md w-full px-8">
+                  {/* Circular spinning icon */}
+                  <div className="relative w-24 h-24 mx-auto">
+                    <div className="absolute inset-0 border-4 border-blue-500/30 rounded-full"></div>
+                    <div className="absolute inset-0 border-4 border-transparent border-t-blue-500 rounded-full animate-spin"></div>
+                    <Sparkles className="absolute inset-0 m-auto w-12 h-12 text-blue-500" />
                   </div>
+
+                  {/* Title */}
+                  <h2 className="text-2xl font-bold text-white">
+                    {t('ai.generatingAI')}
+                  </h2>
+
+                  {/* Subtitle */}
+                  <p className="text-lg text-gray-300">{t('ai.generatingDesc')}</p>
+
+                  {/* Progress section */}
+                  {progress > 0 && (
+                    <div className="space-y-3 mt-6">
+                      {/* Progress label and percentage */}
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-400">{t('ai.progressLabel')}</span>
+                        <span className="text-white font-semibold">{progress}%</span>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-blue-500 h-full rounded-full transition-all duration-300 ease-out"
+                          style={{ width: `${progress}%` }}
+                        ></div>
+                      </div>
+
+                      {/* Estimated time */}
+                      <p className="text-sm text-gray-400 text-center">
+                        {t('ai.estimatedTime')}: {Math.max(1, Math.ceil((100 - progress) / 25))}s
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

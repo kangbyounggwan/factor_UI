@@ -25,14 +25,17 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { publishControlHome, publishControlPause, publishControlResume, publishControlCancel, publishDashboardMove, publishDashboardSetTemperature } from "@shared/services/mqttService";
 import { useTranslation } from "react-i18next";
+import { getPrinterStatusInfo, type PrinterState, type PrinterStateFlags } from "@shared";
 
 interface PrinterControlPadProps {
   isConnected: boolean;
   isPrinting: boolean;
   deviceUuid?: string | null;
+  printerState?: PrinterState;
+  flags?: PrinterStateFlags;
 }
 
-export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: PrinterControlPadProps) => {
+export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid, printerState, flags }: PrinterControlPadProps) => {
   const { t } = useTranslation();
   const [moveDistance, setMoveDistance] = useState(10);
   const [extruderTemp, setExtruderTemp] = useState(210);
@@ -40,6 +43,16 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
   const [fanSpeed, setFanSpeed] = useState([50]);
   const [extrudeAmount, setExtrudeAmount] = useState(10);
   const { toast } = useToast();
+
+  // shared 유틸리티를 사용하여 상태 정보 가져오기
+  const statusInfo = getPrinterStatusInfo(printerState, flags, {
+    idle: t('printerDetail.idle'),
+    printing: t('printer.statusPrinting'),
+    paused: t('printerDetail.paused'),
+    error: t('printerDetail.error'),
+    connecting: t('printerDetail.connecting'),
+    disconnected: t('printerDetail.disconnected')
+  });
 
   const handleAxisMove = async (axis: 'X' | 'Y' | 'Z' | 'E', direction: '+' | '-') => {
     const base = axis === 'E' ? extrudeAmount : moveDistance;
@@ -113,9 +126,9 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Settings className="h-4 w-4" />
           {t('control.title')}
-          <Badge variant={isConnected ? "default" : "secondary"} className="ml-auto">
-            {isConnected ? t('printerDetail.connected') : t('printerDetail.disconnected')}
-          </Badge>
+          <div className={`ml-auto px-2 py-1 rounded-md text-xs font-medium ${statusInfo.badgeClass}`}>
+            {statusInfo.label}
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col space-y-4 text-xs overflow-hidden">

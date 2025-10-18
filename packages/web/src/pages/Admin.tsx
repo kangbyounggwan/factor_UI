@@ -287,7 +287,7 @@ const Admin = () => {
                     .filter((p:any)=>p && typeof p.device_uuid === 'string' && p.device_uuid.length>0)
                     .map((p:any) => (
                       <SelectItem key={p.id} value={p.device_uuid}>
-                        {(p.model || p.name || p.id)} ({p.device_uuid})
+                        {(p.name || p.model || p.id)} ({p.device_uuid})
                       </SelectItem>
                     ))}
                 </SelectContent>

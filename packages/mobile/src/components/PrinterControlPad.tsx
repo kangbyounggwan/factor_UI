@@ -3,20 +3,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { 
-  Settings, 
-  Home, 
-  ArrowUp, 
-  ArrowDown, 
-  ArrowLeft, 
+import {
+  Settings,
+  Home,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
   ArrowRight,
   Move3D,
   Thermometer,
-  Fan,
   Play,
   Pause,
   Square,
@@ -24,20 +22,34 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { publishDashboardMove, publishDashboardSetTemperature, publishControlHome, publishControlPause, publishControlResume, publishControlCancel } from "@shared/services/mqttService";
+import { useTranslation } from "react-i18next";
+import { getPrinterStatusInfo, type PrinterState, type PrinterStateFlags } from "@shared";
 
 interface PrinterControlPadProps {
   isConnected: boolean;
   isPrinting: boolean;
   deviceUuid?: string | null;
+  printerState?: PrinterState;
+  flags?: PrinterStateFlags;
 }
 
-export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: PrinterControlPadProps) => {
+export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid, printerState, flags }: PrinterControlPadProps) => {
+  const { t } = useTranslation();
   const [moveDistance, setMoveDistance] = useState(10);
   const [extruderTemp, setExtruderTemp] = useState(210);
   const [bedTemp, setBedTemp] = useState(60);
-  const [fanSpeed, setFanSpeed] = useState([50]);
   const [extrudeAmount, setExtrudeAmount] = useState(10);
   const { toast } = useToast();
+
+  // shared 유틸리티를 사용하여 상태 정보 가져오기
+  const statusInfo = getPrinterStatusInfo(printerState, flags, {
+    idle: t('printerDetail.idle'),
+    printing: t('printer.statusPrinting'),
+    paused: t('printerDetail.paused'),
+    error: t('printerDetail.error'),
+    connecting: t('printerDetail.connecting'),
+    disconnected: t('printerDetail.disconnected')
+  });
 
   const handleAxisMove = async (axis: 'X' | 'Y' | 'Z' | 'E', direction: '+' | '-') => {
     const base = axis === 'E' ? extrudeAmount : moveDistance;
@@ -48,23 +60,23 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
       const key = axis.toLowerCase() as 'x' | 'y' | 'z' | 'e';
       await publishDashboardMove(deviceUuid, { mode: 'relative', [key]: distance });
       toast({
-        title: "축 이동 명령",
-        description: `${axis}축을 ${distance}mm 이동합니다.`,
+        title: t('control.axisMove'),
+        description: `${axis}${t('control.axis')} ${distance}mm ${t('control.moving')}`,
       });
     } catch {
-      toast({ title: "요청 실패", variant: "destructive" });
+      toast({ title: t('control.requestFailed'), variant: "destructive" });
     }
   };
 
   const handleHomeAxis = async (axis?: 'X' | 'Y' | 'Z' | 'ALL') => {
-    const axisText = axis === 'ALL' ? '모든 축' : `${axis}축`;
+    const axisText = axis === 'ALL' ? t('control.allAxes') : `${axis}${t('control.axis')}`;
     console.log(`Homing ${axis || 'ALL'}`);
     try {
       const axes = axis === 'ALL' ? 'XYZ' : (axis ?? 'XYZ');
       if (deviceUuid) await publishControlHome(deviceUuid, axes);
-      toast({ title: "홈 이동 요청", description: `${axisText} 이동 요청을 보냈습니다.` });
+      toast({ title: t('control.homeRequest'), description: `${axisText} ${t('control.moveRequestSent')}` });
     } catch {
-      toast({ title: "요청 실패", variant: "destructive" });
+      toast({ title: t('control.requestFailed'), variant: "destructive" });
     }
   };
 
@@ -76,12 +88,13 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
       const tool = type === 'bed' ? -1 : (opts?.toolIndex ?? 0);
       const wait = opts?.wait ?? false;
       await publishDashboardSetTemperature(deviceUuid, { tool, temperature: temp, wait });
+      const deviceName = type === 'extruder' ? t('printerDetail.extruder') : t('printerDetail.heatingBed');
       toast({
-        title: "온도 설정",
-        description: `${type === 'extruder' ? '익스트루더' : '히팅베드'} 온도를 ${temp}°C로 설정합니다${wait ? ' (대기)' : ''}.`,
+        title: t('control.temperatureSet'),
+        description: `${deviceName} ${t('control.temperatureTo')} ${temp}°C${wait ? ` (${t('control.wait')})` : ''}.`,
       });
     } catch {
-      toast({ title: "요청 실패", variant: "destructive" });
+      toast({ title: t('control.requestFailed'), variant: "destructive" });
     }
   };
 
@@ -94,9 +107,10 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
       if (action === 'pause') await publishControlPause(deviceUuid);
       else if (action === 'resume') await publishControlResume(deviceUuid);
       else await publishControlCancel(deviceUuid);
-      toast({ title: "제어 요청", description: `프린트를 ${action === 'pause' ? '일시정지' : action === 'resume' ? '재개' : '완전 취소'} 요청을 보냈습니다.` });
+      const actionText = action === 'pause' ? t('printerDetail.pause') : action === 'resume' ? t('printerDetail.resume') : t('printerDetail.cancel');
+      toast({ title: t('control.controlRequest'), description: `${t('control.print')} ${actionText} ${t('control.requestSent')}` });
     } catch {
-      toast({ title: "요청 실패", variant: "destructive" });
+      toast({ title: t('control.requestFailed'), variant: "destructive" });
     }
   };
 
@@ -105,10 +119,10 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
       <CardHeader className="pb-3 flex-shrink-0">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Settings className="h-4 w-4" />
-          프린터 원격 제어
-          <Badge variant={isConnected ? "default" : "secondary"} className="ml-auto">
-            {isConnected ? "연결됨" : "연결끊김"}
-          </Badge>
+          {t('control.title')}
+          <div className={`ml-auto px-2 py-1 rounded-md text-xs font-medium ${statusInfo.badgeClass}`}>
+            {statusInfo.label}
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col space-y-4 text-xs overflow-hidden">
@@ -116,7 +130,7 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
         <div className="space-y-3 flex-shrink-0">
           <div className="flex items-center gap-2">
             <Play className="h-3 w-3" />
-            <span className="font-medium">프린트 제어</span>
+            <span className="font-medium">{t('control.printControl')}</span>
           </div>
           
           <div className="grid grid-cols-3 gap-1">
@@ -158,13 +172,13 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
               <AccordionTrigger className="py-2 text-xs">
                 <div className="flex items-center gap-2">
                   <Move3D className="h-3 w-3" />
-                  <span className="font-medium">축 제어</span>
+                  <span className="font-medium">{t('control.axisControl')}</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="pb-3">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Label className="text-xs min-w-[60px]">이동거리</Label>
+                    <Label className="text-xs min-w-[60px]">{t('control.moveDistance')}</Label>
                     <Input
                       type="number"
                       value={moveDistance}
@@ -263,13 +277,13 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
               <AccordionTrigger className="py-2 text-xs">
                 <div className="flex items-center gap-2">
                   <Thermometer className="h-3 w-3" />
-                  <span className="font-medium">온도 제어</span>
+                  <span className="font-medium">{t('control.temperatureControl')}</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="pb-3">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Label className="text-xs min-w-[50px]">익스트루더</Label>
+                    <Label className="text-xs min-w-[50px]">{t('printerDetail.extruder')}</Label>
                     <Input
                       type="number"
                       value={extruderTemp}
@@ -286,12 +300,12 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
                       disabled={!isConnected}
                       className="h-7 px-2 text-xs"
                     >
-                      설정
+                      {t('control.set')}
                     </Button>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
-                    <Label className="text-xs min-w-[50px]">히팅베드</Label>
+                    <Label className="text-xs min-w-[50px]">{t('printerDetail.heatingBed')}</Label>
                     <Input
                       type="number"
                       value={bedTemp}
@@ -308,7 +322,7 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
                       disabled={!isConnected}
                       className="h-7 px-2 text-xs"
                     >
-                      설정
+                      {t('control.set')}
                     </Button>
                   </div>
                 </div>
@@ -320,13 +334,13 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
               <AccordionTrigger className="py-2 text-xs">
                 <div className="flex items-center gap-2">
                   <RotateCcw className="h-3 w-3" />
-                  <span className="font-medium">익스트루더</span>
+                  <span className="font-medium">{t('control.extruder')}</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="pb-3">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Label className="text-xs min-w-[40px]">길이</Label>
+                    <Label className="text-xs min-w-[40px]">{t('control.length')}</Label>
                     <Input
                       type="number"
                       value={extrudeAmount}
@@ -338,7 +352,7 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
                     />
                     <span className="text-xs text-muted-foreground">mm</span>
                   </div>
-                  
+
                   <div className="flex gap-1">
                     <Button
                       size="sm"
@@ -347,7 +361,7 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
                       disabled={!isConnected}
                       className="flex-1 h-7 text-xs"
                     >
-                      압출
+                      {t('control.extrude')}
                     </Button>
                     <Button
                       size="sm"
@@ -356,33 +370,8 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid }: Print
                       disabled={!isConnected}
                       className="flex-1 h-7 text-xs"
                     >
-                      후퇴
+                      {t('control.retract')}
                     </Button>
-                  </div>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-
-            {/* 팬 제어 */}
-            <AccordionItem value="fan" className="border rounded-lg px-3">
-              <AccordionTrigger className="py-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <Fan className="h-3 w-3" />
-                  <span className="font-medium">팬 속도</span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="pb-3">
-                <div className="space-y-2">
-                  <Slider
-                    value={fanSpeed}
-                    onValueChange={setFanSpeed}
-                    max={100}
-                    step={1}
-                    disabled={!isConnected}
-                    className="w-full"
-                  />
-                  <div className="text-xs text-muted-foreground text-center">
-                    {fanSpeed[0]}%
                   </div>
                 </div>
               </AccordionContent>

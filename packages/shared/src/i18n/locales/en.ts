@@ -14,7 +14,8 @@ export default {
     error: "Error",
     success: "Success",
     warning: "Warning",
-    info: "Info"
+    info: "Info",
+    back: "Back"
   },
   nav: {
     home: "Home",
@@ -53,7 +54,37 @@ export default {
     loginRequired: "Login Required",
     loginSuccess: "Login Successful",
     loginFailed: "Login Failed",
-    logoutSuccess: "Logged Out Successfully"
+    logoutSuccess: "Logged Out Successfully",
+    // Welcome page
+    welcomeBack: "Welcome back!",
+    signInToContinue: "Sign in to continue",
+    createAccount: "Create Account",
+    joinPlatform: "Join FACTOR 3D Printing Platform",
+    username: "Username",
+    enterEmail: "Enter your email",
+    enterPassword: "Enter your password",
+    enterName: "Enter your name",
+    createPassword: "Create password (6+ characters)",
+    confirmYourPassword: "Confirm your password",
+    loggingIn: "Logging in...",
+    creatingAccount: "Creating account...",
+    newUser: "New user?",
+    alreadyHaveAccount: "Already have an account?",
+    orSignInWith: "OR",
+    signInWithAnother: "Sign in with another account",
+    // Error messages
+    invalidCredentials: "Invalid email or password.",
+    emailNotConfirmed: "Email verification required. Please check your email.",
+    passwordMismatch: "Passwords do not match.",
+    passwordTooShort: "Password must be at least 6 characters.",
+    emailAlreadyExists: "This email is already registered.",
+    signupSuccess: "Signup Successful",
+    signupSuccessMessage: "Please log in after email verification.",
+    signupError: "An error occurred during signup.",
+    loginError: "An error occurred during login.",
+    welcomeMessage: "Welcome!",
+    featureComingSoon: "Feature Coming Soon",
+    passwordResetComingSoon: "Password reset feature will be available soon."
   },
   ai: {
     title: "AI 3D Modeling Studio",
@@ -195,7 +226,36 @@ export default {
     workflowModelling: "Generating AI model...",
     workflowOptimization: "Optimizing model...",
     workflowGcode: "Generating G-code...",
-    processing: "Processing..."
+    processing: "Processing...",
+    // New step-by-step workflow
+    whatToCreate: "What would you like to create?",
+    selectInputMethod: "Select your input method",
+    textTo3DDesc: "Generate 3D models from text descriptions",
+    imageTo3DDesc: "Convert images into 3D models",
+    textToImageDesc: "Generate images from text",
+    describeYourIdea: "Describe your idea",
+    describeYourIdeaDesc: "The more details you provide, the better the result",
+    tryExamples: "💡 Try these examples",
+    exampleCar: "Red sports car",
+    exampleChair: "Modern chair",
+    exampleRobot: "Cute robot",
+    exampleHouse: "Small house model",
+    advancedSettings: "Advanced Settings",
+    generatingAI: "AI Generating",
+    generatingDesc: "Please wait a moment",
+    progressLabel: "Progress",
+    estimatedTime: "Estimated time",
+    generationCompleteDesc: "3D model generated successfully",
+    selectPrinterTitle: "Select Printer",
+    selectPrinterDesc: "Choose a printer to print",
+    printerReady: "Ready",
+    printerPrinting: "Printing",
+    printStarted: "Print Started",
+    printStartedDesc: " print job sent",
+    createAnother: "Create Another Model",
+    inputRequiredDesc: "Please enter text or upload an image",
+    uploadSuccess: "Upload Complete",
+    styleCartoon: "Cartoon"
   },
   printer: {
     title: "Printer Management",
@@ -282,9 +342,9 @@ export default {
   },
   settings: {
     title: "System Settings",
-    description: "Manage printer groups, printers, and subscription plans",
+    description: "Manage printer groups, printers",
     // Group management
-    groupManagement: "Printer Group Management",
+    groupManagement: "Printer Group",
     addGroup: "Add Group",
     newGroup: "Add New Printer Group",
     groupName: "Group Name",
@@ -347,10 +407,26 @@ export default {
     addPrinterError: "An error occurred while adding printer.",
     deletePrinterError: "An error occurred while deleting printer.",
     assignGroupError: "An error occurred while assigning group.",
+    printerUpdated: "Printer updated successfully.",
+    updatePrinterError: "An error occurred while updating printer.",
     // Misc
     add: "Add",
     edit: "Edit",
     cancel: "Cancel",
+    apply: "Apply",
+    // Printer edit modal
+    editPrinter: "Edit Printer",
+    monitoring: "Monitoring",
+    manufacturer: "Manufacturer",
+    selectManufacturer: "Manufacturer",
+    selectManufacturerPlaceholder: "Select manufacturer",
+    selectSeries: "Series",
+    selectSeriesPlaceholder: "Select series",
+    selectModel: "Model",
+    selectModelPlaceholder: "Select model",
+    connection: "Connection",
+    cameraUrl: "Camera URL",
+    cameraUrlComingSoon: "Camera URL configuration will be available soon.",
     loading: "Loading data...",
     loginRequired: "Login Required",
     loginRequiredDescription: "Please log in to use printer and group management features.",
@@ -438,7 +514,9 @@ export default {
     // Time Format
     hours: "h",
     minutes: "m",
-    seconds: "s"
+    seconds: "s",
+    // Swipe hint
+    swipeHint: "Swipe"
   },
   camera: {
     title: "Live Camera Feed",
@@ -460,7 +538,8 @@ export default {
     serverConnectionRequired: "Server connection required.",
     inputNotFound: "Camera input address (stream_url) not found.",
     startFailed: "Streaming start failed",
-    exitFullscreen: "Exit Fullscreen"
+    exitFullscreen: "Exit Fullscreen",
+    broadcast: "Broadcast"
   },
   control: {
     title: "Printer Remote Control",
@@ -488,7 +567,14 @@ export default {
     pauseRequest: "Sent print pause request.",
     resumeRequest: "Sent print resume request.",
     cancelRequest: "Sent print cancel request.",
-    requestFailed: "Request Failed"
+    requestFailed: "Request Failed",
+    axis: " axis",
+    moving: "moving",
+    moveRequestSent: "move request sent",
+    temperatureSet: "Temperature Setting",
+    temperatureTo: "temperature to",
+    print: "Print",
+    requestSent: "request sent"
   },
   gcode: {
     title: "G-code Space",

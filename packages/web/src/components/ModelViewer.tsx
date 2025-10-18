@@ -19,8 +19,10 @@ interface ModelViewerProps {
   showDemo?: boolean;
   // 모델이 없을 때 표시할 안내 문구
   placeholderMessage?: string;
-  // GLB/GLTF 파일 경로(URL). 지정 시 그리드 위에 모델을 렌더링합니다.
+  // GLB/GLTF/STL 파일 경로(URL). 지정 시 그리드 위에 모델을 렌더링합니다.
   modelUrl?: string;
+  // STL 파일 경로(URL) - modelUrl의 alias
+  stlUrl?: string;
   // 모델 스케일 (기본 1)
   modelScale?: number;
   // 사용자 회전 컨트롤 활성화 여부
@@ -175,13 +177,13 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
   const group = useRef<Group>(null);
 
   // useGLTF는 항상 호출되어야 함 (React Hooks 규칙)
+  // 유효하지 않은 URL은 에러를 발생시킬 수 있으므로, 상위에서 유효성 검증 후 렌더링해야 함
   const gltf = useGLTF(url);
   const scene = gltf?.scene;
 
   useLayoutEffect(() => {
-    // URL이나 scene이 유효하지 않으면 조기 종료
-    if (!url || !url.trim() || !scene || !group.current) {
-      console.warn('[ModelViewer] GLBModel: Invalid state', { url, hasScene: !!scene, hasGroup: !!group.current });
+    // scene이나 group이 유효하지 않으면 조기 종료
+    if (!scene || !group.current) {
       return;
     }
 
@@ -228,12 +230,12 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
   const group = useRef<Group>(null);
 
   // useLoader는 항상 호출되어야 함 (React Hooks 규칙)
+  // 유효하지 않은 URL은 에러를 발생시킬 수 있으므로, 상위에서 유효성 검증 후 렌더링해야 함
   const geometry = useLoader(STLLoader, url);
 
   useLayoutEffect(() => {
-    // URL이나 geometry가 유효하지 않으면 조기 종료
-    if (!url || !url.trim() || !geometry || !group.current) {
-      console.warn('[ModelViewer] STLModel: Invalid state', { url, hasGeometry: !!geometry, hasGroup: !!group.current });
+    // geometry나 group이 유효하지 않으면 조기 종료
+    if (!geometry || !group.current) {
       return;
     }
 
@@ -275,7 +277,7 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
   );
 }
 
-export default function ModelViewer({ className, height, showDemo = false, placeholderMessage, modelUrl, modelScale = 1, enableRotationControls = false }: ModelViewerProps) {
+export default function ModelViewer({ className, height, showDemo = false, placeholderMessage, modelUrl, stlUrl, modelScale = 1, enableRotationControls = false }: ModelViewerProps) {
   const { t } = useTranslation();
   const style: React.CSSProperties = { width: '100%' };
   if (height !== undefined) {
@@ -302,10 +304,12 @@ export default function ModelViewer({ className, height, showDemo = false, place
   // 사용자 회전 컨트롤
   const [userRotation, setUserRotation] = useState<[number, number, number]>([0, 0, 0]);
 
-  // modelUrl이 제공되지 않으면 undefined 유지 (데모 표시 또는 플레이스홀더)
+  // stlUrl이 제공되면 modelUrl보다 우선 사용
+  const urlToUse = stlUrl || modelUrl;
+
   // URL 유효성 검증 강화
-  const effectiveUrl = (modelUrl && modelUrl.trim().length > 0 && (modelUrl.startsWith('http://') || modelUrl.startsWith('https://') || modelUrl.startsWith('/')))
-    ? modelUrl
+  const effectiveUrl = (urlToUse && urlToUse.trim().length > 0 && (urlToUse.startsWith('http://') || urlToUse.startsWith('https://') || urlToUse.startsWith('/')))
+    ? urlToUse
     : undefined;
 
   return (

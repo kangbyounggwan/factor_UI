@@ -17,6 +17,7 @@ import { supabase } from "@shared/integrations/supabase/client"
 import { onDashStatusMessage } from "@shared/services/mqttService";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
+import { getPrinterStatusInfo, isIdleState, type PrinterState, type PrinterStateFlags } from "@shared";
 
 // 로컬 스냅샷 퍼시스턴스 훅(한 파일 내 사용)
 function usePersistentState<T>(key: string, fallback: T) {
@@ -510,14 +511,14 @@ const PrinterDetail = () => {
     const isOperational = stateStr === 'operational';
 
     let stateLabel = t('printerDetail.noConnection');
-    let stateClass = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80';
+    let stateClass = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-destructive/40 text-destructive-foreground hover:bg-destructive/50';
 
     if (isPrinting) {
       stateLabel = t('printerDetail.printing');
-      stateClass = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-success text-success-foreground hover:bg-success/80';
+      stateClass = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-success/40 text-success-foreground hover:bg-success/50';
     } else if (isOperational) {
       stateLabel = t('printerDetail.standby');
-      stateClass = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-primary text-primary-foreground hover:bg-primary/80';
+      stateClass = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-primary/40 text-primary-foreground hover:bg-primary/50';
     }
     return (
       <div className="h-full rounded-lg border bg-card text-card-foreground shadow-sm">
@@ -560,23 +561,20 @@ const PrinterDetail = () => {
   };
 
   const PrinterStatusCard = () => {
-    const map: any = {
-      idle: { label: t('printerDetail.idle') },
-      printing: { label: t('printer.statusPrinting') },
-      paused: { label: t('printerDetail.paused') },
-      error: { label: t('printerDetail.error') },
-      connecting: { label: t('printerDetail.connecting') },
-      disconnected: { label: t('printerDetail.disconnected') },
-    };
-    const status = data.printerStatus.state as keyof typeof map;
-    const flags: any = data.printerStatus?.flags || {};
-    // flags 우선 규칙 적용
-    let label = t('printerDetail.disconnected');
-    if (flags?.error) label = t('printerDetail.error');
-    else if (flags?.printing) label = t('printer.statusPrinting');
-    else if (flags?.paused) label = t('printerDetail.paused');
-    else if (flags?.ready || flags?.operational) label = t('printerDetail.idle');
-    else label = map[status]?.label || t('printerDetail.disconnected');
+    // shared 유틸리티를 사용하여 상태 정보 가져오기
+    const statusInfo = getPrinterStatusInfo(
+      data.printerStatus.state as PrinterState,
+      data.printerStatus.flags as PrinterStateFlags,
+      {
+        idle: t('printerDetail.idle'),
+        printing: t('printer.statusPrinting'),
+        paused: t('printerDetail.paused'),
+        error: t('printerDetail.error'),
+        connecting: t('printerDetail.connecting'),
+        disconnected: t('printerDetail.disconnected')
+      }
+    );
+    const label = statusInfo.label;
     return (
       <div className="h-full rounded-lg border bg-card text-card-foreground shadow-sm">
         <div className="p-6 border-b"><div className="text-sm font-medium">{t('printerDetail.printerStatus')}</div></div>
@@ -775,6 +773,8 @@ const PrinterDetail = () => {
                   isConnected={data.printerStatus.connected}
                   isPrinting={data.printerStatus.printing}
                   deviceUuid={deviceUuid}
+                  printerState={data.printerStatus.state}
+                  flags={data.printerStatus.flags}
                 />
                 {!data.printerStatus.connected && (
                   <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">

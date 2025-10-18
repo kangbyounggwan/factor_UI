@@ -65,7 +65,8 @@ interface PrinterGroup {
 // 전체 프린터 데이터 타입
 interface PrinterOverview {
   id: string;
-  model: string;
+  name: string; // 프린터 이름 (사용자 지정)
+  model: string; // 제조사 모델명
   group_id?: string;
   group?: PrinterGroup;
   state: "idle" | "printing" | "paused" | "error" | "connecting" | "disconnected";
@@ -90,12 +91,12 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
   const { t } = useTranslation();
 
   const statusConfig = {
-    idle: { color: "bg-muted text-muted-foreground", label: t('dashboard.status.idle') },
+    idle: { color: "bg-success/40 text-success-foreground", label: t('dashboard.status.idle') },
     printing: { color: "bg-success text-success-foreground", label: t('dashboard.status.printing') },
     paused: { color: "bg-warning text-warning-foreground", label: t('dashboard.status.paused') },
-    error: { color: "bg-destructive text-destructive-foreground", label: t('dashboard.status.error') },
+    error: { color: "bg-warning/40 text-warning-foreground", label: t('dashboard.status.error') },
     connecting: { color: "bg-primary text-primary-foreground", label: t('dashboard.status.connecting') },
-    disconnected: { color: "bg-muted text-muted-foreground", label: t('dashboard.status.disconnected') }
+    disconnected: { color: "bg-destructive/40 text-destructive-foreground", label: t('dashboard.status.disconnected') }
   };
 
   const formatTime = (seconds: number): string => {
@@ -119,8 +120,8 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
         {/* 1. 프린터 정보 - 고정 높이 */}
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 flex-shrink-0">
           <div className="space-y-1 min-w-0 flex-1 pr-4">
-            <CardTitle className="text-lg font-semibold truncate">{printer.model}</CardTitle>
-            <p className="text-sm text-muted-foreground truncate">{printer.model}</p>
+            <CardTitle className="text-lg font-semibold truncate">{printer.name}</CardTitle>
+            {printer.model && <p className="text-sm text-muted-foreground truncate">{printer.model}</p>}
             {hasGroupObject ? (
               <div className="flex items-center gap-1">
                 <div 
@@ -198,13 +199,13 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
                     {t('dashboard.printer.extruder')}
                   </span>
                   <span className="font-mono text-xs text-right">
-                    {(printer.temperature.tool_actual ?? 0).toFixed(0)}°C / {(printer.temperature.tool_target ?? 0).toFixed(0)}°C
+                    {printer.state === 'disconnected' ? '-' : `${(printer.temperature.tool_actual ?? 0).toFixed(0)}°C / ${(printer.temperature.tool_target ?? 0).toFixed(0)}°C`}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground flex-shrink-0">{t('dashboard.printer.heatingBed')}</span>
                   <span className="font-mono text-xs text-right">
-                    {(printer.temperature.bed_actual ?? 0).toFixed(0)}°C / {(printer.temperature.bed_target ?? 0).toFixed(0)}°C
+                    {printer.state === 'disconnected' ? '-' : `${(printer.temperature.bed_actual ?? 0).toFixed(0)}°C / ${(printer.temperature.bed_target ?? 0).toFixed(0)}°C`}
                   </span>
                 </div>
               </div>
@@ -283,9 +284,10 @@ const Home = () => {
         const isConnected = printer.status === 'connected' || printer.status === 'printing' || printer.status === 'idle';
         const isPrinting = printer.status === 'printing';
         const state = printer.status as PrinterOverview['state'];
-        
+
         return {
           id: printer.id,
+          name: (printer as any).name || printer.model, // name이 없으면 model을 fallback
           model: printer.model,
           group_id: printer.group_id,
           group: printer.group,
@@ -348,41 +350,65 @@ const Home = () => {
 
   // 대시보드 이탈 시 stop 전송 제거 (세션 종료 시에만 stop 전송)
 
-  // MQTT: dash_status 수신 → 프린터 리스트에 반영
+  // MQTT: dash_status 수신 → 프린터 리스트에 반영 (실시간 연결 상태 모니터링)
   useEffect(() => {
-    // 3초 타임아웃: 첫 수신이 없으면 연결없음 처리
-    const timeouts: Record<string, number> = {};
-    setPrinters((prev) => prev.map(p => {
-      if (p.pending) return p; // 이미 connecting
-      return { ...p, pending: true, state: 'connecting', connected: false };
-    }));
+    if (printers.length === 0) return; // 프린터가 없으면 실행 안 함
 
-    const startTimeoutFor = (uuid?: string) => {
-      if (!uuid) return;
-      if (timeouts[uuid]) { try { clearTimeout(timeouts[uuid]); } catch {} }
+    console.log('[MQTT] 실시간 모니터링 시작 - 프린터 수:', printers.length);
+
+    // 각 프린터별 타임아웃 추적 (5초 동안 데이터 없으면 disconnected)
+    const timeouts: Record<string, number> = {};
+    const TIMEOUT_DURATION = 5000; // 5초
+
+    // 타임아웃 설정/재설정 함수
+    const startTimeoutFor = (uuid?: string, currentState?: string) => {
+      if (!uuid) {
+        console.log('[MQTT] UUID 없음, 타임아웃 설정 건너뜀');
+        return;
+      }
+
+      // 기존 타임아웃 제거
+      if (timeouts[uuid]) {
+        console.log('[MQTT] 기존 타임아웃 제거:', uuid);
+        try { clearTimeout(timeouts[uuid]); } catch {}
+      }
+
+      console.log(`[MQTT] ${TIMEOUT_DURATION/1000}초 타임아웃 설정:`, uuid, '현재 상태:', currentState);
       timeouts[uuid] = window.setTimeout(() => {
-        setPrinters((prev) => prev.map(p => (
-          p.device_uuid === uuid && p.pending
-            ? { ...p, pending: false, state: 'disconnected', connected: false }
-            : p
-        )));
-      }, 3000);
+        console.log('[MQTT] 타임아웃 실행:', uuid, '- 연결끊김으로 변경');
+        setPrinters((prev) => prev.map(p => {
+          if (p.device_uuid === uuid) {
+            console.log('[MQTT] 프린터 상태 업데이트:', uuid, p.state, '-> disconnected');
+            return { ...p, state: 'disconnected', connected: false, pending: false };
+          }
+          return p;
+        }));
+      }, TIMEOUT_DURATION);
     };
 
-    // 모든 uuid에 타임아웃 설정
-    printers.forEach(p => startTimeoutFor(p.device_uuid));
+    // 초기 connecting 상태 설정 및 타임아웃 시작
+    setPrinters((prev) => prev.map(p => {
+      // 이미 connected 상태가 아니면 connecting으로 표시
+      if (p.state !== 'disconnected' && !p.connected) {
+        startTimeoutFor(p.device_uuid, 'connecting');
+        return { ...p, state: 'connecting', pending: true };
+      }
+      // connected 상태면 타임아웃만 시작
+      startTimeoutFor(p.device_uuid, p.state);
+      return p;
+    }));
 
-    // 수신 핸들러: 해당 uuid 프린터 데이터를 대체/병합
+    // MQTT 메시지 수신 핸들러
     const off = onDashStatusMessage((uuid, data) => {
-      // 수신되면 타임아웃 해제
-      if (uuid && timeouts[uuid]) { try { clearTimeout(timeouts[uuid]); } catch {} delete timeouts[uuid]; }
+      console.log('[MQTT] 메시지 수신:', uuid);
+
       setPrinters((prev) => {
         const next = [...prev];
         const idx = next.findIndex(p => p.device_uuid === uuid);
         if (idx >= 0) {
           const bed = data?.temperature_info?.bed;
           const toolAny = data?.temperature_info?.tool;
-          const tool = toolAny?.tool0 ?? toolAny; // tool.tool0 우선, 없으면 tool 사용
+          const tool = toolAny?.tool0 ?? toolAny;
           const flags = data?.printer_status?.flags ?? {};
           const isConnected = Boolean(
             data?.connected ||
@@ -393,19 +419,22 @@ const Home = () => {
             flags.paused   ? 'paused'   :
             flags.error    ? 'error'    :
             (isConnected   ? 'idle'     : 'disconnected');
+
+          console.log('[MQTT] 프린터 상태 업데이트:', uuid, nextState, 'connected:', isConnected);
+
+          // 데이터 수신 시 타임아웃 재설정 (연결 상태 계속 모니터링)
+          startTimeoutFor(uuid, nextState);
+
           next[idx] = {
             ...next[idx],
-            // data에 따라 필요한 필드 갱신 (예: 상태/온도/진행률)
             pending: false,
             state: nextState,
             connected: isConnected,
             printing: (flags?.printing ?? data?.printer_status?.printing) ?? next[idx].printing,
             completion: typeof data?.progress?.completion === 'number' ? data.progress.completion : next[idx].completion,
             temperature: {
-              // 익스트루더: actual/offset
               tool_actual: typeof tool?.actual === 'number' ? tool.actual : next[idx].temperature.tool_actual,
               tool_target: typeof tool?.offset === 'number' ? tool.target : next[idx].temperature.tool_target,
-              // 히팅베드: actual/offset
               bed_actual: typeof bed?.actual === 'number' ? bed.actual : next[idx].temperature.bed_actual,
               bed_target: typeof bed?.offset === 'number' ? bed.target : next[idx].temperature.bed_target,
             },
@@ -416,7 +445,11 @@ const Home = () => {
         return next;
       });
     });
+
+    console.log('[MQTT] 핸들러 등록 완료');
+
     return () => {
+      console.log('[MQTT] 클린업 - 모든 타임아웃 제거');
       off();
       Object.values(timeouts).forEach(t => { try { clearTimeout(t); } catch {} });
     };

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Navigate } from "react-router-dom";
+import { useState } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,22 +9,16 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { startDashStatusSubscriptionsForUser } from "@shared/component/mqtt";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
 
-const Auth = () => {
+const Welcome = () => {
   const { t } = useTranslation();
   const { user, signIn, signUp, loading } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [isSignUp, setIsSignUp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string>("");
   const [showPassword, setShowPassword] = useState(false);
-
-  // 페이지 진입 시 스크롤 초기화
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
 
   const [signInData, setSignInData] = useState({
     email: "",
@@ -38,7 +32,7 @@ const Auth = () => {
     displayName: "",
   });
 
-  // 로그인된 사용자는 대시보드로 리다이렉트
+  // 로그인된 사용자는 홈으로 리다이렉트
   if (user) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -64,13 +58,6 @@ const Auth = () => {
           title: t('auth.loginSuccess'),
           description: t('auth.welcomeMessage'),
         });
-        // 로그인 성공 시점: MQTT dash_status 구독 시작
-        try {
-          const uid = (await import("@shared/integrations/supabase/client")).supabase.auth.getUser().then(r => r.data.user?.id);
-          Promise.resolve(uid).then((id) => {
-            if (id) startDashStatusSubscriptionsForUser(id);
-          });
-        } catch { }
       }
     } catch (err) {
       setError(t('auth.loginError'));
@@ -121,7 +108,7 @@ const Auth = () => {
       }
     } catch (err) {
       setError(t('auth.signupError'));
-    } finally {
+    } finally{
       setIsSubmitting(false);
     }
   };
@@ -152,14 +139,14 @@ const Auth = () => {
       {/* 메인 카드 */}
       <Card className="w-full max-w-md bg-white/95 dark:bg-card/95 backdrop-blur-xl border-0 shadow-2xl relative z-10">
         <CardContent className="p-8">
-          {/* 언어 전환 버튼 - 오른쪽 상단 */}
-          <div className="absolute top-4 right-4">
-            <LanguageSwitcher />
-          </div>
           {/* 로고 */}
           <div className="flex flex-col items-center mb-8">
-            <div className="w-20 h-20 mb-4 flex items-center justify-center bg-primary/10 rounded-3xl">
-              <Lock className="w-10 h-10 text-primary" />
+            <div className="w-20 h-20 mb-4 flex items-center justify-center">
+              <img
+                src="/FACTOR_LOGO.png"
+                alt="FACTOR Logo"
+                className="w-full h-full object-contain"
+              />
             </div>
             <h1 className="text-2xl font-bold text-foreground">
               {isSignUp ? t('auth.createAccount') : t('auth.welcomeBack')}
@@ -403,4 +390,4 @@ const Auth = () => {
   );
 };
 
-export default Auth;
+export default Welcome;

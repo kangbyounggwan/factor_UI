@@ -883,23 +883,46 @@ const AI = () => {
                         )}
 
                         {isProcessing && (
-                          <div className="absolute inset-0 bg-gray-900/70 flex items-center justify-center z-10">
-                            <div className="text-center space-y-4">
-                              <Loader2 className="w-20 h-20 mx-auto animate-spin text-white" />
-                              <div>
-                                <p className="text-xl font-medium text-white">
-                                  {t('ai.processing')}
-                                </p>
-                                <p className="text-lg text-gray-300">{t('ai.waitForGeneration')}</p>
-                                {progress > 0 && (
-                                  <div className="mt-4">
-                                    <p className="text-2xl font-bold text-white">{progress}%</p>
-                                    {progressStatus && (
-                                      <p className="text-sm text-gray-400 mt-1">{progressStatus}</p>
-                                    )}
-                                  </div>
-                                )}
+                          <div className="absolute inset-0 bg-gray-900/95 flex items-center justify-center z-10">
+                            <div className="text-center space-y-6 max-w-md w-full px-8">
+                              {/* Circular spinning icon */}
+                              <div className="relative w-24 h-24 mx-auto">
+                                <div className="absolute inset-0 border-4 border-blue-500/30 rounded-full"></div>
+                                <div className="absolute inset-0 border-4 border-transparent border-t-blue-500 rounded-full animate-spin"></div>
+                                <Sparkles className="absolute inset-0 m-auto w-12 h-12 text-blue-500" />
                               </div>
+
+                              {/* Title */}
+                              <h2 className="text-2xl font-bold text-white">
+                                {t('ai.generatingAI')}
+                              </h2>
+
+                              {/* Subtitle */}
+                              <p className="text-lg text-gray-300">{t('ai.generatingDesc')}</p>
+
+                              {/* Progress section */}
+                              {progress > 0 && (
+                                <div className="space-y-3 mt-6">
+                                  {/* Progress label and percentage */}
+                                  <div className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-400">{t('ai.progressLabel')}</span>
+                                    <span className="text-white font-semibold">{progress}%</span>
+                                  </div>
+
+                                  {/* Progress bar */}
+                                  <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+                                    <div
+                                      className="bg-blue-500 h-full rounded-full transition-all duration-300 ease-out"
+                                      style={{ width: `${progress}%` }}
+                                    ></div>
+                                  </div>
+
+                                  {/* Estimated time */}
+                                  <p className="text-sm text-gray-400 text-center">
+                                    {t('ai.estimatedTime')}: {Math.max(1, Math.ceil((100 - progress) / 25))}s
+                                  </p>
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
@@ -1068,7 +1091,7 @@ const AI = () => {
             <div className="flex-1 overflow-y-auto">
               {archiveViewMode === 'raw' ? (
                 // RAW 모드: 입력 데이터 보여주기
-                (activeTab === 'image-to-3d' || archiveFilter === 'image-to-3d') ? (
+                (archiveFilter === 'image-to-3d') ? (
                   // 이미지→3D: 업로드된 이미지 목록
                   <UploadArchive
                     items={uploadedFiles.map(file => ({
@@ -1101,11 +1124,16 @@ const AI = () => {
                   <ModelArchive
                     items={generatedModels
                       .filter(model => {
-                        if (archiveFilter === 'all') return true;
-                        if (archiveFilter === 'text-to-3d') return model.generation_type === 'text_to_3d';
-                        if (archiveFilter === 'image-to-3d') return false; // 이미지는 위에서 처리
-                        if (archiveFilter === 'text-to-image') return model.generation_type === 'text_to_image';
-                        return model.generation_type !== 'image_to_3d';
+                        switch (archiveFilter) {
+                          case 'all':
+                            return true;
+                          case 'text-to-3d':
+                            return model.generation_type === 'text_to_3d';
+                          case 'text-to-image':
+                            return model.generation_type === 'text_to_image';
+                          default:
+                            return model.generation_type !== 'image_to_3d';
+                        }
                       })
                       .map(model => ({
                         id: model.id,
@@ -1129,10 +1157,22 @@ const AI = () => {
                     .filter(model => {
                       // 타입 필터
                       let typeMatch = false;
-                      if (archiveFilter === 'all') typeMatch = true;
-                      else if (archiveFilter === 'text-to-3d') typeMatch = model.generation_type === 'text_to_3d';
-                      else if (archiveFilter === 'image-to-3d') typeMatch = model.generation_type === 'image_to_3d';
-                      else if (archiveFilter === 'text-to-image') typeMatch = model.generation_type === 'text_to_image';
+                      switch (archiveFilter) {
+                        case 'all':
+                          typeMatch = true;
+                          break;
+                        case 'text-to-3d':
+                          typeMatch = model.generation_type === 'text_to_3d';
+                          break;
+                        case 'image-to-3d':
+                          typeMatch = model.generation_type === 'image_to_3d';
+                          break;
+                        case 'text-to-image':
+                          typeMatch = model.generation_type === 'text_to_image';
+                          break;
+                        default:
+                          typeMatch = false;
+                      }
 
                       if (!typeMatch) return false;
 
@@ -1171,7 +1211,8 @@ const AI = () => {
                         thumbnail_url: isThumbnailSupabaseUrl ? model.thumbnail_url : undefined,
                         _originalModel: model, // 원본 모델 정보 저장
                       };
-                    })}
+                    })
+                  }
                   onSelect={async (item: any) => {
                     const model = item._originalModel as AIGeneratedModel;
 
@@ -1331,7 +1372,7 @@ const AI = () => {
 
       {/* 출력 설정 다이얼로그 */}
       <Dialog open={printDialogOpen} onOpenChange={setPrintDialogOpen}>
-        <DialogContent className="w-[75vw] max-w-[75vw] max-h-[90vh] overflow-hidden p-0 rounded-xl">
+        <DialogContent className="w-[75vw] max-w-[75vw] max-h-[90vh] overflow-hidden p-0 rounded-xl" aria-describedby={undefined}>
           <div className="flex flex-col h-full">
             {/* 헤더 */}
             <div className="px-6 py-4 border-b">

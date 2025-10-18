@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,12 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { 
-  Plus, 
-  Trash2, 
-  Edit, 
-  Monitor, 
-  Wifi, 
+import {
+  Plus,
+  Trash2,
+  Edit,
+  Monitor,
+  Wifi,
   Crown,
   Check,
   Zap,
@@ -19,12 +19,12 @@ import {
   FolderPlus,
   Palette
 } from "lucide-react";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -38,6 +38,15 @@ import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
+import {
+  getManufacturers,
+  getSeriesByManufacturer,
+  getModelsByManufacturerAndSeries,
+  type ManufacturerOption,
+  type SeriesOption,
+  type ModelOption
+} from "@shared/api/manufacturingPrinter";
 
 // 프린터 그룹 타입
 interface PrinterGroup {
@@ -124,6 +133,8 @@ const Settings = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const manufacturerCardRef = useRef<HTMLDivElement>(null);
 
   // 구독 플랜 (번역 적용)
   const subscriptionPlans = getSubscriptionPlans(t);
@@ -132,11 +143,22 @@ const Settings = () => {
   const [groups, setGroups] = useState<PrinterGroup[]>([]);
   const [printers, setPrinters] = useState<PrinterConfig[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // 모달 상태
   const [showAddGroup, setShowAddGroup] = useState(false);
   const [showAddPrinter, setShowAddPrinter] = useState(false);
+  const [showEditPrinter, setShowEditPrinter] = useState(false);
   const [editingGroup, setEditingGroup] = useState<PrinterGroup | null>(null);
+  const [editingPrinter, setEditingPrinter] = useState<PrinterConfig | null>(null);
+
+  // 제조사 데이터 상태
+  const [manufacturers, setManufacturers] = useState<ManufacturerOption[]>([]);
+  const [selectedManufacturer, setSelectedManufacturer] = useState<string>("");
+  const [seriesList, setSeriesList] = useState<SeriesOption[]>([]);
+  const [selectedSeries, setSelectedSeries] = useState<string>("");
+  const [modelsList, setModelsList] = useState<ModelOption[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [selectedModelId, setSelectedModelId] = useState<string>("");
   
   // 폼 데이터
   const [newGroup, setNewGroup] = useState({
@@ -198,6 +220,94 @@ const Settings = () => {
   useEffect(() => {
     loadData();
   }, [user]);
+
+  // 페이지 진입 시 스크롤 초기화
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  // 쿼리 파라미터로 프린터 ID가 전달되면 해당 프린터 수정 모달 열기
+  useEffect(() => {
+    const editPrinterId = searchParams.get('editPrinter');
+    if (editPrinterId && printers.length > 0) {
+      const printer = printers.find(p => p.id === editPrinterId);
+      if (printer) {
+        handleEditPrinter(printer);
+        setSearchParams({});
+        // 제조사 카드로 스크롤 (모달이 열린 후, 모달 내부 스크롤)
+        setTimeout(() => {
+          manufacturerCardRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+            inline: 'nearest'
+          });
+        }, 500);
+      }
+    }
+  }, [searchParams, printers, setSearchParams]);
+
+  // 제조사 목록 로드
+  useEffect(() => {
+    const loadManufacturers = async () => {
+      try {
+        const data = await getManufacturers();
+        setManufacturers(data);
+      } catch (error) {
+        console.error('Failed to load manufacturers:', error);
+      }
+    };
+    loadManufacturers();
+  }, []);
+
+  // 제조사 선택 시 시리즈 로드
+  useEffect(() => {
+    if (!selectedManufacturer) {
+      setSeriesList([]);
+      setSelectedSeries("");
+      return;
+    }
+    const loadSeries = async () => {
+      try {
+        const data = await getSeriesByManufacturer(selectedManufacturer);
+        setSeriesList(data);
+      } catch (error) {
+        console.error('Failed to load series:', error);
+      }
+    };
+    loadSeries();
+  }, [selectedManufacturer]);
+
+  // 시리즈 선택 시 모델 로드
+  useEffect(() => {
+    if (!selectedManufacturer || !selectedSeries) {
+      setModelsList([]);
+      setSelectedModel("");
+      return;
+    }
+    const loadModels = async () => {
+      try {
+        const data = await getModelsByManufacturerAndSeries(selectedManufacturer, selectedSeries);
+        setModelsList(data);
+      } catch (error) {
+        console.error('Failed to load models:', error);
+      }
+    };
+    loadModels();
+  }, [selectedManufacturer, selectedSeries]);
+
+  // 모델 선택 시 editingPrinter.model 및 selectedModelId 업데이트
+  useEffect(() => {
+    if (selectedModel && editingPrinter) {
+      const selectedModelData = modelsList.find(m => m.id === selectedModel);
+      if (selectedModelData) {
+        setEditingPrinter({
+          ...editingPrinter,
+          model: selectedModelData.display_name
+        });
+        setSelectedModelId(selectedModelData.id);
+      }
+    }
+  }, [selectedModel]);
 
   // 그룹 관리 함수들
   const handleAddGroup = async () => {
@@ -337,7 +447,7 @@ const Settings = () => {
       if (error) throw error;
 
       setPrinters(printers.filter(p => p.id !== printerId));
-      
+
       toast({
         title: t('settings.success'),
         description: t('settings.printerDeleted'),
@@ -347,6 +457,89 @@ const Settings = () => {
       toast({
         title: t('settings.error'),
         description: t('settings.deletePrinterError'),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditPrinter = (printer: PrinterConfig) => {
+    setEditingPrinter(printer);
+    // 제조사 선택 초기화
+    setSelectedManufacturer("");
+    setSelectedSeries("");
+    setSelectedModel("");
+    setSelectedModelId("");
+    setShowEditPrinter(true);
+  };
+
+  const handleUpdatePrinter = async () => {
+    if (!user || !editingPrinter) return;
+
+    try {
+      const updateData: any = {
+        name: editingPrinter.name,
+        model: editingPrinter.model,
+        group_id: editingPrinter.group_id || null,
+      };
+
+      // selectedModelId가 있으면 manufacture_id도 업데이트
+      if (selectedModelId) {
+        updateData.manufacture_id = selectedModelId;
+      }
+
+      const { error } = await supabase
+        .from('printers')
+        .update(updateData)
+        .eq('id', editingPrinter.id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // 로컬 상태 업데이트
+      setPrinters(prev => prev.map(p => {
+        if (p.id !== editingPrinter.id) return p;
+        return { ...p, ...updateData };
+      }));
+
+      setShowEditPrinter(false);
+      setEditingPrinter(null);
+
+      // Dashboard의 localStorage 캐시 업데이트 (실시간 반영)
+      try {
+        const dashboardCacheKey = 'dashboard:printers';
+        const cachedData = localStorage.getItem(dashboardCacheKey);
+        if (cachedData) {
+          const printers = JSON.parse(cachedData);
+          const updatedPrinters = printers.map((p: any) => {
+            if (p.id === editingPrinter.id) {
+              return { ...p, name: updateData.name, model: updateData.model };
+            }
+            return p;
+          });
+          localStorage.setItem(dashboardCacheKey, JSON.stringify(updatedPrinters));
+
+          // StorageEvent 발생 (다른 탭에도 전파)
+          window.dispatchEvent(new StorageEvent('storage', {
+            key: dashboardCacheKey,
+            newValue: JSON.stringify(updatedPrinters),
+            oldValue: cachedData,
+            storageArea: localStorage,
+            url: window.location.href
+          }));
+        }
+      } catch (cacheError) {
+        console.log('Dashboard cache update failed:', cacheError);
+      }
+
+      toast({
+        title: t('settings.success'),
+        description: t('settings.printerUpdated'),
+      });
+    } catch (error) {
+      console.error('Error updating printer:', error);
+      toast({
+        title: t('settings.error'),
+        description: t('settings.updatePrinterError'),
         variant: "destructive",
       });
     }
@@ -455,7 +648,7 @@ const Settings = () => {
                   {t('settings.addGroup')}
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
                 <DialogHeader>
                   <DialogTitle>{t('settings.newGroup')}</DialogTitle>
                 </DialogHeader>
@@ -578,7 +771,7 @@ const Settings = () => {
                   {t('settings.addPrinter')}
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
                 <DialogHeader>
                   <DialogTitle>{t('settings.newPrinter')}</DialogTitle>
                 </DialogHeader>
@@ -729,7 +922,7 @@ const Settings = () => {
                     )}
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1">
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEditPrinter(printer)}>
                       <Edit className="h-3 w-3 mr-1" />
                       {t('settings.edit')}
                     </Button>
@@ -746,6 +939,136 @@ const Settings = () => {
               </Card>
             ))}
           </div>
+
+          {/* 프린터 수정 모달 */}
+          <Dialog open={showEditPrinter} onOpenChange={setShowEditPrinter}>
+            <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+              <DialogHeader>
+                <DialogTitle className="text-lg font-bold">{t('settings.editPrinter')}</DialogTitle>
+              </DialogHeader>
+              {editingPrinter && (
+                <div className="space-y-6 pt-2">
+                  {/* 기본 정보 */}
+                  <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
+                    <h3 className="text-sm font-bold uppercase tracking-wide">{t('settings.basicInformation')}</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-name">{t('settings.printerName')}</Label>
+                        <Input
+                          id="edit-name"
+                          value={editingPrinter.name}
+                          onChange={(e) => setEditingPrinter({ ...editingPrinter, name: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-group">{t('settings.group')}</Label>
+                        <Select
+                          value={editingPrinter.group_id || "none"}
+                          onValueChange={(value) => setEditingPrinter({
+                            ...editingPrinter,
+                            group_id: value === "none" ? undefined : value
+                          })}
+                        >
+                          <SelectTrigger id="edit-group">
+                            <SelectValue placeholder={t('settings.selectGroup')} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">{t('settings.noGroup')}</SelectItem>
+                            {groups.map((group) => (
+                              <SelectItem key={group.id} value={group.id}>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: group.color }} />
+                                  {group.name}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 제조사 섹션 */}
+                  <div ref={manufacturerCardRef} className="space-y-4 p-4 bg-muted/30 rounded-lg border">
+                    <h3 className="text-sm font-bold uppercase tracking-wide">{t('settings.manufacturer')}</h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      {/* 제조사 선택 */}
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-manufacturer">{t('settings.selectManufacturer')}</Label>
+                        <Select
+                          value={selectedManufacturer}
+                          onValueChange={setSelectedManufacturer}
+                        >
+                          <SelectTrigger id="edit-manufacturer">
+                            <SelectValue placeholder={t('settings.selectManufacturerPlaceholder')} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {manufacturers.map((m) => (
+                              <SelectItem key={m.manufacturer} value={m.manufacturer}>
+                                {m.manufacturer}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* 시리즈 선택 */}
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-series">{t('settings.selectSeries')}</Label>
+                        <Select
+                          value={selectedSeries}
+                          onValueChange={setSelectedSeries}
+                          disabled={!selectedManufacturer}
+                        >
+                          <SelectTrigger id="edit-series">
+                            <SelectValue placeholder={t('settings.selectSeriesPlaceholder')} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {seriesList.map((s) => (
+                              <SelectItem key={s.series} value={s.series}>
+                                {s.series}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* 모델 선택 */}
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-model-select">{t('settings.selectModel')}</Label>
+                        <Select
+                          value={selectedModel}
+                          onValueChange={setSelectedModel}
+                          disabled={!selectedSeries}
+                        >
+                          <SelectTrigger id="edit-model-select">
+                            <SelectValue placeholder={t('settings.selectModelPlaceholder')} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {modelsList.map((model) => (
+                              <SelectItem key={model.id} value={model.id}>
+                                {model.display_name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 저장 버튼 */}
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" onClick={() => setShowEditPrinter(false)}>
+                      {t('settings.cancel')}
+                    </Button>
+                    <Button onClick={handleUpdatePrinter}>
+                      {t('settings.apply')}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </section>
 
         <Separator />

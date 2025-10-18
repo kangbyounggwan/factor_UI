@@ -54,6 +54,10 @@ export interface AIGeneratedModel {
   file_size?: number;
   thumbnail_url?: string;
 
+  // STL 파일 정보 (추가 포맷)
+  stl_storage_path?: string;
+  stl_download_url?: string;
+
   // 메타데이터
   model_dimensions?: ModelDimensions;
   generation_metadata?: GenerationMetadata;

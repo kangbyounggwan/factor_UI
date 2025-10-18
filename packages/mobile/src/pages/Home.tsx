@@ -1,11 +1,17 @@
+import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Monitor, Settings, Smartphone, Zap, BarChart3, Play, ShoppingCart } from "lucide-react";
+import { Monitor, Settings, Zap, BarChart3, Play, ShoppingCart } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 
 
 const Home = () => {
   const { user } = useAuth();
+
+  // 페이지 진입 시 스크롤 초기화
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const quickMenuItems = [
     {
@@ -14,13 +20,6 @@ const Home = () => {
       description: "실시간 프린터 상태 확인",
       path: user ? "/dashboard" : "/auth",
       color: "bg-blue-500/10 hover:bg-blue-500/20 text-blue-600"
-    },
-    {
-      icon: Smartphone,
-      title: "제품 등록",
-      description: "클라이언트 연결 및 설정",
-      path: user ? "/mobile-setup" : "/auth",
-      color: "bg-green-500/10 hover:bg-green-500/20 text-green-600"
     },
     {
       icon: Play,

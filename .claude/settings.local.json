@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd.exe /c \"taskkill /F /IM node.exe 2>nul\")",
+      "Bash(cmd.exe /c \"for /f \"\"tokens=5\"\" %a in (''netstat -ano ^| findstr :5175'') do @taskkill /F /PID %a 2>nul\")",
+      "Bash(if exist \"packages\\mobile\\src\\components\\MobileSetupCompo\" rmdir \"packages\\mobile\\src\\components\\MobileSetupCompo\")",
+      "Bash(cmd.exe /c \"if exist packages\\mobile\\src\\components\\MobileSetupCompo rmdir packages\\mobile\\src\\components\\MobileSetupCompo\")",
+      "Bash(npx tsc:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

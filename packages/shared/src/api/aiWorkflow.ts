@@ -29,8 +29,8 @@ interface AIServerResponse {
 }
 
 // AI 서버 베이스 URL (환경 변수로 설정)
-const AI_API_BASE_URL = process.env.NEXT_PUBLIC_AI_API_URL ||
-  (typeof window !== 'undefined' && (window as any).VITE_AI_PYTHON_URL) ||
+const AI_API_BASE_URL =
+  import.meta.env?.VITE_AI_PYTHON_URL ||
   'http://127.0.0.1:7000';
 
 /**

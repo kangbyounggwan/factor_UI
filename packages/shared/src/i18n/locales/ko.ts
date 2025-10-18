@@ -14,7 +14,8 @@ export default {
     error: "오류",
     success: "성공",
     warning: "경고",
-    info: "정보"
+    info: "정보",
+    back: "뒤로"
   },
   nav: {
     home: "홈",
@@ -53,7 +54,37 @@ export default {
     loginRequired: "로그인이 필요합니다",
     loginSuccess: "로그인 성공",
     loginFailed: "로그인 실패",
-    logoutSuccess: "로그아웃 되었습니다"
+    logoutSuccess: "로그아웃 되었습니다",
+    // Welcome 페이지
+    welcomeBack: "환영합니다!",
+    signInToContinue: "로그인하여 계속하기",
+    createAccount: "계정 만들기",
+    joinPlatform: "FACTOR 3D 프린팅 플랫폼에 가입하세요",
+    username: "사용자 이름",
+    enterEmail: "이메일을 입력하세요",
+    enterPassword: "비밀번호를 입력하세요",
+    enterName: "이름을 입력하세요",
+    createPassword: "비밀번호 생성 (6자 이상)",
+    confirmYourPassword: "비밀번호 확인",
+    loggingIn: "로그인 중...",
+    creatingAccount: "계정 생성 중...",
+    newUser: "새 사용자이신가요?",
+    alreadyHaveAccount: "이미 계정이 있으신가요?",
+    orSignInWith: "OR",
+    signInWithAnother: "다른 계정으로 로그인",
+    // 에러 메시지
+    invalidCredentials: "이메일 또는 비밀번호가 올바르지 않습니다.",
+    emailNotConfirmed: "이메일 인증이 필요합니다. 이메일을 확인해주세요.",
+    passwordMismatch: "비밀번호가 일치하지 않습니다.",
+    passwordTooShort: "비밀번호는 6자 이상이어야 합니다.",
+    emailAlreadyExists: "이미 등록된 이메일입니다.",
+    signupSuccess: "회원가입 성공",
+    signupSuccessMessage: "이메일 인증 후 로그인해주세요.",
+    signupError: "회원가입 중 오류가 발생했습니다.",
+    loginError: "로그인 중 오류가 발생했습니다.",
+    welcomeMessage: "환영합니다!",
+    featureComingSoon: "기능 준비중",
+    passwordResetComingSoon: "비밀번호 찾기 기능은 곧 제공됩니다."
   },
   ai: {
     title: "AI 3D 모델링 스튜디오",
@@ -195,7 +226,36 @@ export default {
     workflowModelling: "AI 모델 생성 중...",
     workflowOptimization: "모델 최적화 중...",
     workflowGcode: "G-code 생성 중...",
-    processing: "처리 중..."
+    processing: "처리 중...",
+    // 새로운 단계별 워크플로우
+    whatToCreate: "무엇을 만들까요?",
+    selectInputMethod: "입력 방식을 선택하세요",
+    textTo3DDesc: "텍스트 설명으로 3D 모델을 생성하세요",
+    imageTo3DDesc: "이미지를 3D 모델로 변환하세요",
+    textToImageDesc: "텍스트로 이미지를 생성하세요",
+    describeYourIdea: "아이디어를 설명해주세요",
+    describeYourIdeaDesc: "자세히 설명할수록 더 좋은 결과를 얻을 수 있습니다",
+    tryExamples: "💡 예시를 클릭해보세요",
+    exampleCar: "빨간색 스포츠카",
+    exampleChair: "현대적인 의자",
+    exampleRobot: "귀여운 로봇",
+    exampleHouse: "작은 집 모형",
+    advancedSettings: "고급 설정",
+    generatingAI: "AI 생성 중",
+    generatingDesc: "잠시만 기다려주세요",
+    progressLabel: "진행률",
+    estimatedTime: "예상 소요 시간",
+    generationCompleteDesc: "3D 모델이 성공적으로 생성되었습니다",
+    selectPrinterTitle: "프린터 선택",
+    selectPrinterDesc: "출력할 프린터를 선택하세요",
+    printerReady: "대기중",
+    printerPrinting: "프린팅 중",
+    printStarted: "출력 시작",
+    printStartedDesc: "에 출력 작업을 전송했습니다",
+    createAnother: "다른 모델 만들기",
+    inputRequiredDesc: "텍스트를 입력하거나 이미지를 업로드해주세요",
+    uploadSuccess: "업로드 완료",
+    styleCartoon: "카툰"
   },
   printer: {
     title: "프린터 관리",
@@ -235,7 +295,7 @@ export default {
       paused: "일시정지",
       error: "오류",
       connecting: "연결중",
-      disconnected: "연결끊김"
+      disconnected: "연결 없음"
     },
     // 시간 포맷
     time: {
@@ -282,9 +342,9 @@ export default {
   },
   settings: {
     title: "시스템 설정",
-    description: "프린터 그룹 및 프린터 관리, 구독 플랜을 설정하세요",
+    description: "프린터 그룹 및 프린터 관리를 설정하세요",
     // 그룹 관리
-    groupManagement: "프린터 그룹 관리",
+    groupManagement: "프린터 그룹",
     addGroup: "그룹 추가",
     newGroup: "새 프린터 그룹 추가",
     groupName: "그룹 이름",
@@ -314,7 +374,7 @@ export default {
     lastConnected: "마지막 연결:",
     // 상태
     statusConnected: "연결됨",
-    statusDisconnected: "연결끊김",
+    statusDisconnected: "연결 없음",
     statusError: "오류",
     statusUnknown: "알 수 없음",
     // 구독 관리
@@ -347,10 +407,26 @@ export default {
     addPrinterError: "프린터 추가 중 오류가 발생했습니다.",
     deletePrinterError: "프린터 삭제 중 오류가 발생했습니다.",
     assignGroupError: "그룹 배정 중 오류가 발생했습니다.",
+    printerUpdated: "프린터가 업데이트되었습니다.",
+    updatePrinterError: "프린터 업데이트 중 오류가 발생했습니다.",
     // 기타
     add: "추가",
     edit: "수정",
     cancel: "취소",
+    apply: "적용",
+    // 프린터 수정 모달
+    editPrinter: "프린터 수정",
+    monitoring: "모니터링",
+    manufacturer: "제조사",
+    selectManufacturer: "제조사",
+    selectManufacturerPlaceholder: "제조사를 선택하세요",
+    selectSeries: "시리즈",
+    selectSeriesPlaceholder: "시리즈를 선택하세요",
+    selectModel: "모델",
+    selectModelPlaceholder: "모델을 선택하세요",
+    connection: "연결",
+    cameraUrl: "카메라 URL",
+    cameraUrlComingSoon: "카메라 URL 설정은 곧 제공됩니다.",
     loading: "데이터를 불러오는 중...",
     loginRequired: "로그인이 필요합니다",
     loginRequiredDescription: "프린터 및 그룹 관리 기능을 사용하려면 로그인해주세요.",
@@ -379,7 +455,7 @@ export default {
     noConnection: "연결 없음",
     noConnectionDesc: "프린터 연결 후 이용 가능합니다",
     connected: "연결됨",
-    disconnected: "연결끊김",
+    disconnected: "연결 없음",
     connecting: "연결중",
     connectSuccess: "연결 성공",
     connectSuccessDesc: "프린터가 {port}에 연결되었습니다.",
@@ -438,15 +514,17 @@ export default {
     // 시간 포맷
     hours: "시간",
     minutes: "분",
-    seconds: "초"
+    seconds: "초",
+    // 스와이프 힌트
+    swipeHint: "스와이프"
   },
   camera: {
     title: "실시간 카메라 피드",
     connected: "연결됨",
-    disconnected: "연결 끊김",
+    disconnected: "연결 없음",
     streaming: "스트리밍 중",
     streamPreparation: "스트림 준비 중…",
-    cameraDisconnected: "카메라 연결 끊김",
+    cameraDisconnected: "카메라 연결 없음",
     checkConnection: "카메라 연결을 확인해주세요",
     cameraStreaming: "카메라 스트리밍",
     startStreamingDesc: "실시간 카메라 피드를 시작하려면 버튼을 눌러주세요",
@@ -460,7 +538,8 @@ export default {
     serverConnectionRequired: "서버와의 연결이 필요합니다.",
     inputNotFound: "카메라 입력 주소(stream_url)를 찾을 수 없습니다.",
     startFailed: "스트리밍 시작 실패",
-    exitFullscreen: "전체보기 해제"
+    exitFullscreen: "전체보기 해제",
+    broadcast: "영상 송출"
   },
   control: {
     title: "프린터 원격 제어",
@@ -488,7 +567,14 @@ export default {
     pauseRequest: "프린트를 일시정지 요청을 보냈습니다.",
     resumeRequest: "프린트를 재개 요청을 보냈습니다.",
     cancelRequest: "프린트를 완전 취소 요청을 보냈습니다.",
-    requestFailed: "요청 실패"
+    requestFailed: "요청 실패",
+    axis: "축",
+    moving: "이동합니다",
+    moveRequestSent: "이동 요청을 보냈습니다",
+    temperatureSet: "온도 설정",
+    temperatureTo: "온도를",
+    print: "프린트를",
+    requestSent: "요청을 보냈습니다"
   },
   gcode: {
     title: "G-code 파일관리리",

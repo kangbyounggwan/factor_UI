@@ -7,6 +7,7 @@ import { StatusBar } from '@capacitor/status-bar'
 import { Keyboard, KeyboardResize } from '@capacitor/keyboard'
 import { App as CapApp } from '@capacitor/app'
 import { SafeArea, initialize as initSafeArea } from '@capacitor-community/safe-area'
+import './i18n' // i18n 초기화
 
 // Log StatusBar info at startup (Android only)
 ;(async () => {

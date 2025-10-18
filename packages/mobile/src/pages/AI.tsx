@@ -6,101 +6,117 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import ModelViewer from "@/components/ModelViewer";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   Layers,
   Upload,
-  Play,
   Loader2,
-  Box,
-  FileText,
-  Camera as CameraIcon,
   Wand2,
   Send,
   ImageIcon,
   Trash2,
-  FolderOpen,
-  Grid3X3,
-  Image as ImageFile,
-  Shapes,
   Printer,
+  Download,
+  ChevronDown,
+  ChevronRight,
+  Sparkles,
+  FileText,
+  Camera as CameraIcon,
+  Settings,
+  History,
+  Check,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { useTranslation } from "react-i18next";
+
+// 단계 정의
+type Step = "select-input" | "create-prompt" | "configure" | "generate" | "result";
 
 const AI = () => {
-  const [activeTab, setActiveTab] = useState('text-to-3d');
-  const [textPrompt, setTextPrompt] = useState('');
+  const { t } = useTranslation();
+  const [currentStep, setCurrentStep] = useState<Step>("select-input");
+  const [inputType, setInputType] = useState<"text" | "image" | "text-to-image">("text");
+  const [textPrompt, setTextPrompt] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
-  const [generatedModels, setGeneratedModels] = useState<any[]>([]);
+  const [generatedModel, setGeneratedModel] = useState<any | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const contentScrollRef = useRef<HTMLDivElement>(null);
+  const advancedSectionRef = useRef<HTMLDivElement>(null);
+
+  // 고급 설정
+  const [quality, setQuality] = useState<"low" | "medium" | "high">("medium");
+  const [style, setStyle] = useState<"realistic" | "abstract" | "cartoon">("realistic");
+  const [resolution, setResolution] = useState("1024x1024");
+
   const [connectedPrinters] = useState([
-    { id: '1', name: 'Ender 3 Pro', status: 'ready', temperature: { nozzle: 25, bed: 22 } },
-    { id: '2', name: 'Prusa i3 MK3S+', status: 'printing', temperature: { nozzle: 210, bed: 60 }, progress: 45 },
-    { id: '3', name: 'Bambu Lab X1 Carbon', status: 'ready', temperature: { nozzle: 28, bed: 25 } },
+    { id: "1", name: "Ender 3 Pro", status: "ready", temperature: { nozzle: 25, bed: 22 } },
+    { id: "2", name: "Prusa i3 MK3S+", status: "printing", temperature: { nozzle: 210, bed: 60 }, progress: 45 },
+    { id: "3", name: "Bambu Lab X1 Carbon", status: "ready", temperature: { nozzle: 28, bed: 25 } },
   ]);
-  const totalPrinters = connectedPrinters.length;
-  const connectedCount = connectedPrinters.filter(p => p.status === 'ready' || p.status === 'printing').length;
-  const printingCount = connectedPrinters.filter(p => p.status === 'printing').length;
+
   const { toast } = useToast();
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 예시 프롬프트
+  const examplePrompts = [
+    { icon: "🚗", text: t('ai.exampleCar') || "빨간색 스포츠카" },
+    { icon: "🪑", text: t('ai.exampleChair') || "현대적인 의자" },
+    { icon: "🤖", text: t('ai.exampleRobot') || "귀여운 로봇" },
+    { icon: "🏠", text: t('ai.exampleHouse') || "작은 집 모형" },
+  ];
+
   useEffect(() => {
-    document.title = 'AI 3D 모델링 스튜디오 | 텍스트·이미지 → 3D';
-    const desc = '텍스트와 이미지를 AI로 3D 모델로 변환하고, 프린터와 연동해 즉시 출력까지 진행하세요.';
-    let meta = document.querySelector('meta[name="description"]');
-    if (!meta) {
-      meta = document.createElement('meta');
-      meta.setAttribute('name', 'description');
-      document.head.appendChild(meta);
-    }
-    meta.setAttribute('content', desc);
+    window.scrollTo(0, 0);
   }, []);
 
-  const [printDialogOpen, setPrintDialogOpen] = useState(false);
-  const [selectedPrinter, setSelectedPrinter] = useState<any | null>(null);
-  const [printSettings, setPrintSettings] = useState({
-    support_enable: true,
-    support_angle: 50,
-    layer_height: 0.2,
-    line_width: 0.4,
-    speed_print: 50,
-    material_diameter: 1.75,
-    material_flow: 100,
-    infill_sparse_density: 15,
-    wall_line_count: 2,
-    top_layers: 4,
-    bottom_layers: 4,
-    adhesion_type: 'none' as 'none' | 'skirt' | 'brim' | 'raft',
-  });
+  useEffect(() => {
+    document.title = t('ai.title') || "AI 3D 모델링 스튜디오";
+  }, [t]);
 
-  const openPrinterSettings = (printer: any) => {
-    setSelectedPrinter(printer);
-    setPrintDialogOpen(true);
-  };
+  // 고급 설정 열릴 때 해당 섹션으로 스크롤 이동
+  useEffect(() => {
+    if (showAdvanced && contentScrollRef.current && advancedSectionRef.current) {
+      // 약간의 지연 후 스크롤(전개 애니메이션 완료 고려)
+      const id = window.setTimeout(() => {
+        const container = contentScrollRef.current!;
+        const targetTop = advancedSectionRef.current!.offsetTop;
+        container.scrollTo({ top: targetTop - 12, behavior: 'smooth' });
+      }, 50);
+      return () => window.clearTimeout(id);
+    }
+  }, [showAdvanced]);
 
-  const updateSetting = (key: string, value: any) => {
-    setPrintSettings((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const startPrint = async () => {
-    toast({ title: '출력 시작', description: `${selectedPrinter?.name}에 출력 작업을 전송했습니다.` });
-    setPrintDialogOpen(false);
-  };
-
+  // 파일 업로드 핸들러
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
       const file = files[0];
-      setUploadedFiles([...uploadedFiles, { id: Date.now(), name: file.name, size: file.size, type: file.type, url: URL.createObjectURL(file) }]);
-      toast({ title: '파일 업로드 완료', description: `${file.name}이 업로드되었습니다.` });
+      setUploadedFiles([...uploadedFiles, {
+        id: Date.now(),
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        url: URL.createObjectURL(file),
+      }]);
+      toast({ title: t('ai.uploadSuccess'), description: `${file.name}` });
     }
   };
 
@@ -110,291 +126,451 @@ const AI = () => {
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       const file = files[0];
-      setUploadedFiles([...uploadedFiles, { id: Date.now(), name: file.name, size: file.size, type: file.type, url: URL.createObjectURL(file) }]);
-      toast({ title: '파일 업로드 완료', description: `${file.name}이 업로드되었습니다.` });
+      setUploadedFiles([...uploadedFiles, {
+        id: Date.now(),
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        url: URL.createObjectURL(file),
+      }]);
+      toast({ title: t('ai.uploadSuccess'), description: `${file.name}` });
     }
   };
 
-  const generateModel = async () => {
+  const removeFile = (fileId: number) => {
+    setUploadedFiles(uploadedFiles.filter((file) => file.id !== fileId));
+  };
+
+  // 생성 시작
+  const startGeneration = async () => {
     if (!textPrompt.trim() && uploadedFiles.length === 0) {
-      toast({ title: '입력 필요', description: '텍스트를 입력하거나 파일을 업로드해주세요.', variant: 'destructive' });
+      toast({
+        title: t('ai.inputRequired'),
+        description: t('ai.inputRequiredDesc'),
+        variant: "destructive",
+      });
       return;
     }
+
     setIsProcessing(true);
-    toast({ title: 'AI 생성 시작', description: '3D 모델을 생성하고 있습니다...' });
+    setProgress(0);
+    setCurrentStep("generate");
+
+    // 프로그레스 시뮬레이션
+    const interval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 95) {
+          clearInterval(interval);
+          return prev;
+        }
+        return prev + 5;
+      });
+    }, 200);
+
+    // 생성 시뮬레이션
     setTimeout(() => {
-      const newModel = { id: Date.now(), name: `Model_${Date.now()}`, type: activeTab, prompt: textPrompt, status: 'completed', thumbnail: '/placeholder.svg', createdAt: new Date().toISOString() };
-      setGeneratedModels([newModel, ...generatedModels]);
+      clearInterval(interval);
+      setProgress(100);
+      const newModel = {
+        id: Date.now(),
+        name: `Model_${Date.now()}`,
+        type: inputType,
+        prompt: textPrompt,
+        status: "completed",
+        thumbnail: "/placeholder.svg",
+        createdAt: new Date().toISOString(),
+      };
+      setGeneratedModel(newModel);
       setIsProcessing(false);
-      toast({ title: '생성 완료', description: '3D 모델이 성공적으로 생성되었습니다.' });
-    }, 1500);
+      setCurrentStep("result");
+      toast({
+        title: t('ai.generationComplete'),
+        description: t('ai.generationCompleteDesc'),
+      });
+    }, 4000);
   };
 
-  const removeFile = (fileId: number) => { setUploadedFiles(uploadedFiles.filter(file => file.id !== fileId)); };
+  // 다시 시작
+  const resetFlow = () => {
+    setCurrentStep("select-input");
+    setTextPrompt("");
+    setUploadedFiles([]);
+    setGeneratedModel(null);
+    setProgress(0);
+  };
 
-  return (
-    <div className="min-h-[calc(100vh-4rem)] bg-background">
-      <div className="px-3 py-3 space-y-3 pb-[calc(env(safe-area-inset-bottom,0)+72px)]">
-        {/* 상단 헤더 요약 */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-primary/10 rounded-lg"><Layers className="w-5 h-5 text-primary" /></div>
-            <h1 className="text-lg font-semibold">AI 3D 모델링 스튜디오</h1>
-          </div>
-          <div className="text-xs text-muted-foreground">모델 {generatedModels.length} • 프린터 {connectedCount}/{totalPrinters} • 프린팅 {printingCount}</div>
-        </div>
+  // Step 1: 입력 방식 선택
+  const renderSelectInput = () => (
+    <div className="space-y-3">
+      <div className="text-center space-y-1.5">
+        <h1 className="text-xl font-bold">{t('ai.whatToCreate')}</h1>
+        <p className="text-sm text-muted-foreground">{t('ai.selectInputMethod')}</p>
+      </div>
 
-        {/* 탭 */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3 mb-3">
-            <TabsTrigger value="text-to-3d" className="flex items-center gap-1 text-xs"><Wand2 className="w-3 h-3" />텍스트→3D</TabsTrigger>
-            <TabsTrigger value="image-to-3d" className="flex items-center gap-1 text-xs"><ImageIcon className="w-3 h-3" />이미지→3D</TabsTrigger>
-            <TabsTrigger value="text-to-image" className="flex items-center gap-1 text-xs"><FileText className="w-3 h-3" />텍스트→이미지</TabsTrigger>
-          </TabsList>
-
-          {/* 텍스트 → 3D */}
-          <TabsContent value="text-to-3d" className="space-y-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Wand2 className="w-5 h-5" />3D 모델 생성</CardTitle>
-                <CardDescription>텍스트 설명으로 3D 모델을 생성하세요</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Textarea placeholder="예: 빨간색 스포츠카, 현대적인 의자, 귀여운 로봇..." value={textPrompt} onChange={(e)=>setTextPrompt(e.target.value)} className="min-h-[100px]" />
-                <div className="grid grid-cols-3 gap-2">
-                  <Button variant="outline" size="sm">낮음</Button>
-                  <Button variant="default" size="sm">보통</Button>
-                  <Button variant="outline" size="sm">높음</Button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant="default" size="sm">Flux Kontext</Button>
-                  <Button variant="outline" size="sm">GPT-4</Button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant="outline" size="sm">사실적</Button>
-                  <Button variant="outline" size="sm">추상적</Button>
-                </div>
-                <Button onClick={generateModel} disabled={isProcessing || !textPrompt.trim()} className="w-full" size="lg">
-                  {isProcessing ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />생성 중...</>) : (<><Send className="w-4 h-4 mr-2" />3D 모델 생성</>)}
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-0">
-                <div className="bg-muted rounded-lg flex items-center justify-center h-[52vh] relative overflow-hidden">
-                  <ModelViewer className="w-full h-full" />
-                  {isProcessing && (
-                    <div className="absolute inset-0 bg-gray-900/70 flex items-center justify-center z-10">
-                      <div className="text-center space-y-3">
-                        <Loader2 className="w-10 h-10 mx-auto animate-spin text-white" />
-                        <p className="text-sm text-white font-medium">AI 모델 생성 중...</p>
-                        <p className="text-xs text-gray-300">잠시만 기다려주세요</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* 이미지 → 3D */}
-          <TabsContent value="image-to-3d" className="space-y-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Upload className="w-5 h-5" />이미지 업로드</CardTitle>
-                <CardDescription>JPG, PNG 이미지를 3D 모델로 변환하세요</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer" onDragOver={handleDragOver} onDrop={handleDrop} onClick={()=>fileInputRef.current?.click()}>
-                  <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-                  <p className="text-sm">여기에 이미지를 드롭하세요</p>
-                  <Button variant="outline" size="sm" className="mt-3">파일 선택</Button>
-                  <input ref={fileInputRef} type="file" onChange={handleFileUpload} className="hidden" accept="image/*" multiple />
-                </div>
-
-                {uploadedFiles.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    <h4 className="font-medium text-sm">업로드된 이미지</h4>
-                    {uploadedFiles.map((file) => (
-                      <div key={file.id} className="flex items-center gap-3 p-2 border rounded-lg">
-                        <img src={file.url} alt={file.name} className="w-12 h-12 object-cover rounded" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">{file.name}</p>
-                          <p className="text-xs text-muted-foreground">{(file.size/1024/1024).toFixed(2)} MB</p>
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={()=>removeFile(file.id)}><Trash2 className="w-4 h-4" /></Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <Button onClick={generateModel} className="w-full mt-4" size="lg">
-                  {isProcessing ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />변환 중...</>) : (<><Upload className="w-4 h-4 mr-2" />3D 모델로 변환</>)}
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-0">
-                <div className="rounded-lg overflow-hidden h-[52vh] relative">
-                  <ModelViewer className="w-full h-full" />
-                  {isProcessing && (
-                    <div className="absolute inset-0 bg-gray-900/70 flex items-center justify-center z-10">
-                      <div className="text-center space-y-3">
-                        <Loader2 className="w-10 h-10 mx-auto animate-spin text-white" />
-                        <p className="text-sm text-white font-medium">3D 변환 중...</p>
-                        <p className="text-xs text-gray-300">잠시만 기다려주세요</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* 텍스트 → 이미지 */}
-          <TabsContent value="text-to-image" className="space-y-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><CameraIcon className="w-5 h-5" />이미지 생성</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Textarea placeholder="생성하고 싶은 이미지를 설명하세요..." value={textPrompt} onChange={(e)=>setTextPrompt(e.target.value)} className="min-h-[100px]" />
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant="default" size="sm">사실적</Button>
-                  <Button variant="outline" size="sm">카툰</Button>
-                  <Button variant="outline" size="sm">추상적</Button>
-                  <Button variant="outline" size="sm">픽셀아트</Button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant="outline" size="sm">512x512</Button>
-                  <Button variant="default" size="sm">1024x1024</Button>
-                </div>
-                <Button onClick={generateModel} className="w-full" size="lg">
-                  {isProcessing ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />이미지 생성 중...</>) : (<><CameraIcon className="w-4 h-4 mr-2" />이미지 생성</>)}
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-0">
-                <div className="bg-gray-900 rounded-lg flex items-center justify-center h-[52vh] relative overflow-hidden">
-                  <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center" />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-
-        {/* 연결된 프린터 섹션 */}
-        {(activeTab === 'text-to-3d' || activeTab === 'image-to-3d') && (
-          <div>
-            <Separator className="my-3" />
-            <h3 className="font-medium mb-2">연결된 프린터</h3>
-            <div className="flex items-center gap-2 mb-3">
-              <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">연결: {connectedCount}/{totalPrinters}</Badge>
-              <Badge className="rounded-full px-3 py-1 text-xs">프린팅: {printingCount}</Badge>
+      <div className="grid grid-cols-1 gap-3 mt-4">
+        <Card
+          className={`cursor-pointer transition-all hover:shadow-lg ${
+            inputType === "text" ? "ring-2 ring-primary" : ""
+          }`}
+          onClick={() => {
+            setInputType("text");
+            setCurrentStep("create-prompt");
+          }}
+        >
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 bg-primary/10 rounded-lg">
+              <Wand2 className="w-7 h-7 text-primary" />
             </div>
-            <div className="space-y-2">
-              {connectedPrinters.map((printer) => (
-                <Card key={printer.id} className="p-3 cursor-pointer hover:shadow-md transition" onClick={()=>openPrinterSettings(printer)}>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium">{printer.name}</p>
-                      <Badge variant={printer.status === 'ready' ? 'secondary' : 'default'} className="text-xs">{printer.status === 'ready' ? '대기중' : '프린팅중'}</Badge>
-                    </div>
-                    <div className="text-xs text-muted-foreground flex justify-between">
-                      <span>노즐: {printer.temperature.nozzle}°C</span>
-                      <span>베드: {printer.temperature.bed}°C</span>
-                    </div>
-                    {printer.progress && (
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs"><span>진행률</span><span>{printer.progress}%</span></div>
-                        <Progress value={printer.progress} className="h-1" />
-                      </div>
-                    )}
-                  </div>
-                </Card>
+            <div className="flex-1">
+              <h3 className="font-semibold text-base">{t('ai.textTo3D')}</h3>
+              <p className="text-sm text-muted-foreground">{t('ai.textTo3DDesc')}</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`cursor-pointer transition-all hover:shadow-lg ${
+            inputType === "image" ? "ring-2 ring-primary" : ""
+          }`}
+          onClick={() => {
+            setInputType("image");
+            setCurrentStep("create-prompt");
+          }}
+        >
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 bg-primary/10 rounded-lg">
+              <ImageIcon className="w-7 h-7 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-base">{t('ai.imageTo3D')}</h3>
+              <p className="text-sm text-muted-foreground">{t('ai.imageTo3DDesc')}</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`cursor-pointer transition-all hover:shadow-lg ${
+            inputType === "text-to-image" ? "ring-2 ring-primary" : ""
+          }`}
+          onClick={() => {
+            setInputType("text-to-image");
+            setCurrentStep("create-prompt");
+          }}
+        >
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 bg-primary/10 rounded-lg">
+              <CameraIcon className="w-7 h-7 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-base">{t('ai.textToImage')}</h3>
+              <p className="text-sm text-muted-foreground">{t('ai.textToImageDesc')}</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+
+  // Step 2: 프롬프트 작성
+  const renderCreatePrompt = () => (
+    <div className="space-y-4">
+      {/* 뒤로 가기 */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="sm" onClick={() => setCurrentStep("select-input")}>
+          ← {t('common.back')}
+        </Button>
+        <Badge variant="outline">{inputType === "text" ? t('ai.textTo3D') : inputType === "image" ? t('ai.imageTo3D') : t('ai.textToImage')}</Badge>
+      </div>
+
+      <div className="text-center space-y-2">
+        <h2 className="text-xl font-bold">{t('ai.describeYourIdea')}</h2>
+        <p className="text-sm text-muted-foreground">{t('ai.describeYourIdeaDesc')}</p>
+      </div>
+
+      {/* 이미지 업로드 모드 */}
+      {inputType === "image" && (
+        <div
+          className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Upload className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+          <p className="text-sm font-medium">{t('ai.dragAndDrop')}</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('ai.supportedFormats')}</p>
+          <Button variant="outline" size="sm" className="mt-3">
+            {t('gcode.selectFile')}
+          </Button>
+          <input ref={fileInputRef} type="file" onChange={handleFileUpload} className="hidden" accept="image/*" />
+        </div>
+      )}
+
+      {/* 업로드된 파일 목록 */}
+      {uploadedFiles.length > 0 && (
+        <div className="space-y-2">
+          {uploadedFiles.map((file) => (
+            <div key={file.id} className="flex items-center gap-3 p-3 border rounded-lg bg-card">
+              <img src={file.url} alt={file.name} className="w-16 h-16 object-cover rounded" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{file.name}</p>
+                <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => removeFile(file.id)}>
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 텍스트 입력 */}
+      {(inputType === "text" || inputType === "text-to-image") && (
+        <div className="space-y-3">
+          <Textarea
+            placeholder={t('ai.textPromptPlaceholder')}
+            value={textPrompt}
+            onChange={(e) => setTextPrompt(e.target.value)}
+            className="min-h-[120px] text-base resize-none"
+          />
+
+          {/* 예시 칩들 */}
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">{t('ai.tryExamples')}</p>
+            <div className="flex flex-wrap gap-2">
+              {examplePrompts.map((example, idx) => (
+                <Badge
+                  key={idx}
+                  variant="outline"
+                  className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                  onClick={() => setTextPrompt(example.text)}
+                >
+                  {example.icon} {example.text}
+                </Badge>
               ))}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* 출력 설정 다이얼로그 */}
-        <Dialog open={printDialogOpen} onOpenChange={setPrintDialogOpen}>
-          <DialogContent className="w-[92vw] max-w-[92vw] max-h-[90vh] overflow-hidden p-0 rounded-xl">
-            <div className="flex flex-col h-full">
-              <div className="px-4 py-3 border-b">
-                <DialogHeader className="flex flex-row items-center justify-between w-full">
-                  <DialogTitle className="text-base font-semibold">출력 설정{selectedPrinter ? ` - ${selectedPrinter.name}` : ''}</DialogTitle>
-                </DialogHeader>
-              </div>
+      {/* 고급 설정 (접을 수 있음) */}
+      <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" className="w-full justify-between">
+            <span className="flex items-center gap-2">
+              <Settings className="w-4 h-4" />
+              {t('ai.advancedSettings')}
+            </span>
+            <ChevronDown className={`w-4 h-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-3 pt-3">
+          <div ref={advancedSectionRef} />
+          {/* 품질 선택 */}
+          <div className="space-y-2">
+            <Label>{t('ai.quality')}</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                variant={quality === "low" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setQuality("low")}
+              >
+                {t('ai.qualityLow')}
+              </Button>
+              <Button
+                variant={quality === "medium" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setQuality("medium")}
+              >
+                {t('ai.qualityMedium')}
+              </Button>
+              <Button
+                variant={quality === "high" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setQuality("high")}
+              >
+                {t('ai.qualityHigh')}
+              </Button>
+            </div>
+          </div>
 
-              <div className="grid grid-cols-1 gap-4 p-4 overflow-hidden flex-1">
-                <Card className="overflow-hidden">
-                  <CardContent className="p-0">
-                    <ModelViewer className="w-full h-[52vh]" />
+          {/* 스타일 선택 */}
+          <div className="space-y-2">
+            <Label>{t('ai.style')}</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                variant={style === "realistic" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setStyle("realistic")}
+              >
+                {t('ai.styleRealistic')}
+              </Button>
+              <Button
+                variant={style === "cartoon" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setStyle("cartoon")}
+              >
+                {t('ai.styleCartoon')}
+              </Button>
+              <Button
+                variant={style === "abstract" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setStyle("abstract")}
+              >
+                {t('ai.styleAbstract')}
+              </Button>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+
+  // Step 3: 생성 중
+  const renderGenerating = () => (
+    <div className="flex flex-col items-center justify-center py-12 space-y-6">
+      <div className="relative">
+        <Loader2 className="w-16 h-16 animate-spin text-primary" />
+        <Sparkles className="w-6 h-6 text-primary absolute top-0 right-0 animate-pulse" />
+      </div>
+
+      <div className="text-center space-y-2">
+        <h2 className="text-xl font-bold">{t('ai.generatingAI')}</h2>
+        <p className="text-sm text-muted-foreground">{t('ai.generatingDesc')}</p>
+      </div>
+
+      <div className="w-full max-w-sm space-y-2">
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">{t('ai.progressLabel')}</span>
+          <span className="font-medium">{progress}%</span>
+        </div>
+        <Progress value={progress} className="h-2" />
+        <p className="text-xs text-center text-muted-foreground">
+          {t('ai.estimatedTime')}: {Math.max(1, Math.ceil((100 - progress) / 25))}s
+        </p>
+      </div>
+    </div>
+  );
+
+  // Step 4: 결과
+  const renderResult = () => (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <div className="p-2 bg-green-500/10 rounded-full">
+          <Check className="w-5 h-5 text-green-500" />
+        </div>
+        <div>
+          <h2 className="text-lg font-bold">{t('ai.generationComplete')}</h2>
+          <p className="text-xs text-muted-foreground">{t('ai.generationCompleteDesc')}</p>
+        </div>
+      </div>
+
+      {/* 3D 뷰어 */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="rounded-lg overflow-hidden h-[40vh] relative bg-muted">
+            <ModelViewer className="w-full h-full" />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 액션 버튼들 */}
+      <div className="grid grid-cols-2 gap-3">
+        <Button variant="outline" className="h-12">
+          <Download className="w-4 h-4 mr-2" />
+          {t('ai.download')}
+        </Button>
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button className="h-12">
+              <Printer className="w-4 h-4 mr-2" />
+              {t('common.download')}
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="h-[80vh]">
+            <SheetHeader>
+              <SheetTitle>{t('ai.selectPrinterTitle')}</SheetTitle>
+              <SheetDescription>{t('ai.selectPrinterDesc')}</SheetDescription>
+            </SheetHeader>
+            <div className="mt-6 space-y-3">
+              {connectedPrinters.map((printer) => (
+                <Card
+                  key={printer.id}
+                  className="cursor-pointer hover:shadow-md transition"
+                  onClick={() => {
+                    toast({
+                      title: t('ai.printStarted'),
+                      description: `${printer.name}${t('ai.printStartedDesc')}`,
+                    });
+                  }}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-medium">{printer.name}</p>
+                      <Badge variant={printer.status === "ready" ? "secondary" : "default"}>
+                        {printer.status === "ready" ? t('ai.printerReady') : t('ai.printerPrinting')}
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground flex justify-between">
+                      <span>{t('printer.nozzle')}: {printer.temperature.nozzle}°C</span>
+                      <span>{t('printer.bed')}: {printer.temperature.bed}°C</span>
+                    </div>
                   </CardContent>
                 </Card>
-
-                <div className="h-[52vh] overflow-y-auto pr-1">
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-2"><h4 className="font-medium">서포트</h4></div>
-                      <div className="flex items-center justify-between p-3 rounded-lg border"><Label htmlFor="support_enable">서포트 활성화</Label><Switch id="support_enable" checked={printSettings.support_enable} onCheckedChange={(v)=>updateSetting('support_enable', v)} /></div>
-                      <div className="mt-3 grid grid-cols-2 gap-3">
-                        <div><Label htmlFor="support_angle">오버행 임계각(°)</Label><Input id="support_angle" type="number" step="1" value={printSettings.support_angle} onChange={(e)=>updateSetting('support_angle', Number(e.target.value))} /></div>
-                        <div>
-                          <Label htmlFor="adhesion_type">빌드플레이트 접착</Label>
-                          <Select value={printSettings.adhesion_type} onValueChange={(v)=>updateSetting('adhesion_type', v)}>
-                            <SelectTrigger id="adhesion_type" className="w-full"><SelectValue placeholder="없음" /></SelectTrigger>
-                            <SelectContent className="bg-background z-50">
-                              <SelectItem value="none">없음</SelectItem>
-                              <SelectItem value="skirt">Skirt</SelectItem>
-                              <SelectItem value="brim">Brim</SelectItem>
-                              <SelectItem value="raft">Raft</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><Label htmlFor="layer_height">레이어 높이(mm)</Label><Input id="layer_height" type="number" step="0.01" value={printSettings.layer_height} onChange={(e)=>updateSetting('layer_height', Number(e.target.value))} /></div>
-                      <div><Label htmlFor="line_width">라인 너비(mm)</Label><Input id="line_width" type="number" step="0.01" value={printSettings.line_width} onChange={(e)=>updateSetting('line_width', Number(e.target.value))} /></div>
-                      <div><Label htmlFor="speed_print">프린트 속도(mm/s)</Label><Input id="speed_print" type="number" step="1" value={printSettings.speed_print} onChange={(e)=>updateSetting('speed_print', Number(e.target.value))} /></div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><Label htmlFor="material_diameter">재료 직경(mm)</Label><Input id="material_diameter" type="number" step="0.01" value={printSettings.material_diameter} onChange={(e)=>updateSetting('material_diameter', Number(e.target.value))} /></div>
-                      <div><Label htmlFor="material_flow">재료 유량(%)</Label><Input id="material_flow" type="number" step="1" value={printSettings.material_flow} onChange={(e)=>updateSetting('material_flow', Number(e.target.value))} /></div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><Label htmlFor="infill_sparse_density">인필 밀도(%)</Label><Input id="infill_sparse_density" type="number" step="1" value={printSettings.infill_sparse_density} onChange={(e)=>updateSetting('infill_sparse_density', Number(e.target.value))} /></div>
-                      <div><Label htmlFor="wall_line_count">벽 라인 수</Label><Input id="wall_line_count" type="number" step="1" value={printSettings.wall_line_count} onChange={(e)=>updateSetting('wall_line_count', Number(e.target.value))} /></div>
-                      <div><Label htmlFor="top_layers">탑 레이어</Label><Input id="top_layers" type="number" step="1" value={printSettings.top_layers} onChange={(e)=>updateSetting('top_layers', Number(e.target.value))} /></div>
-                      <div><Label htmlFor="bottom_layers">바닥 레이어</Label><Input id="bottom_layers" type="number" step="1" value={printSettings.bottom_layers} onChange={(e)=>updateSetting('bottom_layers', Number(e.target.value))} /></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="px-4 py-3 border-t flex items-center justify-end gap-2">
-                <Button variant="outline" onClick={()=>setPrintDialogOpen(false)}>취소</Button>
-                <Button onClick={startPrint}><Printer className="w-4 h-4 mr-2" />출력 시작</Button>
-              </div>
+              ))}
             </div>
-          </DialogContent>
-        </Dialog>
+          </SheetContent>
+        </Sheet>
       </div>
+
+      {/* 다시 만들기 */}
+      <Button variant="ghost" className="w-full" onClick={resetFlow}>
+        {t('ai.createAnother')}
+      </Button>
+    </div>
+  );
+
+  return (
+    <div className="h-full flex flex-col bg-background overflow-hidden">
+      {/* 상단 헤더 - 고정 */}
+      <div className="flex-shrink-0 px-4 pt-4 pb-3 border-b">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Layers className="w-5 h-5 text-primary" />
+            </div>
+            <h1 className="text-lg font-semibold">{t('ai.title')}</h1>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setShowHistory(!showHistory)}>
+            <History className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* 컨텐츠 영역 - 스크롤 가능 (하단 여백 제거) */}
+      <div ref={contentScrollRef} className="flex-1 overflow-y-auto px-4 pt-4 pb-0">
+        {currentStep === "select-input" && renderSelectInput()}
+        {currentStep === "create-prompt" && renderCreatePrompt()}
+        {currentStep === "generate" && renderGenerating()}
+        {currentStep === "result" && renderResult()}
+      </div>
+
+      {/* 고정된 하단 버튼 (프롬프트 작성 단계에서만) */}
+      {currentStep === "create-prompt" && (
+        <div className="flex-shrink-0 p-4 bg-background border-t" style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + 16px)` }}>
+          <Button
+            size="lg"
+            className="w-full h-14 text-lg font-semibold"
+            onClick={startGeneration}
+            disabled={!textPrompt.trim() && uploadedFiles.length === 0}
+          >
+            <Sparkles className="w-5 h-5 mr-2" />
+            {t('ai.generate')}
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

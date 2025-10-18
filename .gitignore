@@ -27,6 +27,9 @@ out/
 .DS_Store
 Thumbs.db
 
+# Ignore Windows reserved device file accidentally created
+nul
+
 # Logs
 logs
 *.log

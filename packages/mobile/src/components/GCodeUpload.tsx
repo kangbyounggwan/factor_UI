@@ -28,14 +28,18 @@ interface GCodeFile {
   status: string;
 }
 
-export const GCodeUpload = () => {
+interface GCodeUploadProps {
+  deviceUuid?: string | null;
+}
+
+export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
   const { isConnected, printerStatus } = useWebSocket();
   const [files, setFiles] = useState<GCodeFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  
+
   const isPrinting = printerStatus.printing;
 
   const formatFileSize = (bytes: number): string => {

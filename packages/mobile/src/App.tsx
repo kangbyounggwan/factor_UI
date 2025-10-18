@@ -4,25 +4,27 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { ThemeProvider, useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Capacitor } from "@capacitor/core";
 import { StatusBar, Style } from "@capacitor/status-bar";
+import { I18nextProvider } from "react-i18next";
+import i18n from "@shared/i18n";
 import { Header } from "@/components/Header";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 // import { AIAssistantSidebar } from "@/components/AIAssistantSidebar"; // AI 비활성화
 import { AISidebarProvider } from "@/contexts/AISidebarContext";
 import Home from "./pages/Home";
+import Welcome from "./pages/Welcome";
 import Dashboard from "./pages/Dashboard";
 import PrinterDetail from "./pages/PrinterDetail";
 import Settings from "./pages/Settings";
 import Subscription from "./pages/Subscription";
 import SupportedPrinters from "./pages/SupportedPrinters";
-// import AI from "./pages/AI"; // AI 비활성화
+import AI from "./pages/AI";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
 import DeviceRegister from "./pages/DeviceRegister";
-import MobileSetup from "./pages/MobileSetup";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +35,7 @@ const AppContent = () => {
   const [aiSidebarCollapsed, setAiSidebarCollapsed] = useState(true);
   const [aiSidebarWidth, setAiSidebarWidth] = useState(384);
   const { theme } = useTheme();
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // 테마 변경에 따라 상태바 아이콘/배경 동적 적용 (Android)
   useEffect(() => {
@@ -64,6 +67,16 @@ const AppContent = () => {
     }
   }, [location.pathname]);
 
+  // 경로 변경 시 메인 스크롤 컨테이너 스크롤 초기화
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) {
+      el.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }, [location.pathname]);
+
   // 전역 뒤로가기 헬퍼: 홈("/") 도달 시 스택 리셋
   const handleGlobalBack = () => {
     const key = "nav:history";
@@ -81,21 +94,28 @@ const AppContent = () => {
     }
   };
   
+  // 헤더를 숨길 경로들 (Welcome, Auth 페이지)
+  const hideHeaderPaths = ["/", "/auth"];
+  const shouldShowHeader = !hideHeaderPaths.includes(location.pathname);
+
   return (
-    <div className="min-h-screen bg-background transition-colors">
-      {/* 헤더를 모든 페이지에 통합 */}
-      <Header onBack={handleGlobalBack} />
-      
-      {/* 메인 컨텐츠 영역 */}
-      <div 
-        className="transition-all duration-300" 
-        style={{ 
-          marginRight: showAISidebar && !aiSidebarCollapsed ? `${aiSidebarWidth}px` : '0px' 
+    <div className="h-full flex flex-col bg-background transition-colors overflow-hidden">
+      {/* 헤더를 조건부로 표시 - 고정 */}
+      {shouldShowHeader && <Header onBack={handleGlobalBack} />}
+
+      {/* 메인 컨텐츠 영역 - 스크롤 가능 */}
+      <div
+        id="app-scroll"
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto transition-all duration-300"
+        style={{
+          marginRight: showAISidebar && !aiSidebarCollapsed ? `${aiSidebarWidth}px` : '0px'
         }}
       >
         <Routes>
           <Route path="/auth" element={<Auth />} />
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Welcome />} />
+          <Route path="/home" element={<Home />} />
           <Route path="/dashboard" element={
             <ProtectedRoute>
               <Dashboard />
@@ -113,19 +133,11 @@ const AppContent = () => {
           } />
           <Route path="/subscription" element={<Subscription />} />
           <Route path="/supported-printers" element={<SupportedPrinters />} />
-          <Route path="/mobile-setup" element={
-            <ProtectedRoute>
-              <MobileSetup />
-            </ProtectedRoute>
-          } />
-          {/** AI 작업공간 라우트 비활성화 **/}
-          {/**
           <Route path="/ai" element={
             <ProtectedRoute>
               <AI />
             </ProtectedRoute>
           } />
-          **/}
           <Route path="/admin" element={
             <AdminRoute>
               <Admin />
@@ -158,22 +170,24 @@ const AppContent = () => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="system"
-      enableSystem
-      disableTransitionOnChange
-    >
-      <TooltipProvider>
-        <AISidebarProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AppContent />
-          </BrowserRouter>
-        </AISidebarProvider>
-      </TooltipProvider>
-    </ThemeProvider>
+    <I18nextProvider i18n={i18n}>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
+      >
+        <TooltipProvider>
+          <AISidebarProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <AppContent />
+            </BrowserRouter>
+          </AISidebarProvider>
+        </TooltipProvider>
+      </ThemeProvider>
+    </I18nextProvider>
   </QueryClientProvider>
 );
 

@@ -122,6 +122,10 @@ All colors MUST be HSL.
 }
 
 @layer base {
+  html, body, #root {
+    height: 100%;
+  }
+
   * {
     @apply border-border;
   }
@@ -130,5 +134,16 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
     /* 키보드가 나타날 때 하단 안전 패딩 적용 */
     padding-bottom: max(16px, env(safe-area-inset-bottom), var(--kb, 0px));
+  }
+}
+
+@layer utilities {
+  /* 스크롤바 숨기기 */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }

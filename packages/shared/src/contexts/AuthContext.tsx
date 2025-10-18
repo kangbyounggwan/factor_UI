@@ -264,12 +264,6 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (!error && variant === "mobile") {
-      const hasClientConfig = localStorage.getItem("client_config");
-      if (!hasClientConfig) {
-        setTimeout(() => { window.location.href = "/mobile-setup"; }, 1000);
-      }
-    }
     return { error };
   };
 
