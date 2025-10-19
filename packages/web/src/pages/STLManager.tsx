@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { STLUpload } from "@/components/STLUpload";
-import ModelViewer from "@/components/ModelViewer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2 } from "lucide-react";
+
+// Lazy load ModelViewer to reduce initial bundle size
+const ModelViewer = lazy(() => import("@/components/ModelViewer"));
 
 interface STLFile {
   id: string;
@@ -43,11 +46,20 @@ export default function STLManager() {
               </CardTitle>
             </CardHeader>
             <CardContent className="h-[calc(100%-4rem)]">
-              <ModelViewer
-                className="w-full h-full"
-                stlUrl={selectedFile?.storage_url}
-                placeholderMessage="왼쪽에서 파일을 선택하여 미리보기"
-              />
+              <Suspense fallback={
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Loading 3D viewer...</p>
+                  </div>
+                </div>
+              }>
+                <ModelViewer
+                  className="w-full h-full"
+                  stlUrl={selectedFile?.storage_url}
+                  placeholderMessage="왼쪽에서 파일을 선택하여 미리보기"
+                />
+              </Suspense>
             </CardContent>
           </Card>
 

@@ -86,11 +86,12 @@ const DeviceRegister = () => {
       });
 
       navigate('/admin');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error registering device:', error);
+      const errorMessage = error instanceof Error ? error.message : "디바이스 등록 중 오류가 발생했습니다.";
       toast({
         title: "등록 실패",
-        description: error.message || "디바이스 등록 중 오류가 발생했습니다.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

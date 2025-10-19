@@ -263,7 +263,7 @@ const SupportedPrinters = () => {
             다양한 3D 프린터와 호환되는 모니터링 솔루션을 경험해보세요
           </p>
           <Button asChild size="lg" variant="secondary">
-            <Link to="/auth">
+            <Link to="/">
               무료로 시작하기
             </Link>
           </Button>

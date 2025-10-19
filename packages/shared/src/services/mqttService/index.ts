@@ -285,3 +285,129 @@ export async function waitForSdUploadResult(
     }, timeoutMs);
   });
 }
+
+// === Camera Streaming ===
+export type CameraStartOptions = {
+  deviceUuid: string;
+  streamUrl: string;
+  fps?: number;
+  width?: number;
+  height?: number;
+  bitrateKbps?: number;
+  encoder?: 'libx264' | 'h264_omx' | 'h264_v4l2m2m';
+  forceMjpeg?: boolean;
+  lowLatency?: boolean;
+  rtspBase?: string;
+  webrtcBase?: string;
+};
+
+/**
+ * 카메라 스트리밍 시작 명령 전송
+ * @param options - 카메라 스트리밍 옵션
+ */
+export async function publishCameraStart(options: CameraStartOptions): Promise<void> {
+  const {
+    deviceUuid,
+    streamUrl,
+    fps = 20,
+    width = 1280,
+    height = 720,
+    bitrateKbps = 1800,
+    encoder = 'libx264',
+    forceMjpeg = true,
+    lowLatency = true,
+    rtspBase = 'rtsp://factor.io.kr:8554',
+    webrtcBase = 'https://factor.io.kr/webrtc'
+  } = options;
+
+  const topic = `camera/${deviceUuid}/cmd`;
+  const payload = {
+    type: 'camera',
+    action: 'start',
+    options: {
+      name: `cam-${deviceUuid}`,
+      input: streamUrl,
+      fps,
+      width,
+      height,
+      bitrateKbps,
+      encoder,
+      forceMjpeg,
+      lowLatency,
+      rtsp_base: rtspBase,
+      webrtc_base: webrtcBase
+    }
+  };
+
+  console.log('[CAM][MQTT] start payload', payload);
+  await mqttPublish(topic, payload, 1, false);
+}
+
+/**
+ * 카메라 스트리밍 정지 명령 전송
+ * @param deviceUuid - 디바이스 UUID
+ */
+export async function publishCameraStop(deviceUuid: string): Promise<void> {
+  const topic = `camera/${deviceUuid}/cmd`;
+  const payload = {
+    type: 'camera',
+    action: 'stop',
+    options: {
+      name: `cam-${deviceUuid}`
+    }
+  };
+
+  console.log('[CAM][MQTT] stop payload', payload);
+  await mqttPublish(topic, payload, 1, false);
+}
+
+export type CameraStateCallback = (state: {
+  running: boolean;
+  webrtcUrl: string | null;
+  status: 'offline' | 'online';
+}) => void;
+
+/**
+ * 카메라 상태 구독
+ * @param deviceUuid - 디바이스 UUID
+ * @param onStateChange - 상태 변경 시 호출되는 콜백 (running 상태, WebRTC URL)
+ * @returns 구독 해제 함수
+ */
+export async function subscribeCameraState(
+  deviceUuid: string,
+  onStateChange: CameraStateCallback
+): Promise<() => Promise<void>> {
+  await mqttConnect();
+
+  const topic = `camera/${deviceUuid}/state`;
+  const handler = (_t: string, payload: any) => {
+    try {
+      const msg = typeof payload === 'string' ? JSON.parse(payload) : payload;
+
+      // 상태 판단
+      const running = !!(msg?.running);
+      const status = running ? 'online' : 'offline';
+
+      // WebRTC URL 추출
+      const webrtcUrl =
+        msg?.webrtc?.play_url_webrtc ||
+        msg?.play_url_webrtc ||
+        (typeof msg?.url === 'string' && !msg.url.endsWith('.m3u8') ? msg.url : null);
+
+      onStateChange({ running, webrtcUrl, status });
+    } catch (e) {
+      console.warn('[CAM][STATE] parse error', e);
+    }
+  };
+
+  await mqttSubscribe(topic, handler, 1);
+
+  // 구독 해제 함수 반환
+  return async () => {
+    try {
+      await mqttUnsubscribe(topic, handler);
+    } catch (e) {
+      console.warn('[CAM][STATE] unsubscribe error', e);
+    }
+  };
+}

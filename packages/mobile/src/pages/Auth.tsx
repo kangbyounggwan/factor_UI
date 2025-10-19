@@ -11,6 +11,7 @@ import { useAuth } from "@shared/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { startDashStatusSubscriptionsForUser } from "@shared/component/mqtt";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { supabase } from "@shared/integrations/supabase/client";
 
 const Auth = () => {
   const { t } = useTranslation();
@@ -66,11 +67,11 @@ const Auth = () => {
         });
         // 로그인 성공 시점: MQTT dash_status 구독 시작
         try {
-          const uid = (await import("@shared/integrations/supabase/client")).supabase.auth.getUser().then(r => r.data.user?.id);
-          Promise.resolve(uid).then((id) => {
-            if (id) startDashStatusSubscriptionsForUser(id);
-          });
-        } catch { }
+          const uid = await supabase.auth.getUser().then(r => r.data.user?.id);
+          if (uid) startDashStatusSubscriptionsForUser(uid);
+        } catch (error) {
+          console.warn('Failed to start MQTT subscriptions:', error);
+        }
       }
     } catch (err) {
       setError(t('auth.loginError'));
@@ -135,7 +136,7 @@ const Auth = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary via-primary/90 to-primary/80 flex items-center justify-center p-6 overflow-hidden relative">
+    <div className="min-h-screen bg-gradient-to-br from-primary via-primary/90 to-primary/80 flex items-start justify-center p-6 overflow-y-auto relative">
       {/* 배경 장식 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 left-0 w-full h-full">
@@ -150,10 +151,10 @@ const Auth = () => {
       </div>
 
       {/* 메인 카드 */}
-      <Card className="w-full max-w-md bg-white/95 dark:bg-card/95 backdrop-blur-xl border-0 shadow-2xl relative z-10">
-        <CardContent className="p-8">
+      <Card className="w-full max-w-md bg-white/95 dark:bg-card/95 backdrop-blur-xl border-0 shadow-2xl relative z-10 my-8">
+        <CardContent className="p-8 pt-6">
           {/* 언어 전환 버튼 - 오른쪽 상단 */}
-          <div className="absolute top-4 right-4">
+          <div className="flex justify-end mb-2">
             <LanguageSwitcher />
           </div>
           {/* 로고 */}
@@ -188,12 +189,15 @@ const Auth = () => {
                   <Input
                     id="email"
                     type="email"
+                    inputMode="email"
+                    autoComplete="email"
                     placeholder={t('auth.enterEmail')}
                     value={signInData.email}
                     onChange={(e) => setSignInData({ ...signInData, email: e.target.value })}
                     className="pl-10 h-12 bg-muted/50 border-muted"
                     required
                     disabled={isSubmitting}
+                    readOnly={false}
                   />
                 </div>
               </div>
@@ -216,12 +220,15 @@ const Auth = () => {
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
+                    inputMode="text"
+                    autoComplete="current-password"
                     placeholder={t('auth.enterPassword')}
                     value={signInData.password}
                     onChange={(e) => setSignInData({ ...signInData, password: e.target.value })}
                     className="pl-10 pr-10 h-12 bg-muted/50 border-muted"
                     required
                     disabled={isSubmitting}
+                    readOnly={false}
                   />
                   <button
                     type="button"
@@ -292,12 +299,15 @@ const Auth = () => {
                   <Input
                     id="signup-email"
                     type="email"
+                    inputMode="email"
+                    autoComplete="email"
                     placeholder={t('auth.enterEmail')}
                     value={signUpData.email}
                     onChange={(e) => setSignUpData({ ...signUpData, email: e.target.value })}
                     className="pl-10 h-12 bg-muted/50 border-muted"
                     required
                     disabled={isSubmitting}
+                    readOnly={false}
                   />
                 </div>
               </div>
@@ -311,12 +321,15 @@ const Auth = () => {
                   <Input
                     id="signup-password"
                     type={showPassword ? "text" : "password"}
+                    inputMode="text"
+                    autoComplete="new-password"
                     placeholder={t('auth.createPassword')}
                     value={signUpData.password}
                     onChange={(e) => setSignUpData({ ...signUpData, password: e.target.value })}
                     className="pl-10 pr-10 h-12 bg-muted/50 border-muted"
                     required
                     disabled={isSubmitting}
+                    readOnly={false}
                   />
                   <button
                     type="button"
@@ -337,12 +350,15 @@ const Auth = () => {
                   <Input
                     id="signup-confirm"
                     type={showPassword ? "text" : "password"}
+                    inputMode="text"
+                    autoComplete="new-password"
                     placeholder={t('auth.confirmYourPassword')}
                     value={signUpData.confirmPassword}
                     onChange={(e) => setSignUpData({ ...signUpData, confirmPassword: e.target.value })}
                     className="pl-10 pr-10 h-12 bg-muted/50 border-muted"
                     required
                     disabled={isSubmitting}
+                    readOnly={false}
                   />
                 </div>
               </div>

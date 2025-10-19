@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { ThemeProvider, useTheme } from "next-themes";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, lazy, Suspense } from "react";
 import { Capacitor } from "@capacitor/core";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { I18nextProvider } from "react-i18next";
@@ -14,18 +14,19 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 // import { AIAssistantSidebar } from "@/components/AIAssistantSidebar"; // AI 비활성화
 import { AISidebarProvider } from "@/contexts/AISidebarContext";
-import Home from "./pages/Home";
-import Welcome from "./pages/Welcome";
-import Dashboard from "./pages/Dashboard";
-import PrinterDetail from "./pages/PrinterDetail";
-import Settings from "./pages/Settings";
-import Subscription from "./pages/Subscription";
-import SupportedPrinters from "./pages/SupportedPrinters";
-import AI from "./pages/AI";
-import Auth from "./pages/Auth";
-import Admin from "./pages/Admin";
-import DeviceRegister from "./pages/DeviceRegister";
-import NotFound from "./pages/NotFound";
+
+// Lazy load all pages for code splitting
+const Home = lazy(() => import("./pages/Home"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const PrinterDetail = lazy(() => import("./pages/PrinterDetail"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Subscription = lazy(() => import("./pages/Subscription"));
+const SupportedPrinters = lazy(() => import("./pages/SupportedPrinters"));
+const AI = lazy(() => import("./pages/AI"));
+const Auth = lazy(() => import("./pages/Auth"));
+const Admin = lazy(() => import("./pages/Admin"));
+const DeviceRegister = lazy(() => import("./pages/DeviceRegister"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
@@ -94,8 +95,8 @@ const AppContent = () => {
     }
   };
   
-  // 헤더를 숨길 경로들 (Welcome, Auth 페이지)
-  const hideHeaderPaths = ["/", "/auth"];
+  // 헤더를 숨길 경로들 (Auth 페이지)
+  const hideHeaderPaths = ["/"];
   const shouldShowHeader = !hideHeaderPaths.includes(location.pathname);
 
   return (
@@ -112,45 +113,50 @@ const AppContent = () => {
           marginRight: showAISidebar && !aiSidebarCollapsed ? `${aiSidebarWidth}px` : '0px'
         }}
       >
-        <Routes>
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/" element={<Welcome />} />
-          <Route path="/home" element={<Home />} />
-          <Route path="/dashboard" element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/printer/:id" element={
-            <ProtectedRoute>
-              <PrinterDetail />
-            </ProtectedRoute>
-          } />
-          <Route path="/settings" element={
-            <ProtectedRoute>
-              <Settings />
-            </ProtectedRoute>
-          } />
-          <Route path="/subscription" element={<Subscription />} />
-          <Route path="/supported-printers" element={<SupportedPrinters />} />
-          <Route path="/ai" element={
-            <ProtectedRoute>
-              <AI />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin" element={
-            <AdminRoute>
-              <Admin />
-            </AdminRoute>
-          } />
-          <Route path="/admin/device/register" element={
-            <AdminRoute>
-              <DeviceRegister />
-            </AdminRoute>
-          } />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-full">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        }>
+          <Routes>
+            <Route path="/" element={<Auth />} />
+            <Route path="/home" element={<Home />} />
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/printer/:id" element={
+              <ProtectedRoute>
+                <PrinterDetail />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings" element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            } />
+            <Route path="/subscription" element={<Subscription />} />
+            <Route path="/supported-printers" element={<SupportedPrinters />} />
+            <Route path="/ai" element={
+              <ProtectedRoute>
+                <AI />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin" element={
+              <AdminRoute>
+                <Admin />
+              </AdminRoute>
+            } />
+            <Route path="/admin/device/register" element={
+              <AdminRoute>
+                <DeviceRegister />
+              </AdminRoute>
+            } />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </div>
       
       {/* AI 어시스턴트 사이드바 비활성화 */}

@@ -21,8 +21,8 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   }
 
   if (!user) {
-    console.log('ProtectedRoute: 사용자 없음, /auth로 리다이렉트');
-    return <Navigate to="/auth" replace />;
+    console.log('ProtectedRoute: 사용자 없음, /로 리다이렉트');
+    return <Navigate to="/" replace />;
   }
 
   console.log('ProtectedRoute: 사용자 인증됨, 페이지 렌더링');

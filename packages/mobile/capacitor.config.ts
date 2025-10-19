@@ -6,8 +6,8 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   plugins: {
     Keyboard: {
-      resize: 'body',
-      resizeOnFullScreen: true
+      resize: 'ionic',
+      resizeOnFullScreen: false
     },
     StatusBar: {
       overlays: false,

@@ -10,7 +10,7 @@ import { useAuth } from "@shared/contexts/AuthContext";
 import { supabase } from "@shared/integrations/supabase/client"
 import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { useToast } from "@/hooks/use-toast";
-import {  onDashStatusMessage, mqttConnect } from "@shared/services/mqttService";
+import { onDashStatusMessage } from "@shared/services/mqttService";
 import {
   Select,
   SelectContent,
@@ -26,7 +26,8 @@ function usePersistentState<T>(key: string, fallback: T) {
     try {
       const raw = localStorage.getItem(key);
       return raw ? (JSON.parse(raw) as T) : fallback;
-    } catch {
+    } catch (err) {
+      console.warn('Failed to parse localStorage:', err);
       return fallback;
     }
   });
@@ -34,7 +35,7 @@ function usePersistentState<T>(key: string, fallback: T) {
   useEffect(() => {
     try {
       localStorage.setItem(key, JSON.stringify(state));
-    } catch {}
+    } catch (err) { console.warn('Failed to save to localStorage:', err); }
   }, [key, state]);
 
   useEffect(() => {
@@ -42,7 +43,7 @@ function usePersistentState<T>(key: string, fallback: T) {
       if (e.key === key && e.newValue) {
         try {
           setState(JSON.parse(e.newValue) as T);
-        } catch {}
+        } catch (parseErr) { console.warn('Failed to parse storage event:', parseErr); }
       }
     };
     window.addEventListener('storage', onStorage);
@@ -111,11 +112,16 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
 
   const config = statusConfig[printer.state] || statusConfig.disconnected;
   const hasGroupObject = printer.group && typeof printer.group === 'object';
-  const groupColor = hasGroupObject && (printer.group as any).color ? (printer.group as any).color : '#9CA3AF';
-  const groupName = hasGroupObject && (printer.group as any).name ? (printer.group as any).name : t('dashboard.printer.noGroup');
+  const printerGroup = printer.group as { color?: string; name?: string } | undefined;
+  const groupColor = hasGroupObject && printerGroup?.color ? printerGroup.color : '#9CA3AF';
+  const groupName = hasGroupObject && printerGroup?.name ? printerGroup.name : t('dashboard.printer.noGroup');
   
   return (
-    <Link to={isAuthenticated ? `/printer/${printer.id}` : "/auth"} className="block">
+    <Link
+      to={isAuthenticated ? `/printer/${printer.id}` : "/auth"}
+      state={{ printer }}
+      className="block"
+    >
       <Card className="hover:shadow-lg hover:scale-105 transition-all duration-200 h-[450px] flex flex-col cursor-pointer">
         {/* 1. 프린터 정보 - 고정 높이 */}
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 flex-shrink-0">
@@ -237,118 +243,133 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
   );
 };
 
+// MQTT 상태 캐시 타입 (device_uuid별 최신 상태만 저장)
+interface MqttStateCache {
+  [deviceUuid: string]: {
+    state: PrinterOverview['state'];
+    connected: boolean;
+    printing: boolean;
+    pending: boolean;
+    completion?: number;
+    temperature: {
+      tool_actual: number;
+      tool_target: number;
+      bed_actual: number;
+      bed_target: number;
+    };
+    print_time_left?: number;
+    current_file?: string;
+    last_updated: number; // 타임스탬프
+  };
+}
+
 const Home = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();
-  const [printers, setPrinters] = usePersistentState<PrinterOverview[]>('web:dashboard:printers', []);
+  const [printers, setPrinters] = useState<PrinterOverview[]>([]); // localStorage 제거
+  const [mqttStates, setMqttStates] = usePersistentState<MqttStateCache>('web:dashboard:mqtt_states', {}); // MQTT 상태만 저장
   const [groups, setGroups] = useState<PrinterGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string>("all");
-  const [loading, setLoading] = useState(printers.length === 0);
+  const [loading, setLoading] = useState(true);
   const summary = useDashboardSummary();
 
 
-  // 프린터 데이터 로드
+  // 프린터 데이터 로드: DB 조회 + localStorage의 MQTT 상태 복원
   const loadPrinters = useCallback(async (showSpinner?: boolean) => {
-    try { console.log('[DASH][LOAD] start', { userId: user?.id ?? null, showSpinner, cachedCount: printers.length }); } catch {}
+    console.log('[DASH][LOAD] start', { userId: user?.id ?? null, showSpinner });
     if (!user) {
-      try { console.log('[DASH][LOAD] skip: no user'); } catch {}
+      console.log('[DASH][LOAD] skip: no user');
       setPrinters([]);
       setLoading(false);
       return;
     }
 
     try {
-      if (showSpinner ?? printers.length === 0) setLoading(true);
-      
+      if (showSpinner) setLoading(true);
+
       // 그룹 / 프린터 데이터 (shared service 활용)
       const groupsData = await getUserPrinterGroups(user.id);
-      try { console.log('[DASH][FETCH] groups', { count: groupsData?.length ?? 0 }); } catch {}
+      console.log('[DASH][FETCH] groups', { count: groupsData?.length ?? 0 });
       setGroups(groupsData);
 
       const printersData = await getUserPrintersWithGroup(user.id);
-      try {
-        console.log('[DASH][FETCH] printers', {
-          count: printersData?.length ?? 0,
-          items: (printersData || []).map((p: any) => ({
-            id: p?.id,
-            device_uuid: p?.device_uuid ?? p?.uuid ?? null,
-            user_id: p?.user_id ?? null,
-            model: p?.model ?? null,
-          })),
-        });
-      } catch {}
+      console.log('[DASH][FETCH] printers from DB', { count: printersData?.length ?? 0 });
 
-      // 프린터 데이터를 UI 형식으로 변환 (실제 데이터 사용)
+      // DB 데이터 + localStorage의 MQTT 상태 병합 (현재 시점의 mqttStates 읽기)
+      const currentMqttStates = JSON.parse(localStorage.getItem('web:dashboard:mqtt_states') || '{}');
       const formattedPrinters: PrinterOverview[] = (printersData || []).map(printer => {
-        const isConnected = printer.status === 'connected' || printer.status === 'printing' || printer.status === 'idle';
-        const isPrinting = printer.status === 'printing';
-        const state = printer.status as PrinterOverview['state'];
+        const printerWithUuid = printer as typeof printer & { device_uuid?: string; name?: string };
+        const deviceUuid = printerWithUuid.device_uuid;
+        const cachedState = deviceUuid ? currentMqttStates[deviceUuid] : null;
 
-        return {
-          id: printer.id,
-          name: (printer as any).name || printer.model, // name이 없으면 model을 fallback
-          model: printer.model,
-          group_id: printer.group_id,
-          group: printer.group,
-          state: 'connecting', // 초기엔 연결중으로 표시
-          connected: false,
-          printing: isPrinting,
-          pending: true, // MQTT 수신 대기
-          completion: 0, // TODO: 실제 진행률 데이터 필드 추가 필요
-          temperature: {
-            tool_actual: 0, // TODO: 실제 온도 데이터 필드 추가 필요
-            tool_target: 0,
-            bed_actual: 23,
-            bed_target: 0
-          },
-          print_time_left: 0, // TODO: 실제 남은 시간 데이터 필드 추가 필요
-          current_file: undefined, // TODO: 실제 파일명 데이터 필드 추가 필요
-          device_uuid: (printer as any).device_uuid ?? undefined,
-        };
+        // localStorage에 캐시된 MQTT 상태가 있으면 사용, 없으면 기본값
+        if (cachedState) {
+          console.log('[DASH][RESTORE] MQTT 상태 복원:', deviceUuid, cachedState.state);
+          return {
+            id: printer.id,
+            name: printerWithUuid.name || printer.model,
+            model: printer.model,
+            group_id: printer.group_id,
+            group: printer.group,
+            state: cachedState.state,
+            connected: cachedState.connected,
+            printing: cachedState.printing,
+            pending: cachedState.pending,
+            completion: cachedState.completion ?? 0,
+            temperature: cachedState.temperature,
+            print_time_left: cachedState.print_time_left,
+            current_file: cachedState.current_file,
+            device_uuid: deviceUuid,
+          };
+        } else {
+          // 캐시 없으면 기본값 (connecting 상태)
+          console.log('[DASH][NEW] 새 프린터 또는 캐시 없음:', deviceUuid);
+          return {
+            id: printer.id,
+            name: printerWithUuid.name || printer.model,
+            model: printer.model,
+            group_id: printer.group_id,
+            group: printer.group,
+            state: 'connecting',
+            connected: false,
+            printing: false,
+            pending: true,
+            completion: 0,
+            temperature: {
+              tool_actual: 0,
+              tool_target: 0,
+              bed_actual: 23,
+              bed_target: 0
+            },
+            print_time_left: 0,
+            current_file: undefined,
+            device_uuid: deviceUuid,
+          };
+        }
       });
 
       setPrinters(formattedPrinters);
-      try {
-        console.log('[DASH][SET] printers', {
-          count: formattedPrinters.length,
-          uuids: formattedPrinters.map(p => p.device_uuid ?? null)
-        });
-      } catch {}
+      console.log('[DASH][SET] 프린터 목록 업데이트 완료:', formattedPrinters.length);
     } catch (error) {
       console.error('Error loading printers:', error);
     } finally {
-      if (showSpinner ?? printers.length === 0) setLoading(false);
-    }
-  }, [user, printers.length, setPrinters]);
-
-  // 프린터 데이터가 복원되면 로딩 상태 업데이트
-  useEffect(() => {
-    if (printers.length > 0 && loading) {
-      console.log('웹 대시보드: 프린터 데이터 복원됨, 로딩 상태 해제');
       setLoading(false);
     }
-  }, [printers.length, loading]);
+  }, [user]); // mqttStates 의존성 제거 - 대신 localStorage에서 직접 읽기
 
-  // 초기 1회 로드: 스냅샷이 이미 있으면 서버 로드 생략
+  // 초기 로드: 항상 DB에서 프린터 목록 조회 + localStorage MQTT 상태 복원
   useEffect(() => {
-    if (!user) return;
-    loadPrinters();
-  }, [user, printers.length, loadPrinters]);
+    console.log('웹 대시보드 초기 로드:', { user: !!user });
+    if (!user) {
+      console.log('user 없음 - 로드 생략');
+      return;
+    }
+    console.log('DB에서 프린터 목록 조회 시작');
+    loadPrinters(true); // 항상 스피너 표시
+  }, [user, loadPrinters]);
 
-  // MQTT: 대시보드 진입 시 1회 퍼블리시
-  const publishedRef = useRef(false);
-
-  useEffect(() => {
-    if (publishedRef.current) return;
-    if (!user) return;
-    const deviceUuids = Array.from(new Set(
-      printers.map(p => p.device_uuid).filter((v): v is string => Boolean(v))
-    ));
-    if (deviceUuids.length === 0) return;
-  }, [user, printers]);
-
-  // 대시보드 이탈 시 stop 전송 제거 (세션 종료 시에만 stop 전송)
+  // MQTT 연결은 로그인 시 Auth.tsx에서 전역적으로 처리되므로 여기서는 생략
 
   // MQTT: dash_status 수신 → 프린터 리스트에 반영 (실시간 연결 상태 모니터링)
   useEffect(() => {
@@ -370,15 +391,34 @@ const Home = () => {
       // 기존 타임아웃 제거
       if (timeouts[uuid]) {
         console.log('[MQTT] 기존 타임아웃 제거:', uuid);
-        try { clearTimeout(timeouts[uuid]); } catch {}
+        try { clearTimeout(timeouts[uuid]); } catch (err) { console.warn('clearTimeout failed:', err); }
       }
 
       console.log(`[MQTT] ${TIMEOUT_DURATION/1000}초 타임아웃 설정:`, uuid, '현재 상태:', currentState);
       timeouts[uuid] = window.setTimeout(() => {
         console.log('[MQTT] 타임아웃 실행:', uuid, '- 연결끊김으로 변경');
+
+        // printers 상태 업데이트
         setPrinters((prev) => prev.map(p => {
           if (p.device_uuid === uuid) {
             console.log('[MQTT] 프린터 상태 업데이트:', uuid, p.state, '-> disconnected');
+
+            // localStorage에도 동시 저장
+            setMqttStates((prevStates) => ({
+              ...prevStates,
+              [uuid]: {
+                state: 'disconnected',
+                connected: false,
+                printing: false,
+                pending: false,
+                completion: p.completion,
+                temperature: p.temperature,
+                print_time_left: p.print_time_left,
+                current_file: p.current_file,
+                last_updated: Date.now(),
+              },
+            }));
+
             return { ...p, state: 'disconnected', connected: false, pending: false };
           }
           return p;
@@ -386,17 +426,11 @@ const Home = () => {
       }, TIMEOUT_DURATION);
     };
 
-    // 초기 connecting 상태 설정 및 타임아웃 시작
-    setPrinters((prev) => prev.map(p => {
-      // 이미 connected 상태가 아니면 connecting으로 표시
-      if (p.state !== 'disconnected' && !p.connected) {
-        startTimeoutFor(p.device_uuid, 'connecting');
-        return { ...p, state: 'connecting', pending: true };
-      }
-      // connected 상태면 타임아웃만 시작
-      startTimeoutFor(p.device_uuid, p.state);
-      return p;
-    }));
+    // 초기 마운트 시 스냅샷 상태를 유지하고, 타임아웃만 시작
+    setPrinters((prev) => {
+      prev.forEach((p) => startTimeoutFor(p.device_uuid, p.state));
+      return prev;
+    });
 
     // MQTT 메시지 수신 핸들러
     const off = onDashStatusMessage((uuid, data) => {
@@ -425,7 +459,7 @@ const Home = () => {
           // 데이터 수신 시 타임아웃 재설정 (연결 상태 계속 모니터링)
           startTimeoutFor(uuid, nextState);
 
-          next[idx] = {
+          const updatedPrinter = {
             ...next[idx],
             pending: false,
             state: nextState,
@@ -441,6 +475,24 @@ const Home = () => {
             print_time_left: data?.progress?.print_time_left ?? next[idx].print_time_left,
             current_file: data?.printer_status?.current_file ?? next[idx].current_file,
           };
+
+          // localStorage에 MQTT 상태 저장
+          setMqttStates((prevStates) => ({
+            ...prevStates,
+            [uuid]: {
+              state: updatedPrinter.state,
+              connected: updatedPrinter.connected,
+              printing: updatedPrinter.printing,
+              pending: updatedPrinter.pending,
+              completion: updatedPrinter.completion,
+              temperature: updatedPrinter.temperature,
+              print_time_left: updatedPrinter.print_time_left,
+              current_file: updatedPrinter.current_file,
+              last_updated: Date.now(),
+            },
+          }));
+
+          next[idx] = updatedPrinter;
         }
         return next;
       });
@@ -451,7 +503,7 @@ const Home = () => {
     return () => {
       console.log('[MQTT] 클린업 - 모든 타임아웃 제거');
       off();
-      Object.values(timeouts).forEach(t => { try { clearTimeout(t); } catch {} });
+      Object.values(timeouts).forEach(t => { try { clearTimeout(t); } catch (err) { console.warn('clearTimeout failed:', err); } });
     };
   }, [printers.length]);
 

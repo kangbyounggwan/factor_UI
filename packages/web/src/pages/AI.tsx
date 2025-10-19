@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import ModelViewer from "@/components/ModelViewer";
+
+// Lazy load ModelViewer to reduce initial bundle size
+const ModelViewer = lazy(() => import("@/components/ModelViewer"));
 import TextTo3DForm from "@/components/ai/TextTo3DForm";
 import ImageTo3DForm from "@/components/ai/ImageTo3DForm";
 import ModelPreview from "@/components/ai/ModelPreview";
@@ -49,7 +51,7 @@ interface Printer {
     bed: number;
   };
   progress?: number;
-  raw?: any;
+  raw?: unknown;
 }
 
 interface PrintSettings {
@@ -264,7 +266,7 @@ const AI = () => {
     setPrintDialogOpen(true);
   };
 
-  const updateSetting = (key: keyof PrintSettings, value: any) => {
+  const updateSetting = (key: keyof PrintSettings, value: string | number | boolean) => {
     setPrintSettings((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -371,7 +373,7 @@ const AI = () => {
   };
 
   // 개별 모델 삭제 핸들러
-  const handleModelDelete = async (model: any) => {
+  const handleModelDelete = async (model: AIGeneratedModel) => {
     try {
       setModelViewerUrl(null);
       await deleteAIModel(supabase, model.id.toString());
@@ -585,7 +587,7 @@ const AI = () => {
 
         // 2. 이미지 → 3D API 호출 (async_mode=true)
         const common = buildCommon('flux-kontext', imageQuality, undefined, user?.id);
-        const { model: _omitModel, ...meta } = { depth: imageDepth, ...common } as any;
+        const { model: _omitModel, ...meta } = { depth: imageDepth, ...common } as Record<string, unknown>;
 
         const form = new FormData();
         form.append('task', 'image_to_3d');
@@ -701,7 +703,7 @@ const AI = () => {
         throw new Error(t('ai.unsupportedGenerationType'));
       }
 
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('[AI] 생성 실패:', e);
 
       // DB에 실패 상태 기록
@@ -709,7 +711,7 @@ const AI = () => {
         try {
           await updateAIModel(supabase, dbModelId, {
             status: 'failed',
-            generation_metadata: { error: e?.message || 'Unknown error' },
+            generation_metadata: { error: e instanceof Error ? e.message : 'Unknown error' },
           });
         } catch (updateError) {
           console.error('[AI] DB 업데이트 실패:', updateError);
@@ -814,7 +816,16 @@ const AI = () => {
                   <Card className="h-fit lg:sticky top-4">
                     <CardContent className="p-0">
                       <div className="rounded-lg overflow-hidden h-[calc(85vh-4rem-2rem)] relative">
-                        <ModelViewer className="w-full h-full" modelUrl={modelViewerUrl ?? undefined} modelScale={1} enableRotationControls={true} />
+                        <Suspense fallback={
+                          <div className="flex items-center justify-center h-full bg-muted">
+                            <div className="text-center">
+                              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                              <p className="text-sm text-muted-foreground">Loading 3D viewer...</p>
+                            </div>
+                          </div>
+                        }>
+                          <ModelViewer className="w-full h-full" modelUrl={modelViewerUrl ?? undefined} modelScale={1} enableRotationControls={true} />
+                        </Suspense>
 
                         {/* 다운로드 드롭다운 버튼 - 오른쪽 위 */}
                         {(currentGlbUrl || currentStlUrl) && !isProcessing && (
@@ -1213,7 +1224,7 @@ const AI = () => {
                       };
                     })
                   }
-                  onSelect={async (item: any) => {
+                  onSelect={async (item: { _originalModel?: AIGeneratedModel; download_url?: string; name?: string }) => {
                     const model = item._originalModel as AIGeneratedModel;
 
                     if (item.download_url) {

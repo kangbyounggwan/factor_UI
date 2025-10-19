@@ -1,9 +1,11 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import ModelViewer from "@/components/ModelViewer";
+
+// Lazy load ModelViewer to reduce initial bundle size
+const ModelViewer = lazy(() => import("@/components/ModelViewer"));
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
@@ -46,6 +48,26 @@ import { useTranslation } from "react-i18next";
 // 단계 정의
 type Step = "select-input" | "create-prompt" | "configure" | "generate" | "result";
 
+// 업로드된 파일 타입
+interface UploadedFile {
+  id: number;
+  name: string;
+  size: number;
+  type: string;
+  url: string;
+}
+
+// 생성된 모델 타입
+interface GeneratedModel {
+  id: number;
+  name: string;
+  type: string;
+  prompt: string;
+  status: string;
+  thumbnail: string;
+  createdAt: string;
+}
+
 const AI = () => {
   const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState<Step>("select-input");
@@ -53,8 +75,8 @@ const AI = () => {
   const [textPrompt, setTextPrompt] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
-  const [generatedModel, setGeneratedModel] = useState<any | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [generatedModel, setGeneratedModel] = useState<GeneratedModel | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const contentScrollRef = useRef<HTMLDivElement>(null);
@@ -471,7 +493,13 @@ const AI = () => {
       <Card>
         <CardContent className="p-0">
           <div className="rounded-lg overflow-hidden h-[40vh] relative bg-muted">
-            <ModelViewer className="w-full h-full" />
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            }>
+              <ModelViewer className="w-full h-full" />
+            </Suspense>
           </div>
         </CardContent>
       </Card>

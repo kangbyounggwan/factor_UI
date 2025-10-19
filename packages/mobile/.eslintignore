@@ -1,0 +1,9 @@
+# Auto-generated files
+android/
+ios/
+dist/
+build/
+node_modules/
+
+# Capacitor generated files
+**/native-bridge.js

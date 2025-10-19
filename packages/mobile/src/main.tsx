@@ -9,6 +9,14 @@ import { App as CapApp } from '@capacitor/app'
 import { SafeArea, initialize as initSafeArea } from '@capacitor-community/safe-area'
 import './i18n' // i18n 초기화
 
+// 프로덕션 환경에서 console 로그 제거
+if (import.meta.env.PROD) {
+  console.log = () => {};
+  console.debug = () => {};
+  console.info = () => {};
+  // console.warn과 console.error는 유지 (중요한 경고/에러 확인용)
+}
+
 // Log StatusBar info at startup (Android only)
 ;(async () => {
   try {
@@ -39,21 +47,8 @@ import './i18n' // i18n 초기화
       const info = await StatusBar.getInfo()
       console.log('Capacitor StatusBar info:', info)
 
-      // Ensure sticky header remains stable when keyboard opens
-      try { await Keyboard.setResizeMode({ mode: KeyboardResize.Body }) } catch {}
-      try { await Keyboard.setScroll({ isDisabled: true }) } catch {}
-
-      // Expose keyboard height for optional UI adjustments
-      Keyboard.addListener('keyboardDidShow', (e) => {
-        document.documentElement.style.setProperty('--kb-height', `${e.keyboardHeight ?? 0}px`)
-        document.documentElement.style.setProperty('--kb', `${e.keyboardHeight ?? 0}px`)
-        document.documentElement.classList.add('kb-open')
-      })
-      Keyboard.addListener('keyboardDidHide', () => {
-        document.documentElement.style.setProperty('--kb-height', '0px')
-        document.documentElement.style.setProperty('--kb', '0px')
-        document.documentElement.classList.remove('kb-open')
-      })
+      // Keyboard handling is configured in capacitor.config.ts with resize: 'none'
+      // No additional JavaScript keyboard handling needed
     }
   } catch (error) {
     console.warn('StatusBar.getInfo failed:', error)

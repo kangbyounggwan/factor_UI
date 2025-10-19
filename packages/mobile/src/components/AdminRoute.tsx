@@ -15,7 +15,7 @@ export const AdminRoute = ({ children }: AdminRouteProps) => {
 
   // 로그인하지 않은 경우 인증 페이지로 리다이렉트
   if (!user) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/" replace />;
   }
 
   // 역할 로딩 중

@@ -36,9 +36,9 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeout: numb
     });
     clearTimeout(timeoutId);
     return response;
-  } catch (error: any) {
+  } catch (error: unknown) {
     clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
+    if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('요청 시간이 초과되었습니다. 다시 시도해주세요.');
     }
     throw error;
@@ -193,7 +193,7 @@ export interface TaskProgressResponse {
     result_glb_url?: string;
     download_url?: string;
     thumbnail_url?: string;
-    raw?: any;
+    raw?: unknown;
   };
   error?: string;
   message?: string;
@@ -222,10 +222,10 @@ export interface AIModelResponse {
     stl_path?: string;               // STL 경로
     thumbnail_path?: string;         // 썸네일 경로
     raw?: {
-      image_to_3d?: any;
-      remesh?: any;
+      image_to_3d?: unknown;
+      remesh?: unknown;
     };
-    request_payload?: any;
+    request_payload?: unknown;
     file_size?: number;
   };
   error?: string;
@@ -241,8 +241,8 @@ export interface AIModelResponse {
   thumbnail_download_url?: string;
   local_path?: string;
   uploaded_local_path?: string;
-  raw?: any;
-  request_payload?: any;
+  raw?: unknown;
+  request_payload?: unknown;
 }
 
 // GLB URL 추출 헬퍼 (Python 서버 응답 구조에 맞춤)

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, RefreshCw, Wifi, WifiOff, Camera, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import { GCodeUpload } from "@/components/GCodeUpload";
 import { WebSocketStatus } from "@/components/WebSocketStatus";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { supabase } from "@shared/integrations/supabase/client"
-import { onDashStatusMessage, mqttConnect, mqttPublish, mqttSubscribe, mqttUnsubscribe } from "@shared/services/mqttService";
+import { onDashStatusMessage, publishCameraStart, subscribeCameraState } from "@shared/services/mqttService";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
 
@@ -31,7 +31,9 @@ function usePersistentState<T>(key: string, fallback: T) {
   useEffect(() => {
     try {
       localStorage.setItem(key, JSON.stringify(state));
-    } catch {}
+    } catch (error) {
+      console.warn('Failed to save to localStorage:', error);
+    }
   }, [key, state]);
 
   useEffect(() => {
@@ -39,7 +41,9 @@ function usePersistentState<T>(key: string, fallback: T) {
       if (e.key === key && e.newValue) {
         try {
           setState(JSON.parse(e.newValue) as T);
-        } catch {}
+        } catch (error) {
+          console.warn('Failed to parse storage event:', error);
+        }
       }
     };
     window.addEventListener('storage', onStorage);
@@ -57,7 +61,7 @@ interface MonitoringData {
     error_message?: string;
     connected: boolean;
     printing: boolean;
-    flags?: Record<string, any>;
+    flags?: Record<string, unknown>;
   };
   temperature: {
     tool: { actual: number; target: number; offset?: number };
@@ -131,6 +135,7 @@ const defaultIoTDevices: PrinterIoTDevice[] = [];
 const PrinterDetail = () => {
   const { t } = useTranslation();
   const { id } = useParams();
+  const location = useLocation();
   const storageKey = `printer:detail:${id ?? 'unknown'}`;
   const hasSnapshot = typeof window !== 'undefined' ? !!localStorage.getItem(storageKey) : false;
   const [data, setData] = usePersistentState<MonitoringData>(storageKey, defaultData);
@@ -138,7 +143,12 @@ const PrinterDetail = () => {
   const [loading, setLoading] = useState(!hasSnapshot);
   const { user } = useAuth();
   const { toast } = useToast();
+
+  // MQTT WebSocket 연결 상태는 사용하지 않음 - 프린터의 connected 상태만 사용
   const [deviceUuid, setDeviceUuid] = useState<string | null>(null);
+
+  // 프린터 연결 상태 (대시보드에서 전달받거나 MQTT로 업데이트됨)
+  const printerConnected = data.printerStatus.connected;
   const [printerName, setPrinterName] = useState<string>('Printer');
   const [streamUrl, setStreamUrl] = usePersistentState<string | null>(
     `printer:stream:${id ?? 'unknown'}`,
@@ -147,10 +157,12 @@ const PrinterDetail = () => {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [showSwipeHint, setShowSwipeHint] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number>(0);
+  const touchEndX = useRef<number>(0);
   const [isStreaming, setIsStreaming] = useState(false);
   const [webrtcUrl, setWebrtcUrl] = useState<string | null>(null);
   const [cameraStatus, setCameraStatus] = useState<'offline' | 'starting' | 'online' | 'error'>('offline');
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLIFrameElement>(null);
   const [sdFiles, setSdFiles] = useState<Array<{ name: string; size: number }>>([]);
   // 로컬 파일 (MQTT sd_list_result의 local 객체)
   type LocalFile = {
@@ -174,7 +186,49 @@ const PrinterDetail = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [availablePorts, setAvailablePorts] = useState<string[]>(['/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyACM0']);
   const [availableProfiles, setAvailableProfiles] = useState<string[]>(['ender3 evo', 'prusa i3', 'cr-10', 'custom']);
-  
+
+  // 대시보드에서 전달받은 프린터 상태로 초기화 (지연 없는 즉시 반영)
+  useEffect(() => {
+    const routePrinter = (location.state as { printer?: Record<string, unknown> })?.printer;
+    if (!routePrinter) return;
+
+    // 대시보드에서 받은 상태로 즉시 초기화
+    setData((prev) => ({
+      ...prev,
+      printerStatus: {
+        ...prev.printerStatus,
+        state: routePrinter.state || prev.printerStatus.state,
+        connected: routePrinter.connected ?? prev.printerStatus.connected,
+        printing: routePrinter.printing ?? prev.printerStatus.printing,
+        timestamp: Date.now(),
+      },
+      temperature: {
+        tool: {
+          actual: routePrinter.temperature?.tool_actual ?? prev.temperature.tool.actual,
+          target: routePrinter.temperature?.tool_target ?? prev.temperature.tool.target,
+        },
+        bed: {
+          actual: routePrinter.temperature?.bed_actual ?? prev.temperature.bed.actual,
+          target: routePrinter.temperature?.bed_target ?? prev.temperature.bed.target,
+        },
+      },
+      printProgress: {
+        ...prev.printProgress,
+        completion: routePrinter.completion ?? prev.printProgress.completion,
+        print_time_left: routePrinter.print_time_left ?? prev.printProgress.print_time_left,
+      },
+    }));
+
+    // device_uuid 설정
+    if (routePrinter.device_uuid) {
+      setDeviceUuid(routePrinter.device_uuid);
+    }
+
+    // 프린터 이름 설정
+    if (routePrinter.name || routePrinter.model) {
+      setPrinterName(routePrinter.name || routePrinter.model);
+    }
+  }, [location.state]);
 
   // 페이지 진입 시 스크롤 초기화 (메인 스크롤 컨테이너가 우선)
   useEffect(() => {
@@ -232,6 +286,59 @@ const PrinterDetail = () => {
     return () => clearTimeout(timer);
   }, []);
 
+  // 스와이프 핸들러 - 최소 50px 이동해야 페이지 전환
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    const swipeDistance = touchStartX.current - touchEndX.current;
+    const minSwipeDistance = 50; // 최소 스와이프 거리 (픽셀)
+
+    if (Math.abs(swipeDistance) < minSwipeDistance) {
+      // 스와이프 거리가 부족하면 원래 위치로 복귀
+      scrollToCard(currentCardIndex);
+      return;
+    }
+
+    if (swipeDistance > 0) {
+      // 왼쪽으로 스와이프 (다음 페이지)
+      if (currentCardIndex < 2) {
+        const newIndex = currentCardIndex + 1;
+        setCurrentCardIndex(newIndex);
+        scrollToCard(newIndex);
+        if (showSwipeHint) {
+          setShowSwipeHint(false);
+        }
+      } else {
+        scrollToCard(currentCardIndex);
+      }
+    } else {
+      // 오른쪽으로 스와이프 (이전 페이지)
+      if (currentCardIndex > 0) {
+        const newIndex = currentCardIndex - 1;
+        setCurrentCardIndex(newIndex);
+        scrollToCard(newIndex);
+      } else {
+        scrollToCard(currentCardIndex);
+      }
+    }
+  };
+
+  const scrollToCard = (index: number) => {
+    if (scrollContainerRef.current) {
+      const cardWidth = scrollContainerRef.current.offsetWidth;
+      scrollContainerRef.current.scrollTo({
+        left: cardWidth * index,
+        behavior: 'smooth'
+      });
+    }
+  };
+
   // 스크롤 이벤트 모니터링 - 디버깅용
   useEffect(() => {
     const handleScroll = () => {
@@ -254,25 +361,10 @@ const PrinterDetail = () => {
 
     (async () => {
       try {
-        await mqttConnect();
-        const topic = `camera/${deviceUuid}/state`;
-        const handler = (_t: string, payload: any) => {
-          try {
-            const msg = typeof payload === 'string' ? JSON.parse(payload) : payload;
-            const running = !!(msg?.running);
-            setCameraStatus(running ? 'online' : 'offline');
-
-            const wurl =
-              msg?.webrtc?.play_url_webrtc ||
-              msg?.play_url_webrtc ||
-              (typeof msg?.url === 'string' && !msg.url.endsWith('.m3u8') ? msg.url : null);
-            if (wurl) setWebrtcUrl(wurl);
-          } catch (e) {
-            console.warn('[CAM][STATE] parse error', e);
-          }
-        };
-        await mqttSubscribe(topic, handler, 1);
-        unsub = async () => { try { await mqttUnsubscribe(topic, handler); } catch {} };
+        unsub = await subscribeCameraState(deviceUuid, ({ running, webrtcUrl, status }) => {
+          setCameraStatus(status);
+          if (webrtcUrl) setWebrtcUrl(webrtcUrl);
+        });
       } catch (e) {
         console.warn('[CAM][MQTT] subscribe failed', e);
       }
@@ -283,7 +375,7 @@ const PrinterDetail = () => {
 
   // 스트리밍 시작
   const startStreaming = async () => {
-    if (!data.printerStatus.connected || !deviceUuid) {
+    if (!printerConnected || !deviceUuid) {
       toast({
         title: t('camera.serverConnectionRequired'),
         variant: "destructive"
@@ -295,8 +387,6 @@ const PrinterDetail = () => {
     setCameraStatus('starting');
 
     try {
-      await mqttConnect();
-
       if (!streamUrl) {
         toast({
           title: t('camera.inputNotFound'),
@@ -310,26 +400,20 @@ const PrinterDetail = () => {
       const RTSP_BASE = import.meta.env?.VITE_MEDIA_RTSP_BASE || 'rtsp://factor.io.kr:8554';
       const WEBRTC_BASE = import.meta.env?.VITE_MEDIA_WEBRTC_BASE || 'https://factor.io.kr/webrtc';
 
-      const topic = `camera/${deviceUuid}/cmd`;
-      const payload = {
-        type: 'camera',
-        action: 'start',
-        options: {
-          name: `cam-${deviceUuid}`,
-          input: streamUrl,
-          fps: 20,
-          width: 1280,
-          height: 720,
-          bitrateKbps: 1800,
-          encoder: 'libx264',
-          forceMjpeg: true,
-          lowLatency: true,
-          rtsp_base: RTSP_BASE,
-          webrtc_base: WEBRTC_BASE
-        }
-      };
-
-      await mqttPublish(topic, payload, 1, false);
+      // shared 함수 사용
+      await publishCameraStart({
+        deviceUuid,
+        streamUrl,
+        fps: 20,
+        width: 1280,
+        height: 720,
+        bitrateKbps: 1800,
+        encoder: 'libx264',
+        forceMjpeg: true,
+        lowLatency: true,
+        rtspBase: RTSP_BASE,
+        webrtcBase: WEBRTC_BASE
+      });
 
       toast({
         title: t('camera.startStreaming'),
@@ -449,24 +533,26 @@ const PrinterDetail = () => {
       // 스냅샷이 있을 경우, 서버의 상태값으로 덮어쓰지 않음 → 깜빡임 방지
       setData((prev) => {
         if (hasSnapshot) return prev;
+        const printerData = printer as Record<string, unknown>;
         return {
           ...prev,
           printerStatus: {
             ...prev.printerStatus,
-            state: (printer.status as any) ?? prev.printerStatus.state,
+            state: (printerData.status as MonitoringData['printerStatus']['state']) ?? prev.printerStatus.state,
             timestamp: Date.now(),
-            connected: (printer.status !== 'disconnected' && printer.status !== 'disconnect') ?? prev.printerStatus.connected,
-            printing: (printer.status === 'printing') || prev.printProgress.active === true,
+            connected: (printerData.status !== 'disconnected' && printerData.status !== 'disconnect') ?? prev.printerStatus.connected,
+            printing: (printerData.status === 'printing') || prev.printProgress.active === true,
           },
         };
       });
 
       // 상세 페이지 실시간 반영을 위한 device_uuid 저장
-      const device_uuid = (printer as any)?.device_uuid ?? null;
+      const printerData = printer as { device_uuid?: string; name?: string; model?: string };
+      const device_uuid = printerData.device_uuid ?? null;
       setDeviceUuid(device_uuid);
 
       // 프린터 이름 설정 (name 우선, fallback은 model)
-      setPrinterName(printer?.name || printer?.model || 'Printer');
+      setPrinterName(printerData.name || printerData.model || 'Printer');
 
       // cameras.stream_url 조회 및 퍼시스트 저장
       if (device_uuid) {
@@ -478,7 +564,8 @@ const PrinterDetail = () => {
         if (camErr) {
           console.warn('[CAM][DB] stream_url 조회 실패:', camErr.message);
         }
-        setStreamUrl((cam as any)?.stream_url ?? null);
+        const camData = cam as { stream_url?: string | null };
+        setStreamUrl(camData?.stream_url ?? null);
       } else {
         setStreamUrl(null);
       }
@@ -508,7 +595,8 @@ const PrinterDetail = () => {
           console.warn('[CAM][DB] stream_url 재조회 실패:', camErr.message);
           return;
         }
-        setStreamUrl((cam as any)?.stream_url ?? null);
+        const camData = cam as { stream_url?: string | null };
+        setStreamUrl(camData?.stream_url ?? null);
       } catch (e) {
         console.warn('[CAM][DB] stream_url 재조회 예외:', e);
       }
@@ -525,26 +613,29 @@ const PrinterDetail = () => {
         const conn = payload?.connection;
         if (conn && typeof conn.port === 'string') {
           try {
+            const connData = conn as { port?: string; baudrate?: number; profile_name?: string };
             setConnectionInfo((ci) => ({
               ...ci,
-              serialPort: conn.port || ci.serialPort,
-              baudrate: String(conn.baudrate ?? ci.baudrate),
+              serialPort: connData.port || ci.serialPort,
+              baudrate: String(connData.baudrate ?? ci.baudrate),
               // 요청사항: Printer Profile은 connection[3].name을 사용 (매핑: connection.profile_name)
-              printerProfile: (conn as any).profile_name || ci.printerProfile,
+              printerProfile: connData.profile_name || ci.printerProfile,
             }));
-          } catch {}
+          } catch (error) {
+            console.warn('Failed to update connection info:', error);
+          }
         }
         const bed = payload?.temperature_info?.bed;
         const toolAny = payload?.temperature_info?.tool;
         const tool = toolAny?.tool0 ?? toolAny;
-        const flags = payload?.printer_status?.flags as any;
+        const flags = (payload?.printer_status?.flags ?? {}) as Record<string, unknown>;
         const nextState = flags?.ready === true
           ? 'operational'
           : (payload?.printer_status?.state ?? prev.printerStatus.state);
         return {
           ...prev,
           printerStatus: {
-            state: nextState as any,
+            state: nextState as MonitoringData['printerStatus']['state'],
             timestamp: Date.now(),
             connected: Boolean(flags && (flags.operational || flags.printing || flags.paused || flags.ready || flags.error)),
             printing: Boolean(payload?.printer_status?.printing ?? prev.printerStatus.printing),
@@ -588,7 +679,7 @@ const PrinterDetail = () => {
   // SD/로컬 결과 수신 이벤트로 리스트 갱신 (포맷 구분: local=object, sdcard=array, files=array)
   useEffect(() => {
     const onSdList = (e: Event) => {
-      const ce = e as CustomEvent<{ deviceSerial: string; result: any }>;
+      const ce = e as CustomEvent<{ deviceSerial: string; result: Record<string, unknown> }>;
       const detail = ce?.detail;
       if (!detail || !deviceUuid || detail.deviceSerial !== deviceUuid) return;
       const res = detail.result || {};
@@ -596,17 +687,23 @@ const PrinterDetail = () => {
       // SD 카드: 우선 sdcard 배열, fallback files 배열
       if (Array.isArray(res.sdcard)) {
         setSdFiles(
-          res.sdcard.map((f: any) => ({
-            name: String(f.name ?? f.display ?? ''),
-            size: Number(f.size) || 0,
-          }))
+          res.sdcard.map((f: unknown) => {
+            const file = f as { name?: string; display?: string; size?: number };
+            return {
+              name: String(file.name ?? file.display ?? ''),
+              size: Number(file.size) || 0,
+            };
+          })
         );
       } else if (Array.isArray(res.files)) {
         setSdFiles(
-          res.files.map((f: any) => ({
-            name: String(f.name ?? f.display ?? ''),
-            size: Number(f.size) || 0,
-          }))
+          res.files.map((f: unknown) => {
+            const file = f as { name?: string; display?: string; size?: number };
+            return {
+              name: String(file.name ?? file.display ?? ''),
+              size: Number(file.size) || 0,
+            };
+          })
         );
       } else {
         setSdFiles([]);
@@ -615,15 +712,15 @@ const PrinterDetail = () => {
       // 로컬: local이 객체(키-값 딕셔너리)
       if (res.local && typeof res.local === 'object' && !Array.isArray(res.local)) {
         const entries = Object.entries(res.local);
-        const parsed: LocalFile[] = entries.map(([key, val]: [string, any]) => {
-          const v = val || {};
+        const parsed: LocalFile[] = entries.map(([key, val]: [string, unknown]) => {
+          const v = (val as Record<string, unknown>) || {};
           return {
             name: String(v.name ?? key),
             display: v.display ? String(v.display) : undefined,
             size: v.size != null ? Number(v.size) : undefined,
-            date: v.date ?? null,
-            hash: v.hash,
-            user: v.user,
+            date: (v.date as string | null) ?? null,
+            hash: v.hash as string | undefined,
+            user: v.user as string | undefined,
           };
         });
         setLocalFiles(parsed);
@@ -638,11 +735,11 @@ const PrinterDetail = () => {
   // control_result 토스트 알림 (글로벌 이벤트 수신 → 현재 디바이스만 처리)
   useEffect(() => {
     const onControlResult = (e: Event) => {
-      const ce = e as CustomEvent<{ deviceSerial: string; result: any }>;
+      const ce = e as CustomEvent<{ deviceSerial: string; result: Record<string, unknown> }>;
       const detail = ce?.detail;
       if (!detail || !deviceUuid || detail.deviceSerial !== deviceUuid) return;
       const result = detail.result || {};
-      const action: string = result.action || 'control';
+      const action: string = (result.action as string) || 'control';
       const labelMap: Record<string, string> = {
         home: '홈 이동',
         pause: '일시 정지',
@@ -651,9 +748,9 @@ const PrinterDetail = () => {
       };
       const label = labelMap[action] || '제어';
       if (result.ok) {
-        toast({ title: `${label} 성공`, description: result.message ?? undefined });
+        toast({ title: `${label} 성공`, description: result.message ? String(result.message) : undefined });
       } else {
-        toast({ title: `${label} 실패`, description: result.message ?? '오류가 발생했습니다.', variant: 'destructive' });
+        toast({ title: `${label} 실패`, description: result.message ? String(result.message) : '오류가 발생했습니다.', variant: 'destructive' });
       }
     };
     window.addEventListener('control_result', onControlResult as EventListener);
@@ -671,7 +768,7 @@ const PrinterDetail = () => {
     };
 
     // 상태 라벨 결정
-    const flags: any = data.printerStatus?.flags || {};
+    const flags = (data.printerStatus?.flags || {}) as Record<string, unknown>;
     const status = data.printerStatus.state;
     let label = t('printerDetail.disconnected');
     if (flags?.error) label = t('printerDetail.error');
@@ -897,14 +994,14 @@ const PrinterDetail = () => {
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
             <Button asChild variant="ghost" size="sm" className="h-9 w-9 p-0">
-              <Link to="/">
+              <Link to="/dashboard">
                 <ArrowLeft className="h-5 w-5" />
               </Link>
             </Button>
             <div>
               <h1 className="text-base font-bold">{printerName}</h1>
               <p className={`text-xs font-medium ${(() => {
-                  const flags = data.printerStatus?.flags as any;
+                  const flags = (data.printerStatus?.flags || {}) as Record<string, unknown>;
                   const state = data.printerStatus.state;
 
                   if (!data.printerStatus.connected && (state === 'disconnected' || state === 'disconnect')) {
@@ -928,7 +1025,7 @@ const PrinterDetail = () => {
                   return 'text-destructive';
                 })()}`}>
                 {(() => {
-                  const flags = data.printerStatus?.flags as any;
+                  const flags = (data.printerStatus?.flags || {}) as Record<string, unknown>;
                   const state = data.printerStatus.state;
 
                   if (!data.printerStatus.connected && (state === 'disconnected' || state === 'disconnect')) {
@@ -970,7 +1067,7 @@ const PrinterDetail = () => {
           <>
             {/* WebRTC 스트림 */}
             <iframe
-              ref={videoRef as any}
+              ref={videoRef}
               src={`${webrtcUrl}?autoplay=1&muted=1`}
               className="w-full h-full"
               allow="autoplay; fullscreen"
@@ -990,13 +1087,35 @@ const PrinterDetail = () => {
             </div>
             {/* 상태 뱃지 */}
             <div className="absolute top-3 left-3">
-              <div className="px-2 py-1 rounded-md text-xs font-medium bg-red-500 text-white">
-                {cameraStatus === 'online' ? 'LIVE' : cameraStatus.toUpperCase()}
+              <div className={`px-2 py-1 rounded-md text-xs font-medium ${
+                !printerConnected
+                  ? 'bg-destructive text-white'
+                  : cameraStatus === 'online'
+                    ? 'bg-red-500 text-white'
+                    : 'bg-muted text-muted-foreground'
+              }`}>
+                {!printerConnected
+                  ? t('printerDetail.disconnected')
+                  : cameraStatus === 'online'
+                    ? 'LIVE'
+                    : cameraStatus.toUpperCase()}
               </div>
             </div>
           </>
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-white">
+            {/* 상태 뱃지 (스트리밍 전에도 표시) */}
+            <div className="absolute top-3 left-3">
+              <div className={`px-2 py-1 rounded-md text-xs font-medium ${
+                !printerConnected
+                  ? 'bg-destructive text-white'
+                  : 'bg-muted text-muted-foreground'
+              }`}>
+                {!printerConnected
+                  ? t('printerDetail.disconnected')
+                  : t('camera.cameraDisconnected')}
+              </div>
+            </div>
             <div className="text-center px-4">
               <Camera className="h-16 w-16 mx-auto mb-4 opacity-50" />
               <h3 className="text-lg font-medium mb-2">{t('camera.cameraStreaming')}</h3>
@@ -1009,7 +1128,7 @@ const PrinterDetail = () => {
                 size="lg"
                 className="bg-primary hover:bg-primary/90"
                 onClick={startStreaming}
-                disabled={!data.printerStatus.connected || isStreaming}
+                disabled={!printerConnected || isStreaming}
               >
                 <span className="mr-2">▶</span>
                 {isStreaming ? t('camera.streamPreparation') : t('camera.startStreaming')}
@@ -1019,7 +1138,7 @@ const PrinterDetail = () => {
         )}
 
         {/* 연결 끊김 시 비활성화 오버레이 */}
-        {!data.printerStatus.connected && (
+        {!printerConnected && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
             <div className="text-center text-white">
               <WifiOff className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -1034,38 +1153,29 @@ const PrinterDetail = () => {
         {/* 스와이프 컨테이너 */}
         <div
           ref={scrollContainerRef}
-          className="overflow-x-auto snap-x snap-mandatory scrollbar-hide"
+          className="overflow-x-hidden snap-x snap-mandatory scrollbar-hide"
           style={{
             scrollbarWidth: 'none',
             msOverflowStyle: 'none',
             scrollSnapType: 'x mandatory',
             scrollBehavior: 'smooth'
           }}
-          onScroll={(e) => {
-            const container = e.currentTarget;
-            const scrollLeft = container.scrollLeft;
-            const cardWidth = container.offsetWidth;
-            const index = Math.round(scrollLeft / cardWidth);
-            setCurrentCardIndex(index);
-
-            // 사용자가 스와이프하면 힌트 숨김
-            if (showSwipeHint) {
-              setShowSwipeHint(false);
-            }
-          }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
         >
           <div className="flex">
             {/* 1. 프린터 원격 제어 */}
             <div className="min-w-full snap-center p-4" style={{ scrollSnapAlign: 'center' }}>
               <div className="relative">
                 <PrinterControlPad
-                  isConnected={data.printerStatus.connected}
+                  isConnected={printerConnected}
                   isPrinting={data.printerStatus.printing}
                   deviceUuid={deviceUuid}
                   printerState={data.printerStatus.state}
                   flags={data.printerStatus.flags}
                 />
-                {!data.printerStatus.connected && (
+                {!printerConnected && (
                   <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
                     <div className="text-center">
                       <div className="text-sm font-medium">{t('printerDetail.noConnection')}</div>
@@ -1077,7 +1187,16 @@ const PrinterDetail = () => {
 
             {/* 2. G-code 파일 관리 */}
             <div className="min-w-full snap-center p-4" style={{ scrollSnapAlign: 'center' }}>
-              <GCodeUpload deviceUuid={deviceUuid} />
+              <div className="relative">
+                <GCodeUpload deviceUuid={deviceUuid} isConnected={printerConnected} />
+                {!printerConnected && (
+                  <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
+                    <div className="text-center">
+                      <div className="text-sm font-medium">{t('printerDetail.noConnection')}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* 3. 프린터 스테이터스 */}

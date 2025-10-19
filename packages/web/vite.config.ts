@@ -34,5 +34,39 @@ export default defineConfig(({ mode }) => {
         "@shared": path.resolve(__dirname, "../shared/src"),
       },
     },
+    build: {
+      sourcemap: true,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            // Three.js and 3D rendering libraries in separate chunk
+            'three-bundle': [
+              'three',
+              'three-stdlib',
+              '@react-three/fiber',
+              '@react-three/drei',
+            ],
+            // Vendor chunk for React
+            'vendor': [
+              'react',
+              'react-dom',
+              'react-router-dom',
+            ],
+            // UI components
+            'ui': [
+              '@radix-ui/react-dialog',
+              '@radix-ui/react-dropdown-menu',
+              '@radix-ui/react-toast',
+              '@radix-ui/react-tabs',
+              '@radix-ui/react-select',
+            ],
+            // Supabase
+            'supabase': [
+              '@supabase/supabase-js',
+            ],
+          },
+        },
+      },
+    },
   };
 });

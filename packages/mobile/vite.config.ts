@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "node:path";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { componentTagger } from "lovable-tagger";
+import { visualizer } from "rollup-plugin-visualizer";
 
 export default defineConfig(({ mode }) => {
   const rootEnvDir = path.resolve(__dirname, "../../");
@@ -23,6 +24,12 @@ export default defineConfig(({ mode }) => {
       react(),
       tsconfigPaths(),            // ✅ tsconfig paths 적용 (@shared/* 등)
       mode === "development" && componentTagger(),
+      visualizer({
+        filename: "dist/stats.html",
+        open: false,
+        gzipSize: true,
+        brotliSize: true,
+      }),
     ].filter(Boolean),
 
     resolve: {
@@ -59,6 +66,31 @@ export default defineConfig(({ mode }) => {
       outDir: "dist",
       sourcemap: true,
       commonjsOptions: { transformMixedEsModules: true },
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            // Three.js and 3D rendering libraries in separate chunk
+            'three-bundle': [
+              'three',
+              '@react-three/fiber',
+              '@react-three/drei',
+            ],
+            // Vendor chunk for React
+            'vendor': [
+              'react',
+              'react-dom',
+              'react-router-dom',
+            ],
+            // UI components
+            'ui': [
+              '@radix-ui/react-dialog',
+              '@radix-ui/react-dropdown-menu',
+              '@radix-ui/react-toast',
+              '@radix-ui/react-tabs',
+            ],
+          },
+        },
+      },
     },
   };
 });

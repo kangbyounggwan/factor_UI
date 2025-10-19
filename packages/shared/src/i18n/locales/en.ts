@@ -84,7 +84,31 @@ export default {
     loginError: "An error occurred during login.",
     welcomeMessage: "Welcome!",
     featureComingSoon: "Feature Coming Soon",
-    passwordResetComingSoon: "Password reset feature will be available soon."
+    passwordResetComingSoon: "Password reset feature will be available soon.",
+    displayName: "Display Name",
+    signInSubtitle: "Sign in to your FACTOR account",
+    signingIn: "Signing in...",
+    byContinuing: "By continuing, you agree to our",
+    termsOfService: "Terms of Service",
+    and: "and",
+    privacyPolicy: "Privacy Policy",
+    userAlreadyRegistered: "This email is already registered.",
+    welcome: "Welcome!",
+    signupFailed: "Sign up failed",
+    // Marketing banner
+    marketing: {
+      titleLine1: "A new experience for",
+      titleLine2: "3D printer farms",
+      subtitleLine1: "Start smarter 3D printing with",
+      subtitleLine2: "real-time monitoring and remote control",
+      feature1: "Real-time temperature and progress monitoring",
+      feature2: "Remote printer control and G-code upload",
+      feature3: "Live camera feed for real-time view",
+      feature4: "Environment monitoring via IoT sensors",
+      ctaTitle: "Start free now",
+      ctaDescLine1: "Cloud-based 3D printer management solution",
+      ctaDescLine2: "ready to use without complex setup"
+    }
   },
   ai: {
     title: "AI 3D Modeling Studio",
@@ -347,6 +371,7 @@ export default {
     groupManagement: "Printer Group",
     addGroup: "Add Group",
     newGroup: "Add New Printer Group",
+    editGroup: "Edit Group",
     groupName: "Group Name",
     groupNamePlaceholder: "e.g., Creality Printers, FDM Printers",
     groupDescription: "Description (optional)",
@@ -375,6 +400,9 @@ export default {
     // Status
     statusConnected: "Connected",
     statusDisconnected: "Disconnected",
+    statusPrinting: "Printing",
+    statusPaused: "Paused",
+    statusConnecting: "Connecting",
     statusError: "Error",
     statusUnknown: "Unknown",
     // Subscription management
@@ -404,6 +432,7 @@ export default {
     loadError: "An error occurred while loading data.",
     addGroupError: "An error occurred while adding group.",
     deleteGroupError: "An error occurred while deleting group.",
+    updateGroupError: "An error occurred while updating group.",
     addPrinterError: "An error occurred while adding printer.",
     deletePrinterError: "An error occurred while deleting printer.",
     assignGroupError: "An error occurred while assigning group.",
@@ -412,10 +441,13 @@ export default {
     // Misc
     add: "Add",
     edit: "Edit",
+    save: "Save",
     cancel: "Cancel",
     apply: "Apply",
     // Printer edit modal
     editPrinter: "Edit Printer",
+    basicInformation: "Basic Information",
+    currentModel: "Current Model",
     monitoring: "Monitoring",
     manufacturer: "Manufacturer",
     selectManufacturer: "Manufacturer",

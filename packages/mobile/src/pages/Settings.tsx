@@ -142,21 +142,24 @@ const Settings = () => {
       const printersData = await getUserPrintersWithGroup(user.id);
       
       // 타입 변환 및 안전한 할당
-      const formattedPrinters: PrinterConfig[] = (printersData || []).map(printer => ({
-        id: printer.id,
-        name: (printer as any).name ?? printer.model,
-        model: printer.model,
-        group_id: printer.group_id,
-        group: printer.group?.[0] || undefined,
-        ip_address: printer.ip_address,
-        port: printer.port,
-        api_key: printer.api_key,
-        firmware: printer.firmware as "marlin" | "klipper" | "repetier" | "octoprint",
-        status: printer.status as "connected" | "disconnected" | "error",
-        last_connected: printer.last_connected ? new Date(printer.last_connected) : undefined,
-        device_uuid: printer.device_uuid,  // device_uuid 포함
-        manufacture_id: (printer as any).manufacture_id  // manufacture_id 포함
-      }));
+      const formattedPrinters: PrinterConfig[] = (printersData || []).map(printer => {
+        const printerData = printer as Record<string, unknown>;
+        return {
+          id: printer.id,
+          name: (printerData.name as string | undefined) ?? printer.model,
+          model: printer.model,
+          group_id: printer.group_id,
+          group: printer.group?.[0] || undefined,
+          ip_address: printer.ip_address,
+          port: printer.port,
+          api_key: printer.api_key,
+          firmware: printer.firmware as "marlin" | "klipper" | "repetier" | "octoprint",
+          status: printer.status as "connected" | "disconnected" | "error",
+          last_connected: printer.last_connected ? new Date(printer.last_connected) : undefined,
+          device_uuid: printer.device_uuid,  // device_uuid 포함
+          manufacture_id: printerData.manufacture_id as string | undefined  // manufacture_id 포함
+        };
+      });
 
       setPrinters(formattedPrinters);
     } catch (error) {
@@ -338,6 +341,54 @@ const Settings = () => {
     }
   };
 
+  const handleEditGroup = (group: PrinterGroup) => {
+    setEditingGroup(group);
+    setNewGroup({
+      name: group.name,
+      description: group.description || "",
+      color: group.color
+    });
+    setShowAddGroup(true);
+  };
+
+  const handleUpdateGroup = async () => {
+    if (!user || !editingGroup || !newGroup.name.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from('printer_groups')
+        .update({
+          name: newGroup.name.trim(),
+          description: newGroup.description.trim() || null,
+          color: newGroup.color
+        })
+        .eq('id', editingGroup.id);
+
+      if (error) throw error;
+
+      setGroups(groups.map(g =>
+        g.id === editingGroup.id
+          ? { ...g, name: newGroup.name.trim(), description: newGroup.description.trim(), color: newGroup.color }
+          : g
+      ));
+      setNewGroup({ name: "", description: "", color: colorPalette[0] });
+      setEditingGroup(null);
+      setShowAddGroup(false);
+
+      toast({
+        title: t('settings.success'),
+        description: t('settings.groupUpdated'),
+      });
+    } catch (error) {
+      console.error('Error updating group:', error);
+      toast({
+        title: t('settings.error'),
+        description: t('settings.updateGroupError'),
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleDeleteGroup = async (groupId: string) => {
     if (!user) return;
 
@@ -350,7 +401,7 @@ const Settings = () => {
       if (error) throw error;
 
       setGroups(groups.filter(g => g.id !== groupId));
-      
+
       toast({
         title: t('settings.success'),
         description: t('settings.groupDeleted'),
@@ -524,7 +575,12 @@ const Settings = () => {
     if (!user || !editingPrinter) return;
 
     try {
-      const updateData: any = {
+      const updateData: {
+        name: string;
+        model: string;
+        group_id: string | null;
+        manufacture_id?: string;
+      } = {
         name: editingPrinter.name,
         model: editingPrinter.model,
         group_id: editingPrinter.group_id || null,
@@ -558,12 +614,13 @@ const Settings = () => {
         const dashboardCacheKey = 'dashboard:printers';
         const cachedData = localStorage.getItem(dashboardCacheKey);
         if (cachedData) {
-          const printers = JSON.parse(cachedData);
-          const updatedPrinters = printers.map((p: any) => {
-            if (p.id === editingPrinter.id) {
-              return { ...p, name: updateData.name, model: updateData.model };
+          const printers = JSON.parse(cachedData) as unknown[];
+          const updatedPrinters = printers.map((p) => {
+            const printer = p as { id: string; name?: string; model?: string };
+            if (printer.id === editingPrinter.id) {
+              return { ...printer, name: updateData.name, model: updateData.model };
             }
-            return p;
+            return printer;
           });
           localStorage.setItem(dashboardCacheKey, JSON.stringify(updatedPrinters));
 
@@ -611,7 +668,7 @@ const Settings = () => {
       setPrinters(prev => prev.map(p => {
         if (p.id !== printerId) return p;
         const nextGroup = groupId ? groups.find(g => g.id === groupId) : undefined;
-        return { ...p, group_id: groupId ?? undefined, group: nextGroup } as any;
+        return { ...p, group_id: groupId ?? undefined, group: nextGroup } satisfies PrinterConfig;
       }));
 
       toast({ title: t('settings.saved'), description: t('settings.groupUpdated') });
@@ -700,7 +757,7 @@ const Settings = () => {
               </DialogTrigger>
               <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
                 <DialogHeader>
-                  <DialogTitle>{t('settings.newGroup')}</DialogTitle>
+                  <DialogTitle>{editingGroup ? t('settings.editGroup') : t('settings.newGroup')}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div className="space-y-2">
@@ -738,10 +795,14 @@ const Settings = () => {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={handleAddGroup} className="flex-1">
-                      {t('settings.add')}
+                    <Button onClick={editingGroup ? handleUpdateGroup : handleAddGroup} className="flex-1">
+                      {editingGroup ? t('settings.save') : t('settings.add')}
                     </Button>
-                    <Button variant="outline" onClick={() => setShowAddGroup(false)} className="flex-1">
+                    <Button variant="outline" onClick={() => {
+                      setShowAddGroup(false);
+                      setEditingGroup(null);
+                      setNewGroup({ name: "", description: "", color: colorPalette[0] });
+                    }} className="flex-1">
                       {t('settings.cancel')}
                     </Button>
                   </div>
@@ -793,6 +854,7 @@ const Settings = () => {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
+                          onClick={() => handleEditGroup(group)}
                         >
                           <Edit className="h-3.5 w-3.5" />
                         </Button>
@@ -897,7 +959,7 @@ const Settings = () => {
                     <Label htmlFor="firmware">{t('settings.firmware')}</Label>
                     <Select
                       value={newPrinter.firmware || "marlin"}
-                      onValueChange={(value) => setNewPrinter({...newPrinter, firmware: value as any})}
+                      onValueChange={(value) => setNewPrinter({...newPrinter, firmware: value as "marlin" | "klipper" | "repetier" | "octoprint"})}
                     >
                       <SelectTrigger>
                         <SelectValue />

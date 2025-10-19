@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Camera, Play, RotateCw, Maximize2, X } from "lucide-react";
-import { mqttConnect, mqttPublish, mqttSubscribe, mqttUnsubscribe } from "@shared/services/mqttService";
+import { publishCameraStart, publishCameraStop, subscribeCameraState } from "@shared/services/mqttService";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useTranslation } from "react-i18next";
 
@@ -29,7 +29,11 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
   const cleanupVideo = useCallback(() => {
     const frame = iframeRef.current;
     if (frame) {
-      try { frame.src = 'about:blank'; } catch {}
+      try {
+        frame.src = 'about:blank';
+      } catch (error) {
+        console.warn('[CAM] Failed to reset iframe src:', error);
+      }
     }
     setWebrtcUrl(null);
   }, []);
@@ -46,7 +50,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
         console.warn('[CAM][DB] stream_url 조회 실패:', error.message);
         return null;
       }
-      return (data as any)?.stream_url ?? null;
+      return (data as { stream_url?: string } | null)?.stream_url ?? null;
     } catch (e) {
       console.warn('[CAM][DB] stream_url 조회 예외:', e);
       return null;
@@ -56,32 +60,13 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
   // ── MQTT 상태 구독 (STATE_TOPIC) ──────────────────────────────────────────────
   useEffect(() => {
     let unsub: (() => Promise<void>) | null = null;
-    let active = true;
 
     (async () => {
       try {
-        await mqttConnect();
-        const topic = `camera/${cameraId}/state`;
-        const handler = (_t: string, payload: any) => {
-          try {
-            const msg = typeof payload === 'string' ? JSON.parse(payload) : payload;
-
-            // 상태 판단
-            const running = !!(msg?.running);
-            setCameraStatus(running ? 'online' : 'offline');
-
-            // URL 추출 (WebRTC만 사용)
-            const wurl =
-              msg?.webrtc?.play_url_webrtc ||
-              msg?.play_url_webrtc ||
-              (typeof msg?.url === 'string' && !msg.url.endsWith('.m3u8') ? msg.url : null);
-            if (wurl) setWebrtcUrl(wurl);
-          } catch (e) {
-            console.warn('[CAM][STATE] parse error', e);
-          }
-        };
-        await mqttSubscribe(topic, handler, 1);
-        unsub = async () => { try { await mqttUnsubscribe(topic, handler); } catch {} };
+        unsub = await subscribeCameraState(cameraId, ({ running, webrtcUrl, status }) => {
+          setCameraStatus(status);
+          if (webrtcUrl) setWebrtcUrl(webrtcUrl);
+        });
       } catch (e) {
         console.warn('[CAM][MQTT] subscribe failed', e);
       }
@@ -101,8 +86,6 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
     setCameraStatus('starting');
 
     try {
-      await mqttConnect();
-
       // 입력(MJPEG/RTSP 등)
       const input = await getCameraStreamInput(cameraId);
       if (!input) {
@@ -118,29 +101,23 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
       const height = Number.isFinite(h) && h > 0 ? h : 720;
 
       // 환경변수(없으면 라우터의 LAN 주소를 직접 기입)
-      const RTSP_BASE   = (import.meta as any).env?.VITE_MEDIA_RTSP_BASE   || 'rtsp://factor.io.kr:8554';
-      const WEBRTC_BASE = (import.meta as any).env?.VITE_MEDIA_WEBRTC_BASE || 'https://factor.io.kr/webrtc';
+      const RTSP_BASE   = import.meta.env?.VITE_MEDIA_RTSP_BASE   || 'rtsp://factor.io.kr:8554';
+      const WEBRTC_BASE = import.meta.env?.VITE_MEDIA_WEBRTC_BASE || 'https://factor.io.kr/webrtc';
 
-      const topic = `camera/${cameraId}/cmd`;
-      const payload = {
-        type: 'camera',
-        action: 'start',
-        options: {
-          name: `cam-${cameraId}`,
-          input,                 // ex) http://<rpi>/stream 혹은 rtsp://...
-          fps: 20,
-          width,
-          height,
-          bitrateKbps: 1800,
-          encoder: 'libx264',    // 라즈베리 HW 인코더(사용 불가면 서버에서 SW로 폴백)
-          forceMjpeg: true,      // HTTP MJPEG 입력 최적화
-          lowLatency: true,
-          rtsp_base: RTSP_BASE,
-          webrtc_base: WEBRTC_BASE
-        }
-      };
-      console.log('[CAM][MQTT] start payload', payload);
-      await mqttPublish(topic, payload, 1, false);
+      // shared 함수 사용
+      await publishCameraStart({
+        deviceUuid: cameraId,
+        streamUrl: input,
+        fps: 20,
+        width,
+        height,
+        bitrateKbps: 1800,
+        encoder: 'libx264',
+        forceMjpeg: true,
+        lowLatency: true,
+        rtspBase: RTSP_BASE,
+        webrtcBase: WEBRTC_BASE
+      });
       // 이후 실제 재생 URL은 STATE_TOPIC에서 수신 → setWebrtcUrl()
     } catch (e) {
       console.error('[CAM][MQTT] start error', e);
@@ -148,30 +125,43 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
       setCameraStatus('error');
       setIsStreaming(false);
     }
-  }, [isConnected, cameraId, resolution]);
+  }, [isConnected, cameraId, resolution, t]);
 
   const stopStreaming = useCallback(async () => {
     setIsStreaming(false);
     cleanupVideo();
     try {
-      const topic = `camera/${cameraId}/cmd`;
-      await mqttPublish(topic, { type:'camera', action: 'stop', options: { name: `cam-${cameraId}` } }, 1, false);
-    } catch {}
+      await publishCameraStop(cameraId);
+    } catch (e) {
+      console.warn('[CAM][MQTT] stop error', e);
+    }
   }, [cleanupVideo, cameraId]);
 
   // 5분 자동 {t("camera.stop")}} 타이머
   useEffect(() => {
     if (isStreaming) {
       if (autoStopTimerRef.current) {
-        try { clearTimeout(autoStopTimerRef.current); } catch {}
+        try {
+          clearTimeout(autoStopTimerRef.current);
+        } catch (error) {
+          console.warn('[CAM] Failed to clear timeout:', error);
+        }
       }
       autoStopTimerRef.current = window.setTimeout(() => {
-        try { stopStreaming(); } catch {}
+        try {
+          stopStreaming();
+        } catch (error) {
+          console.error('[CAM] Auto-stop failed:', error);
+        }
       }, 5 * 60 * 1000);
     }
     return () => {
       if (autoStopTimerRef.current) {
-        try { clearTimeout(autoStopTimerRef.current); } catch {}
+        try {
+          clearTimeout(autoStopTimerRef.current);
+        } catch (error) {
+          console.warn('[CAM] Failed to clear timeout on cleanup:', error);
+        }
         autoStopTimerRef.current = null;
       }
     };
@@ -243,8 +233,18 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
                   )}
 
                   <div className="absolute top-4 left-4">
-                    <Badge variant="secondary" className="bg-black/50 text-white">
-                      {cameraStatus === 'online' ? 'LIVE' : cameraStatus.toUpperCase()}
+                    <Badge variant="secondary" className={`text-white ${
+                      !isConnected
+                        ? 'bg-destructive'
+                        : cameraStatus === 'online'
+                          ? 'bg-red-500'
+                          : 'bg-black/50'
+                    }`}>
+                      {!isConnected
+                        ? t('camera.disconnected')
+                        : cameraStatus === 'online'
+                          ? 'LIVE'
+                          : cameraStatus.toUpperCase()}
                     </Badge>
                   </div>
 

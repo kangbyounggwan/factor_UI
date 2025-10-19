@@ -132,8 +132,8 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
-    /* 키보드가 나타날 때 하단 안전 패딩 적용 */
-    padding-bottom: max(16px, env(safe-area-inset-bottom), var(--kb, 0px));
+    /* 키보드 처리는 capacitor.config.ts에서 resize: 'none'으로 설정됨 */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }
 

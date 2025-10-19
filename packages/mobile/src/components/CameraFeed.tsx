@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,9 +23,9 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
   const roomIdRef = useRef<string>(`camera:${cameraId}`);
   const joinedRef = useRef<boolean>(false);
 
-  const iceServers: RTCIceServer[] = [
+  const iceServers = useMemo<RTCIceServer[]>(() => [
     { urls: ["stun:stun.l.google.com:19302", "stun:global.stun.twilio.com:3478"] },
-  ];
+  ], []);
 
   // 실시간 시간 업데이트 시뮬레이션
   useEffect(() => {
@@ -57,14 +57,24 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
         peer.ontrack = null;
         peer.onicecandidate = null;
         peer.getSenders().forEach((s) => {
-          try { s.track?.stop(); } catch {}
+          try {
+            s.track?.stop();
+          } catch (error) {
+            console.warn('Failed to stop sender track:', error);
+          }
         });
         peer.getReceivers().forEach((r) => {
-          try { r.track?.stop(); } catch {}
+          try {
+            r.track?.stop();
+          } catch (error) {
+            console.warn('Failed to stop receiver track:', error);
+          }
         });
         peer.close();
       }
-    } catch {}
+    } catch (error) {
+      console.error('Error cleaning up peer connection:', error);
+    }
     peerRef.current = null;
 
     const videoElement = videoRef.current;
@@ -74,7 +84,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
       videoElement.srcObject = null;
     }
   }, []);
-  const normalizeSessionDescriptionInit = (raw: any): RTCSessionDescriptionInit | null => {
+  const normalizeSessionDescriptionInit = (raw: unknown): RTCSessionDescriptionInit | null => {
     if (!raw) return null;
     // { offer: { type, sdp } }
     if (raw.offer && typeof raw.offer === 'object' && raw.offer.sdp && raw.offer.type) {
@@ -95,7 +105,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
     return null;
   };
  // 2) handleOffer 교체
-  const handleOffer = useCallback(async (payload: any) => {
+  const handleOffer = useCallback(async (payload: unknown) => {
     const offer = normalizeSessionDescriptionInit(payload);
     if (!offer) {
       console.error('수신한 offer 데이터 형식이 올바르지 않습니다:', payload);
@@ -133,10 +143,10 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
       console.error('WebRTC offer 처리 실패', error);
       setStreamError('스트림 연결 중 오류가 발생했습니다.');
     }
-  }, [attachMediaStream]);
+  }, [attachMediaStream, iceServers]);
 
-  const handleRemoteIce = useCallback(async (payload: any) => {
-    const candidate: RTCIceCandidateInit = payload?.candidate;
+  const handleRemoteIce = useCallback(async (payload: unknown) => {
+    const candidate: RTCIceCandidateInit = (payload as { candidate?: RTCIceCandidateInit })?.candidate;
     if (!candidate) return;
     try {
       if (peerRef.current) {
@@ -190,12 +200,14 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
   // WebSocket 시그널링 구독/해제
   useEffect(() => {
     if (!isStreaming) return;
-    const onOffer = (data: any) => {
-      if (data?.roomId !== roomIdRef.current) return;
+    const onOffer = (data: unknown) => {
+      const typedData = data as { roomId?: string };
+      if (typedData?.roomId !== roomIdRef.current) return;
       handleOffer(data);
     };
-    const onIce = (data: any) => {
-      if (data?.roomId !== roomIdRef.current) return;
+    const onIce = (data: unknown) => {
+      const typedData = data as { roomId?: string };
+      if (typedData?.roomId !== roomIdRef.current) return;
       handleRemoteIce(data);
     };
 

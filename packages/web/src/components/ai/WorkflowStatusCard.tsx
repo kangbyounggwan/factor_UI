@@ -40,7 +40,7 @@ const stepConfig = {
   },
 };
 
-function getStepIcon(status: WorkflowStepStatus, StepIcon: any) {
+function getStepIcon(status: WorkflowStepStatus, StepIcon: React.ComponentType<{ className?: string }>) {
   switch (status) {
     case "completed":
       return <CheckCircle2 className="w-5 h-5 text-green-500" />;

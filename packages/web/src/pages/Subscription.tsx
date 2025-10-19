@@ -36,7 +36,7 @@ interface SubscriptionPlan {
 }
 
 // 구독 플랜 상세 정보
-const getSubscriptionPlans = (isYearly: boolean, t: any): SubscriptionPlan[] => [
+const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string): SubscriptionPlan[] => [
   {
     id: "basic",
     name: t('subscription.plans.basic.name'),

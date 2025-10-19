@@ -84,7 +84,31 @@ export default {
     loginError: "로그인 중 오류가 발생했습니다.",
     welcomeMessage: "환영합니다!",
     featureComingSoon: "기능 준비중",
-    passwordResetComingSoon: "비밀번호 찾기 기능은 곧 제공됩니다."
+    passwordResetComingSoon: "비밀번호 찾기 기능은 곧 제공됩니다.",
+    displayName: "사용자 이름",
+    signInSubtitle: "FACTOR 계정으로 로그인하세요",
+    signingIn: "로그인 중...",
+    byContinuing: "계속 진행하면",
+    termsOfService: "이용약관",
+    and: "및",
+    privacyPolicy: "개인정보처리방침",
+    userAlreadyRegistered: "이미 등록된 이메일입니다.",
+    welcome: "환영합니다!",
+    signupFailed: "회원가입 실패",
+    // 마케팅 배너
+    marketing: {
+      titleLine1: "3D 프린터 팜을 위한",
+      titleLine2: "새로운 경험",
+      subtitleLine1: "실시간 모니터링과 원격 제어로",
+      subtitleLine2: "스마트한 3D 프린팅을 시작하세요",
+      feature1: "실시간 온도 및 진행률 모니터링",
+      feature2: "원격 프린터 제어 및 G-code 업로드",
+      feature3: "실시간 카메라 피드 제공",
+      feature4: "IoT 센서를 통한 환경 모니터링",
+      ctaTitle: "지금 무료로 시작하기",
+      ctaDescLine1: "복잡한 설정 없이 바로 사용 가능한",
+      ctaDescLine2: "클라우드 기반 3D 프린터 관리 솔루션"
+    }
   },
   ai: {
     title: "AI 3D 모델링 스튜디오",
@@ -347,6 +371,7 @@ export default {
     groupManagement: "프린터 그룹",
     addGroup: "그룹 추가",
     newGroup: "새 프린터 그룹 추가",
+    editGroup: "그룹 수정",
     groupName: "그룹 이름",
     groupNamePlaceholder: "예: Creality 프린터, FDM 프린터",
     groupDescription: "설명 (선택사항)",
@@ -404,6 +429,7 @@ export default {
     loadError: "데이터를 불러오는 중 오류가 발생했습니다.",
     addGroupError: "그룹 추가 중 오류가 발생했습니다.",
     deleteGroupError: "그룹 삭제 중 오류가 발생했습니다.",
+    updateGroupError: "그룹 업데이트 중 오류가 발생했습니다.",
     addPrinterError: "프린터 추가 중 오류가 발생했습니다.",
     deletePrinterError: "프린터 삭제 중 오류가 발생했습니다.",
     assignGroupError: "그룹 배정 중 오류가 발생했습니다.",
@@ -412,10 +438,12 @@ export default {
     // 기타
     add: "추가",
     edit: "수정",
+    save: "저장",
     cancel: "취소",
     apply: "적용",
     // 프린터 수정 모달
     editPrinter: "프린터 수정",
+    basicInformation: "기본 정보",
     monitoring: "모니터링",
     manufacturer: "제조사",
     selectManufacturer: "제조사",
@@ -424,6 +452,7 @@ export default {
     selectSeriesPlaceholder: "시리즈를 선택하세요",
     selectModel: "모델",
     selectModelPlaceholder: "모델을 선택하세요",
+    currentModel: "현재 모델",
     connection: "연결",
     cameraUrl: "카메라 URL",
     cameraUrlComingSoon: "카메라 URL 설정은 곧 제공됩니다.",
@@ -577,7 +606,7 @@ export default {
     requestSent: "요청을 보냈습니다"
   },
   gcode: {
-    title: "G-code 파일관리리",
+    title: "G-code 파일관리",
     localFiles: "로컬 파일",
     sdCard: "SD 카드",
     uploadGcode: "G-code 업로드",

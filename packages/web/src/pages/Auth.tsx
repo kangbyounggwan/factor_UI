@@ -68,7 +68,7 @@ const Auth = () => {
 
 
 
-        } catch {}
+        } catch (mqttError) { console.warn('MQTT subscription error:', mqttError); }
       }
     } catch (err) {
       setError(t('auth.loginFailed', 'Login failed'));

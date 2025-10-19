@@ -3,7 +3,7 @@
 import { Canvas, useLoader } from "@react-three/fiber";
 import { OrbitControls, Grid, Environment, useGLTF, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { Suspense, useMemo, useLayoutEffect, useRef, useState } from "react";
-import { Box3, Group, Vector3, Object3D } from "three";
+import { Box3, Group, Vector3, Object3D, BufferGeometry, BufferAttribute, Mesh, SkinnedMesh } from "three";
 import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { SimplifyModifier } from "three/examples/jsm/modifiers/SimplifyModifier.js";
 import { EdgeSplitModifier } from "three/examples/jsm/modifiers/EdgeSplitModifier.js";
@@ -54,11 +54,11 @@ type OptimizeOptions = {
 
 const simplifyModifier = new SimplifyModifier();
 
-function edgeSplitModify(geo: any, angleDeg: number) {
+function edgeSplitModify(geo: BufferGeometry, angleDeg: number): BufferGeometry {
   if (!geo) return geo;
 
   // 1) 인덱싱/포지션 보장
-  let g = toIndexed(geo);
+  const g = toIndexed(geo);
   const pos = g?.getAttribute?.("position");
   const idx = g?.index;
 
@@ -68,7 +68,11 @@ function edgeSplitModify(geo: any, angleDeg: number) {
 
   // 3) 노말 보장
   if (!g.getAttribute("normal")) {
-    try { g.computeVertexNormals(); } catch {}
+    try {
+      g.computeVertexNormals();
+    } catch (error) {
+      console.warn("[ModelViewer] Failed to compute normals:", error);
+    }
   }
 
   // 4) 실행
@@ -76,9 +80,21 @@ function edgeSplitModify(geo: any, angleDeg: number) {
     const modifier = new EdgeSplitModifier();
     const out = modifier.modify(g, (angleDeg * Math.PI) / 180, /*tryKeepNormals*/ false);
     // 후처리
-    try { out.computeVertexNormals(); } catch {}
-    try { out.computeBoundingSphere(); } catch {}
-    try { out.computeBoundingBox(); } catch {}
+    try {
+      out.computeVertexNormals();
+    } catch (error) {
+      console.warn("[ModelViewer] Failed to compute normals after EdgeSplit:", error);
+    }
+    try {
+      out.computeBoundingSphere();
+    } catch (error) {
+      console.warn("[ModelViewer] Failed to compute bounding sphere:", error);
+    }
+    try {
+      out.computeBoundingBox();
+    } catch (error) {
+      console.warn("[ModelViewer] Failed to compute bounding box:", error);
+    }
     return out;
   } catch (e) {
     // 안전 폴백: EdgeSplit을 건너뛰되, 노말만 재계산
@@ -87,16 +103,18 @@ function edgeSplitModify(geo: any, angleDeg: number) {
       g.computeVertexNormals();
       g.computeBoundingSphere();
       g.computeBoundingBox();
-    } catch {}
+    } catch (error) {
+      console.warn("[ModelViewer] Failed to compute geometry properties:", error);
+    }
     return geo;
   }
 }
 
-function isBufferAttr(attr: any): boolean {
-  return !!attr && attr.isBufferAttribute === true && attr.array && typeof attr.array.length === "number";
+function isBufferAttr(attr: unknown): attr is BufferAttribute {
+  return !!attr && (attr as BufferAttribute).isBufferAttribute === true && !!(attr as BufferAttribute).array && typeof (attr as BufferAttribute).array.length === "number";
 }
 
-function toIndexed(geo: any) {
+function toIndexed(geo: BufferGeometry): BufferGeometry {
   if (!geo || !geo.getAttribute) return geo;
   const pos = geo.getAttribute("position");
   if (!isBufferAttr(pos) || pos.count < 3) return geo;
@@ -104,29 +122,33 @@ function toIndexed(geo: any) {
   // Interleaved면 일단 비인덱스로 풀었다가 mergeVertices로 다시 인덱싱
   let g = geo;
   if (pos.isInterleavedBufferAttribute) {
-    try { g = g.toNonIndexed(); } catch {}
+    try {
+      g = g.toNonIndexed();
+    } catch (error) {
+      console.warn("[ModelViewer] Failed to convert to non-indexed:", error);
+    }
   }
 
   if (g.index && isBufferAttr(g.index)) return g;
 
   try {
     // mergeVertices: 인덱스 생성 + 용접
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const merged = (BufferGeometryUtils as any).mergeVertices(g, 1e-4);
+    const merged = (BufferGeometryUtils as { mergeVertices: (geometry: BufferGeometry, tolerance?: number) => BufferGeometry }).mergeVertices(g, 1e-4);
     return merged && merged.index ? merged : g;
-  } catch {
+  } catch (error) {
+    console.warn("[ModelViewer] Failed to merge vertices:", error);
     return g;
   }
 }
 
-function triangleCount(geo: any) {
+function triangleCount(geo: BufferGeometry): number {
   const g = toIndexed(geo);
   const pos = g?.getAttribute?.("position");
   if (!pos || pos.count < 3) return 0;
   return (g.index ? g.index.count : pos.count) / 3;
 }
 
-function applySimplify(geo: any, maxTris: number) {
+function applySimplify(geo: BufferGeometry, maxTris: number): BufferGeometry {
   const indexed = toIndexed(geo);
   const nowTris = triangleCount(indexed);
   if (nowTris <= maxTris) return indexed;
@@ -140,17 +162,18 @@ function applySimplify(geo: any, maxTris: number) {
   return simplified;
 }
 
-function applySubdivision(geo: any, _iterations: 0 | 1, _weight: number) {
+function applySubdivision(geo: BufferGeometry, _iterations: 0 | 1, _weight: number): BufferGeometry {
   // SubdivisionModifier 타입/경로 호환성 이슈로, 현재는 no-op 처리.
   // 필요 시 three/examples SubdivisionModifier 적용 가능.
   return geo;
 }
 
-function optimizeObject3D(root: Object3D, opt: OptimizeOptions) {
+function optimizeObject3D(root: Object3D, opt: OptimizeOptions): void {
   const { maxTriangles, iterations, preserveEdges, weight, split, flatOnly } = opt;
-  root.traverse((obj: any) => {
-    if (!(obj && (obj.isMesh || obj.isSkinnedMesh))) return;
-    let g = obj.geometry;
+  root.traverse((obj: Object3D) => {
+    if (!((obj as Mesh).isMesh || (obj as SkinnedMesh).isSkinnedMesh)) return;
+    const meshObj = obj as Mesh | SkinnedMesh;
+    let g = meshObj.geometry;
     if (!g) return;
 
     if (preserveEdges) {
@@ -169,7 +192,7 @@ function optimizeObject3D(root: Object3D, opt: OptimizeOptions) {
     g.computeVertexNormals();
     g.computeBoundingSphere();
     g.computeBoundingBox();
-    obj.geometry = g;
+    meshObj.geometry = g;
   });
 }
 
@@ -200,11 +223,11 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
       box.getSize(scaledSize);
 
       // 원본(추가 스케일 미적용) 크기 계산
-      const baseBox = new Box3().setFromObject(scene as any);
+      const baseBox = new Box3().setFromObject(scene);
       const baseSizeVec = new Vector3();
       baseBox.getSize(baseSizeVec);
       onSize?.({ x: scaledSize.x, y: scaledSize.y, z: scaledSize.z }, { x: baseSizeVec.x, y: baseSizeVec.y, z: baseSizeVec.z });
-      onReady?.(group.current, scene as unknown as Object3D);
+      onReady?.(group.current, scene);
     } catch (error) {
       console.error('[ModelViewer] Error in GLBModel layout effect:', error);
     }
@@ -216,9 +239,9 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
   }
 
   return (
-    <group ref={group as any} scale={scale} castShadow receiveShadow>
+    <group ref={group} scale={scale} castShadow receiveShadow>
       {/* 사용자 회전 적용 */}
-      <group rotation={rotation as any}>
+      <group rotation={rotation}>
         <primitive object={scene} />
       </group>
     </group>
@@ -269,7 +292,7 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
   }
 
   return (
-    <group ref={group as any} scale={scale} castShadow receiveShadow>
+    <group ref={group} scale={scale} castShadow receiveShadow>
       <mesh geometry={geometry} castShadow receiveShadow>
         <meshStandardMaterial color="#bfc7d5" roughness={0.85} metalness={0.0} />
       </mesh>

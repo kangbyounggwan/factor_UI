@@ -61,16 +61,16 @@ const Admin = () => {
   });
 
   // AdminCommand state
-  const [printerRows, setPrinterRows] = useState<any[]>([]);
+  const [printerRows, setPrinterRows] = useState<Array<{ id: string; name?: string; model?: string; device_uuid?: string }>>([]);
   const [deviceId, setDeviceId] = useState<string>("");
   const [mode, setMode] = useState<'command' | 'mcode'>("command");
   const [cmd, setCmd] = useState<string>("");
   const mqtt = useState(() => createSharedMqttClient())[0];
-  const [logs, setLogs] = useState<Array<{ id: number; ts: number; dir: 'tx'|'rx'; topic: string; deviceId: string; payload: any }>>([]);
+  const [logs, setLogs] = useState<Array<{ id: number; ts: number; dir: 'tx'|'rx'; topic: string; deviceId: string; payload: unknown }>>([]);
   const logIdRef = useState(1)[0];
   const consoleRef = useState<HTMLDivElement | null>(null)[0];
   const adminResultTopicRef = useRef<string | null>(null);
-  const adminResultHandlerRef = useRef<((t: string, p: any)=>void) | null>(null);
+  const adminResultHandlerRef = useRef<((t: string, p: unknown)=>void) | null>(null);
 
   // 데이터 로드
   const loadData = async () => {
@@ -130,9 +130,9 @@ const Admin = () => {
       }
       toast({ title: '전송 완료', description: `${deviceId}에 커맨드 전송됨` });
       setCmd('');
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      toast({ title: '전송 실패', description: String(e?.message ?? e), variant: 'destructive' });
+      toast({ title: '전송 실패', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
     }
   };
 
@@ -160,23 +160,23 @@ const Admin = () => {
     try {
       // 이전 구독 제거
       if (adminResultTopicRef.current && adminResultHandlerRef.current) {
-        try { await mqtt.unsubscribe(adminResultTopicRef.current, adminResultHandlerRef.current); } catch {}
+        try { await mqtt.unsubscribe(adminResultTopicRef.current, adminResultHandlerRef.current); } catch (err) { console.warn('Unsubscribe failed:', err); }
       }
-      const handler = (t: string, payload: any) => {
-        let parsed: any = payload;
+      const handler = (t: string, payload: unknown) => {
+        let parsed: unknown = payload;
         try {
           if (typeof payload === 'string') parsed = JSON.parse(payload);
           else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-        } catch {}
+        } catch (parseErr) { console.warn('Failed to parse payload:', parseErr); }
         setLogs((prev) => [...prev, { id: Date.now(), ts: Date.now(), dir: 'rx', topic: t, deviceId, payload: parsed }]);
       };
       await mqtt.subscribe(topic, handler);
       adminResultTopicRef.current = topic;
       adminResultHandlerRef.current = handler;
       toast({ title: '구독 시작', description: `${topic} 구독을 시작했습니다.` });
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      toast({ title: '구독 실패', description: String(e?.message ?? e), variant: 'destructive' });
+      toast({ title: '구독 실패', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
     }
   };
 
@@ -185,7 +185,7 @@ const Admin = () => {
     return () => {
       (async () => {
         if (adminResultTopicRef.current && adminResultHandlerRef.current) {
-          try { await mqtt.unsubscribe(adminResultTopicRef.current, adminResultHandlerRef.current); } catch {}
+          try { await mqtt.unsubscribe(adminResultTopicRef.current, adminResultHandlerRef.current); } catch (err) { console.warn('Cleanup unsubscribe failed:', err); }
         }
       })();
     };
@@ -283,9 +283,9 @@ const Admin = () => {
                   <SelectValue placeholder="디바이스 선택" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Array.from(new Map((printerRows || []).map((p:any)=>[p.device_uuid,p])).values())
-                    .filter((p:any)=>p && typeof p.device_uuid === 'string' && p.device_uuid.length>0)
-                    .map((p:any) => (
+                  {Array.from(new Map((printerRows || []).map((p)=>[p.device_uuid,p])).values())
+                    .filter((p)=>p && typeof p.device_uuid === 'string' && p.device_uuid.length>0)
+                    .map((p) => (
                       <SelectItem key={p.id} value={p.device_uuid}>
                         {(p.name || p.model || p.id)} ({p.device_uuid})
                       </SelectItem>
@@ -296,7 +296,7 @@ const Admin = () => {
 
             <div className="space-y-2">
               <Label>토픽 모드</Label>
-              <RadioGroup value={mode} onValueChange={(v) => setMode(v as any)} className="flex gap-6">
+              <RadioGroup value={mode} onValueChange={(v) => setMode(v as 'command' | 'mcode')} className="flex gap-6">
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="command" id="rg-command" />
                   <Label htmlFor="rg-command">COMMAND (ADMIN_COMMAND/&lt;id&gt;)</Label>

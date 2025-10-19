@@ -29,7 +29,7 @@ export interface PrintProgressData {
   filament_used: number;
 }
 
-type MessageHandler = (data: any) => void;
+type MessageHandler = (data: unknown) => void;
 
 class WebSocketService {
   private ws: WebSocket | null = null;
@@ -134,7 +134,7 @@ class WebSocketService {
     }
   }
 
-  private handleMessage(message: any): void {
+  private handleMessage(message: { type?: string; data?: unknown }): void {
     const { type, data } = message;
 
     if (type && this.messageHandlers.has(type)) {
@@ -143,7 +143,7 @@ class WebSocketService {
     }
   }
 
-  on<T = any>(messageType: string, handler: MessageHandler): void {
+  on(messageType: string, handler: MessageHandler): void {
     if (!this.messageHandlers.has(messageType)) {
       this.messageHandlers.set(messageType, []);
     }
@@ -160,7 +160,7 @@ class WebSocketService {
     }
   }
 
-  send(type: string, data: any): void {
+  send(type: string, data: unknown): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       const message = { type, data };
       this.ws.send(JSON.stringify(message));

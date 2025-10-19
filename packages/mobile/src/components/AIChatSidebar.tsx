@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -46,14 +46,7 @@ export const AIChatSidebar = ({
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // 채팅 세션 로드
-  useEffect(() => {
-    if (user) {
-      loadChatSessions();
-    }
-  }, [user]);
-
-  const loadChatSessions = async () => {
+  const loadChatSessions = useCallback(async () => {
     try {
       setIsLoading(true);
       const sessions = await chatService.getUserChatSessions();
@@ -68,7 +61,14 @@ export const AIChatSidebar = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [toast]);
+
+  // 채팅 세션 로드
+  useEffect(() => {
+    if (user) {
+      loadChatSessions();
+    }
+  }, [user, loadChatSessions]);
 
   const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();

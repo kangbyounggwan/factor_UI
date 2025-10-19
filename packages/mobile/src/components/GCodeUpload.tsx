@@ -30,10 +30,11 @@ interface GCodeFile {
 
 interface GCodeUploadProps {
   deviceUuid?: string | null;
+  isConnected?: boolean;
 }
 
-export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
-  const { isConnected, printerStatus } = useWebSocket();
+export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProps) => {
+  const { printerStatus } = useWebSocket();
   const [files, setFiles] = useState<GCodeFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -216,14 +217,14 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
               type="file"
               accept=".gcode"
               onChange={handleFileSelect}
-              disabled={uploading}
+              disabled={uploading || !isConnected}
               className="h-8 text-xs"
             />
             <Button
               size="sm"
               variant="outline"
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
+              disabled={uploading || !isConnected}
               className="h-8 px-3"
             >
               <Upload className="h-3 w-3 mr-1" />

@@ -32,9 +32,10 @@ interface GCodeFile {
 
 interface GCodeUploadProps {
   deviceUuid?: string | null;
+  isConnected?: boolean;
 }
 
-export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
+export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProps) => {
   const { t } = useTranslation();
   const [files, setFiles] = useState<GCodeFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -242,10 +243,10 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
     const off = onDashStatusMessage((uuid, payload) => {
       if (deviceUuid && uuid !== deviceUuid) return;
       const sd = payload?.sd || {};
-      const localArr: any[] = Array.isArray(sd?.local) ? sd.local : [];
-      const sdArr: any[] = Array.isArray(sd?.sdcard) ? sd.sdcard : [];
+      const localArr: Array<{ name: string; display?: string; size?: number; date?: number | string | null; estimatedPrintTime?: number; user?: string; path?: string }> = Array.isArray(sd?.local) ? sd.local : [];
+      const sdArr: Array<{ name?: string; display?: string; size?: number }> = Array.isArray(sd?.sdcard) ? sd.sdcard : [];
       setLocalMqttFiles(localArr);
-      setSdFiles(sdArr.map((f: any) => ({ name: String(f?.name ?? f?.display ?? ''), size: Number(f?.size) || 0 })));
+      setSdFiles(sdArr.map((f) => ({ name: String(f?.name ?? f?.display ?? ''), size: Number(f?.size) || 0 })));
       const printing = Boolean(payload?.printer_status?.printing);
       setIsPrinting(printing);
     });
@@ -267,15 +268,19 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
             <RadioGroup value={fileSource} onValueChange={async (v) => {
               const next = v as 'LOCAL' | 'SDCARD';
               setFileSource(next);
-              try { if (deviceUuid) await mqttConnect(); } catch {}
-            }} className="flex flex-row gap-4">
+              try {
+                if (deviceUuid) await mqttConnect();
+              } catch (error) {
+                console.warn('[GCODE] Failed to connect MQTT on source change:', error);
+              }
+            }} disabled={!isConnected} className="flex flex-row gap-4">
               <div className="flex items-center space-x-2">
-                <RadioGroupItem id="gc-local" value="LOCAL" />
-                <Label htmlFor="gc-local" className="cursor-pointer text-xs">{t('gcode.localFiles')}</Label>
+                <RadioGroupItem id="gc-local" value="LOCAL" disabled={!isConnected} />
+                <Label htmlFor="gc-local" className={`text-xs ${!isConnected ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>{t('gcode.localFiles')}</Label>
               </div>
               <div className="flex items-center space-x-2">
-                <RadioGroupItem id="gc-sd" value="SDCARD" />
-                <Label htmlFor="gc-sd" className="cursor-pointer text-xs">{t('gcode.sdCard')}</Label>
+                <RadioGroupItem id="gc-sd" value="SDCARD" disabled={!isConnected} />
+                <Label htmlFor="gc-sd" className={`text-xs ${!isConnected ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>{t('gcode.sdCard')}</Label>
               </div>
             </RadioGroup>
           </div>
@@ -310,7 +315,7 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
                           }
                           await mqttConnect();
                           const origin = 'local';
-                          const filename = (file as any).name || (file as any).display;
+                          const filename = file.name || file.display;
                           if (!filename) {
                             toast({ title: t('errors.general'), description: t('errors.fileNotSelected'), variant: 'destructive' });
                             return;
@@ -318,12 +323,13 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
                           const jobId = filename.replace(/\.[^/.]+$/, '');
                           await publishGcodePrint(deviceUuid, { filename, origin, job_id: jobId });
                           toast({ title: t('gcode.printStart'), description: `${filename} (${origin})` });
-                        } catch (e: any) {
-                          console.error(e);
-                          toast({ title: t('errors.uploadFailed'), description: String(e?.message ?? e), variant: 'destructive' });
+                        } catch (error) {
+                          console.error(error);
+                          const message = error instanceof Error ? error.message : String(error);
+                          toast({ title: t('errors.uploadFailed'), description: message, variant: 'destructive' });
                         }
                       }}
-                      disabled={isPrinting}
+                      disabled={isPrinting || !isConnected}
                       className="h-6 w-6 p-0"
                     >
                       <Play className="h-2 w-2" />
@@ -359,12 +365,13 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
                           const jobId = filename.replace(/\.[^/.]+$/, '');
                           await publishGcodePrint(deviceUuid, { filename, origin, job_id: jobId });
                           toast({ title: t('gcode.printStart'), description: `${filename} (${origin})` });
-                        } catch (e: any) {
-                          console.error(e);
-                          toast({ title: t('errors.uploadFailed'), description: String(e?.message ?? e), variant: 'destructive' });
+                        } catch (error) {
+                          console.error(error);
+                          const message = error instanceof Error ? error.message : String(error);
+                          toast({ title: t('errors.uploadFailed'), description: message, variant: 'destructive' });
                         }
                       }}
-                      disabled={isPrinting}
+                      disabled={isPrinting || !isConnected}
                       className="h-6 w-6 p-0"
                     >
                       <Play className="h-2 w-2" />
@@ -383,7 +390,7 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
               type="file"
               accept=".gcode,.gco"
               onChange={handleFileSelect}
-              disabled={uploading}
+              disabled={uploading || !isConnected}
               className="h-8 text-xs flex-1"
             />
             <Button
@@ -396,7 +403,7 @@ export const GCodeUpload = ({ deviceUuid }: GCodeUploadProps) => {
                   fileInputRef.current?.click();
                 }
               }}
-              disabled={uploading}
+              disabled={uploading || !isConnected}
               className="h-8 px-3 whitespace-nowrap flex-shrink-0"
             >
               <Upload className="h-3 w-3 mr-1" />

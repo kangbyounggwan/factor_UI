@@ -65,7 +65,7 @@ const SheetContent = React.forwardRef<
         top: 'var(--safe-area-inset-top, 0px)',
         height: 'calc(100dvh - var(--safe-area-inset-top, 0px))',
         bottom: 'auto',
-        ...(props as any).style,
+        ...((props as { style?: React.CSSProperties }).style ?? {}),
       }}
     >
       {children}

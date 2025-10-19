@@ -235,14 +235,14 @@ export const AIAssistantSidebar = ({ isCollapsed, onToggle, width, onWidthChange
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing) return;
-    
+
     const calculatedWidth = window.innerWidth - e.clientX;
     const minWidth = 280;
     const maxWidth = Math.min(720, window.innerWidth * 0.6);
-    
+
     const finalWidth = Math.max(minWidth, Math.min(maxWidth, calculatedWidth));
     onWidthChange(finalWidth);
-  }, [isResizing]);
+  }, [isResizing, onWidthChange]);
 
   const handleMouseUp = useCallback(() => {
     setIsResizing(false);

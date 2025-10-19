@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Download, Sparkles } from "lucide-react";
@@ -7,7 +8,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import ModelViewer from "@/components/ModelViewer";
+
+// Lazy load ModelViewer to reduce initial bundle size
+const ModelViewer = lazy(() => import("@/components/ModelViewer"));
 import WorkflowStatusCard from "./WorkflowStatusCard";
 import { WorkflowStep, WorkflowStepStatus } from "@factor/shared";
 import { useTranslation } from "react-i18next";
@@ -120,11 +123,20 @@ export default function ModelPreview({
       <Card className="h-fit lg:sticky top-4">
         <CardContent className="p-0">
           <div className="bg-muted rounded-lg flex items-center justify-center h-[calc(85vh-4rem-2rem)] relative overflow-hidden">
-            <ModelViewer
-              className="w-full h-full"
-              modelUrl={modelUrl}
-              placeholderMessage={t('ai.generatePrompt')}
-            />
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Loading 3D viewer...</p>
+                </div>
+              </div>
+            }>
+              <ModelViewer
+                className="w-full h-full"
+                modelUrl={modelUrl}
+                placeholderMessage={t('ai.generatePrompt')}
+              />
+            </Suspense>
 
             {/* 다운로드 드롭다운 버튼 - 오른쪽 위 */}
             {hasDownloadableFiles && !isProcessing && (

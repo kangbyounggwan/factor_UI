@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import LanguageSwitcher from "./LanguageSwitcher";
 
 export const Header = ({ onBack }: { onBack?: () => void }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [systemStatus, setSystemStatus] = useState({
     connectedPrinters: 0,
@@ -46,13 +47,6 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
     ? 'env(safe-area-inset-top, 0px)'
     : '0px';
 
-  // 실제 프린터 상태 로드
-  useEffect(() => {
-    if (user) {
-      loadPrinterStatus();
-    }
-  }, [user]);
-
   // MQTT dash_status 수신 → 연결/프린팅 집계 반영
   useEffect(() => {
     const off = onDashStatusMessage((uuid, data) => {
@@ -71,23 +65,25 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
   const liveConnectedCount = Object.values(connectedMap).filter(Boolean).length;
   const livePrintingCount = Object.values(printingMap).filter(Boolean).length;
 
-  const loadPrinterStatus = async () => {
+  const loadPrinterStatus = useCallback(async () => {
+    if (!user) return;
+
     try {
       const { data: printers, error } = await supabase
         .from('printers')
         .select('*')
         .eq('user_id', user.id);
-      
+
       if (error) {
         console.error('Error loading printer status:', error);
         return;
       }
-      
+
       if (printers) {
         const total = printers.length;
         const connected = printers.filter(p => p.status === 'connected').length;
         const printing = printers.filter(p => p.status === 'printing').length;
-        
+
         setSystemStatus({
           totalPrinters: total,
           connectedPrinters: connected,
@@ -97,7 +93,14 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
     } catch (error) {
       console.error('Error loading printer status:', error);
     }
-  };
+  }, [user]);
+
+  // 실제 프린터 상태 로드
+  useEffect(() => {
+    if (user) {
+      loadPrinterStatus();
+    }
+  }, [user, loadPrinterStatus]);
 
   const isActive = (path: string) => {
     if (path === "/" && location.pathname === "/") return true;
@@ -105,58 +108,8 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
     return false;
   };
 
-  const isHomePage = location.pathname === "/";
-  const isAuthPage = location.pathname === "/auth";
+  const isHomePage = location.pathname === "/home";
   const currentNavigation = isHomePage ? homeNavigation : navigation;
-
-
-  // 로그인 페이지일 때는 간단한 헤더 표시
-  if (isAuthPage) {
-    return (
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60" style={{ paddingTop: safeTop }}>
-        <div className="container flex h-12 items-center justify-between px-4">
-          {/* 로고 */}
-          <Link to="/" className="flex items-center space-x-3">
-            <div className="flex items-center justify-center w-10 h-10 bg-primary rounded-lg">
-              <Activity className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-2xl font-bold font-orbitron text-primary tracking-wide">
-                FACTOR
-              </span>
-              <span className="text-xs text-muted-foreground font-inter -mt-1">
-                3D PRINTER FARM
-              </span>
-            </div>
-          </Link>
-
-          <div className="flex items-center gap-2">
-            {/* 언어 선택 버튼 */}
-            <LanguageSwitcher />
-
-            {/* 테마 토글 버튼 */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="w-9 h-9 p-0"
-            >
-              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-              <span className="sr-only">Toggle theme</span>
-            </Button>
-
-            {/* 홈으로 돌아가기 버튼 */}
-            <Button asChild variant="outline" size="sm">
-              <Link to="/" className="flex items-center gap-2">
-                {t('nav.backToHome')}
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </header>
-    );
-  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60" style={{ paddingTop: safeTop }}>
@@ -264,7 +217,10 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={signOut}
+                onClick={async () => {
+                  await signOut();
+                  navigate("/", { replace: true });
+                }}
                 className="text-xs"
               >
                 <LogOut className="h-3 w-3 mr-1" />
@@ -274,7 +230,7 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
           ) : (
             <div className="pl-4 border-l">
               <Button asChild variant="outline" size="sm">
-                <Link to="/auth" className="text-xs">
+                <Link to="/" className="text-xs">
                   <LogOut className="h-3 w-3 mr-1" />
                   {t('nav.login')}
                 </Link>
@@ -283,14 +239,16 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
           )}
         </div>
 
-        {/* 메뉴 버튼 (전 화면 크기 공통) - 오른쪽 끝에 고정 */}
-        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-          <SheetTrigger asChild>
-            <Button variant="outline" size="icon">
-              <Menu className="h-4 w-4" />
-              <span className="sr-only">{t('nav.openMenu')}</span>
-            </Button>
-          </SheetTrigger>
+        {/* 언어 선택 및 메뉴 버튼 - 오른쪽 끝에 고정 */}
+        <div className="flex items-center gap-2">
+          <LanguageSwitcher />
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="icon">
+                <Menu className="h-4 w-4" />
+                <span className="sr-only">{t('nav.openMenu')}</span>
+              </Button>
+            </SheetTrigger>
           <SheetContent side="right" className="w-[300px] sm:w-[400px] flex flex-col">
             {/* 접근성: DialogTitle 요구 충족 (시각적으로 숨김) */}
             <SheetHeader>
@@ -405,9 +363,10 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        signOut();
+                      onClick={async () => {
                         setMobileMenuOpen(false);
+                        await signOut();
+                        navigate("/", { replace: true });
                       }}
                       className="w-full justify-start"
                     >
@@ -423,7 +382,7 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
                     onClick={() => setMobileMenuOpen(false)}
                     className="w-full justify-start"
                   >
-                    <Link to="/auth">
+                    <Link to="/">
                       <LogOut className="h-4 w-4 mr-2" />
                       {t('nav.login')}
                     </Link>
@@ -458,7 +417,8 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
               </div>
             </div>
           </SheetContent>
-        </Sheet>
+          </Sheet>
+        </div>
       </div>
     </header>
   );

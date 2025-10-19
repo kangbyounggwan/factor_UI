@@ -5,6 +5,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { createMqttProxy } from './mqttProxyServer.js';
 // 브라우저 전용 supabase client.ts는 Node 환경에서 사용하지 않습니다.
 
 async function resolveSupabaseEnv() {
@@ -358,7 +359,7 @@ function mountRest(app) {
 export function createApp({ staticDir, enableRest = true, enableWs = true } = {}) {
   const app = express();
   const server = http.createServer(app);
-  const wss = enableWs ? new WebSocketServer({ server }) : null;
+  const wss = enableWs ? new WebSocketServer({ noServer: true }) : null;
 
   app.use(cors());
   app.use(express.json());
@@ -474,7 +475,21 @@ export function createApp({ staticDir, enableRest = true, enableWs = true } = {}
     ws.on('error', (error) => { console.error('[WS] Client error on', wsUrl, error); });
   };
 
-  if (wss) wss.on('connection', wssOnConnection);
+  if (wss) {
+    wss.on('connection', wssOnConnection);
+
+    // 기존 WebSocket 서버의 upgrade 핸들러 (MQTT Proxy가 아닌 경로)
+    server.on('upgrade', (request, socket, head) => {
+      const url = new URL(request.url, 'http://localhost');
+
+      // MQTT Proxy가 아닌 모든 경로는 기존 WebSocket 서버가 처리
+      if (url.pathname !== '/mqtt-proxy') {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          wss.emit('connection', ws, request);
+        });
+      }
+    });
+  }
 
   app.get('/api/status', (req, res) => {
     res.json({
@@ -497,7 +512,18 @@ export function createApp({ staticDir, enableRest = true, enableWs = true } = {}
     }
   });
 
-  return { app, server, wss };
+  // MQTT Proxy 추가
+  let mqttProxyWss = null;
+  if (enableWs) {
+    try {
+      mqttProxyWss = createMqttProxy(server);
+      console.log('[Server] MQTT Proxy enabled on /mqtt-proxy');
+    } catch (err) {
+      console.error('[Server] Failed to create MQTT Proxy:', err.message);
+    }
+  }
+
+  return { app, server, wss, mqttProxyWss };
 }
 
 // Vite 개발 서버(5173)에서 REST만 사용하기 위한 라우터
