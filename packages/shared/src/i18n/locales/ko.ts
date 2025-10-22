@@ -729,7 +729,7 @@ export default {
     cancelAnytime: "언제든 취소 가능"
   },
   modelViewer: {
-    modelRotation: "모델 회전",
+    modelRotation: "Model Rotation",
     xAxisRotation: "X축 회전",
     yAxisRotation: "Y축 회전",
     zAxisRotation: "Z축 회전",

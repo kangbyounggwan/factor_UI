@@ -120,9 +120,7 @@ const Subscription = () => {
   };
 
   useEffect(() => {
-    const title = '구독 플랜 및 가격 | 프린터 관리 플랫폼';
     const desc = '프린터 팜을 위한 구독 플랜과 가격을 비교하고, 가장 알맞은 요금제로 바로 업그레이드하세요.';
-    document.title = title;
 
     let meta = document.querySelector('meta[name="description"]');
     if (!meta) {

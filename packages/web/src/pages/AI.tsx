@@ -225,9 +225,8 @@ const AI = () => {
     return () => { active = false; };
   }, [user?.id]);
 
-  // SEO: Title & Meta description
+  // SEO: Meta description
   useEffect(() => {
-    document.title = t('ai.title');
     const desc = t('ai.description');
     let meta = document.querySelector('meta[name="description"]');
     if (!meta) {

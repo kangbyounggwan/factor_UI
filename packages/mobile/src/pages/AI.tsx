@@ -568,6 +568,7 @@ const AI = () => {
                 <ModelViewer
                   className="w-full h-full"
                   modelUrl={generatedModel.glbUrl}
+                  enableRotationControls={true}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full">

@@ -19,6 +19,8 @@ interface ModelViewerProps {
   stlUrl?: string;
   // GLB/GLTF 파일 URL (선택적)
   modelUrl?: string;
+  // 사용자 회전 컨트롤 활성화 여부
+  enableRotationControls?: boolean;
 }
 
 function SpinningObject() {
@@ -63,7 +65,7 @@ function STLModel({ url }: { url: string }) {
   );
 }
 
-function GLBModel({ url }: { url: string }) {
+function GLBModel({ url, rotation = [0, 0, 0] }: { url: string; rotation?: [number, number, number] }) {
   const gltf = useLoader(GLTFLoader, url);
   const [modelGroup] = useState(() => new THREE.Group());
 
@@ -95,15 +97,23 @@ function GLBModel({ url }: { url: string }) {
     }
   }, [gltf, modelGroup]);
 
-  return <primitive object={modelGroup} castShadow receiveShadow />;
+  return (
+    <group rotation={rotation}>
+      <primitive object={modelGroup} castShadow receiveShadow />
+    </group>
+  );
 }
 
-export default function ModelViewer({ className, height, showDemo = false, placeholderMessage = "모델을 생성하거나 불러오세요", stlUrl, modelUrl }: ModelViewerProps) {
+export default function ModelViewer({ className, height, showDemo = false, placeholderMessage = "모델을 생성하거나 불러오세요", stlUrl, modelUrl, enableRotationControls = false }: ModelViewerProps) {
   const style: React.CSSProperties = { width: '100%' };
   if (height !== undefined) {
     style.height = typeof height === 'number' ? `${height}px` : height;
   }
   style.position = 'relative';
+
+  // 사용자 회전 컨트롤
+  const [userRotation, setUserRotation] = useState<[number, number, number]>([0, 0, 0]);
+  const [showControls, setShowControls] = useState(false);
 
   const hasContent = showDemo || stlUrl || modelUrl;
 
@@ -116,12 +126,108 @@ export default function ModelViewer({ className, height, showDemo = false, place
         <Suspense fallback={null}>
           {showDemo && <SpinningObject />}
           {stlUrl && <STLModel url={stlUrl} />}
-          {modelUrl && <GLBModel url={modelUrl} />}
+          {modelUrl && <GLBModel url={modelUrl} rotation={userRotation} />}
           <Environment preset="city" />
         </Suspense>
         <Grid infiniteGrid cellColor="#2a2f3a" sectionColor="#3b4252" args={[20, 20]} />
         <OrbitControls enableDamping dampingFactor={0.05} />
       </Canvas>
+
+      {/* 회전 컨트롤 */}
+      {enableRotationControls && hasContent && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 12,
+            left: 12,
+            right: 12,
+            background: 'rgba(0,0,0,0.7)',
+            borderRadius: 8,
+            padding: showControls ? 12 : 8,
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <button
+            onClick={() => setShowControls(!showControls)}
+            style={{
+              width: '100%',
+              padding: 8,
+              background: 'transparent',
+              border: 'none',
+              color: '#fff',
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+            }}
+          >
+            {showControls ? '▼' : '▲'} Model Rotation
+          </button>
+
+          {showControls && (
+            <div style={{ marginTop: 8, color: '#fff' }}>
+              <label style={{ display: 'block', marginBottom: 8, fontSize: 11 }}>
+                X축: {(userRotation[0] * 180 / Math.PI).toFixed(0)}°
+                <input
+                  type="range"
+                  min={-Math.PI}
+                  max={Math.PI}
+                  step={Math.PI / 36}
+                  value={userRotation[0]}
+                  onChange={(e) => setUserRotation([Number(e.target.value), userRotation[1], userRotation[2]])}
+                  style={{ width: '100%', marginTop: 4 }}
+                />
+              </label>
+
+              <label style={{ display: 'block', marginBottom: 8, fontSize: 11 }}>
+                Y축: {(userRotation[1] * 180 / Math.PI).toFixed(0)}°
+                <input
+                  type="range"
+                  min={-Math.PI}
+                  max={Math.PI}
+                  step={Math.PI / 36}
+                  value={userRotation[1]}
+                  onChange={(e) => setUserRotation([userRotation[0], Number(e.target.value), userRotation[2]])}
+                  style={{ width: '100%', marginTop: 4 }}
+                />
+              </label>
+
+              <label style={{ display: 'block', marginBottom: 8, fontSize: 11 }}>
+                Z축: {(userRotation[2] * 180 / Math.PI).toFixed(0)}°
+                <input
+                  type="range"
+                  min={-Math.PI}
+                  max={Math.PI}
+                  step={Math.PI / 36}
+                  value={userRotation[2]}
+                  onChange={(e) => setUserRotation([userRotation[0], userRotation[1], Number(e.target.value)])}
+                  style={{ width: '100%', marginTop: 4 }}
+                />
+              </label>
+
+              <button
+                onClick={() => setUserRotation([0, 0, 0])}
+                style={{
+                  width: '100%',
+                  padding: 8,
+                  borderRadius: 6,
+                  background: '#374151',
+                  border: '1px solid #4b5563',
+                  color: '#fff',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+              >
+                초기화
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {!hasContent && (
         <div
           style={{

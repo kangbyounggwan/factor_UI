@@ -135,6 +135,7 @@ export default function ModelPreview({
                 className="w-full h-full"
                 modelUrl={modelUrl}
                 placeholderMessage={t('ai.generatePrompt')}
+                enableRotationControls={true}
               />
             </Suspense>
 
