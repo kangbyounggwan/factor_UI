@@ -752,7 +752,14 @@ export default {
     meshOptimizing: "Optimizing mesh…",
     placeholder: "Generate or load a model",
     targetSize: "Enter target size (mm)",
-    doubleClickToInput: "Double-click to input target (mm)"
+    doubleClickToInput: "Double-click to input target (mm)",
+    exportModel: "Export Model",
+    exportSTL: "Export as STL",
+    exportGLB: "Export as GLB",
+    exportInfo: "The exported model will include all current rotation, scale, and mesh optimizations.",
+    saveModel: "Save Model",
+    saveButton: "Save",
+    saveInfo: "Saves the model with current rotation, scale, and mesh optimizations applied."
   },
   subscription: {
     title: "Subscription Plans & Pricing",

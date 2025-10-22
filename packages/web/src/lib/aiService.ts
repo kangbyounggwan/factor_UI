@@ -385,4 +385,88 @@ export function extractMetadata(result: AIModelResponse) {
   };
 }
 
+// STL 업로드 및 슬라이싱 API
+export interface SlicingSettings {
+  layer_height?: string;
+  line_width?: string;
+  infill_sparse_density?: string;
+  wall_line_count?: string;
+  top_layers?: string;
+  bottom_layers?: string;
+  speed_print?: string;
+  support_enable?: string;
+  support_angle?: string;
+  adhesion_type?: string;
+  material_diameter?: string;
+  material_flow?: string;
+}
+
+export interface PrinterDefinition {
+  version: number;
+  name: string;
+  overrides: {
+    machine_width?: { default_value: number };
+    machine_depth?: { default_value: number };
+    machine_height?: { default_value: number };
+    [key: string]: { default_value: number | string } | undefined;
+  };
+}
+
+export interface SlicingResponse {
+  status: 'ok' | 'error';
+  data?: {
+    task_id: string;
+    input_stl: string;
+    gcode_path: string;
+    gcode_url: string;
+    cura_settings: Record<string, string>;
+  };
+  error?: string;
+}
+
+export async function uploadSTLAndSlice(
+  stlBlob: Blob,
+  filename: string,
+  curaSettings?: SlicingSettings,
+  printerDefinition?: PrinterDefinition
+): Promise<SlicingResponse> {
+  const SLICE_ENDPOINT = `${AI_PYTHON_URL}/v1/process/upload-stl-and-slice`;
+
+  const formData = new FormData();
+  formData.append('stl_file', stlBlob, filename);
+
+  if (curaSettings) {
+    formData.append('cura_settings_json', JSON.stringify(curaSettings));
+  }
+
+  if (printerDefinition) {
+    formData.append('printer_definition_json', JSON.stringify(printerDefinition));
+  }
+
+  try {
+    console.log('[aiService] Uploading STL and slicing...', {
+      filename,
+      curaSettings,
+      printerDefinition,
+    });
+
+    const response = await fetchWithTimeout(SLICE_ENDPOINT, {
+      method: 'POST',
+      body: formData,
+    }, 180000); // 3분 타임아웃 (슬라이싱은 시간이 걸릴 수 있음)
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('[aiService] Slicing response:', result);
+
+    return result;
+  } catch (error) {
+    console.error('[aiService] Slicing failed:', error);
+    throw error;
+  }
+}
+
 

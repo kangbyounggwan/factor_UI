@@ -37,7 +37,10 @@ export function formatFileSize(bytes: number): string {
  * @param temp - 온도 값
  * @returns 포맷된 온도 문자열
  */
-export function formatTemperature(temp: number): string {
+export function formatTemperature(temp: number | undefined | null): string {
+  if (temp === undefined || temp === null || isNaN(temp)) {
+    return '--°C';
+  }
   return `${temp.toFixed(1)}°C`;
 }
 

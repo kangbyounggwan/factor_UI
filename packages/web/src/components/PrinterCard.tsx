@@ -9,8 +9,11 @@ export interface PrinterCardProps {
   name: string;
   status: PrinterStatus | string;
   temperature: {
-    nozzle: number;
-    bed: number;
+    nozzle?: number;
+    bed?: number;
+    // 새로운 구조도 지원
+    tool_actual?: number;
+    bed_actual?: number;
   };
   progress?: number;
   onClick?: () => void;
@@ -51,8 +54,8 @@ export function PrinterCard({
         {/* 온도 정보 */}
         <div className="text-xs text-muted-foreground">
           <div className="flex justify-between">
-            <span>{t('printer.nozzle')}: {formatTemperature(temperature.nozzle)}</span>
-            <span>{t('printer.bed')}: {formatTemperature(temperature.bed)}</span>
+            <span>{t('printer.nozzle')}: {formatTemperature(temperature.nozzle ?? temperature.tool_actual)}</span>
+            <span>{t('printer.bed')}: {formatTemperature(temperature.bed ?? temperature.bed_actual)}</span>
           </div>
         </div>
 

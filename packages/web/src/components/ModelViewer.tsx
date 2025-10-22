@@ -1,13 +1,14 @@
 // 3D 모델 뷰어 담당 컴포넌트
 //
 import { Canvas, useLoader } from "@react-three/fiber";
-import { OrbitControls, Grid, Environment, useGLTF, GizmoHelper, GizmoViewport } from "@react-three/drei";
+import { OrbitControls, Grid, useGLTF, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { Suspense, useMemo, useLayoutEffect, useRef, useState } from "react";
 import { Box3, Group, Vector3, Object3D, BufferGeometry, BufferAttribute, Mesh, SkinnedMesh } from "three";
 import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { SimplifyModifier } from "three/examples/jsm/modifiers/SimplifyModifier.js";
-import { EdgeSplitModifier } from "three/examples/jsm/modifiers/EdgeSplitModifier.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { STLExporter } from "three/examples/jsm/exporters/STLExporter.js";
+import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useTranslation } from "react-i18next";
 
@@ -27,6 +28,16 @@ interface ModelViewerProps {
   modelScale?: number;
   // 사용자 회전 컨트롤 활성화 여부
   enableRotationControls?: boolean;
+  // 모델 ID (DB 업데이트용)
+  modelId?: string;
+  // 저장 콜백 함수
+  onSave?: (data: {
+    rotation: [number, number, number];
+    scale: number;
+    optimized: boolean;
+    blob: Blob;
+    format: 'stl' | 'glb';
+  }) => Promise<void>;
 }
 
 function SpinningObject() {
@@ -45,99 +56,26 @@ type Size3 = { x: number; y: number; z: number };
 // 메쉬 최적화 옵션/도구
 type OptimizeOptions = {
   maxTriangles: number | null;
-  iterations: 0 | 1;
-  preserveEdges: boolean;
-  weight: number; // 0~1
-  split: boolean;
   flatOnly: boolean;
 };
 
 const simplifyModifier = new SimplifyModifier();
 
-function edgeSplitModify(geo: BufferGeometry, angleDeg: number): BufferGeometry {
-  if (!geo) return geo;
-
-  // 1) 인덱싱/포지션 보장
-  const g = toIndexed(geo);
-  const pos = g?.getAttribute?.("position");
-  const idx = g?.index;
-
-  // 2) EdgeSplit이 필요로 하는 최소 조건 체크
-  if (!isBufferAttr(pos) || pos.count < 3) return geo;
-  if (!idx || !isBufferAttr(idx) || idx.count < 3) return geo;
-
-  // 3) 노말 보장
-  if (!g.getAttribute("normal")) {
-    try {
-      g.computeVertexNormals();
-    } catch (error) {
-      console.warn("[ModelViewer] Failed to compute normals:", error);
-    }
-  }
-
-  // 4) 실행
-  try {
-    const modifier = new EdgeSplitModifier();
-    const out = modifier.modify(g, (angleDeg * Math.PI) / 180, /*tryKeepNormals*/ false);
-    // 후처리
-    try {
-      out.computeVertexNormals();
-    } catch (error) {
-      console.warn("[ModelViewer] Failed to compute normals after EdgeSplit:", error);
-    }
-    try {
-      out.computeBoundingSphere();
-    } catch (error) {
-      console.warn("[ModelViewer] Failed to compute bounding sphere:", error);
-    }
-    try {
-      out.computeBoundingBox();
-    } catch (error) {
-      console.warn("[ModelViewer] Failed to compute bounding box:", error);
-    }
-    return out;
-  } catch (e) {
-    // 안전 폴백: EdgeSplit을 건너뛰되, 노말만 재계산
-    console.warn("[ModelViewer] EdgeSplit failed, skipping:", e);
-    try {
-      g.computeVertexNormals();
-      g.computeBoundingSphere();
-      g.computeBoundingBox();
-    } catch (error) {
-      console.warn("[ModelViewer] Failed to compute geometry properties:", error);
-    }
-    return geo;
-  }
-}
-
-function isBufferAttr(attr: unknown): attr is BufferAttribute {
-  return !!attr && (attr as BufferAttribute).isBufferAttribute === true && !!(attr as BufferAttribute).array && typeof (attr as BufferAttribute).array.length === "number";
-}
-
 function toIndexed(geo: BufferGeometry): BufferGeometry {
   if (!geo || !geo.getAttribute) return geo;
   const pos = geo.getAttribute("position");
-  if (!isBufferAttr(pos) || pos.count < 3) return geo;
+  if (!pos || pos.count < 3) return geo;
 
-  // Interleaved면 일단 비인덱스로 풀었다가 mergeVertices로 다시 인덱싱
-  let g = geo;
-  if (pos.isInterleavedBufferAttribute) {
-    try {
-      g = g.toNonIndexed();
-    } catch (error) {
-      console.warn("[ModelViewer] Failed to convert to non-indexed:", error);
-    }
-  }
-
-  if (g.index && isBufferAttr(g.index)) return g;
+  // 이미 인덱싱되어 있으면 그대로 반환
+  if (geo.index) return geo;
 
   try {
-    // mergeVertices: 인덱스 생성 + 용접
-    const merged = (BufferGeometryUtils as { mergeVertices: (geometry: BufferGeometry, tolerance?: number) => BufferGeometry }).mergeVertices(g, 1e-4);
-    return merged && merged.index ? merged : g;
+    // mergeVertices로 인덱스 생성
+    const merged = (BufferGeometryUtils as { mergeVertices: (geometry: BufferGeometry, tolerance?: number) => BufferGeometry }).mergeVertices(geo, 1e-4);
+    return merged && merged.index ? merged : geo;
   } catch (error) {
     console.warn("[ModelViewer] Failed to merge vertices:", error);
-    return g;
+    return geo;
   }
 }
 
@@ -162,36 +100,19 @@ function applySimplify(geo: BufferGeometry, maxTris: number): BufferGeometry {
   return simplified;
 }
 
-function applySubdivision(geo: BufferGeometry, _iterations: 0 | 1, _weight: number): BufferGeometry {
-  // SubdivisionModifier 타입/경로 호환성 이슈로, 현재는 no-op 처리.
-  // 필요 시 three/examples SubdivisionModifier 적용 가능.
-  return geo;
-}
-
 function optimizeObject3D(root: Object3D, opt: OptimizeOptions): void {
-  const { maxTriangles, iterations, preserveEdges, weight, split, flatOnly } = opt;
+  const { maxTriangles, flatOnly } = opt;
   root.traverse((obj: Object3D) => {
     if (!((obj as Mesh).isMesh || (obj as SkinnedMesh).isSkinnedMesh)) return;
     const meshObj = obj as Mesh | SkinnedMesh;
     let g = meshObj.geometry;
     if (!g) return;
 
-    if (preserveEdges) {
-      g = edgeSplitModify(toIndexed(g), 30);
-    }
+    // maxTriangles 설정이 있으면 메시 단순화
     if (typeof maxTriangles === 'number' && maxTriangles > 0) {
       g = applySimplify(g, maxTriangles);
     }
-    if (!flatOnly && iterations > 0) {
-      g = applySubdivision(g, iterations, weight);
-    }
-    if (split) {
-      g = edgeSplitModify(toIndexed(g), 60);
-      g.computeVertexNormals();
-    }
-    g.computeVertexNormals();
-    g.computeBoundingSphere();
-    g.computeBoundingBox();
+
     meshObj.geometry = g;
   });
 }
@@ -300,7 +221,7 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
   );
 }
 
-export default function ModelViewer({ className, height, showDemo = false, placeholderMessage, modelUrl, stlUrl, modelScale = 1, enableRotationControls = false }: ModelViewerProps) {
+export default function ModelViewer({ className, height, showDemo = false, placeholderMessage, modelUrl, stlUrl, modelScale = 1, enableRotationControls = false, modelId, onSave }: ModelViewerProps) {
   const { t } = useTranslation();
   const style: React.CSSProperties = { width: '100%' };
   if (height !== undefined) {
@@ -317,10 +238,6 @@ export default function ModelViewer({ className, height, showDemo = false, place
   const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
   const [opt, setOpt] = useState<OptimizeOptions>({
     maxTriangles: 100000,
-    iterations: 0,
-    preserveEdges: true,
-    weight: 0,
-    split: false,
     flatOnly: false,
   });
 
@@ -337,7 +254,12 @@ export default function ModelViewer({ className, height, showDemo = false, place
 
   return (
     <div className={className} style={style}>
-      <Canvas shadows camera={{ position: [3, 3, 5], fov: 50 }} onCreated={({ camera }) => { camera.up.set(0, 0, 1); }}>
+      <Canvas
+        shadows
+        camera={{ position: [3, 3, 5], fov: 50 }}
+        onCreated={({ camera }) => { camera.up.set(0, 0, 1); }}
+        style={{ width: '100%', height: '100%' }}
+      >
         <color attach="background" args={["#2e323a"]} />
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
@@ -374,7 +296,11 @@ export default function ModelViewer({ className, height, showDemo = false, place
           ) : (
             showDemo && <SpinningObject />
           )}
-          <Environment preset="city" />
+          {/* 기본 조명 설정 - 외부 HDR 의존성 제거 */}
+          <ambientLight intensity={0.8} />
+          <directionalLight position={[10, 10, 5]} intensity={1.5} castShadow />
+          <directionalLight position={[-10, -10, -5]} intensity={0.6} />
+          <directionalLight position={[0, 10, 0]} intensity={0.4} />
         </Suspense>
         {/* Z-up: 그리드를 XY 평면으로 회전 (법선 +Z) */}
         <Grid rotation={[Math.PI / 2, 0, 0]} infiniteGrid cellColor="#3a3f47" sectionColor="#596273" args={[20, 20]} />
@@ -531,7 +457,7 @@ export default function ModelViewer({ className, height, showDemo = false, place
 
             {/* Mesh Optimize 섹션 */}
             {modelRoot && (
-              <AccordionItem value="mesh" className="border-b-0">
+              <AccordionItem value="mesh" className="border-b border-white/10">
                 <AccordionTrigger className="py-3 text-sm hover:no-underline">
                   {t('modelViewer.meshOptimize')}
                 </AccordionTrigger>
@@ -550,36 +476,6 @@ export default function ModelViewer({ className, height, showDemo = false, place
                     >
                       Off
                     </button>
-                  </label>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13 }}>
-                    iterations (0/1): {opt.iterations}
-                    <input type="range" min={0} max={1} step={1}
-                      value={opt.iterations}
-                      onChange={(e)=>setOpt(o=>({...o, iterations: Number(e.target.value) as 0|1}))}
-                      disabled={isOptimizing}
-                      style={{ width: '100%' }} />
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 13 }}>
-                    <input type="checkbox" checked={opt.preserveEdges}
-                      onChange={(e)=>setOpt(o=>({...o, preserveEdges: e.target.checked}))}
-                      disabled={isOptimizing}
-                    />
-                    preserveEdges (권장 On)
-                  </label>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13 }}>
-                    weight (0~1): {opt.weight.toFixed(2)}
-                    <input type="range" min={0} max={1} step={0.05}
-                      value={opt.weight}
-                      onChange={(e)=>setOpt(o=>({...o, weight: Number(e.target.value)}))}
-                      disabled={isOptimizing || opt.iterations === 0}
-                      style={{ width: '100%' }} />
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 13 }}>
-                    <input type="checkbox" checked={opt.split}
-                      onChange={(e)=>setOpt(o=>({...o, split: e.target.checked}))}
-                      disabled={isOptimizing}
-                    />
-                    split (특수 케이스)
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 13 }}>
                     <input type="checkbox" checked={opt.flatOnly}
@@ -605,6 +501,113 @@ export default function ModelViewer({ className, height, showDemo = false, place
                 </AccordionContent>
               </AccordionItem>
             )}
+
+            {/* 모델 저장 섹션 */}
+            <AccordionItem value="export" className="border-b border-white/10">
+              <AccordionTrigger className="py-3 text-sm hover:no-underline">
+                {t('modelViewer.saveModel') || 'Save Model'}
+              </AccordionTrigger>
+              <AccordionContent className="pb-3 space-y-2">
+                <button
+                  onClick={async () => {
+                    if (!modelRoot) return;
+                    try {
+                      // 회전과 스케일이 적용된 복사본 생성
+                      const exportGroup = new Group();
+                      const clonedModel = modelRoot.clone(true);
+
+                      // 사용자 회전 적용
+                      clonedModel.rotation.set(userRotation[0], userRotation[1], userRotation[2]);
+
+                      // 스케일 적용
+                      clonedModel.scale.set(uniformScale, uniformScale, uniformScale);
+
+                      // Matrix를 업데이트하여 변환을 적용
+                      clonedModel.updateMatrixWorld(true);
+
+                      // 모든 메시에 변환을 베이킹
+                      clonedModel.traverse((child) => {
+                        if ((child as Mesh).isMesh) {
+                          const mesh = child as Mesh;
+                          if (mesh.geometry) {
+                            // Geometry를 복제하고 변환 적용
+                            const geometry = mesh.geometry.clone();
+                            geometry.applyMatrix4(mesh.matrixWorld);
+                            mesh.geometry = geometry;
+
+                            // 변환을 리셋
+                            mesh.position.set(0, 0, 0);
+                            mesh.rotation.set(0, 0, 0);
+                            mesh.scale.set(1, 1, 1);
+                            mesh.updateMatrix();
+                          }
+                        }
+                      });
+
+                      // exportGroup 변환도 리셋
+                      clonedModel.position.set(0, 0, 0);
+                      clonedModel.rotation.set(0, 0, 0);
+                      clonedModel.scale.set(1, 1, 1);
+                      clonedModel.updateMatrix();
+
+                      exportGroup.add(clonedModel);
+
+                      // GLB로 내보내기 (DB 저장용)
+                      const exporter = new GLTFExporter();
+                      exporter.parse(
+                        exportGroup,
+                        async (gltf) => {
+                          const blob = new Blob([gltf as ArrayBuffer], { type: 'application/octet-stream' });
+
+                          // onSave 콜백이 있으면 DB 업데이트만 수행
+                          if (onSave) {
+                            try {
+                              await onSave({
+                                rotation: userRotation,
+                                scale: uniformScale,
+                                optimized: optVersion > 0,
+                                blob,
+                                format: 'glb'
+                              });
+                              console.log('[ModelViewer] Model saved to DB successfully');
+                            } catch (error) {
+                              console.error('[ModelViewer] Save to DB failed:', error);
+                            }
+                          } else {
+                            console.warn('[ModelViewer] No onSave callback provided');
+                          }
+                        },
+                        (error) => {
+                          console.error('[ModelViewer] GLB export failed:', error);
+                        },
+                        { binary: true }
+                      );
+                    } catch (error) {
+                      console.error('[ModelViewer] Save failed:', error);
+                    }
+                  }}
+                  disabled={!modelRoot}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    background: modelRoot ? '#3b82f6' : '#2b2f36',
+                    border: '1px solid #3a3f47',
+                    color: '#fff',
+                    cursor: modelRoot ? 'pointer' : 'not-allowed',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    opacity: modelRoot ? 1 : 0.5
+                  }}
+                >
+                  {t('modelViewer.saveButton') || 'Save'}
+                </button>
+
+                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
+                  {t('modelViewer.saveInfo') || 'Saves the model with current rotation, scale, and mesh optimizations applied.'}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
           </Accordion>
         </div>
       )}

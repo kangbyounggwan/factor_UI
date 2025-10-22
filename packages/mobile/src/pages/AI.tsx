@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 // Lazy load ModelViewer to reduce initial bundle size
 const ModelViewer = lazy(() => import("@/components/ModelViewer"));
 import { Badge } from "@/components/ui/badge";
+import { PrinterStatusBadge } from "@/components/PrinterStatusBadge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
@@ -632,9 +633,7 @@ const AI = () => {
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between mb-2">
                       <p className="font-medium">{printer.name}</p>
-                      <Badge variant={printer.status === "ready" ? "secondary" : "default"}>
-                        {printer.status === "ready" ? t('ai.printerReady') : t('ai.printerPrinting')}
-                      </Badge>
+                      <PrinterStatusBadge status={printer.status} />
                     </div>
                     <div className="text-xs text-muted-foreground flex justify-between">
                       <span>{t('printer.nozzle')}: {printer.temperature.nozzle}°C</span>

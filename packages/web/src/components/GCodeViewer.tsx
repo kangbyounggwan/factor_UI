@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Code, FileText, Layers, Download, Eye, EyeOff } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Grid, Environment } from "@react-three/drei";
+import { OrbitControls, Grid } from "@react-three/drei";
 
 interface GCodeViewerProps {
   gcodeUrl?: string;
@@ -267,10 +267,13 @@ export default function GCodeViewer({
                   onCreated={({ camera }) => {
                     camera.up.set(0, 0, 1);
                   }}
+                  style={{ width: "100%", height: "100%" }}
                 >
                   <color attach="background" args={["#2e323a"]} />
-                  <ambientLight intensity={0.5} />
-                  <directionalLight position={[5, 5, 5]} intensity={1} />
+                  <ambientLight intensity={0.8} />
+                  <directionalLight position={[10, 10, 5]} intensity={1.5} castShadow />
+                  <directionalLight position={[-10, -10, -5]} intensity={0.6} />
+                  <directionalLight position={[0, 10, 0]} intensity={0.4} />
                   <GCodePath gcode={gcode} />
                   <Grid
                     rotation={[Math.PI / 2, 0, 0]}
@@ -280,7 +283,6 @@ export default function GCodeViewer({
                     args={[200, 200]}
                   />
                   <axesHelper args={[100]} />
-                  <Environment preset="city" />
                   <OrbitControls enableDamping dampingFactor={0.05} />
                 </Canvas>
               ) : (

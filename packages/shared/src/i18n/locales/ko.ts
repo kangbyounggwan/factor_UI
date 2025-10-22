@@ -749,7 +749,14 @@ export default {
     meshOptimizing: "메쉬 최적화 중…",
     placeholder: "모델을 생성하거나 불러오세요",
     targetSize: "목표 크기(mm)를 입력하세요",
-    doubleClickToInput: "더블클릭하여 목표(mm) 입력"
+    doubleClickToInput: "더블클릭하여 목표(mm) 입력",
+    exportModel: "Export Model",
+    exportSTL: "Export as STL",
+    exportGLB: "Export as GLB",
+    exportInfo: "The exported model will include all current rotation, scale, and mesh optimizations.",
+    saveModel: "Save Model",
+    saveButton: "Save",
+    saveInfo: "Saves the model with current rotation, scale, and mesh optimizations applied."
   },
   subscription: {
     title: "구독 플랜 및 가격",

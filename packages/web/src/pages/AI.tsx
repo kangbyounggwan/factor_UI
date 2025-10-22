@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 // Lazy load ModelViewer to reduce initial bundle size
 const ModelViewer = lazy(() => import("@/components/ModelViewer"));
+const GCodeViewer = lazy(() => import("@/components/GCodeViewer"));
+const GCodePreview = lazy(() => import("@/components/GCodePreview"));
 import TextTo3DForm from "@/components/ai/TextTo3DForm";
 import ImageTo3DForm from "@/components/ai/ImageTo3DForm";
 import ModelPreview from "@/components/ai/ModelPreview";
@@ -42,16 +44,37 @@ import { PrinterCard } from "@/components/PrinterCard";
 import type { UploadedFile } from "@shared/hooks/useAIImageUpload";
 import type { AIGeneratedModel } from "@shared/types/aiModelType";
 
-interface Printer {
+// 프린터 그룹 타입
+interface PrinterGroup {
   id: string;
   name: string;
-  status: string;
+  description?: string;
+  color: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// 프린터 타입 (Dashboard와 동일)
+interface Printer {
+  id: string;
+  name: string; // 프린터 이름 (사용자 지정)
+  model: string; // 제조사 모델명
+  group_id?: string;
+  group?: PrinterGroup;
+  state: "idle" | "printing" | "paused" | "error" | "connecting" | "disconnected";
+  connected: boolean;
+  printing: boolean;
+  pending?: boolean; // MQTT 최초 수신 대기 중
+  completion?: number;
   temperature: {
-    nozzle: number;
-    bed: number;
+    tool_actual: number;
+    tool_target: number;
+    bed_actual: number;
+    bed_target: number;
   };
-  progress?: number;
-  raw?: unknown;
+  print_time_left?: number;
+  current_file?: string;
+  device_uuid?: string;
 }
 
 interface PrintSettings {
@@ -108,11 +131,12 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
-import { buildCommon, postTextTo3D, postImageTo3D, extractGLBUrl, extractSTLUrl, extractMetadata, extractThumbnailUrl, pollTaskUntilComplete, AIModelResponse } from "@/lib/aiService";
+import { onDashStatusMessage } from "@shared/services/mqttService";
+import { buildCommon, postTextTo3D, postImageTo3D, extractGLBUrl, extractSTLUrl, extractMetadata, extractThumbnailUrl, pollTaskUntilComplete, AIModelResponse, uploadSTLAndSlice, SlicingSettings, PrinterDefinition } from "@/lib/aiService";
 import { createAIModel, updateAIModel, listAIModels, deleteAIModel } from "@shared/services/supabaseService/aiModel";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useAIImageUpload } from "@shared/hooks/useAIImageUpload";
-import { downloadAndUploadModel, downloadAndUploadSTL, downloadAndUploadThumbnail } from "@shared/services/supabaseService/aiStorage";
+import { downloadAndUploadModel, downloadAndUploadSTL, downloadAndUploadThumbnail, downloadAndUploadGCode } from "@shared/services/supabaseService/aiStorage";
 
 const AI = () => {
   const { t } = useTranslation();
@@ -124,8 +148,11 @@ const AI = () => {
   const [generatedModels, setGeneratedModels] = useState<AIGeneratedModel[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [modelViewerUrl, setModelViewerUrl] = useState<string | null>(null);
+  const [currentModelId, setCurrentModelId] = useState<string | null>(null); // 현재 선택된 모델 ID
   const [currentGlbUrl, setCurrentGlbUrl] = useState<string | null>(null); // 현재 모델의 GLB URL
   const [currentStlUrl, setCurrentStlUrl] = useState<string | null>(null); // 현재 모델의 STL URL
+  const [currentGCodeUrl, setCurrentGCodeUrl] = useState<string | null>(null); // 현재 모델의 GCode URL
+  const [isSlicing, setIsSlicing] = useState<boolean>(false); // 슬라이싱 진행 중
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null); // Text-to-Image 생성 이미지 URL
   const [selectedImageHasModel, setSelectedImageHasModel] = useState<boolean>(false); // 선택된 이미지의 3D 모델 존재 여부
   // 모델 아카이브 필터 상태
@@ -180,7 +207,7 @@ const AI = () => {
     }
   });
 
-  // 연결된 프린터 로드 (Supabase)
+  // 연결된 프린터 로드 (Supabase) - Dashboard와 동일한 구조
   useEffect(() => {
     let active = true;
     (async () => {
@@ -190,11 +217,24 @@ const AI = () => {
         if (!active) return;
         const mapped: Printer[] = (rows || []).map((r) => ({
           id: r.id,
-          name: r.model ?? r.device_uuid ?? 'Unknown Printer',
-          status: r.status ?? 'disconnected',
-          temperature: { nozzle: 0, bed: 0 },
-          progress: undefined,
-          raw: r,
+          name: r.name || r.model || r.device_uuid || 'Unknown Printer',
+          model: r.model || 'Unknown Model',
+          group_id: r.group_id,
+          group: r.group,
+          state: 'connecting' as const,
+          connected: false,
+          printing: false,
+          pending: true,
+          completion: undefined,
+          temperature: {
+            tool_actual: 0,
+            tool_target: 0,
+            bed_actual: 0,
+            bed_target: 0,
+          },
+          print_time_left: undefined,
+          current_file: undefined,
+          device_uuid: r.device_uuid,
         }));
         setPrinters(mapped);
       } catch (e) {
@@ -203,6 +243,97 @@ const AI = () => {
     })();
     return () => { active = false; };
   }, [user?.id]);
+
+  // MQTT 실시간 상태 업데이트 (Dashboard와 동일)
+  useEffect(() => {
+    if (printers.length === 0) return;
+
+    console.log('[AI MQTT] 프린터 상태 모니터링 시작:', printers.length);
+
+    // 각 프린터별 타임아웃 추적 (3초 동안 데이터 없으면 disconnected)
+    const timeouts: Record<string, number> = {};
+    const TIMEOUT_DURATION = 3000; // 3초
+
+    // 타임아웃 설정/재설정 함수
+    const startTimeoutFor = (uuid?: string, currentState?: string) => {
+      if (!uuid) return;
+
+      // 기존 타임아웃 제거
+      if (timeouts[uuid]) {
+        try { clearTimeout(timeouts[uuid]); } catch (err) { console.warn('clearTimeout failed:', err); }
+      }
+
+      timeouts[uuid] = window.setTimeout(() => {
+        console.log('[AI MQTT] 타임아웃 실행:', uuid, '- 연결끊김으로 변경');
+        setPrinters((prev) => prev.map(p => {
+          if (p.device_uuid === uuid) {
+            return { ...p, state: 'disconnected', connected: false, pending: false };
+          }
+          return p;
+        }));
+      }, TIMEOUT_DURATION);
+    };
+
+    // 초기 타임아웃 시작
+    setPrinters((prev) => {
+      prev.forEach((p) => startTimeoutFor(p.device_uuid, p.state));
+      return prev;
+    });
+
+    // MQTT 메시지 수신 핸들러
+    const off = onDashStatusMessage((uuid, data) => {
+      console.log('[AI MQTT] 메시지 수신:', uuid);
+
+      setPrinters((prev) => {
+        const next = [...prev];
+        const idx = next.findIndex(p => p.device_uuid === uuid);
+        if (idx >= 0) {
+          const bed = data?.temperature_info?.bed;
+          const toolAny = data?.temperature_info?.tool;
+          const tool = toolAny?.tool0 ?? toolAny;
+          const flags = data?.printer_status?.flags ?? {};
+          const isConnected = Boolean(
+            data?.connected ||
+            flags.operational || flags.printing || flags.paused || flags.ready || flags.error
+          );
+          const nextState: Printer['state'] =
+            flags.printing ? 'printing' :
+            flags.paused   ? 'paused'   :
+            flags.error    ? 'error'    :
+            (isConnected   ? 'idle'     : 'disconnected');
+
+          // 데이터 수신 시 타임아웃 재설정
+          startTimeoutFor(uuid, nextState);
+
+          next[idx] = {
+            ...next[idx],
+            pending: false,
+            state: nextState,
+            connected: isConnected,
+            printing: (flags?.printing ?? data?.printer_status?.printing) ?? next[idx].printing,
+            completion: typeof data?.progress?.completion === 'number' ? data.progress.completion : next[idx].completion,
+            temperature: {
+              tool_actual: typeof tool?.actual === 'number' ? tool.actual : next[idx].temperature.tool_actual,
+              tool_target: typeof tool?.target === 'number' ? tool.target : next[idx].temperature.tool_target,
+              bed_actual: typeof bed?.actual === 'number' ? bed.actual : next[idx].temperature.bed_actual,
+              bed_target: typeof bed?.target === 'number' ? bed.target : next[idx].temperature.bed_target,
+            },
+            print_time_left: data?.progress?.print_time_left ?? next[idx].print_time_left,
+            current_file: data?.printer_status?.current_file ?? next[idx].current_file,
+          };
+        }
+        return next;
+      });
+    });
+
+    console.log('[AI MQTT] 핸들러 등록 완료');
+
+    return () => {
+      console.log('[AI MQTT] 클린업 - 모든 타임아웃 제거');
+      off();
+      Object.values(timeouts).forEach(t => { try { clearTimeout(t); } catch (err) { console.warn('clearTimeout failed:', err); } });
+    };
+  }, [printers.length]);
 
   // Supabase Storage에서 이미지는 useAIImageUpload 훅에서 자동 로드됨
 
@@ -237,9 +368,20 @@ const AI = () => {
     meta.setAttribute('content', desc);
   }, []);
 
+  // Sync archiveFilter with activeTab
+  useEffect(() => {
+    if (activeTab === 'text-to-3d' || activeTab === 'image-to-3d' || activeTab === 'text-to-image') {
+      setArchiveFilter(activeTab as ArchiveFilter);
+    }
+  }, [activeTab]);
+
   // 출력 설정 다이얼로그 상태
   const [printDialogOpen, setPrintDialogOpen] = useState<boolean>(false);
   const [selectedPrinter, setSelectedPrinter] = useState<Printer | null>(null);
+
+  // 프린터 선택 확인 모달 상태
+  const [printerConfirmDialogOpen, setPrinterConfirmDialogOpen] = useState<boolean>(false);
+  const [printerToConfirm, setPrinterToConfirm] = useState<Printer | null>(null);
 
   // 이미지 삭제 확인 다이얼로그 상태
   const [deleteImageDialogOpen, setDeleteImageDialogOpen] = useState<boolean>(false);
@@ -261,8 +403,164 @@ const AI = () => {
   });
 
   const openPrinterSettings = (printer: Printer) => {
-    setSelectedPrinter(printer);
-    setPrintDialogOpen(true);
+    console.log('[AI] ===== 프린터 카드 클릭됨 =====');
+    console.log('[AI] 프린터:', printer.name, '/', printer.model);
+    console.log('[AI] 프린터 UUID:', printer.device_uuid);
+    console.log('[AI] 현재 상태:');
+    console.log('[AI]   - currentModelId:', currentModelId);
+    console.log('[AI]   - currentStlUrl:', currentStlUrl);
+    console.log('[AI]   - currentGlbUrl:', currentGlbUrl);
+
+    // 먼저 확인 모달 표시
+    setPrinterToConfirm(printer);
+    setPrinterConfirmDialogOpen(true);
+  };
+
+  const confirmPrinterSelection = async () => {
+    console.log('[AI] confirmPrinterSelection 호출됨');
+    console.log('[AI] 체크 - printerToConfirm:', printerToConfirm);
+    console.log('[AI] 체크 - currentStlUrl:', currentStlUrl);
+    console.log('[AI] 체크 - currentGlbUrl:', currentGlbUrl);
+    console.log('[AI] 체크 - currentModelId:', currentModelId);
+    console.log('[AI] 체크 - user?.id:', user?.id);
+
+    // STL이 없으면 GLB 사용 (폴백)
+    const modelUrl = currentStlUrl || currentGlbUrl;
+
+    if (!printerToConfirm || !modelUrl || !user?.id) {
+      console.error('[AI] 필수 데이터 부족:');
+      console.error('  - printerToConfirm:', printerToConfirm ? '있음' : '없음');
+      console.error('  - currentStlUrl:', currentStlUrl ? currentStlUrl : '없음');
+      console.error('  - currentGlbUrl:', currentGlbUrl ? currentGlbUrl : '없음');
+      console.error('  - user?.id:', user?.id ? user.id : '없음');
+
+      toast({
+        title: '오류',
+        description: '3D 모델 파일이나 프린터 정보가 없습니다.',
+        variant: 'destructive',
+      });
+      setPrinterConfirmDialogOpen(false);
+      return;
+    }
+
+    console.log('[AI] 슬라이싱에 사용할 모델 URL:', modelUrl);
+
+    try {
+      // 확인 모달 닫기
+      setPrinterConfirmDialogOpen(false);
+      setSelectedPrinter(printerToConfirm);
+      setIsSlicing(true);
+
+      toast({
+        title: '슬라이싱 시작',
+        description: `${printerToConfirm.name} 프린터로 슬라이싱을 시작합니다...`,
+      });
+
+      // 1. 모델 파일 다운로드 (STL 또는 GLB)
+      console.log('[AI] Downloading model file:', modelUrl);
+      const modelResponse = await fetch(modelUrl);
+      if (!modelResponse.ok) {
+        throw new Error('모델 파일 다운로드 실패');
+      }
+      const modelBlob = await modelResponse.blob();
+
+      // 파일 확장자 추출
+      const fileExtension = modelUrl.endsWith('.stl') ? 'stl' : 'glb';
+      console.log('[AI] 파일 형식:', fileExtension);
+
+      // 2. 슬라이싱 설정 구성
+      const curaSettings: SlicingSettings = {
+        layer_height: printSettings.layer_height.toString(),
+        line_width: printSettings.line_width.toString(),
+        infill_sparse_density: printSettings.infill_sparse_density.toString(),
+        wall_line_count: printSettings.wall_line_count.toString(),
+        top_layers: printSettings.top_layers.toString(),
+        bottom_layers: printSettings.bottom_layers.toString(),
+        speed_print: printSettings.speed_print.toString(),
+        support_enable: printSettings.support_enable.toString(),
+        support_angle: printSettings.support_angle.toString(),
+        adhesion_type: printSettings.adhesion_type,
+        material_diameter: printSettings.material_diameter.toString(),
+        material_flow: printSettings.material_flow.toString(),
+      };
+
+      // 3. 프린터 정의 (기본값 사용, 필요시 프린터별로 커스터마이징 가능)
+      const printerDefinition: PrinterDefinition = {
+        version: 2,
+        name: printerToConfirm.model || printerToConfirm.name,
+        overrides: {
+          machine_width: { default_value: 220 },
+          machine_depth: { default_value: 220 },
+          machine_height: { default_value: 250 },
+        },
+      };
+
+      // 4. 슬라이싱 API 호출
+      console.log('[AI] Uploading model and slicing...');
+      const slicingResult = await uploadSTLAndSlice(
+        modelBlob,
+        `model_${Date.now()}.${fileExtension}`,
+        curaSettings,
+        printerDefinition
+      );
+
+      if (slicingResult.status === 'error' || !slicingResult.data) {
+        throw new Error(slicingResult.error || '슬라이싱 실패');
+      }
+
+      console.log('[AI] Slicing completed:', slicingResult.data);
+
+      // 5. GCode URL 저장
+      const gcodeUrl = slicingResult.data.gcode_url;
+      setCurrentGCodeUrl(gcodeUrl);
+
+      // 6. GCode를 Supabase Storage에 업로드 및 DB 업데이트
+      if (currentModelId) {
+        try {
+          console.log('[AI] Uploading GCode to Supabase Storage...');
+          const gcodeUploadResult = await downloadAndUploadGCode(
+            supabase,
+            user.id,
+            currentModelId,
+            gcodeUrl
+          );
+
+          if (gcodeUploadResult) {
+            // DB에 GCode URL 저장
+            await updateAIModel(supabase, currentModelId, {
+              gcode_storage_path: gcodeUploadResult.path,
+              gcode_download_url: gcodeUploadResult.publicUrl,
+            });
+            console.log('[AI] GCode saved to DB:', gcodeUploadResult.publicUrl);
+
+            // Supabase URL로 업데이트
+            setCurrentGCodeUrl(gcodeUploadResult.publicUrl);
+          }
+        } catch (gcodeError) {
+          console.error('[AI] Failed to upload GCode:', gcodeError);
+          // GCode 업로드 실패해도 계속 진행
+        }
+      }
+
+      toast({
+        title: '슬라이싱 완료',
+        description: 'GCode 생성이 완료되었습니다.',
+      });
+
+      setIsSlicing(false);
+
+      // 7. 출력 설정 모달 열기
+      setPrintDialogOpen(true);
+
+    } catch (error) {
+      console.error('[AI] Slicing failed:', error);
+      setIsSlicing(false);
+      toast({
+        title: '슬라이싱 실패',
+        description: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const updateSetting = (key: keyof PrintSettings, value: string | number | boolean) => {
@@ -270,11 +568,33 @@ const AI = () => {
   };
 
   const startPrint = async () => {
-    toast({
-      title: t('ai.printStart'),
-      description: `${selectedPrinter?.name}${t('ai.printJobSent')}`,
-    });
-    setPrintDialogOpen(false);
+    if (!currentGCodeUrl || !selectedPrinter) {
+      toast({
+        title: '오류',
+        description: 'GCode 파일이나 프린터 정보가 없습니다.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      toast({
+        title: t('ai.printStart'),
+        description: `${selectedPrinter.name}${t('ai.printJobSent')}`,
+      });
+
+      // TODO: 프린터로 GCode 전송 로직 추가
+      // MQTT나 다른 방식으로 프린터에 GCode 전송
+
+      setPrintDialogOpen(false);
+    } catch (error) {
+      console.error('[AI] Print start failed:', error);
+      toast({
+        title: '출력 시작 실패',
+        description: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+        variant: 'destructive',
+      });
+    }
   };
 
   // Shared 훅의 함수를 래핑
@@ -1227,7 +1547,15 @@ const AI = () => {
                     const model = item._originalModel as AIGeneratedModel;
 
                     if (item.download_url) {
-                      console.log('[AI] Loading model from archive:', item.name, item.download_url);
+                      console.log('[AI] ===== 모델 아카이브에서 모델 선택됨 =====');
+                      console.log('[AI] 모델명:', item.name);
+                      console.log('[AI] 모델 ID:', model.id);
+                      console.log('[AI] GLB URL:', model.download_url);
+                      console.log('[AI] STL URL:', model.stl_download_url);
+                      console.log('[AI] GCode URL:', model.gcode_download_url);
+
+                      // 모델 ID 설정
+                      setCurrentModelId(model.id);
 
                       // STL 우선, GLB 폴백으로 뷰어 URL 설정
                       const viewerUrl = model.stl_download_url || model.download_url;
@@ -1236,6 +1564,13 @@ const AI = () => {
                       // 다운로드 버튼용 URL 설정
                       setCurrentGlbUrl(model.download_url || null);
                       setCurrentStlUrl(model.stl_download_url || null);
+                      setCurrentGCodeUrl(null); // 새 모델 선택 시 GCode 초기화
+
+                      console.log('[AI] 상태 업데이트 완료:');
+                      console.log('[AI]   - currentModelId:', model.id);
+                      console.log('[AI]   - currentGlbUrl:', model.download_url || null);
+                      console.log('[AI]   - currentStlUrl:', model.stl_download_url || null);
+                      console.log('[AI]   - currentGCodeUrl: null (초기화됨)');
 
                       // 왼쪽 사이드바에 매핑된 입력 데이터 표시
                       if (model.generation_type === 'image_to_3d') {
@@ -1367,9 +1702,9 @@ const AI = () => {
                       key={printer.id}
                       id={printer.id}
                       name={printer.name}
-                      status={printer.status}
+                      status={printer.state}
                       temperature={printer.temperature}
-                      progress={printer.progress}
+                      progress={printer.completion}
                       onClick={() => openPrinterSettings(printer)}
                     />
                   ))}
@@ -1395,10 +1730,12 @@ const AI = () => {
 
             {/* 본문 */}
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(560px,1fr)_440px] gap-6 p-6 overflow-hidden flex-1">
-              {/* 좌: 렌더링 */}
+              {/* 좌: G-code 프리뷰 */}
               <Card className="overflow-hidden">
-                <CardContent className="p-0">
-                  <ModelViewer className="w-full h-[68vh]" modelUrl={modelViewerUrl ?? undefined} modelScale={1} />
+                <CardContent className="p-0 h-[68vh]">
+                  <Suspense fallback={<div className="w-full h-full flex items-center justify-center">Loading...</div>}>
+                    <GCodePreview gcodeUrl={currentGCodeUrl ?? modelViewerUrl ?? undefined} />
+                  </Suspense>
                 </CardContent>
               </Card>
 
@@ -1438,55 +1775,73 @@ const AI = () => {
 
                   <Separator />
 
-                  {/* 품질/속도 */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="layer_height">레이어 높이(mm)</Label>
-                      <Input id="layer_height" type="number" step="0.01" value={printSettings.layer_height} onChange={(e)=>updateSetting('layer_height', Number(e.target.value))} />
+                  {/* 품질 */}
+                  <div>
+                    <h4 className="font-medium mb-3">품질</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="layer_height">레이어 높이(mm)</Label>
+                        <Input id="layer_height" type="number" step="0.01" value={printSettings.layer_height} onChange={(e)=>updateSetting('layer_height', Number(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label htmlFor="line_width">라인 너비(mm)</Label>
+                        <Input id="line_width" type="number" step="0.01" value={printSettings.line_width} onChange={(e)=>updateSetting('line_width', Number(e.target.value))} />
+                      </div>
                     </div>
-                    <div>
-                      <Label htmlFor="line_width">라인 너비(mm)</Label>
-                      <Input id="line_width" type="number" step="0.01" value={printSettings.line_width} onChange={(e)=>updateSetting('line_width', Number(e.target.value))} />
-                    </div>
-                    <div>
-                      <Label htmlFor="speed_print">프린트 속도(mm/s)</Label>
-                      <Input id="speed_print" type="number" step="1" value={printSettings.speed_print} onChange={(e)=>updateSetting('speed_print', Number(e.target.value))} />
+                  </div>
+
+                  <Separator />
+
+                  {/* 속도 */}
+                  <div>
+                    <h4 className="font-medium mb-3">속도</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="speed_print">프린트 속도(mm/s)</Label>
+                        <Input id="speed_print" type="number" step="1" value={printSettings.speed_print} onChange={(e)=>updateSetting('speed_print', Number(e.target.value))} />
+                      </div>
                     </div>
                   </div>
 
                   <Separator />
 
                   {/* 재료 */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="material_diameter">재료 직경(mm)</Label>
-                      <Input id="material_diameter" type="number" step="0.01" value={printSettings.material_diameter} onChange={(e)=>updateSetting('material_diameter', Number(e.target.value))} />
-                    </div>
-                    <div>
-                      <Label htmlFor="material_flow">재료 유량(%)</Label>
-                      <Input id="material_flow" type="number" step="1" value={printSettings.material_flow} onChange={(e)=>updateSetting('material_flow', Number(e.target.value))} />
+                  <div>
+                    <h4 className="font-medium mb-3">재료</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="material_diameter">재료 직경(mm)</Label>
+                        <Input id="material_diameter" type="number" step="0.01" value={printSettings.material_diameter} onChange={(e)=>updateSetting('material_diameter', Number(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label htmlFor="material_flow">재료 유량(%)</Label>
+                        <Input id="material_flow" type="number" step="1" value={printSettings.material_flow} onChange={(e)=>updateSetting('material_flow', Number(e.target.value))} />
+                      </div>
                     </div>
                   </div>
 
                   <Separator />
 
-                  {/* 인필/벽/탑/바닥 */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="infill_sparse_density">인필 밀도(%)</Label>
-                      <Input id="infill_sparse_density" type="number" step="1" value={printSettings.infill_sparse_density} onChange={(e)=>updateSetting('infill_sparse_density', Number(e.target.value))} />
-                    </div>
-                    <div>
-                      <Label htmlFor="wall_line_count">벽 라인 수</Label>
-                      <Input id="wall_line_count" type="number" step="1" value={printSettings.wall_line_count} onChange={(e)=>updateSetting('wall_line_count', Number(e.target.value))} />
-                    </div>
-                    <div>
-                      <Label htmlFor="top_layers">탑 레이어</Label>
-                      <Input id="top_layers" type="number" step="1" value={printSettings.top_layers} onChange={(e)=>updateSetting('top_layers', Number(e.target.value))} />
-                    </div>
-                    <div>
-                      <Label htmlFor="bottom_layers">바닥 레이어</Label>
-                      <Input id="bottom_layers" type="number" step="1" value={printSettings.bottom_layers} onChange={(e)=>updateSetting('bottom_layers', Number(e.target.value))} />
+                  {/* 쉘/인필 */}
+                  <div>
+                    <h4 className="font-medium mb-3">쉘/인필</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="infill_sparse_density">인필 밀도(%)</Label>
+                        <Input id="infill_sparse_density" type="number" step="1" value={printSettings.infill_sparse_density} onChange={(e)=>updateSetting('infill_sparse_density', Number(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label htmlFor="wall_line_count">벽 라인 수</Label>
+                        <Input id="wall_line_count" type="number" step="1" value={printSettings.wall_line_count} onChange={(e)=>updateSetting('wall_line_count', Number(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label htmlFor="top_layers">탑 레이어</Label>
+                        <Input id="top_layers" type="number" step="1" value={printSettings.top_layers} onChange={(e)=>updateSetting('top_layers', Number(e.target.value))} />
+                      </div>
+                      <div>
+                        <Label htmlFor="bottom_layers">바닥 레이어</Label>
+                        <Input id="bottom_layers" type="number" step="1" value={printSettings.bottom_layers} onChange={(e)=>updateSetting('bottom_layers', Number(e.target.value))} />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1496,7 +1851,7 @@ const AI = () => {
             {/* 푸터 */}
             <div className="px-6 py-4 border-t flex items-center justify-end gap-2">
               <Button variant="outline" onClick={() => setPrintDialogOpen(false)}>취소</Button>
-              <Button onClick={startPrint}>
+              <Button onClick={startPrint} disabled={!currentGCodeUrl}>
                 <Printer className="w-4 h-4 mr-2" />
                 출력 시작
               </Button>
@@ -1504,6 +1859,26 @@ const AI = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 프린터 선택 확인 모달 */}
+      <AlertDialog open={printerConfirmDialogOpen} onOpenChange={setPrinterConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>출력 준비</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{printerToConfirm?.model || printerToConfirm?.name}</strong> 프린터로 출력 준비를 시작합니다.
+              <br /><br />
+              계속하시겠습니까?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmPrinterSelection}>
+              확인
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 이미지 삭제 확인 다이얼로그 */}
       <AlertDialog open={deleteImageDialogOpen} onOpenChange={setDeleteImageDialogOpen}>

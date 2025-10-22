@@ -11,6 +11,7 @@ import { supabase } from "@shared/integrations/supabase/client"
 import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { useToast } from "@/hooks/use-toast";
 import { onDashStatusMessage } from "@shared/services/mqttService";
+import { PrinterStatusBadge } from "@/components/PrinterStatusBadge";
 import {
   Select,
   SelectContent,
@@ -86,19 +87,8 @@ interface PrinterOverview {
   device_uuid?: string;
 }
 
-// statusConfig는 컴포넌트 내부로 이동 (useTranslation 필요)
-
 const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; isAuthenticated: boolean }) => {
   const { t } = useTranslation();
-
-  const statusConfig = {
-    idle: { color: "bg-success/40 text-success-foreground", label: t('dashboard.status.idle') },
-    printing: { color: "bg-success text-success-foreground", label: t('dashboard.status.printing') },
-    paused: { color: "bg-warning text-warning-foreground", label: t('dashboard.status.paused') },
-    error: { color: "bg-warning/40 text-warning-foreground", label: t('dashboard.status.error') },
-    connecting: { color: "bg-primary text-primary-foreground", label: t('dashboard.status.connecting') },
-    disconnected: { color: "bg-destructive/40 text-destructive-foreground", label: t('dashboard.status.disconnected') }
-  };
 
   const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
@@ -110,7 +100,6 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
     return `${minutes}${t('dashboard.time.minutes')}`;
   };
 
-  const config = statusConfig[printer.state] || statusConfig.disconnected;
   const hasGroupObject = printer.group && typeof printer.group === 'object';
   const printerGroup = printer.group as { color?: string; name?: string } | undefined;
   const groupColor = hasGroupObject && printerGroup?.color ? printerGroup.color : '#9CA3AF';
@@ -147,14 +136,12 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
             {printer.pending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                <Badge className={statusConfig.connecting.color}>{t('dashboard.status.connecting')}</Badge>
+                <PrinterStatusBadge status="connecting" />
               </>
             ) : (
               <>
                 <div className={`h-3 w-3 rounded-full ${printer.connected ? 'bg-success' : 'bg-destructive'}`} />
-                <Badge className={config.color}>
-                  {config.label}
-                </Badge>
+                <PrinterStatusBadge status={printer.state} />
               </>
             )}
           </div>
@@ -377,9 +364,9 @@ const Home = () => {
 
     console.log('[MQTT] 실시간 모니터링 시작 - 프린터 수:', printers.length);
 
-    // 각 프린터별 타임아웃 추적 (5초 동안 데이터 없으면 disconnected)
+    // 각 프린터별 타임아웃 추적 (3초 동안 데이터 없으면 disconnected)
     const timeouts: Record<string, number> = {};
-    const TIMEOUT_DURATION = 5000; // 5초
+    const TIMEOUT_DURATION = 3000; // 3초
 
     // 타임아웃 설정/재설정 함수
     const startTimeoutFor = (uuid?: string, currentState?: string) => {

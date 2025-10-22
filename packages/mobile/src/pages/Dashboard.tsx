@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PrinterStatusBadge } from "@/components/PrinterStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Monitor, LogIn, Plus, Thermometer, ChevronDown, ChevronUp, Layers, Settings as SettingsIcon } from "lucide-react";
@@ -156,18 +157,6 @@ const PrinterCard = ({ printer, isAuthenticated, onSetupRequired, onStreamStart 
     navigate(`/printer/${printer.id}`, { state: { printer } });
   };
 
-  // 상태별 색상 설정
-  const statusConfig = {
-    idle: { color: "bg-success/40 text-success-foreground", label: t('dashboard.status.idle') },
-    printing: { color: "bg-success text-success-foreground", label: t('dashboard.status.printing') },
-    paused: { color: "bg-warning text-warning-foreground", label: t('dashboard.status.paused') },
-    error: { color: "bg-warning/40 text-warning-foreground", label: t('dashboard.status.error') },
-    connecting: { color: "bg-primary text-primary-foreground", label: t('dashboard.status.connecting') },
-    disconnected: { color: "bg-destructive/40 text-destructive-foreground", label: t('dashboard.status.disconnected') }
-  };
-
-  const config = statusConfig[printer.state] || statusConfig.disconnected;
-
   // 시간 포맷 함수
   const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
@@ -241,7 +230,7 @@ const PrinterCard = ({ printer, isAuthenticated, onSetupRequired, onStreamStart 
             <h3 className="text-lg font-bold truncate">{printer.name}</h3>
             {printer.model && <p className="text-xs text-muted-foreground truncate">{printer.model}</p>}
           </div>
-          <Badge className={config.color} variant="secondary">{config.label}</Badge>
+          <PrinterStatusBadge status={printer.state} />
         </div>
         {printer.printing && (
           <div className="flex items-center gap-2">

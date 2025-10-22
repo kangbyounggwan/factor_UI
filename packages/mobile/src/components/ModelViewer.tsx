@@ -1,7 +1,7 @@
 // 3D 모델 뷰어 담당 컴포넌트
 //
 import { Canvas, useLoader } from "@react-three/fiber";
-import { OrbitControls, Grid, Environment } from "@react-three/drei";
+import { OrbitControls, Grid } from "@react-three/drei";
 import { Suspense, useMemo, useEffect, useState } from "react";
 import { STLLoader } from "three-stdlib";
 import { GLTFLoader } from "three-stdlib";
@@ -121,13 +121,14 @@ export default function ModelViewer({ className, height, showDemo = false, place
     <div className={className} style={style}>
       <Canvas shadows camera={{ position: [3, 3, 5], fov: 50 }}>
         <color attach="background" args={["#0b0f17"]} />
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
+        <ambientLight intensity={0.8} />
+        <directionalLight position={[5, 5, 5]} intensity={1.5} castShadow />
+        <directionalLight position={[-5, -5, -5]} intensity={0.6} />
+        <directionalLight position={[0, 5, 0]} intensity={0.4} />
         <Suspense fallback={null}>
           {showDemo && <SpinningObject />}
           {stlUrl && <STLModel url={stlUrl} />}
           {modelUrl && <GLBModel url={modelUrl} rotation={userRotation} />}
-          <Environment preset="city" />
         </Suspense>
         <Grid infiniteGrid cellColor="#2a2f3a" sectionColor="#3b4252" args={[20, 20]} />
         <OrbitControls enableDamping dampingFactor={0.05} />

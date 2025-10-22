@@ -287,3 +287,56 @@ export async function listUserSourceImages(
     };
   });
 }
+
+/**
+ * Python AI 서버의 GCode URL에서 GCode를 다운로드하고 Supabase Storage에 업로드
+ */
+export async function downloadAndUploadGCode(
+  supabase: SupabaseClient,
+  userId: string,
+  modelId: string,
+  gcodeUrl: string
+): Promise<{ path: string; publicUrl: string } | null> {
+  try {
+    console.log('[aiStorage] Downloading GCode from AI server:', gcodeUrl);
+
+    // 1. Python 서버에서 GCode 다운로드
+    const response = await fetch(gcodeUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download GCode: ${response.status} ${response.statusText}`);
+    }
+
+    const gcodeBlob = await response.blob();
+    console.log('[aiStorage] GCode downloaded, size:', gcodeBlob.size, 'bytes');
+
+    // 2. Supabase Storage에 업로드
+    const path = `${userId}/generated-models/${modelId}.gcode`;
+    const { data, error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(path, gcodeBlob, {
+        contentType: 'text/plain',
+        cacheControl: '3600',
+        upsert: true
+      });
+
+    if (error) {
+      console.error('[aiStorage] GCode upload failed:', error);
+      throw error;
+    }
+
+    // 3. Public URL 생성
+    const { data: urlData } = supabase.storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(path);
+
+    console.log('[aiStorage] GCode uploaded successfully:', urlData.publicUrl);
+
+    return {
+      path: path,
+      publicUrl: urlData.publicUrl
+    };
+  } catch (error) {
+    console.error('[aiStorage] Failed to download and upload GCode:', error);
+    return null;
+  }
+}
