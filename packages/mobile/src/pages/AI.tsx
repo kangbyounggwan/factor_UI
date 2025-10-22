@@ -65,6 +65,7 @@ interface GeneratedModel {
   prompt: string;
   status: string;
   thumbnail: string;
+  glbUrl?: string;
   createdAt: string;
 }
 
@@ -178,38 +179,103 @@ const AI = () => {
     setProgress(0);
     setCurrentStep("generate");
 
-    // 프로그레스 시뮬레이션
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 95) {
-          clearInterval(interval);
-          return prev;
-        }
-        return prev + 5;
-      });
-    }, 200);
+    try {
+      let result;
 
-    // 생성 시뮬레이션
-    setTimeout(() => {
-      clearInterval(interval);
-      setProgress(100);
-      const newModel = {
-        id: Date.now(),
-        name: `Model_${Date.now()}`,
-        type: inputType,
-        prompt: textPrompt,
-        status: "completed",
-        thumbnail: "/placeholder.svg",
-        createdAt: new Date().toISOString(),
-      };
-      setGeneratedModel(newModel);
-      setIsProcessing(false);
-      setCurrentStep("result");
+      if (inputType === "text" || inputType === "text-to-image") {
+        // 텍스트 → 3D 변환
+        const { postTextTo3D, buildCommon, pollTaskUntilComplete, extractGLBUrl, extractThumbnailUrl } = await import("@/lib/aiService");
+
+        const payload = {
+          ...buildCommon('flux-kontext', quality, style, user?.id),
+          input: { text: textPrompt },
+        };
+
+        // 비동기 모드로 요청
+        const asyncResult = await postTextTo3D(payload, true);
+
+        if (asyncResult.status === 'ok' && asyncResult.data?.task_id) {
+          // 진행률 폴링
+          result = await pollTaskUntilComplete(
+            asyncResult.data.task_id,
+            (progressValue, status) => {
+              setProgress(progressValue);
+              console.log(`[AI] Progress: ${progressValue}% - Status: ${status}`);
+            }
+          );
+        } else {
+          throw new Error('Task ID를 받지 못했습니다.');
+        }
+      } else if (inputType === "image" && uploadedFiles.length > 0) {
+        // 이미지 → 3D 변환
+        const { postImageTo3D, buildCommon, pollTaskUntilComplete, extractGLBUrl, extractThumbnailUrl } = await import("@/lib/aiService");
+
+        const formData = new FormData();
+
+        // 이미지 파일을 Blob으로 변환하여 추가
+        const uploadedFile = uploadedFiles[0];
+        const response = await fetch(uploadedFile.url);
+        const blob = await response.blob();
+        formData.append('image', blob, uploadedFile.name);
+
+        // 설정 추가
+        const config = buildCommon('flux-kontext', quality, style, user?.id);
+        formData.append('config', JSON.stringify(config));
+
+        // 비동기 모드로 요청
+        const asyncResult = await postImageTo3D(formData, true);
+
+        if (asyncResult.status === 'ok' && asyncResult.data?.task_id) {
+          // 진행률 폴링
+          result = await pollTaskUntilComplete(
+            asyncResult.data.task_id,
+            (progressValue, status) => {
+              setProgress(progressValue);
+              console.log(`[AI] Progress: ${progressValue}% - Status: ${status}`);
+            }
+          );
+        } else {
+          throw new Error('Task ID를 받지 못했습니다.');
+        }
+      }
+
+      // 결과 처리
+      if (result) {
+        const { extractGLBUrl, extractThumbnailUrl } = await import("@/lib/aiService");
+        const glbUrl = extractGLBUrl(result);
+        const thumbnailUrl = extractThumbnailUrl(result);
+
+        const newModel = {
+          id: Date.now(),
+          name: `Model_${Date.now()}`,
+          type: inputType,
+          prompt: textPrompt,
+          status: "completed",
+          thumbnail: thumbnailUrl || "/placeholder.svg",
+          glbUrl: glbUrl || undefined,
+          createdAt: new Date().toISOString(),
+        };
+
+        setGeneratedModel(newModel);
+        setProgress(100);
+        setCurrentStep("result");
+
+        toast({
+          title: t('ai.generationComplete'),
+          description: t('ai.generationCompleteDesc'),
+        });
+      }
+    } catch (error) {
+      console.error('[AI] Generation error:', error);
       toast({
-        title: t('ai.generationComplete'),
-        description: t('ai.generationCompleteDesc'),
+        title: t('ai.generationFailed') || '생성 실패',
+        description: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+        variant: "destructive",
       });
-    }, 4000);
+      setCurrentStep("create-prompt");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // 다시 시작
@@ -498,7 +564,16 @@ const AI = () => {
                 <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
               </div>
             }>
-              <ModelViewer className="w-full h-full" />
+              {generatedModel?.glbUrl ? (
+                <ModelViewer
+                  className="w-full h-full"
+                  modelUrl={generatedModel.glbUrl}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-sm text-muted-foreground">{t('ai.noModelAvailable') || '모델을 불러올 수 없습니다'}</p>
+                </div>
+              )}
             </Suspense>
           </div>
         </CardContent>
@@ -506,7 +581,26 @@ const AI = () => {
 
       {/* 액션 버튼들 */}
       <div className="grid grid-cols-2 gap-3">
-        <Button variant="outline" className="h-12">
+        <Button
+          variant="outline"
+          className="h-12"
+          onClick={() => {
+            if (generatedModel?.glbUrl) {
+              // GLB 파일 다운로드
+              const link = document.createElement('a');
+              link.href = generatedModel.glbUrl;
+              link.download = `${generatedModel.name}.glb`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              toast({
+                title: t('ai.downloadStarted') || '다운로드 시작',
+                description: t('ai.downloadStartedDesc') || 'GLB 파일 다운로드를 시작합니다.',
+              });
+            }
+          }}
+          disabled={!generatedModel?.glbUrl}
+        >
           <Download className="w-4 h-4 mr-2" />
           {t('ai.download')}
         </Button>

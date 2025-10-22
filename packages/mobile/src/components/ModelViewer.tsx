@@ -4,6 +4,7 @@ import { Canvas, useLoader } from "@react-three/fiber";
 import { OrbitControls, Grid, Environment } from "@react-three/drei";
 import { Suspense, useMemo, useEffect, useState } from "react";
 import { STLLoader } from "three-stdlib";
+import { GLTFLoader } from "three-stdlib";
 import * as THREE from "three";
 
 interface ModelViewerProps {
@@ -16,6 +17,8 @@ interface ModelViewerProps {
   placeholderMessage?: string;
   // STL 파일 URL (선택적)
   stlUrl?: string;
+  // GLB/GLTF 파일 URL (선택적)
+  modelUrl?: string;
 }
 
 function SpinningObject() {
@@ -60,14 +63,49 @@ function STLModel({ url }: { url: string }) {
   );
 }
 
-export default function ModelViewer({ className, height, showDemo = false, placeholderMessage = "모델을 생성하거나 불러오세요", stlUrl }: ModelViewerProps) {
+function GLBModel({ url }: { url: string }) {
+  const gltf = useLoader(GLTFLoader, url);
+  const [modelGroup] = useState(() => new THREE.Group());
+
+  useEffect(() => {
+    if (gltf && gltf.scene) {
+      // 기존 자식 제거
+      while (modelGroup.children.length > 0) {
+        modelGroup.remove(modelGroup.children[0]);
+      }
+
+      // GLTF 씬 복제
+      const scene = gltf.scene.clone(true);
+
+      // 바운딩 박스 계산
+      const box = new THREE.Box3().setFromObject(scene);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+
+      // 중심 이동
+      scene.position.sub(center);
+
+      // 스케일 정규화 (화면에 맞춤)
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const scale = 2 / maxDim;
+      scene.scale.multiplyScalar(scale);
+
+      // 그룹에 추가
+      modelGroup.add(scene);
+    }
+  }, [gltf, modelGroup]);
+
+  return <primitive object={modelGroup} castShadow receiveShadow />;
+}
+
+export default function ModelViewer({ className, height, showDemo = false, placeholderMessage = "모델을 생성하거나 불러오세요", stlUrl, modelUrl }: ModelViewerProps) {
   const style: React.CSSProperties = { width: '100%' };
   if (height !== undefined) {
     style.height = typeof height === 'number' ? `${height}px` : height;
   }
   style.position = 'relative';
 
-  const hasContent = showDemo || stlUrl;
+  const hasContent = showDemo || stlUrl || modelUrl;
 
   return (
     <div className={className} style={style}>
@@ -78,6 +116,7 @@ export default function ModelViewer({ className, height, showDemo = false, place
         <Suspense fallback={null}>
           {showDemo && <SpinningObject />}
           {stlUrl && <STLModel url={stlUrl} />}
+          {modelUrl && <GLBModel url={modelUrl} />}
           <Environment preset="city" />
         </Suspense>
         <Grid infiniteGrid cellColor="#2a2f3a" sectionColor="#3b4252" args={[20, 20]} />
