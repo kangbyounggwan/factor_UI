@@ -71,6 +71,7 @@ export default {
     newUser: "New user?",
     alreadyHaveAccount: "Already have an account?",
     orSignInWith: "OR",
+    googleSignIn: "Sign in with Google",
     signInWithAnother: "Sign in with another account",
     // Error messages
     invalidCredentials: "Invalid email or password.",

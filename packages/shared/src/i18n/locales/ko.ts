@@ -71,6 +71,7 @@ export default {
     newUser: "새 사용자이신가요?",
     alreadyHaveAccount: "이미 계정이 있으신가요?",
     orSignInWith: "OR",
+    googleSignIn: "Google로 로그인",
     signInWithAnother: "다른 계정으로 로그인",
     // 에러 메시지
     invalidCredentials: "이메일 또는 비밀번호가 올바르지 않습니다.",

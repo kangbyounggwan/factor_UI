@@ -15,7 +15,7 @@ i18n
     },
     lng: 'ko', // 초기 언어 명시
     fallbackLng: 'ko', // 기본 언어
-    debug: true, // 디버그 모드 활성화
+    debug: false, // 프로덕션: 디버그 모드 비활성화
     interpolation: {
       escapeValue: false, // React는 자동으로 XSS 방지
     },
@@ -29,6 +29,9 @@ i18n
     },
   });
 
-console.log('i18n initialized:', i18n.isInitialized, 'language:', i18n.language);
+// 개발 환경에서만 로그 출력
+if (import.meta.env.DEV) {
+  console.log('i18n initialized:', i18n.isInitialized, 'language:', i18n.language);
+}
 
 export default i18n;

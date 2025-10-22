@@ -767,18 +767,29 @@ const PrinterDetail = () => {
       return h > 0 ? `${h}${t('printerDetail.hours')} ${m}${t('printerDetail.minutes')} ${s}${t('printerDetail.seconds')}` : `${m}${t('printerDetail.minutes')} ${s}${t('printerDetail.seconds')}`;
     };
 
-    // 상태 라벨 결정
+    // 상태 라벨 결정 (MQTT 연결 상태 우선 체크)
     const flags = (data.printerStatus?.flags || {}) as Record<string, unknown>;
     const status = data.printerStatus.state;
     let label = t('printerDetail.disconnected');
-    if (flags?.error) label = t('printerDetail.error');
+
+    // MQTT 연결이 끊긴 경우 무조건 "연결 없음"
+    if (!data.printerStatus.connected && (status === 'disconnected' || status === 'disconnect')) {
+      label = t('printerDetail.disconnected');
+    }
+    // MQTT 연결이 있는 경우에만 flags 기반으로 상태 결정
+    else if (flags?.error) label = t('printerDetail.error');
     else if (flags?.printing) label = t('printer.statusPrinting');
     else if (flags?.paused) label = t('printerDetail.paused');
     else if (flags?.ready || flags?.operational) label = t('printerDetail.idle');
     else if (status === 'connecting') label = t('printerDetail.connecting');
 
-    // 상태별 뱃지 색상
+    // 상태별 뱃지 색상 (MQTT 연결 상태 우선 체크)
     const getStatusBadgeClass = () => {
+      // MQTT 연결이 끊긴 경우 무조건 연결 없음 표시
+      if (!data.printerStatus.connected && (status === 'disconnected' || status === 'disconnect')) {
+        return 'bg-destructive/40 text-destructive-foreground';
+      }
+      // MQTT 연결이 있는 경우에만 flags 기반으로 색상 결정
       if (flags?.error) return 'bg-warning/40 text-warning-foreground';
       if (flags?.printing) return 'bg-success text-success-foreground';
       if (flags?.paused) return 'bg-warning text-warning-foreground';
@@ -787,7 +798,8 @@ const PrinterDetail = () => {
       return 'bg-destructive/40 text-destructive-foreground'; // disconnected
     };
 
-    const isConnected = Boolean(flags?.operational || flags?.printing || flags?.paused || flags?.ready || flags?.error);
+    // MQTT 연결 상태를 직접 사용 (flags 대신)
+    const isConnected = data.printerStatus.connected;
     const printingStatus = flags?.printing ? t('printerDetail.inProgress') : (flags?.paused ? t('printerDetail.pausing') : t('printerDetail.stopped'));
 
     return (

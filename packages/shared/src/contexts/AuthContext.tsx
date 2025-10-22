@@ -15,6 +15,7 @@ interface AuthContextType {
   loading: boolean;
   signUp: (email: string, password: string, displayName?: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signInWithGoogle: () => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -40,13 +41,16 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   const signOutInProgressRef = useRef(false);
   const authEventReceivedRef = useRef(false);
 
-  console.log('AuthProvider 렌더링:', { 
-    variant, 
-    loading, 
-    user: !!user, 
-    session: !!session,
-    timestamp: new Date().toISOString()
-  });
+  // 개발 환경에서만 렌더링 로그
+  if (import.meta.env.DEV) {
+    console.log('[AuthProvider] Rendering:', {
+      variant,
+      loading,
+      user: !!user,
+      session: !!session,
+      timestamp: new Date().toISOString()
+    });
+  }
 
   const loadUserRole = async (userId: string) => {
     if (lastRoleLoadedUserIdRef.current === userId) return;
@@ -267,6 +271,21 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     return { error };
   };
 
+  const signInWithGoogle = async () => {
+    const redirectUrl = ((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectUrl,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+    return { error };
+  };
+
   const signOut = async () => {
     setUserRole(null);
     try {
@@ -302,6 +321,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     loading,
     signUp,
     signIn,
+    signInWithGoogle,
     signOut,
   };
 
