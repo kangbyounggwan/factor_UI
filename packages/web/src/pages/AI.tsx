@@ -484,6 +484,8 @@ const AI = () => {
         material_flow: printSettings.material_flow.toString(),
       };
 
+      console.log('[AI] Cura settings prepared:', curaSettings);
+
       // 3. 프린터 정의 (기본값 사용, 필요시 프린터별로 커스터마이징 가능)
       const printerDefinition: PrinterDefinition = {
         version: 2,
@@ -497,14 +499,23 @@ const AI = () => {
         },
       };
 
+      console.log('[AI] Printer definition prepared:', printerDefinition);
+
       // 4. 슬라이싱 API 호출
+      const fileName = `model_${Date.now()}.${fileExtension}`;
       console.log('[AI] Uploading model and slicing...');
+      console.log('[AI] - File name:', fileName);
+      console.log('[AI] - File size:', modelBlob.size, 'bytes');
+      console.log('[AI] - File type:', modelBlob.type);
+
       const slicingResult = await uploadSTLAndSlice(
         modelBlob,
-        `model_${Date.now()}.${fileExtension}`,
+        fileName,
         curaSettings,
         printerDefinition
       );
+
+      console.log('[AI] Slicing result received:', slicingResult);
 
       if (slicingResult.status === 'error' || !slicingResult.data) {
         throw new Error(slicingResult.error || '슬라이싱 실패');
@@ -556,6 +567,13 @@ const AI = () => {
 
     } catch (error) {
       console.error('[AI] Slicing failed:', error);
+      if (error instanceof Error) {
+        console.error('[AI] Error name:', error.name);
+        console.error('[AI] Error message:', error.message);
+        console.error('[AI] Error stack:', error.stack);
+      }
+      console.error('[AI] Error details:', JSON.stringify(error, null, 2));
+
       setIsSlicing(false);
       toast({
         title: '슬라이싱 실패',
@@ -1145,7 +1163,69 @@ const AI = () => {
                             </div>
                           </div>
                         }>
-                          <ModelViewer className="w-full h-full" modelUrl={modelViewerUrl ?? undefined} modelScale={1} enableRotationControls={true} />
+                          <ModelViewer
+                            className="w-full h-full"
+                            modelUrl={modelViewerUrl ?? undefined}
+                            modelScale={1}
+                            enableRotationControls={true}
+                            modelId={currentModelId ?? undefined}
+                            onSave={async (data) => {
+                              try {
+                                if (!currentModelId) {
+                                  throw new Error('No model selected');
+                                }
+
+                                // 1. Upload the new GLB file to Supabase Storage
+                                const timestamp = Date.now();
+                                const fileName = `model_${currentModelId}_${timestamp}.glb`;
+                                const filePath = `${user?.id}/${fileName}`;
+
+                                const { data: uploadData, error: uploadError } = await supabase.storage
+                                  .from('ai_models')
+                                  .upload(filePath, data.blob, {
+                                    contentType: 'model/gltf-binary',
+                                    upsert: false
+                                  });
+
+                                if (uploadError) throw uploadError;
+
+                                // 2. Get public URL
+                                const { data: { publicUrl } } = supabase.storage
+                                  .from('ai_models')
+                                  .getPublicUrl(filePath);
+
+                                // 3. Update the model record in database
+                                await updateAIModel(supabase, currentModelId, {
+                                  download_url: publicUrl,
+                                  metadata: {
+                                    rotation: data.rotation,
+                                    scale: data.scale,
+                                    optimized: data.optimized,
+                                    saved_at: new Date().toISOString()
+                                  }
+                                });
+
+                                // 4. Update local state
+                                setCurrentGlbUrl(publicUrl);
+                                setModelViewerUrl(publicUrl);
+
+                                // 5. Reload models list
+                                await reloadModels();
+
+                                toast({
+                                  title: t('ai.modelSaved') || 'Model Saved',
+                                  description: t('ai.modelSavedDescription') || 'Your model has been saved with current transformations.',
+                                });
+                              } catch (error) {
+                                console.error('[AI] Failed to save model:', error);
+                                toast({
+                                  title: t('ai.modelSaveFailed') || 'Save Failed',
+                                  description: error instanceof Error ? error.message : 'Failed to save model',
+                                  variant: 'destructive'
+                                });
+                              }
+                            }}
+                          />
                         </Suspense>
 
                         {/* 다운로드 드롭다운 버튼 - 오른쪽 위 */}

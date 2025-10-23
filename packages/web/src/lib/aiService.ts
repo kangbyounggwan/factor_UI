@@ -408,7 +408,6 @@ export interface PrinterDefinition {
     machine_width?: { default_value: number };
     machine_depth?: { default_value: number };
     machine_height?: { default_value: number };
-    machine_extruder_count?: { default_value: number };
     [key: string]: { default_value: number | string } | undefined;
   };
 }
@@ -436,71 +435,63 @@ export async function uploadSTLAndSlice(
   const formData = new FormData();
   formData.append('model_file', stlBlob, filename);
 
-  const curaSettingsJson = curaSettings ? JSON.stringify(curaSettings) : null;
-  const printerDefinitionJson = printerDefinition ? JSON.stringify(printerDefinition) : null;
-
-  if (curaSettingsJson) {
-    formData.append('cura_settings_json', curaSettingsJson);
+  if (curaSettings) {
+    formData.append('cura_settings_json', JSON.stringify(curaSettings));
   }
 
-  if (printerDefinitionJson) {
-    formData.append('printer_definition_json', printerDefinitionJson);
+  if (printerDefinition) {
+    formData.append('printer_definition_json', JSON.stringify(printerDefinition));
   }
 
   try {
-    // 요청 데이터 로깅
-    console.group('🚀 [AI Service] Slicing Request');
-    console.log('📍 Endpoint:', SLICE_ENDPOINT);
-    console.log('📄 Filename:', filename);
-    console.log('📦 File size:', stlBlob.size, 'bytes');
-    console.log('🔖 File type:', stlBlob.type);
-    console.log('\n--- Request Body (FormData) ---');
-    console.log('model_file:', `Blob(${stlBlob.size} bytes, ${stlBlob.type})`);
+    // 최종 요청 데이터를 하나의 JSON으로 표시
+    const requestPayload = {
+      endpoint: SLICE_ENDPOINT,
+      method: 'POST',
+      content_type: 'multipart/form-data',
+      fields: {
+        model_file: {
+          filename: filename,
+          size: stlBlob.size,
+          type: stlBlob.type || 'application/octet-stream',
+          content: '[BINARY FILE DATA]'
+        },
+        cura_settings_json: curaSettings || null,
+        printer_definition_json: printerDefinition || null
+      }
+    };
 
-    if (curaSettingsJson) {
-      console.log('\n🔧 cura_settings_json (raw string):');
-      console.log(curaSettingsJson);
-      console.log('\n🔧 cura_settings_json (parsed object):');
-      console.log(JSON.parse(curaSettingsJson));
-    } else {
-      console.log('cura_settings_json: (not provided)');
-    }
-
-    if (printerDefinitionJson) {
-      console.log('\n🖨️ printer_definition_json (raw string):');
-      console.log(printerDefinitionJson);
-      console.log('\n🖨️ printer_definition_json (parsed object):');
-      console.log(JSON.parse(printerDefinitionJson));
-    } else {
-      console.log('printer_definition_json: (not provided)');
-    }
-    console.groupEnd();
+    console.log('[aiService] ========================================');
+    console.log('[aiService] 📤 FINAL REQUEST TO SERVER:');
+    console.log(JSON.stringify(requestPayload, null, 2));
+    console.log('[aiService] ========================================');
 
     const response = await fetchWithTimeout(SLICE_ENDPOINT, {
       method: 'POST',
       body: formData,
     }, 180000); // 3분 타임아웃 (슬라이싱은 시간이 걸릴 수 있음)
 
-    console.log('[aiService] Slicing response status:', response.status, response.statusText);
+    console.log('[aiService] Response status:', response.status, response.statusText);
     console.log('[aiService] Response headers:', Object.fromEntries(response.headers.entries()));
 
     if (!response.ok) {
       // 에러 응답 본문 읽기
-      const errorText = await response.text().catch(() => '');
-      console.error('[aiService] Slicing error response:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorText,
-      });
+      let errorBody: any;
+      const contentType = response.headers.get('content-type');
 
-      // JSON 파싱 시도
       try {
-        const errorJson = JSON.parse(errorText);
-        console.error('[aiService] Parsed error JSON:', errorJson);
-        throw new Error(`Slicing failed (${response.status}): ${errorJson.error || errorJson.message || errorText}`);
-      } catch (parseError) {
-        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText || 'empty'}`);
+        if (contentType?.includes('application/json')) {
+          errorBody = await response.json();
+        } else {
+          errorBody = await response.text();
+        }
+      } catch (e) {
+        errorBody = 'Could not parse error response';
       }
+
+      console.error('[aiService] Error response body:', errorBody);
+
+      throw new Error(`HTTP error! status: ${response.status}, body: ${JSON.stringify(errorBody)}`);
     }
 
     const result = await response.json();
@@ -510,7 +501,6 @@ export async function uploadSTLAndSlice(
   } catch (error) {
     console.error('[aiService] Slicing failed:', error);
     if (error instanceof Error) {
-      console.error('[aiService] Error name:', error.name);
       console.error('[aiService] Error message:', error.message);
       console.error('[aiService] Error stack:', error.stack);
     }
