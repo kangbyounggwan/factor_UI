@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, lazy, Suspense } from "react";
+import { useState, useRef, useEffect, useCallback, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -168,8 +168,8 @@ const AI = () => {
   const [imageDepth, setImageDepth] = useState<ImageDepth>('auto');
   const [imageQuality, setImageQuality] = useState<Quality>('high');
   const totalPrinters = printers.length;
-  const connectedCount = printers.filter((p) => p.status === 'ready' || p.status === 'printing' || p.status === 'operational').length;
-  const printingCount = printers.filter((p) => p.status === 'printing').length;
+  const connectedCount = printers.filter((p) => p.connected).length;
+  const printingCount = printers.filter((p) => p.state === 'printing').length;
   const { toast } = useToast();
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -402,6 +402,108 @@ const AI = () => {
     adhesion_type: 'none' as 'none' | 'skirt' | 'brim' | 'raft',
   });
 
+  // ModelViewer onSave 콜백
+  const handleModelSave = useCallback(async (data: {
+    rotation: [number, number, number];
+    scale: number;
+    optimized: boolean;
+    blob: Blob;
+    format: 'stl' | 'glb';
+  }) => {
+    console.log('[AI] ========================================');
+    console.log('[AI] handleModelSave 호출됨');
+    console.log('[AI] onSave 콜백 호출됨');
+    console.log('[AI] Save data:', {
+      rotation: data.rotation,
+      scale: data.scale,
+      optimized: data.optimized,
+      blobSize: data.blob.size,
+      format: data.format
+    });
+    console.log('[AI] ========================================');
+
+    try {
+      if (!currentModelId) {
+        throw new Error('No model selected');
+      }
+
+      // 1. Upload the new GLB file to Supabase Storage
+      const timestamp = Date.now();
+      const fileName = `model_${currentModelId}_${timestamp}.glb`;
+      const filePath = `${user?.id}/${fileName}`;
+
+      console.log('[AI] Uploading GLB to Supabase Storage:', {
+        fileName,
+        filePath,
+        blobSize: data.blob.size
+      });
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('ai-models')
+        .upload(filePath, data.blob, {
+          contentType: 'model/gltf-binary',
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      // 2. Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('ai-models')
+        .getPublicUrl(filePath);
+
+      console.log('[AI] GLB uploaded successfully:', {
+        publicUrl,
+        uploadPath: uploadData.path
+      });
+
+      // 3. Update the model record in database
+      await updateAIModel(supabase, currentModelId, {
+        download_url: publicUrl,
+        generation_metadata: {
+          rotation: data.rotation,
+          scale: data.scale,
+          optimized: data.optimized,
+          saved_at: new Date().toISOString()
+        }
+      });
+
+      console.log('[AI] Database updated with new GLB URL');
+
+      // 4. STL URL을 state에서만 삭제 (DB 컬럼이 없음)
+      console.log('[AI] Clearing old STL URL from state');
+      setCurrentStlUrl(null);
+
+      // 5. Update local state
+      setCurrentGlbUrl(publicUrl);
+      setModelViewerUrl(publicUrl);
+
+      console.log('[AI] Local state updated with new GLB URL');
+
+      // 6. Reload models list - call directly instead of from deps
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+
+      console.log('[AI] Model list reloaded');
+      console.log('[AI] ========================================');
+      console.log('[AI] Model save completed successfully');
+      console.log('[AI] ========================================');
+
+      toast({
+        title: t('ai.modelSaved') || 'Model Saved',
+        description: t('ai.modelSavedDescription') || 'Your model has been saved with current transformations.',
+      });
+    } catch (error) {
+      console.error('[AI] Failed to save model:', error);
+      toast({
+        title: t('ai.modelSaveFailed') || 'Save Failed',
+        description: error instanceof Error ? error.message : 'Failed to save model',
+        variant: 'destructive'
+      });
+    }
+  }, [currentModelId, user?.id, supabase, t, toast]);
+
   const openPrinterSettings = (printer: Printer) => {
     console.log('[AI] ===== 프린터 카드 클릭됨 =====');
     console.log('[AI] 프린터:', printer.name, '/', printer.model);
@@ -417,6 +519,7 @@ const AI = () => {
   };
 
   const confirmPrinterSelection = async () => {
+    console.log('[AI] ========================================');
     console.log('[AI] confirmPrinterSelection 호출됨');
     console.log('[AI] 체크 - printerToConfirm:', printerToConfirm);
     console.log('[AI] 체크 - currentStlUrl:', currentStlUrl);
@@ -426,6 +529,9 @@ const AI = () => {
 
     // STL이 없으면 GLB 사용 (폴백)
     const modelUrl = currentStlUrl || currentGlbUrl;
+
+    console.log('[AI] 슬라이싱에 사용할 모델 URL:', modelUrl);
+    console.log('[AI] URL 타입:', currentStlUrl ? 'STL' : 'GLB');
 
     if (!printerToConfirm || !modelUrl || !user?.id) {
       console.error('[AI] 필수 데이터 부족:');
@@ -443,8 +549,6 @@ const AI = () => {
       return;
     }
 
-    console.log('[AI] 슬라이싱에 사용할 모델 URL:', modelUrl);
-
     try {
       // 확인 모달 닫기
       setPrinterConfirmDialogOpen(false);
@@ -457,7 +561,7 @@ const AI = () => {
       });
 
       // 1. 모델 파일 다운로드 (STL 또는 GLB)
-      console.log('[AI] Downloading model file:', modelUrl);
+      console.log('[AI] Downloading model file from URL:', modelUrl);
       const modelResponse = await fetch(modelUrl);
       if (!modelResponse.ok) {
         throw new Error('모델 파일 다운로드 실패');
@@ -466,7 +570,10 @@ const AI = () => {
 
       // 파일 확장자 추출
       const fileExtension = modelUrl.endsWith('.stl') ? 'stl' : 'glb';
-      console.log('[AI] 파일 형식:', fileExtension);
+      console.log('[AI] Downloaded model file:');
+      console.log('[AI] - File format:', fileExtension);
+      console.log('[AI] - Downloaded blob size:', modelBlob.size, 'bytes');
+      console.log('[AI] - Downloaded blob type:', modelBlob.type);
 
       // 2. 슬라이싱 설정 구성
       const curaSettings: SlicingSettings = {
@@ -525,6 +632,17 @@ const AI = () => {
 
       // 5. GCode URL 저장
       const gcodeUrl = slicingResult.data.gcode_url;
+      console.log('[AI] GCode URL from slicing result:', gcodeUrl);
+
+      // GCode 파일 크기 확인
+      try {
+        const gcodeResponse = await fetch(gcodeUrl, { method: 'HEAD' });
+        const gcodeSize = gcodeResponse.headers.get('content-length');
+        console.log('[AI] Generated GCode file size:', gcodeSize ? `${gcodeSize} bytes` : 'unknown');
+      } catch (error) {
+        console.warn('[AI] Could not get GCode file size:', error);
+      }
+
       setCurrentGCodeUrl(gcodeUrl);
 
       // 6. GCode를 Supabase Storage에 업로드 및 DB 업데이트
@@ -541,19 +659,25 @@ const AI = () => {
           if (gcodeUploadResult) {
             // DB에 GCode URL 저장
             await updateAIModel(supabase, currentModelId, {
-              gcode_storage_path: gcodeUploadResult.path,
-              gcode_download_url: gcodeUploadResult.publicUrl,
+              gcode_url: gcodeUploadResult.publicUrl,
             });
             console.log('[AI] GCode saved to DB:', gcodeUploadResult.publicUrl);
 
             // Supabase URL로 업데이트
+            console.log('[AI] Updating currentGCodeUrl to:', gcodeUploadResult.publicUrl);
             setCurrentGCodeUrl(gcodeUploadResult.publicUrl);
+          } else {
+            console.warn('[AI] GCode upload result is null, keeping original URL:', gcodeUrl);
           }
         } catch (gcodeError) {
           console.error('[AI] Failed to upload GCode:', gcodeError);
           // GCode 업로드 실패해도 계속 진행
         }
       }
+
+      console.log('[AI] ========================================');
+      console.log('[AI] Slicing workflow completed successfully');
+      console.log('[AI] ========================================');
 
       toast({
         title: '슬라이싱 완료',
@@ -712,14 +836,14 @@ const AI = () => {
   };
 
   // 개별 모델 삭제 핸들러
-  const handleModelDelete = async (model: AIGeneratedModel) => {
+  const handleModelDelete = async (item: { id: string | number; name: string }) => {
     try {
       setModelViewerUrl(null);
-      await deleteAIModel(supabase, model.id.toString());
+      await deleteAIModel(supabase, item.id.toString());
       await reloadModels();
       toast({
         title: t('ai.modelDeleted'),
-        description: `${model.name}${t('ai.modelDeleteSuccess')}`,
+        description: `${item.name}${t('ai.modelDeleteSuccess')}`,
       });
     } catch (error) {
       console.error('[AI] Failed to delete model:', error);
@@ -1059,7 +1183,7 @@ const AI = () => {
 
       toast({
         title: t('ai.generationFailed'),
-        description: e?.message || t('ai.generationError'),
+        description: (e instanceof Error ? e.message : String(e)) || t('ai.generationError'),
         variant: 'destructive'
       });
     } finally {
@@ -1127,6 +1251,8 @@ const AI = () => {
                     stlDownloadUrl={currentStlUrl ?? undefined}
                     progress={progress}
                     progressStatus={progressStatus}
+                    modelId={currentModelId ?? undefined}
+                    onSave={handleModelSave}
                   />
                 </div>
               </TabsContent>
@@ -1169,62 +1295,7 @@ const AI = () => {
                             modelScale={1}
                             enableRotationControls={true}
                             modelId={currentModelId ?? undefined}
-                            onSave={async (data) => {
-                              try {
-                                if (!currentModelId) {
-                                  throw new Error('No model selected');
-                                }
-
-                                // 1. Upload the new GLB file to Supabase Storage
-                                const timestamp = Date.now();
-                                const fileName = `model_${currentModelId}_${timestamp}.glb`;
-                                const filePath = `${user?.id}/${fileName}`;
-
-                                const { data: uploadData, error: uploadError } = await supabase.storage
-                                  .from('ai_models')
-                                  .upload(filePath, data.blob, {
-                                    contentType: 'model/gltf-binary',
-                                    upsert: false
-                                  });
-
-                                if (uploadError) throw uploadError;
-
-                                // 2. Get public URL
-                                const { data: { publicUrl } } = supabase.storage
-                                  .from('ai_models')
-                                  .getPublicUrl(filePath);
-
-                                // 3. Update the model record in database
-                                await updateAIModel(supabase, currentModelId, {
-                                  download_url: publicUrl,
-                                  metadata: {
-                                    rotation: data.rotation,
-                                    scale: data.scale,
-                                    optimized: data.optimized,
-                                    saved_at: new Date().toISOString()
-                                  }
-                                });
-
-                                // 4. Update local state
-                                setCurrentGlbUrl(publicUrl);
-                                setModelViewerUrl(publicUrl);
-
-                                // 5. Reload models list
-                                await reloadModels();
-
-                                toast({
-                                  title: t('ai.modelSaved') || 'Model Saved',
-                                  description: t('ai.modelSavedDescription') || 'Your model has been saved with current transformations.',
-                                });
-                              } catch (error) {
-                                console.error('[AI] Failed to save model:', error);
-                                toast({
-                                  title: t('ai.modelSaveFailed') || 'Save Failed',
-                                  description: error instanceof Error ? error.message : 'Failed to save model',
-                                  variant: 'destructive'
-                                });
-                              }
-                            }}
+                            onSave={handleModelSave}
                           />
                         </Suspense>
 
@@ -1607,14 +1678,6 @@ const AI = () => {
                                                      model.thumbnail_url?.includes('localhost') ||
                                                      model.thumbnail_url?.includes('127.0.0.1');
 
-                      // 디버깅용 로그
-                      console.log('[AI] Model archive item:', {
-                        name: model.model_name,
-                        thumbnail_url: model.thumbnail_url,
-                        isThumbnailSupabaseUrl,
-                        download_url: model.download_url
-                      });
-
                       return {
                         id: model.id,
                         name: model.model_name,
@@ -1625,16 +1688,16 @@ const AI = () => {
                       };
                     })
                   }
-                  onSelect={async (item: { _originalModel?: AIGeneratedModel; download_url?: string; name?: string }) => {
-                    const model = item._originalModel as AIGeneratedModel;
+                  onSelect={async (item: { id: string | number; _originalModel?: AIGeneratedModel; download_url?: string; name?: string }) => {
+                    const model = item._originalModel;
 
-                    if (item.download_url) {
+                    if (item.download_url && model) {
                       console.log('[AI] ===== 모델 아카이브에서 모델 선택됨 =====');
                       console.log('[AI] 모델명:', item.name);
                       console.log('[AI] 모델 ID:', model.id);
                       console.log('[AI] GLB URL:', model.download_url);
                       console.log('[AI] STL URL:', model.stl_download_url);
-                      console.log('[AI] GCode URL:', model.gcode_download_url);
+                      console.log('[AI] GCode URL:', model.gcode_url);
 
                       // 모델 ID 설정
                       setCurrentModelId(model.id);

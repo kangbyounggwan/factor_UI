@@ -1,9 +1,9 @@
 // 3D 모델 뷰어 담당 컴포넌트
 //
-import { Canvas, useLoader } from "@react-three/fiber";
+import { Canvas, useLoader, useThree } from "@react-three/fiber";
 import { OrbitControls, Grid, useGLTF, GizmoHelper, GizmoViewport } from "@react-three/drei";
-import { Suspense, useMemo, useLayoutEffect, useRef, useState } from "react";
-import { Box3, Group, Vector3, Object3D, BufferGeometry, BufferAttribute, Mesh, SkinnedMesh } from "three";
+import { Suspense, useMemo, useLayoutEffect, useRef, useState, useEffect } from "react";
+import { Box3, Group, Vector3, Object3D, BufferGeometry, BufferAttribute, Mesh, SkinnedMesh, Matrix4, Euler } from "three";
 import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { SimplifyModifier } from "three/examples/jsm/modifiers/SimplifyModifier.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
@@ -11,6 +11,8 @@ import { STLExporter } from "three/examples/jsm/exporters/STLExporter.js";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useTranslation } from "react-i18next";
+import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "@shared/integrations/supabase/client";
 
 interface ModelViewerProps {
   className?: string;
@@ -119,6 +121,7 @@ function optimizeObject3D(root: Object3D, opt: OptimizeOptions): void {
 
 function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, onReady }: { url: string; scale?: number; version?: number; rotation?: [number, number, number]; onSize?: (scaled: Size3, base?: Size3) => void; onReady?: (group: Group, scene: Object3D) => void }) {
   const group = useRef<Group>(null);
+  const { camera, controls } = useThree();
 
   // useGLTF는 항상 호출되어야 함 (React Hooks 규칙)
   // 유효하지 않은 URL은 에러를 발생시킬 수 있으므로, 상위에서 유효성 검증 후 렌더링해야 함
@@ -132,12 +135,20 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
     }
 
     try {
-      // 모델의 바운딩 박스를 계산해 바닥(z=0)에 접지되도록 오프셋 적용 (Z-up)
+      // 모델의 바운딩 박스를 계산해 원점(0,0,0)에 중심을 맞춤
       const box = new Box3().setFromObject(group.current);
-      if (!isFinite(box.min.z) || !isFinite(box.max.z)) return;
-      const zOffset = box.min.z; // 바닥이 z=0이 되도록
-      // 수평(XY) 중앙 정렬은 유지(요청사항은 바닥 접지만)
-      group.current.position.z -= zOffset;
+      if (!isFinite(box.min.x) || !isFinite(box.max.x) ||
+          !isFinite(box.min.y) || !isFinite(box.max.y) ||
+          !isFinite(box.min.z) || !isFinite(box.max.z)) return;
+
+      // 바운딩 박스의 중심 계산
+      const center = new Vector3();
+      box.getCenter(center);
+
+      // 모델을 원점으로 이동 (바닥은 Z=0에 맞춤)
+      group.current.position.x -= center.x;
+      group.current.position.y -= center.y;
+      group.current.position.z -= box.min.z; // 바닥이 Z=0이 되도록
 
       // 크기(mm) 계산 및 보고 (현재 scale 적용된 상태로 계산됨)
       const scaledSize = new Vector3();
@@ -148,11 +159,49 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
       const baseSizeVec = new Vector3();
       baseBox.getSize(baseSizeVec);
       onSize?.({ x: scaledSize.x, y: scaledSize.y, z: scaledSize.z }, { x: baseSizeVec.x, y: baseSizeVec.y, z: baseSizeVec.z });
+
+      // 카메라를 모델에 맞춤 - 모델이 로드될 때마다 초기화
+      if (controls && 'fov' in camera) {
+        // 모델 크기에 따라 카메라 거리 자동 조정
+        const maxDim = Math.max(scaledSize.x, scaledSize.y, scaledSize.z);
+        const fov = (camera as any).fov * (Math.PI / 180);
+        let cameraDistance = Math.abs(maxDim / Math.tan(fov / 2)) * 1.2; // 1.2배 여유
+
+        // 최소 거리 보장
+        cameraDistance = Math.max(cameraDistance, maxDim * 2);
+
+        // OrbitControls의 target을 모델 중심(높이의 중간)으로 설정
+        const modelCenterZ = scaledSize.z / 2;
+        const targetPosition = new Vector3(0, 0, modelCenterZ);
+        (controls as any).target.copy(targetPosition);
+
+        // 카메라를 등각 뷰 위치에 배치
+        const angleXY = Math.PI / 4; // 45도
+        const angleZ = Math.PI / 6;   // 30도 위에서
+
+        camera.position.set(
+          cameraDistance * Math.cos(angleXY) * Math.cos(angleZ),
+          cameraDistance * Math.sin(angleXY) * Math.cos(angleZ),
+          modelCenterZ + cameraDistance * Math.sin(angleZ)
+        );
+
+        camera.lookAt(targetPosition);
+        camera.updateProjectionMatrix();
+        (controls as any).update();
+
+        console.log('[ModelViewer] Camera adjusted:', {
+          modelSize: { x: scaledSize.x, y: scaledSize.y, z: scaledSize.z },
+          cameraDistance,
+          cameraPosition: camera.position,
+          target: targetPosition
+        });
+      }
+
       onReady?.(group.current, scene);
     } catch (error) {
       console.error('[ModelViewer] Error in GLBModel layout effect:', error);
     }
-  }, [scene, scale, version, url, onSize, onReady]);
+  }, [scene, scale, version, url, onSize, onReady, camera, controls]);
 
   // scene이 없으면 아무것도 렌더링하지 않음
   if (!scene) {
@@ -172,6 +221,7 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
 // STL 로더 (Z-up 접지 및 크기 보고)
 function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: string; scale?: number; version?: number; onSize?: (scaled: Size3, base?: Size3) => void; onReady?: (group: Group) => void }) {
   const group = useRef<Group>(null);
+  const { camera, controls } = useThree();
 
   // useLoader는 항상 호출되어야 함 (React Hooks 규칙)
   // 유효하지 않은 URL은 에러를 발생시킬 수 있으므로, 상위에서 유효성 검증 후 렌더링해야 함
@@ -190,9 +240,18 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
       geometry.computeBoundingSphere();
 
       const box = new Box3().setFromObject(group.current);
-      if (!isFinite(box.min.z) || !isFinite(box.max.z)) return;
-      const zOffset = box.min.z;
-      group.current.position.z -= zOffset;
+      if (!isFinite(box.min.x) || !isFinite(box.max.x) ||
+          !isFinite(box.min.y) || !isFinite(box.max.y) ||
+          !isFinite(box.min.z) || !isFinite(box.max.z)) return;
+
+      // 바운딩 박스의 중심 계산
+      const center = new Vector3();
+      box.getCenter(center);
+
+      // 모델을 원점으로 이동 (바닥은 Z=0에 맞춤)
+      group.current.position.x -= center.x;
+      group.current.position.y -= center.y;
+      group.current.position.z -= box.min.z; // 바닥이 Z=0이 되도록
 
       const scaledSizeVec = new Vector3();
       box.getSize(scaledSizeVec);
@@ -201,11 +260,49 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
       const baseSizeVec = new Vector3();
       baseBox.getSize(baseSizeVec);
       onSize?.({ x: scaledSizeVec.x, y: scaledSizeVec.y, z: scaledSizeVec.z }, { x: baseSizeVec.x, y: baseSizeVec.y, z: baseSizeVec.z });
+
+      // 카메라를 모델에 맞춤 - 모델이 로드될 때마다 초기화
+      if (controls && 'fov' in camera) {
+        // 모델 크기에 따라 카메라 거리 자동 조정
+        const maxDim = Math.max(scaledSizeVec.x, scaledSizeVec.y, scaledSizeVec.z);
+        const fov = (camera as any).fov * (Math.PI / 180);
+        let cameraDistance = Math.abs(maxDim / Math.tan(fov / 2)) * 1.2; // 1.2배 여유
+
+        // 최소 거리 보장
+        cameraDistance = Math.max(cameraDistance, maxDim * 2);
+
+        // OrbitControls의 target을 모델 중심(높이의 중간)으로 설정
+        const modelCenterZ = scaledSizeVec.z / 2;
+        const targetPosition = new Vector3(0, 0, modelCenterZ);
+        (controls as any).target.copy(targetPosition);
+
+        // 카메라를 등각 뷰 위치에 배치
+        const angleXY = Math.PI / 4; // 45도
+        const angleZ = Math.PI / 6;   // 30도 위에서
+
+        camera.position.set(
+          cameraDistance * Math.cos(angleXY) * Math.cos(angleZ),
+          cameraDistance * Math.sin(angleXY) * Math.cos(angleZ),
+          modelCenterZ + cameraDistance * Math.sin(angleZ)
+        );
+
+        camera.lookAt(targetPosition);
+        camera.updateProjectionMatrix();
+        (controls as any).update();
+
+        console.log('[ModelViewer] Camera adjusted:', {
+          modelSize: { x: scaledSizeVec.x, y: scaledSizeVec.y, z: scaledSizeVec.z },
+          cameraDistance,
+          cameraPosition: camera.position,
+          target: targetPosition
+        });
+      }
+
       onReady?.(group.current);
     } catch (error) {
       console.error('[ModelViewer] Error in STLModel layout effect:', error);
     }
-  }, [geometry, scale, version, url, onSize, onReady]);
+  }, [geometry, scale, version, url, onSize, onReady, camera, controls]);
 
   // geometry가 없으면 아무것도 렌더링하지 않음
   if (!geometry) {
@@ -223,6 +320,7 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
 
 export default function ModelViewer({ className, height, showDemo = false, placeholderMessage, modelUrl, stlUrl, modelScale = 1, enableRotationControls = false, modelId, onSave }: ModelViewerProps) {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const style: React.CSSProperties = { width: '100%' };
   if (height !== undefined) {
     style.height = typeof height === 'number' ? `${height}px` : height;
@@ -243,6 +341,43 @@ export default function ModelViewer({ className, height, showDemo = false, place
 
   // 사용자 회전 컨트롤
   const [userRotation, setUserRotation] = useState<[number, number, number]>([0, 0, 0]);
+
+  // DB 저장된 변환값 로드 (새로고침/초기 렌더 시 적용)
+  useEffect(() => {
+    if (!modelId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('ai_generated_models')
+          .select('generation_metadata')
+          .eq('id', modelId)
+          .single();
+        if (cancelled || error || !data) return;
+
+        // generation_metadata에서 저장된 변환 정보 읽기
+        const saved: any = (data as any)?.generation_metadata;
+        if (saved) {
+          // 스케일과 회전 모두 복원하지 않음 - 이미 GLB에 베이킹되어 있음
+          // if (Array.isArray(saved.rotation) && saved.rotation.length === 3) {
+          //   const [rx, ry, rz] = saved.rotation.map((v: number) => (typeof v === 'number' && isFinite(v) ? v : 0)) as [number, number, number];
+          //   setUserRotation([rx, ry, rz]);
+          // }
+          // if (typeof saved.scale === 'number' && isFinite(saved.scale)) {
+          //   setUniformScale(saved.scale);
+          // }
+
+          // saved_at이 있으면 스케일과 회전이 베이킹된 모델임을 표시
+          if (saved.saved_at) {
+            console.log('[ModelViewer] Loaded baked model (scale and rotation already applied), saved at:', saved.saved_at);
+          }
+        }
+      } catch (e) {
+        console.error('[ModelViewer] Failed to load saved transform:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [modelId]);
 
   // stlUrl이 제공되면 modelUrl보다 우선 사용
   const urlToUse = stlUrl || modelUrl;
@@ -510,29 +645,48 @@ export default function ModelViewer({ className, height, showDemo = false, place
               <AccordionContent className="pb-3 space-y-2">
                 <button
                   onClick={async () => {
-                    if (!modelRoot) return;
+                    console.log('[ModelViewer] Save button clicked');
+                    console.log('[ModelViewer] onSave callback exists?', typeof onSave === 'function');
+
+                    if (!modelRoot) {
+                      toast({
+                        title: t('modelViewer.saveFailed') || '저장 불가',
+                        description: t('modelViewer.modelNotLoaded') || '모델이 로드되지 않았습니다.',
+                        variant: 'destructive'
+                      });
+                      return;
+                    }
                     try {
-                      // 회전과 스케일이 적용된 복사본 생성
+                      // 스케일과 회전을 모두 GLB에 베이킹
                       const exportGroup = new Group();
                       const clonedModel = modelRoot.clone(true);
 
-                      // 사용자 회전 적용
-                      clonedModel.rotation.set(userRotation[0], userRotation[1], userRotation[2]);
-
-                      // 스케일 적용
+                      // 스케일과 회전 적용
                       clonedModel.scale.set(uniformScale, uniformScale, uniformScale);
-
-                      // Matrix를 업데이트하여 변환을 적용
+                      clonedModel.rotation.set(userRotation[0], userRotation[1], userRotation[2]);
                       clonedModel.updateMatrixWorld(true);
 
-                      // 모든 메시에 변환을 베이킹
+                      // 모든 메시에 스케일과 회전 베이킹
                       clonedModel.traverse((child) => {
                         if ((child as Mesh).isMesh) {
                           const mesh = child as Mesh;
                           if (mesh.geometry) {
-                            // Geometry를 복제하고 변환 적용
+                            // Geometry를 복제
                             const geometry = mesh.geometry.clone();
-                            geometry.applyMatrix4(mesh.matrixWorld);
+
+                            // 회전 행렬 생성
+                            const rotationMatrix = new Matrix4();
+                            rotationMatrix.makeRotationFromEuler(new Euler(userRotation[0], userRotation[1], userRotation[2]));
+
+                            // 스케일 행렬 생성
+                            const scaleMatrix = new Matrix4();
+                            scaleMatrix.makeScale(uniformScale, uniformScale, uniformScale);
+
+                            // 변환 적용: 기존 mesh matrix → rotation → scale
+                            geometry.applyMatrix4(mesh.matrix);
+                            geometry.applyMatrix4(rotationMatrix);
+                            geometry.applyMatrix4(scaleMatrix);
+
                             mesh.geometry = geometry;
 
                             // 변환을 리셋
@@ -544,7 +698,7 @@ export default function ModelViewer({ className, height, showDemo = false, place
                         }
                       });
 
-                      // exportGroup 변환도 리셋
+                      // clonedModel 변환도 리셋
                       clonedModel.position.set(0, 0, 0);
                       clonedModel.rotation.set(0, 0, 0);
                       clonedModel.scale.set(1, 1, 1);
@@ -571,6 +725,11 @@ export default function ModelViewer({ className, height, showDemo = false, place
                               });
                               console.log('[ModelViewer] Model saved to DB successfully');
                             } catch (error) {
+                              toast({
+                                title: t('modelViewer.saveFailed') || '저장 실패',
+                                description: error instanceof Error ? error.message : '모델 저장에 실패했습니다.',
+                                variant: 'destructive'
+                              });
                               console.error('[ModelViewer] Save to DB failed:', error);
                             }
                           } else {
@@ -578,15 +737,24 @@ export default function ModelViewer({ className, height, showDemo = false, place
                           }
                         },
                         (error) => {
+                          toast({
+                            title: t('modelViewer.saveFailed') || '저장 실패',
+                            description: t('modelViewer.exportFailed') || 'GLB 내보내기에 실패했습니다.',
+                            variant: 'destructive'
+                          });
                           console.error('[ModelViewer] GLB export failed:', error);
                         },
                         { binary: true }
                       );
                     } catch (error) {
+                      toast({
+                        title: t('modelViewer.saveFailed') || '저장 실패',
+                        description: error instanceof Error ? error.message : '예상치 못한 오류가 발생했습니다.',
+                        variant: 'destructive'
+                      });
                       console.error('[ModelViewer] Save failed:', error);
                     }
                   }}
-                  disabled={!modelRoot}
                   style={{
                     width: '100%',
                     padding: '8px 12px',

@@ -7,6 +7,7 @@ import type {
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
+const TOAST_AUTO_DISMISS_DELAY = 3000 // 3초 후 자동으로 사라짐
 
 type ToasterToast = ToastProps & {
   id: string
@@ -160,6 +161,11 @@ function toast({ ...props }: Toast) {
       },
     },
   })
+
+  // 3초 후 자동으로 dismiss
+  setTimeout(() => {
+    dismiss()
+  }, TOAST_AUTO_DISMISS_DELAY)
 
   return {
     id: id,

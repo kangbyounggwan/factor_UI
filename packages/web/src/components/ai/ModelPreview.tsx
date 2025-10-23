@@ -32,6 +32,14 @@ interface ModelPreviewProps {
     };
     error?: string;
   };
+  modelId?: string;
+  onSave?: (data: {
+    rotation: [number, number, number];
+    scale: number;
+    optimized: boolean;
+    blob: Blob;
+    format: 'stl' | 'glb';
+  }) => Promise<void>;
 }
 
 export default function ModelPreview({
@@ -42,6 +50,8 @@ export default function ModelPreview({
   progress = 0,
   progressStatus = '',
   workflowState,
+  modelId,
+  onSave,
 }: ModelPreviewProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -136,6 +146,8 @@ export default function ModelPreview({
                 modelUrl={modelUrl}
                 placeholderMessage={t('ai.generatePrompt')}
                 enableRotationControls={true}
+                modelId={modelId}
+                onSave={onSave}
               />
             </Suspense>
 

@@ -350,8 +350,8 @@ export function extractThumbnailUrl(result: AIModelResponse): string | null {
   const thumbnailUrl =
     data.thumbnail_download_url ||
     data.thumbnail_url ||
-    data.raw?.remesh?.thumbnail_url ||
-    data.raw?.image_to_3d?.thumbnail_url ||
+    (data.raw as any)?.remesh?.thumbnail_url ||
+    (data.raw as any)?.image_to_3d?.thumbnail_url ||
     null;
 
   if (thumbnailUrl) {

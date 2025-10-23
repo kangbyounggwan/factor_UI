@@ -58,6 +58,9 @@ export interface AIGeneratedModel {
   stl_storage_path?: string;
   stl_download_url?: string;
 
+  // GCode 파일 정보
+  gcode_url?: string;
+
   // 메타데이터
   model_dimensions?: ModelDimensions;
   generation_metadata?: GenerationMetadata;

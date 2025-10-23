@@ -117,7 +117,7 @@ export async function downloadAndUploadSTL(
   console.log('[aiStorage] Downloaded STL size:', arrayBuffer.byteLength, 'bytes');
 
   // 올바른 MIME type으로 새 Blob 생성
-  const stlBlob = new Blob([arrayBuffer], { type: 'model/stl' });
+  const stlBlob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
   console.log('[aiStorage] Created STL Blob with MIME type:', stlBlob.type);
 
   // Supabase Storage에 업로드
@@ -126,7 +126,7 @@ export async function downloadAndUploadSTL(
   const { data, error } = await supabase.storage
     .from(BUCKET_NAME)
     .upload(path, stlBlob, {
-      contentType: 'model/stl',
+      contentType: 'application/octet-stream',
       cacheControl: '3600',
       upsert: true
     });
