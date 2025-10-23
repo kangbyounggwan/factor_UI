@@ -27,7 +27,7 @@ export const Header = () => {
   // 동적 네비게이션 메뉴
   const navigation = [
     { name: t('nav.dashboard'), href: "/dashboard", icon: Monitor },
-    { name: t('nav.ai'), href: "/ai", icon: Layers },
+    { name: t('nav.ai'), href: "/create", icon: Layers },
     { name: t('nav.settings'), href: "/settings", icon: Settings },
   ];
 

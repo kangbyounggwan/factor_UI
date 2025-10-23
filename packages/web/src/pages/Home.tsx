@@ -185,7 +185,7 @@ const Home = () => {
 
           <div className="text-center">
             <Button asChild size="lg" className="text-lg px-8 py-6">
-              <Link to="/ai">
+              <Link to="/create">
                 <Layers className="h-5 w-5 mr-2" />
                 {t('home.tryAIStudio')}
               </Link>

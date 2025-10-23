@@ -138,7 +138,7 @@ const AppContent = () => {
             } />
             <Route path="/subscription" element={<Subscription />} />
             <Route path="/supported-printers" element={<SupportedPrinters />} />
-            <Route path="/ai" element={
+            <Route path="/create" element={
               <ProtectedRoute>
                 <AI />
               </ProtectedRoute>

@@ -492,6 +492,8 @@ const AI = () => {
           machine_width: { default_value: 220 },
           machine_depth: { default_value: 220 },
           machine_height: { default_value: 250 },
+          machine_extruder_count: { default_value: 1 },
+          mesh_rotation_matrix: { default_value: "[[1,0,0], [0,1,0], [0,0,1]]" },
         },
       };
 
