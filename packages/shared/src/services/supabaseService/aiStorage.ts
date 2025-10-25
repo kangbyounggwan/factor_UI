@@ -3,6 +3,64 @@ import { SupabaseClient } from '@supabase/supabase-js';
 const BUCKET_NAME = 'ai-models';
 
 /**
+ * GCode 슬라이싱 메타데이터 타입
+ */
+export interface GCodeMetadata {
+  print_time_formatted?: string;
+  print_time_seconds?: number;
+  filament_used_m?: number;
+  filament_weight_g?: number;
+  filament_cost?: number;
+  layer_count?: number;
+  layer_height?: number;
+  bounding_box?: {
+    min_x: number;
+    max_x: number;
+    min_y: number;
+    max_y: number;
+    min_z: number;
+    max_z: number;
+    size_x?: number;
+    size_y?: number;
+    size_z?: number;
+  };
+  nozzle_temp?: number;
+  bed_temp?: number;
+  printer_name?: string;
+}
+
+/**
+ * print_time_formatted 문자열을 초 단위로 변환
+ * @param timeStr - 예: "2h 30m 15s", "1h 5m", "45m 30s", "30s"
+ * @returns 초 단위 숫자, 파싱 실패 시 null
+ */
+function parseFormattedTimeToSeconds(timeStr: string | null | undefined): number | null {
+  if (!timeStr) return null;
+
+  let totalSeconds = 0;
+
+  // 시간 추출 (h)
+  const hoursMatch = timeStr.match(/(\d+)\s*h/);
+  if (hoursMatch) {
+    totalSeconds += parseInt(hoursMatch[1]) * 3600;
+  }
+
+  // 분 추출 (m)
+  const minutesMatch = timeStr.match(/(\d+)\s*m/);
+  if (minutesMatch) {
+    totalSeconds += parseInt(minutesMatch[1]) * 60;
+  }
+
+  // 초 추출 (s)
+  const secondsMatch = timeStr.match(/(\d+)\s*s/);
+  if (secondsMatch) {
+    totalSeconds += parseInt(secondsMatch[1]);
+  }
+
+  return totalSeconds > 0 ? totalSeconds : null;
+}
+
+/**
  * 원본 이미지를 Supabase Storage에 업로드
  */
 export async function uploadSourceImage(
@@ -93,7 +151,9 @@ export async function downloadAndUploadModel(
   console.log('[aiStorage] Created Blob with correct MIME type:', glbBlob.type);
 
   // Supabase Storage에 업로드
-  return await uploadGeneratedModel(supabase, userId, modelId, glbBlob);
+  const result = await uploadGeneratedModel(supabase, userId, modelId, glbBlob);
+  console.log('[aiStorage] GLB uploaded successfully:', result.publicUrl);
+  return result;
 }
 
 /**
@@ -137,11 +197,13 @@ export async function downloadAndUploadSTL(
     .from(BUCKET_NAME)
     .getPublicUrl(path);
 
-  return {
+  const result = {
     path: path,
     url: urlData.publicUrl,
     publicUrl: urlData.publicUrl
   };
+  console.log('[aiStorage] STL uploaded successfully:', result.publicUrl);
+  return result;
 }
 
 /**
@@ -369,44 +431,39 @@ export async function downloadAndUploadGCode(
   modelId: string,
   gcodeUrl: string,
   printerModelId?: string,
-  modelName?: string
-): Promise<{ path: string; publicUrl: string } | null> {
+  modelName?: string,
+  printerInfo?: {
+    manufacturer?: string;
+    series?: string;
+    model?: string;
+    printer_name?: string;
+  },
+  metadata?: GCodeMetadata
+): Promise<{ path: string; publicUrl: string; metadata?: GCodeMetadata } | null> {
   try {
     const GCODE_BUCKET = 'gcode-files';
 
     // 3D 모델명 폴더 내에 프린터별 GCode 파일 저장
-    // 경로: {userId}/{modelName}/{printerModelId}.gcode
+    // 경로: {userId}/{modelName}/{series}-{model}-{filename}.gcode
     const sanitizedModelName = (modelName || modelId).replace(/[^a-zA-Z0-9._-]/g, '_');
-    const filename = printerModelId
-      ? `${printerModelId}.gcode`
-      : 'default.gcode';
-    const path = `${userId}/${sanitizedModelName}/${filename}`;
 
-    console.log('[aiStorage] Checking if GCode already exists:', path);
-
-    // 1. 이미 저장된 GCode가 있는지 확인
-    const folderPath = `${userId}/${sanitizedModelName}`;
-    const { data: existingFiles } = await supabase.storage
-      .from(GCODE_BUCKET)
-      .list(folderPath, {
-        search: filename
-      });
-
-    if (existingFiles && existingFiles.length > 0) {
-      console.log('[aiStorage] GCode already exists in storage, using existing file');
-      const { data: urlData } = supabase.storage
-        .from(GCODE_BUCKET)
-        .getPublicUrl(path);
-
-      return {
-        path: path,
-        publicUrl: urlData.publicUrl
-      };
+    // 파일명 생성: {series}-{model}-{파일명}.gcode
+    let filename: string;
+    if (printerInfo?.series && printerInfo?.model) {
+      const sanitizedSeries = printerInfo.series.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const sanitizedModel = printerInfo.model.replace(/[^a-zA-Z0-9._-]/g, '_');
+      filename = `${sanitizedSeries}-${sanitizedModel}-${sanitizedModelName}.gcode`;
+    } else if (printerModelId) {
+      filename = `${printerModelId}.gcode`;
+    } else {
+      filename = 'default.gcode';
     }
 
-    console.log('[aiStorage] GCode not found in storage, downloading from AI server:', gcodeUrl);
+    const path = `${userId}/${sanitizedModelName}/${filename}`;
 
-    // 2. Python 서버에서 GCode 다운로드
+    console.log('[aiStorage] Downloading GCode from AI server:', gcodeUrl);
+
+    // 1. Python 서버에서 GCode 다운로드
     const response = await fetch(gcodeUrl);
     if (!response.ok) {
       throw new Error(`Failed to download GCode: ${response.status} ${response.statusText}`);
@@ -415,7 +472,7 @@ export async function downloadAndUploadGCode(
     const gcodeBlob = await response.blob();
     console.log('[aiStorage] GCode downloaded, size:', gcodeBlob.size, 'bytes');
 
-    // 3. Supabase Storage에 업로드
+    // 2. Supabase Storage에 업로드
     const { data, error } = await supabase.storage
       .from(GCODE_BUCKET)
       .upload(path, gcodeBlob, {
@@ -429,16 +486,64 @@ export async function downloadAndUploadGCode(
       throw error;
     }
 
-    // 4. Public URL 생성
-    const { data: urlData } = supabase.storage
+    // 3. Public URL 생성
+    const { data: urlData} = supabase.storage
       .from(GCODE_BUCKET)
       .getPublicUrl(path);
 
     console.log('[aiStorage] GCode uploaded successfully:', urlData.publicUrl);
 
+    // 4. 메타데이터를 DB에 저장
+    if (printerModelId && metadata) {
+      // print_time_formatted를 초 단위로 변환
+      const printTimeSeconds = parseFormattedTimeToSeconds(metadata.print_time_formatted);
+
+      console.log('[aiStorage] Saving metadata to DB:', {
+        model_id: modelId,
+        printer_id: printerModelId,
+        metadata: metadata,
+        print_time_seconds: printTimeSeconds
+      });
+
+      const { data: upsertData, error: metadataError } = await supabase
+        .from('gcode_files')
+        .upsert({
+          user_id: userId,
+          model_id: modelId,
+          printer_id: printerModelId,
+          filename: filename,
+          file_path: path,
+          file_size: gcodeBlob.size,
+          manufacturer: printerInfo?.manufacturer,
+          series: printerInfo?.series,
+          printer_model_name: printerInfo?.model,
+          printer_name: printerInfo?.printer_name,
+          print_time_formatted: metadata.print_time_formatted,
+          print_time_seconds: printTimeSeconds,
+          filament_used_m: metadata.filament_used_m,
+          filament_weight_g: metadata.filament_weight_g,
+          filament_cost: metadata.filament_cost,
+          layer_count: metadata.layer_count,
+          layer_height: metadata.layer_height,
+          bounding_box: metadata.bounding_box,
+          nozzle_temp: metadata.nozzle_temp,
+          bed_temp: metadata.bed_temp,
+          status: 'uploaded'
+        })
+        .select();
+
+      if (metadataError) {
+        console.error('[aiStorage] Failed to save metadata to DB:', metadataError);
+        console.error('[aiStorage] Error details:', JSON.stringify(metadataError, null, 2));
+      } else {
+        console.log('[aiStorage] Metadata saved to DB successfully:', upsertData);
+      }
+    }
+
     return {
       path: path,
-      publicUrl: urlData.publicUrl
+      publicUrl: urlData.publicUrl,
+      metadata: metadata
     };
   } catch (error) {
     console.error('[aiStorage] Failed to download and upload GCode:', error);

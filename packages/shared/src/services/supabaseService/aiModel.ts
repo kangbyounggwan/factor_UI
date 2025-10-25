@@ -33,9 +33,9 @@ export async function createAIModel(
       generation_type: data.generation_type,
       prompt: data.prompt,
       source_image_url: data.source_image_url,
-      ai_model: data.ai_model,
-      quality: data.quality,
-      style: data.style,
+      art_style: data.art_style,
+      target_polycount: data.target_polycount,
+      symmetry_mode: data.symmetry_mode,
       model_name: data.model_name,
       file_format: 'glb',
       storage_path: '', // 초기에는 빈 값, 파일 업로드 후 업데이트

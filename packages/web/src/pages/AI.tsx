@@ -88,10 +88,8 @@ interface PrintSettings {
   adhesion_type: 'none' | 'skirt' | 'brim' | 'raft';
 }
 
-type Quality = 'low' | 'medium' | 'high';
-type Model = 'flux-kontext' | 'gpt-4';
-type Style = 'realistic' | 'abstract';
-type ImageDepth = 'auto' | 'manual';
+type SymmetryMode = 'off' | 'auto' | 'on';
+type ArtStyle = 'realistic' | 'sculpture';
 import {
   Layers,
   Upload,
@@ -129,7 +127,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { onDashStatusMessage } from "@shared/services/mqttService";
-import { buildCommon, postTextTo3D, postImageTo3D, extractGLBUrl, extractSTLUrl, extractMetadata, extractThumbnailUrl, pollTaskUntilComplete, AIModelResponse, uploadSTLAndSlice, SlicingSettings, PrinterDefinition } from "@/lib/aiService";
+import { buildCommon, postTextTo3D, postImageTo3D, extractGLBUrl, extractSTLUrl, extractMetadata, extractThumbnailUrl, pollTaskUntilComplete, AIModelResponse, uploadSTLAndSlice, SlicingSettings, PrinterDefinition } from "@shared/services/aiService";
 import { createAIModel, updateAIModel, listAIModels, deleteAIModel } from "@shared/services/supabaseService/aiModel";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useAIImageUpload } from "@shared/hooks/useAIImageUpload";
@@ -180,12 +178,13 @@ const AI = () => {
   // 아카이브 뷰 모드 (RAW / 3D 모델)
   const [archiveViewMode, setArchiveViewMode] = useState<'raw' | '3d'>('3d');
   // Text → 3D 설정 상태
-  const [textQuality, setTextQuality] = useState<Quality>('medium');
-  const [textModel, setTextModel] = useState<Model>('flux-kontext');
-  const [textStyle, setTextStyle] = useState<Style>('realistic');
+  const [textSymmetryMode, setTextSymmetryMode] = useState<'off' | 'auto' | 'on'>('auto');
+  const [textArtStyle, setTextArtStyle] = useState<'realistic' | 'sculpture'>('realistic');
+  const [textTargetPolycount, setTextTargetPolycount] = useState<number>(30000);
   // Image → 3D 설정 상태
-  const [imageDepth, setImageDepth] = useState<ImageDepth>('auto');
-  const [imageQuality, setImageQuality] = useState<Quality>('high');
+  const [imageSymmetryMode, setImageSymmetryMode] = useState<SymmetryMode>('auto');
+  const [imageArtStyle, setImageArtStyle] = useState<ArtStyle>('realistic');
+  const [imageTargetPolycount, setImageTargetPolycount] = useState<number>(30000);
   const totalPrinters = printers.length;
   const connectedCount = printers.filter((p) => p.connected).length;
   const printingCount = printers.filter((p) => p.state === 'printing').length;
@@ -572,6 +571,9 @@ const AI = () => {
       setSelectedPrinter(printerToConfirm);
       setIsSlicing(true);
 
+      // 출력 설정 모달 먼저 열기 (로딩 상태 표시)
+      setPrintDialogOpen(true);
+
       toast({
         title: '슬라이싱 시작',
         description: `${printerToConfirm.name} 프린터로 슬라이싱을 시작합니다...`,
@@ -616,13 +618,14 @@ const AI = () => {
 
       // 3. manufacturing_printers에서 프린터 정보 조회
       let printerFilename = printerToConfirm.model || printerToConfirm.name;
+      let printerInfoForGCode: { manufacturer?: string; series?: string; model?: string; printer_name?: string } = {};
 
       if (printerToConfirm.manufacture_id) {
         try {
           console.log('[AI] Fetching printer info from manufacturing_printers:', printerToConfirm.manufacture_id);
           const { data: manufacturingPrinter, error } = await supabase
             .from('manufacturing_printers')
-            .select('filename, build_volume')
+            .select('filename, build_volume, manufacturer, series, display_name')
             .eq('id', printerToConfirm.manufacture_id)
             .single();
 
@@ -633,6 +636,14 @@ const AI = () => {
             // .def.json 제거
             printerFilename = manufacturingPrinter.filename.replace('.def.json', '');
             console.log('[AI] Using printer filename:', printerFilename);
+
+            // GCode 파일명에 사용할 프린터 정보 저장
+            printerInfoForGCode = {
+              manufacturer: manufacturingPrinter.manufacturer,
+              series: manufacturingPrinter.series,
+              model: manufacturingPrinter.display_name,
+              printer_name: printerToConfirm.name  // 현재 선택된 프린터 이름
+            };
           }
         } catch (error) {
           console.warn('[AI] Error fetching manufacturing printer:', error);
@@ -653,7 +664,68 @@ const AI = () => {
 
       console.log('[AI] Printer definition prepared:', printerDefinition);
 
-      // 4. 슬라이싱 API 호출
+      // 4. DB에서 캐시된 GCode 확인 (API 호출 전)
+      if (currentModelId && printerToConfirm.manufacture_id) {
+        console.log('[AI] ========================================');
+        console.log('[AI] 🔍 Checking for cached GCode in DB...');
+        console.log('[AI] - modelId:', currentModelId);
+        console.log('[AI] - printerId:', printerToConfirm.manufacture_id);
+        console.log('[AI] ========================================');
+
+        const { data: existingGcode, error: gcodeError } = await supabase
+          .from('gcode_files')
+          .select('*')
+          .eq('model_id', currentModelId)
+          .eq('printer_id', printerToConfirm.manufacture_id)
+          .single();
+
+        if (existingGcode && !gcodeError) {
+          console.log('[AI] ✅ Cached GCode found! Skipping API call...');
+          console.log('[AI] - file_path:', existingGcode.file_path);
+          console.log('[AI] - Created at:', existingGcode.created_at);
+
+          // Public URL 생성
+          const { data: urlData } = supabase.storage
+            .from('gcode-files')
+            .getPublicUrl(existingGcode.file_path);
+
+          // 캐시된 메타데이터를 UI에 표시
+          setGcodeInfo({
+            printTime: existingGcode.print_time_formatted,
+            filamentLength: existingGcode.filament_used_m ? `${existingGcode.filament_used_m.toFixed(2)}m` : undefined,
+            filamentWeight: existingGcode.filament_weight_g ? `${existingGcode.filament_weight_g.toFixed(1)}g` : undefined,
+            filamentCost: existingGcode.filament_cost ? `$${existingGcode.filament_cost.toFixed(2)}` : undefined,
+            layerCount: existingGcode.layer_count,
+            layerHeight: existingGcode.layer_height,
+            modelSize: existingGcode.bounding_box ? {
+              minX: existingGcode.bounding_box.min_x,
+              maxX: existingGcode.bounding_box.max_x,
+              minY: existingGcode.bounding_box.min_y,
+              maxY: existingGcode.bounding_box.max_y,
+              minZ: existingGcode.bounding_box.min_z,
+              maxZ: existingGcode.bounding_box.max_z,
+            } : undefined,
+            nozzleTemp: existingGcode.nozzle_temp,
+            bedTemp: existingGcode.bed_temp,
+            printerName: existingGcode.printer_name,
+          });
+
+          setCurrentGCodeUrl(urlData.publicUrl);
+          setIsSlicing(false);
+
+          console.log('[AI] ========================================');
+          console.log('[AI] ✅ Using cached GCode - No API call needed!');
+          console.log('[AI] ========================================');
+          return; // API 호출 없이 종료
+        } else {
+          console.log('[AI] ❌ No cached GCode found, proceeding with API call...');
+          if (gcodeError) {
+            console.log('[AI] - Error:', gcodeError.message);
+          }
+        }
+      }
+
+      // 5. 슬라이싱 API 호출
       const fileName = `model_${Date.now()}.${fileExtension}`;
       console.log('[AI] Uploading model and slicing...');
       console.log('[AI] - File name:', fileName);
@@ -758,16 +830,51 @@ const AI = () => {
           const currentModel = generatedModels.find(m => m.id === currentModelId);
           const modelName = currentModel?.model_name || currentModel?.prompt || currentModelId;
 
+          console.log('[AI] ========================================');
+          console.log('[AI] Uploading GCode with params:');
+          console.log('[AI] - modelId:', currentModelId);
+          console.log('[AI] - printerModelId:', printerToConfirm.manufacture_id);
+          console.log('[AI] - modelName:', modelName);
+          console.log('[AI] - printerInfo:', printerInfoForGCode);
+          console.log('[AI] - metadata:', slicingResult.data.gcode_metadata);
+          console.log('[AI] ========================================');
+
           const gcodeUploadResult = await downloadAndUploadGCode(
             supabase,
             user.id,
             currentModelId,
             gcodeUrl,
             printerToConfirm.manufacture_id,
-            modelName
+            modelName,
+            printerInfoForGCode,
+            slicingResult.data.gcode_metadata
           );
 
           if (gcodeUploadResult) {
+            // 캐시된 메타데이터가 있으면 사용
+            if (gcodeUploadResult.metadata) {
+              console.log('[AI] Using cached metadata from DB');
+              setGcodeInfo({
+                printTime: gcodeUploadResult.metadata.print_time_formatted,
+                filamentLength: gcodeUploadResult.metadata.filament_used_m ? `${gcodeUploadResult.metadata.filament_used_m.toFixed(2)}m` : undefined,
+                filamentWeight: gcodeUploadResult.metadata.filament_weight_g ? `${gcodeUploadResult.metadata.filament_weight_g.toFixed(1)}g` : undefined,
+                filamentCost: gcodeUploadResult.metadata.filament_cost ? `$${gcodeUploadResult.metadata.filament_cost.toFixed(2)}` : undefined,
+                layerCount: gcodeUploadResult.metadata.layer_count,
+                layerHeight: gcodeUploadResult.metadata.layer_height,
+                modelSize: gcodeUploadResult.metadata.bounding_box ? {
+                  minX: gcodeUploadResult.metadata.bounding_box.min_x,
+                  maxX: gcodeUploadResult.metadata.bounding_box.max_x,
+                  minY: gcodeUploadResult.metadata.bounding_box.min_y,
+                  maxY: gcodeUploadResult.metadata.bounding_box.max_y,
+                  minZ: gcodeUploadResult.metadata.bounding_box.min_z,
+                  maxZ: gcodeUploadResult.metadata.bounding_box.max_z,
+                } : undefined,
+                nozzleTemp: gcodeUploadResult.metadata.nozzle_temp,
+                bedTemp: gcodeUploadResult.metadata.bed_temp,
+                printerName: gcodeUploadResult.metadata.printer_name,
+              });
+            }
+
             // DB에 GCode URL 저장
             await updateAIModel(supabase, currentModelId, {
               gcode_url: gcodeUploadResult.publicUrl,
@@ -796,9 +903,6 @@ const AI = () => {
       });
 
       setIsSlicing(false);
-
-      // 7. 출력 설정 모달 열기
-      setPrintDialogOpen(true);
 
     } catch (error) {
       console.error('[AI] Slicing failed:', error);
@@ -963,6 +1067,13 @@ const AI = () => {
       const printerFilename = manufacturingPrinter.filename.replace('.def.json', '');
       const buildVolume = manufacturingPrinter.build_volume || { x: 220, y: 220, z: 250 };
 
+      // GCode 파일명에 사용할 프린터 정보 저장
+      const printerInfoForGCode = {
+        manufacturer: manufacturingPrinter.manufacturer,
+        series: manufacturingPrinter.series,
+        model: manufacturingPrinter.display_name
+      };
+
       // 프린터 정의 생성
       const printerDefinition: PrinterDefinition = {
         version: 2,
@@ -1033,10 +1144,58 @@ const AI = () => {
           currentModel.id,
           gcodeUrl,
           resliceModelId,
-          modelName
+          modelName,
+          printerInfoForGCode,
+          slicingResult.data.gcode_metadata
         );
         if (uploaded) {
           uploadedGcodeUrl = uploaded.publicUrl;
+
+          // 캐시된 메타데이터가 있으면 사용
+          if (uploaded.metadata) {
+            console.log('[AI] Using cached metadata from DB for reslice');
+            setGcodeInfo({
+              printTime: uploaded.metadata.print_time_formatted,
+              filamentLength: uploaded.metadata.filament_used_m ? `${uploaded.metadata.filament_used_m.toFixed(2)}m` : undefined,
+              filamentWeight: uploaded.metadata.filament_weight_g ? `${uploaded.metadata.filament_weight_g.toFixed(1)}g` : undefined,
+              filamentCost: uploaded.metadata.filament_cost ? `$${uploaded.metadata.filament_cost.toFixed(2)}` : undefined,
+              layerCount: uploaded.metadata.layer_count,
+              layerHeight: uploaded.metadata.layer_height,
+              modelSize: uploaded.metadata.bounding_box ? {
+                minX: uploaded.metadata.bounding_box.min_x,
+                maxX: uploaded.metadata.bounding_box.max_x,
+                minY: uploaded.metadata.bounding_box.min_y,
+                maxY: uploaded.metadata.bounding_box.max_y,
+                minZ: uploaded.metadata.bounding_box.min_z,
+                maxZ: uploaded.metadata.bounding_box.max_z,
+              } : undefined,
+              nozzleTemp: uploaded.metadata.nozzle_temp,
+              bedTemp: uploaded.metadata.bed_temp,
+              printerName: uploaded.metadata.printer_name,
+            });
+          } else if (slicingResult.data.gcode_metadata) {
+            // 새로 슬라이싱한 경우 서버 메타데이터 사용
+            const metadata = slicingResult.data.gcode_metadata;
+            setGcodeInfo({
+              printTime: metadata.print_time_formatted,
+              filamentLength: metadata.filament_used_m ? `${metadata.filament_used_m.toFixed(2)}m` : undefined,
+              filamentWeight: metadata.filament_weight_g ? `${metadata.filament_weight_g.toFixed(1)}g` : undefined,
+              filamentCost: metadata.filament_cost ? `$${metadata.filament_cost.toFixed(2)}` : undefined,
+              layerCount: metadata.layer_count,
+              layerHeight: metadata.layer_height,
+              modelSize: metadata.bounding_box ? {
+                minX: metadata.bounding_box.min_x,
+                maxX: metadata.bounding_box.max_x,
+                minY: metadata.bounding_box.min_y,
+                maxY: metadata.bounding_box.max_y,
+                minZ: metadata.bounding_box.min_z,
+                maxZ: metadata.bounding_box.max_z,
+              } : undefined,
+              nozzleTemp: metadata.nozzle_temp,
+              bedTemp: metadata.bed_temp,
+              printerName: metadata.printer_name,
+            });
+          }
         }
       }
 
@@ -1324,9 +1483,9 @@ const AI = () => {
         const dbModel = await createAIModel(supabase, {
           generation_type: 'text_to_3d',
           prompt: textPrompt,
-          ai_model: textModel,
-          quality: textQuality,
-          style: textStyle,
+          art_style: textArtStyle,
+          target_polycount: textTargetPolycount,
+          symmetry_mode: textSymmetryMode,
           model_name: `Text-to-3D: ${textPrompt.substring(0, 30)}...`,
         }, user.id);
 
@@ -1336,7 +1495,7 @@ const AI = () => {
         const payload = {
           task: 'text_to_3d',
           prompt: textPrompt,
-          ...buildCommon(textModel, textQuality, textStyle, user?.id),
+          ...buildCommon(textSymmetryMode, textArtStyle, textTargetPolycount, user?.id, 'web'),
         };
 
         // async_mode로 즉시 task_id 받기
@@ -1470,20 +1629,21 @@ const AI = () => {
         const dbModel = await createAIModel(supabase, {
           generation_type: 'image_to_3d',
           source_image_url: selected.storagePath || selected.url, // Supabase Storage 경로 또는 URL
-          quality: imageQuality,
+          art_style: imageArtStyle,
+          target_polycount: imageTargetPolycount,
+          symmetry_mode: imageSymmetryMode,
           model_name: `Image-to-3D: ${selected.name}`,
         }, user.id);
 
         dbModelId = dbModel.id;
 
         // 2. 이미지 → 3D API 호출 (async_mode=true)
-        const common = buildCommon('flux-kontext', imageQuality, undefined, user?.id);
-        const { model: _omitModel, ...meta } = { depth: imageDepth, ...common } as Record<string, unknown>;
+        const common = buildCommon(imageSymmetryMode, imageArtStyle, imageTargetPolycount, user?.id, 'web');
 
         const form = new FormData();
         form.append('task', 'image_to_3d');
         form.append('image_file', file, file.name);
-        form.append('json', JSON.stringify(meta));
+        form.append('json', JSON.stringify(common));
 
         // async_mode로 즉시 task_id 받기
         const initialResponse = await postImageTo3D(form, true); // async_mode=true
@@ -1660,14 +1820,14 @@ const AI = () => {
                   {/* 입력 영역 → TextTo3DForm */}
                   <TextTo3DForm
                     prompt={textPrompt}
-                    quality={textQuality}
-                    model={textModel}
-                    style={textStyle}
+                    symmetryMode={textSymmetryMode}
+                    artStyle={textArtStyle}
+                    targetPolycount={textTargetPolycount}
                     isProcessing={isProcessing}
                     onChangePrompt={setTextPrompt}
-                    onChangeQuality={setTextQuality}
-                    onChangeModel={setTextModel}
-                    onChangeStyle={setTextStyle}
+                    onChangeSymmetryMode={setTextSymmetryMode}
+                    onChangeArtStyle={setTextArtStyle}
+                    onChangeTargetPolycount={setTextTargetPolycount}
                     onSubmit={generateModel}
                   />
 
@@ -1691,8 +1851,9 @@ const AI = () => {
                   <ImageTo3DForm
                     files={uploadedFiles}
                     selectedId={selectedImageId}
-                    imageDepth={imageDepth}
-                    imageQuality={imageQuality}
+                    symmetryMode={imageSymmetryMode}
+                    artStyle={imageArtStyle}
+                    targetPolycount={imageTargetPolycount}
                     isProcessing={isProcessing}
                     hasExistingModel={selectedImageHasModel}
                     onDrop={handleDrop}
@@ -1700,8 +1861,9 @@ const AI = () => {
                     onFileChange={handleFileUpload}
                     onRemove={handleImageDelete}
                     onSelect={selectImage}
-                    onChangeDepth={setImageDepth}
-                    onChangeQuality={setImageQuality}
+                    onChangeSymmetryMode={setImageSymmetryMode}
+                    onChangeArtStyle={setImageArtStyle}
+                    onChangeTargetPolycount={setImageTargetPolycount}
                     onSubmit={generateModel}
                   />
 
@@ -2328,6 +2490,7 @@ const AI = () => {
                     className="w-full px-3 py-2 text-sm border rounded-md bg-background"
                     value={resliceManufacturer}
                     onChange={(e) => setResliceManufacturer(e.target.value)}
+                    disabled={isSlicing}
                   >
                     <option value="">{t('ai.selectOption')}</option>
                     {manufacturers.map(m => (
@@ -2342,7 +2505,7 @@ const AI = () => {
                     className="w-full px-3 py-2 text-sm border rounded-md bg-background"
                     value={resliceSeries}
                     onChange={(e) => setResliceSeries(e.target.value)}
-                    disabled={!resliceManufacturer}
+                    disabled={isSlicing || !resliceManufacturer}
                   >
                     <option value="">{t('ai.selectOption')}</option>
                     {seriesList.map(s => (
@@ -2352,12 +2515,12 @@ const AI = () => {
                 </div>
 
                 <div className="flex-1 min-w-[200px]">
-                  <label className="text-xs text-muted-foreground block mb-1.5">{t('ai.model')}</label>
+                  <label className="text-xs text-muted-foreground block mb-1.5">{t('ai.printerModel')}</label>
                   <select
                     className="w-full px-3 py-2 text-sm border rounded-md bg-background"
                     value={resliceModelId}
                     onChange={(e) => setResliceModelId(e.target.value)}
-                    disabled={!resliceSeries}
+                    disabled={isSlicing || !resliceSeries}
                   >
                     <option value="">{t('ai.selectOption')}</option>
                     {modelsList.map(model => (
@@ -2382,7 +2545,18 @@ const AI = () => {
             </div>
 
             {/* 본문 */}
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(560px,1fr)_440px] gap-6 p-6 overflow-hidden flex-1">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(560px,1fr)_440px] gap-6 p-6 overflow-hidden flex-1 relative">
+              {/* 슬라이싱 중 오버레이 */}
+              {isSlicing && (
+                <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                    <p className="text-lg font-medium">슬라이싱 진행 중...</p>
+                    <p className="text-sm text-muted-foreground">잠시만 기다려주세요</p>
+                  </div>
+                </div>
+              )}
+
               {/* 좌: G-code 프리뷰 */}
               <Card className="overflow-hidden">
                 <CardContent className="p-0 h-[60vh]">
@@ -2503,19 +2677,6 @@ const AI = () => {
                           )}
                         </CardContent>
                       </Card>
-
-                      {/* 프린터 정보 */}
-                      {gcodeInfo.printerName && (
-                        <Card>
-                          <CardContent className="p-4 space-y-3">
-                            <h4 className="font-medium text-sm text-muted-foreground">{t('ai.printerInfo')}</h4>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">{t('ai.printerName')}</span>
-                              <span className="font-semibold text-sm">{gcodeInfo.printerName}</span>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
                     </>
                   ) : (
                     <div className="text-center py-12 text-muted-foreground text-sm">
@@ -2527,12 +2688,29 @@ const AI = () => {
             </div>
 
             {/* 푸터 */}
-            <div className="px-6 py-4 border-t flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => setPrintDialogOpen(false)}>{t('common.cancel')}</Button>
-              <Button onClick={startPrint} disabled={!currentGCodeUrl}>
-                <Printer className="w-4 h-4 mr-2" />
-                {t('ai.startPrint')}
-              </Button>
+            <div className="px-6 py-4 border-t">
+              {/* 프린터 연결 상태 경고 */}
+              {selectedPrinter && !selectedPrinter.connected && (
+                <div className="mb-3 text-sm text-red-500 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  {t('ai.printerNotConnected')}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2">
+                <Button variant="outline" onClick={() => setPrintDialogOpen(false)} disabled={isSlicing}>
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  onClick={startPrint}
+                  disabled={isSlicing || !currentGCodeUrl || !selectedPrinter?.connected}
+                >
+                  <Printer className="w-4 h-4 mr-2" />
+                  {t('ai.startPrint')}
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>
@@ -2542,17 +2720,19 @@ const AI = () => {
       <AlertDialog open={printerConfirmDialogOpen} onOpenChange={setPrinterConfirmDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>출력 준비</AlertDialogTitle>
+            <AlertDialogTitle>{t('ai.printPreparation')}</AlertDialogTitle>
             <AlertDialogDescription>
-              <strong>{printerToConfirm?.model || printerToConfirm?.name}</strong> 프린터로 출력 준비를 시작합니다.
+              {t('ai.printPreparationMessage', {
+                printer: printerToConfirm?.model || printerToConfirm?.name
+              })}
               <br /><br />
-              계속하시겠습니까?
+              {t('ai.continueQuestion')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmPrinterSelection}>
-              확인
+              {t('common.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2562,23 +2742,23 @@ const AI = () => {
       <AlertDialog open={deleteImageDialogOpen} onOpenChange={setDeleteImageDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>이미지 삭제 확인</AlertDialogTitle>
+            <AlertDialogTitle>{t('ai.deleteImageConfirm')}</AlertDialogTitle>
             <AlertDialogDescription>
               {linkedModelsCount > 0 ? (
                 <>
-                  이 이미지로 생성된 <strong>{linkedModelsCount}개의 3D 모델</strong>이 함께 삭제됩니다.
+                  {t('ai.deleteImageWithModels')} <strong>{linkedModelsCount}{t('ai.deleteImageModelsCount')}</strong>{t('ai.deleteImageModelsWillBeDeleted')}
                   <br /><br />
-                  정말로 삭제하시겠습니까?
+                  {t('ai.reallyDelete')}
                 </>
               ) : (
-                '이 이미지를 삭제하시겠습니까?'
+                t('ai.deleteImageQuestion')
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmImageDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              삭제
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

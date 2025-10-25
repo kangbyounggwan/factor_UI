@@ -1,26 +1,39 @@
 // 타입 정의
-export type Quality = 'low' | 'medium' | 'high';
-export type Model = 'flux-kontext' | 'gpt-4';
-export type Style = 'realistic' | 'abstract';
-export type ImageDepth = 'auto' | 'manual';
+export type SymmetryMode = 'off' | 'auto' | 'on';
+export type ArtStyle = 'realistic' | 'sculpture';
 
-// AI 서버 설정
-const AI_PYTHON_URL: string = String(
-  import.meta.env.VITE_AI_PYTHON_URL || 'http://127.0.0.1:7000'
-).replace(/\/+$/, '');
-const AI_ENDPOINT: string = `${AI_PYTHON_URL}/v1/process/modelling`;
-const REQUEST_TIMEOUT = 120000; // 2분
+// AI 서버 설정 (환경변수에서 동적으로 가져옴)
+function getAIPythonURL(): string {
+  // Vite 환경에서는 import.meta.env 사용
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    return String(import.meta.env.VITE_AI_PYTHON_URL || 'http://127.0.0.1:7000').replace(/\/+$/, '');
+  }
+  // Node.js 환경에서는 process.env 사용
+  if (typeof process !== 'undefined' && process.env) {
+    return String(process.env.VITE_AI_PYTHON_URL || 'http://127.0.0.1:7000').replace(/\/+$/, '');
+  }
+  return 'http://127.0.0.1:7000';
+}
+
+const REQUEST_TIMEOUT = 600000; // 10분 (초기 요청용)
+const POLL_TIMEOUT = 30000; // 30초 (폴링 요청용)
 const POLL_INTERVAL = 5000; // 5초마다 폴링
 
 // 공통 설정 빌더
-export function buildCommon(model: string, quality: Quality, style?: string, userId?: string) {
+export function buildCommon(
+  symmetryMode: SymmetryMode,
+  artStyle: ArtStyle,
+  targetPolycount: number,
+  userId?: string,
+  source: 'web' | 'mobile' = 'web'
+) {
   return {
-    model,
-    quality,
-    style,
+    symmetry_mode: symmetryMode,
+    art_style: artStyle,
+    target_polycount: targetPolycount,
     output: { format: 'glb', unit: 'mm', scale: 1 },
     printer: { device_uuid: undefined, auto_slice: false, print: false },
-    metadata: { session_id: undefined, source: 'mobile', user_id: userId },
+    metadata: { session_id: undefined, source, user_id: userId },
   } as const;
 }
 
@@ -47,6 +60,9 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeout: numb
 
 // 텍스트 → 3D (async_mode 지원)
 export async function postTextTo3D(payload: unknown, asyncMode: boolean = false) {
+  const AI_PYTHON_URL = getAIPythonURL();
+  const AI_ENDPOINT = `${AI_PYTHON_URL}/v1/process/modelling`;
+
   if (!AI_ENDPOINT) {
     throw new Error('AI 서버 주소가 설정되지 않았습니다. (VITE_AI_PYTHON_URL 환경변수 확인)');
   }
@@ -82,6 +98,9 @@ export async function postTextTo3D(payload: unknown, asyncMode: boolean = false)
 
 // 이미지 → 3D (async_mode 지원)
 export async function postImageTo3D(form: FormData, asyncMode: boolean = false) {
+  const AI_PYTHON_URL = getAIPythonURL();
+  const AI_ENDPOINT = `${AI_PYTHON_URL}/v1/process/modelling`;
+
   if (!AI_ENDPOINT) {
     throw new Error('AI 서버 주소가 설정되지 않았습니다. (VITE_AI_PYTHON_URL 환경변수 확인)');
   }
@@ -124,6 +143,9 @@ export async function postImageTo3D(form: FormData, asyncMode: boolean = false) 
 
 // 진행률 조회 (GET /v1/process/modelling/{task_id})
 export async function getTaskProgress(taskId: string): Promise<TaskProgressResponse> {
+  const AI_PYTHON_URL = getAIPythonURL();
+  const AI_ENDPOINT = `${AI_PYTHON_URL}/v1/process/modelling`;
+
   if (!AI_ENDPOINT) {
     throw new Error('AI 서버 주소가 설정되지 않았습니다.');
   }
@@ -133,7 +155,7 @@ export async function getTaskProgress(taskId: string): Promise<TaskProgressRespo
 
   const res = await fetchWithTimeout(url, {
     method: 'GET',
-  }, 10000); // 10초 타임아웃
+  }, POLL_TIMEOUT); // 30초 타임아웃
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -149,11 +171,20 @@ export async function getTaskProgress(taskId: string): Promise<TaskProgressRespo
 // 진행률 폴링 (완료될 때까지 반복 조회)
 export async function pollTaskUntilComplete(
   taskId: string,
-  onProgress?: (progress: number, status: string) => void
+  onProgress?: (progress: number, status: string) => void,
+  maxWaitTime: number = 1800000 // 30분 최대 대기 시간
 ): Promise<AIModelResponse> {
   console.log('[pollTaskUntilComplete] Starting polling for task:', taskId);
+  const startTime = Date.now();
 
   while (true) {
+    // 전체 폴링 시간 체크 (30분 초과 시 타임아웃)
+    const elapsedTime = Date.now() - startTime;
+    if (elapsedTime > maxWaitTime) {
+      console.error('[pollTaskUntilComplete] Maximum wait time exceeded:', elapsedTime);
+      throw new Error('AI 모델 생성 시간이 너무 오래 걸립니다. 나중에 다시 시도해주세요.');
+    }
+
     const progressData = await getTaskProgress(taskId);
 
     // 진행률 콜백 호출
@@ -247,6 +278,8 @@ export interface AIModelResponse {
 
 // GLB URL 추출 헬퍼 (Python 서버 응답 구조에 맞춤)
 export function extractGLBUrl(result: AIModelResponse): string | null {
+  const AI_PYTHON_URL = getAIPythonURL();
+
   if (!result) {
     console.warn('[aiService] No result provided');
     return null;
@@ -306,6 +339,8 @@ export function extractGLBUrl(result: AIModelResponse): string | null {
 
 // STL URL 추출 헬퍼
 export function extractSTLUrl(result: AIModelResponse): string | null {
+  const AI_PYTHON_URL = getAIPythonURL();
+
   if (!result) {
     console.warn('[aiService] No result provided');
     return null;
@@ -338,6 +373,8 @@ export function extractSTLUrl(result: AIModelResponse): string | null {
 
 // 썸네일 URL 추출 헬퍼
 export function extractThumbnailUrl(result: AIModelResponse): string | null {
+  const AI_PYTHON_URL = getAIPythonURL();
+
   if (!result) return null;
 
   const data = result.data || result;
@@ -350,8 +387,8 @@ export function extractThumbnailUrl(result: AIModelResponse): string | null {
   const thumbnailUrl =
     data.thumbnail_download_url ||
     data.thumbnail_url ||
-    data.raw?.remesh?.thumbnail_url ||
-    data.raw?.image_to_3d?.thumbnail_url ||
+    (data.raw as any)?.remesh?.thumbnail_url ||
+    (data.raw as any)?.image_to_3d?.thumbnail_url ||
     null;
 
   if (thumbnailUrl) {
@@ -383,4 +420,156 @@ export function extractMetadata(result: AIModelResponse) {
     request_payload: data.request_payload,
     raw: data.raw,
   };
+}
+
+// STL 업로드 및 슬라이싱 API
+export interface SlicingSettings {
+  layer_height?: string;
+  line_width?: string;
+  infill_sparse_density?: string;
+  wall_line_count?: string;
+  top_layers?: string;
+  bottom_layers?: string;
+  speed_print?: string;
+  support_enable?: string;
+  support_angle?: string;
+  adhesion_type?: string;
+  material_diameter?: string;
+  material_flow?: string;
+}
+
+export interface PrinterDefinition {
+  version: number;
+  overrides: {
+    machine_width?: { default_value: number };
+    machine_depth?: { default_value: number };
+    machine_height?: { default_value: number };
+    [key: string]: { default_value: number | string } | undefined;
+  };
+}
+
+export interface SlicingResponse {
+  status: 'ok' | 'error';
+  data?: {
+    task_id: string;
+    input_stl: string;
+    gcode_path: string;
+    gcode_url: string;
+    cura_settings: Record<string, string>;
+    gcode_metadata?: {
+      print_time_seconds?: number;
+      print_time_formatted?: string;
+      filament_used_m?: number;
+      filament_weight_g?: number;
+      filament_cost?: number;
+      layer_count?: number;
+      layer_height?: number;
+      bounding_box?: {
+        min_x: number;
+        max_x: number;
+        min_y: number;
+        max_y: number;
+        min_z: number;
+        max_z: number;
+        size_x: number;
+        size_y: number;
+        size_z: number;
+      };
+      nozzle_temp?: number;
+      bed_temp?: number;
+      printer_name?: string;
+    };
+  };
+  error?: string;
+}
+
+export async function uploadSTLAndSlice(
+  stlBlob: Blob,
+  filename: string,
+  curaSettings?: SlicingSettings,
+  printerDefinition?: PrinterDefinition,
+  printerName?: string
+): Promise<SlicingResponse> {
+  const AI_PYTHON_URL = getAIPythonURL();
+  const SLICE_ENDPOINT = `${AI_PYTHON_URL}/v1/process/upload-stl-and-slice`;
+
+  const formData = new FormData();
+  formData.append('file', stlBlob, filename); // Python 서버가 'file' 필드를 기대함
+
+  if (curaSettings) {
+    formData.append('cura_settings_json', JSON.stringify(curaSettings));
+  }
+
+  if (printerDefinition) {
+    formData.append('printer_definition_json', JSON.stringify(printerDefinition));
+  }
+
+  if (printerName) {
+    formData.append('printer_name', printerName);
+  }
+
+  try {
+    // 최종 요청 데이터를 하나의 JSON으로 표시
+    const requestPayload = {
+      endpoint: SLICE_ENDPOINT,
+      method: 'POST',
+      content_type: 'multipart/form-data',
+      fields: {
+        file: {
+          filename: filename,
+          size: stlBlob.size,
+          type: stlBlob.type || 'application/octet-stream',
+          content: '[BINARY FILE DATA]'
+        },
+        cura_settings_json: curaSettings || null,
+        printer_definition_json: printerDefinition || null,
+        printer_name: printerName || null
+      }
+    };
+
+    console.log('[aiService] ========================================');
+    console.log('[aiService] 📤 FINAL REQUEST TO SERVER:');
+    console.log(JSON.stringify(requestPayload, null, 2));
+    console.log('[aiService] ========================================');
+
+    const response = await fetchWithTimeout(SLICE_ENDPOINT, {
+      method: 'POST',
+      body: formData,
+    }, 180000); // 3분 타임아웃 (슬라이싱은 시간이 걸릴 수 있음)
+
+    console.log('[aiService] Response status:', response.status, response.statusText);
+    console.log('[aiService] Response headers:', Object.fromEntries(response.headers.entries()));
+
+    if (!response.ok) {
+      // 에러 응답 본문 읽기
+      let errorBody: any;
+      const contentType = response.headers.get('content-type');
+
+      try {
+        if (contentType?.includes('application/json')) {
+          errorBody = await response.json();
+        } else {
+          errorBody = await response.text();
+        }
+      } catch (e) {
+        errorBody = 'Could not parse error response';
+      }
+
+      console.error('[aiService] Error response body:', errorBody);
+
+      throw new Error(`HTTP error! status: ${response.status}, body: ${JSON.stringify(errorBody)}`);
+    }
+
+    const result = await response.json();
+    console.log('[aiService] Slicing response:', result);
+
+    return result;
+  } catch (error) {
+    console.error('[aiService] Slicing failed:', error);
+    if (error instanceof Error) {
+      console.error('[aiService] Error message:', error.message);
+      console.error('[aiService] Error stack:', error.stack);
+    }
+    throw error;
+  }
 }

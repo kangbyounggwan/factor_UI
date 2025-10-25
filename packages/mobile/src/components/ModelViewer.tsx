@@ -1,11 +1,22 @@
 // 3D 모델 뷰어 담당 컴포넌트
 //
-import { Canvas, useLoader } from "@react-three/fiber";
-import { OrbitControls, Grid } from "@react-three/drei";
-import { Suspense, useMemo, useEffect, useState } from "react";
+import React, { Suspense, useMemo, useEffect, useState, useLayoutEffect } from "react";
+import { Canvas, useLoader, useThree } from "@react-three/fiber";
+import { OrbitControls, Grid, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { STLLoader } from "three-stdlib";
 import { GLTFLoader } from "three-stdlib";
 import * as THREE from "three";
+import { calculateBoundingBox, getBoundingBoxCenter, getBoundingBoxSize, groundModelToZero, fitCameraToModel, logCameraAdjustment } from "@shared/utils/modelViewerUtils";
+import {
+  CAMERA_CONFIG,
+  LIGHTING_CONFIG,
+  GRID_CONFIG,
+  BACKGROUND_COLOR,
+  AXES_HELPER_CONFIG,
+  GIZMO_CONFIG,
+  ORBIT_CONTROLS_CONFIG,
+  MATERIAL_CONFIG,
+} from "@shared/config/modelViewerConfig";
 
 interface ModelViewerProps {
   className?: string;
@@ -19,226 +30,209 @@ interface ModelViewerProps {
   stlUrl?: string;
   // GLB/GLTF 파일 URL (선택적)
   modelUrl?: string;
-  // 사용자 회전 컨트롤 활성화 여부
-  enableRotationControls?: boolean;
+  // 모델 스케일 (기본 1)
+  modelScale?: number;
+  // 모델 회전 (라디안)
+  rotation?: [number, number, number];
+  // 모델 ID (DB 업데이트용)
+  modelId?: string;
+  // 모델 크기 변경 콜백
+  onSize?: (size: { x: number; y: number; z: number }) => void;
+  // 저장 콜백 함수
+  onSave?: (data: {
+    rotation: [number, number, number];
+    scale: number;
+    optimized: boolean;
+    blob: Blob;
+    format: 'stl' | 'glb';
+  }) => Promise<void>;
 }
 
 function SpinningObject() {
   // Simple demo geometry
-  const color = useMemo(() => "#6ee7b7", []); // matches semantic accent-ish tint
+  const color = useMemo(() => MATERIAL_CONFIG.demo.color, []);
   return (
     <mesh rotation={[0.4, 0.6, 0]} castShadow receiveShadow>
       <torusKnotGeometry args={[1.1, 0.35, 220, 32]} />
-      <meshStandardMaterial color={color} metalness={0.2} roughness={0.2} />
+      <meshStandardMaterial
+        color={color}
+        metalness={MATERIAL_CONFIG.demo.metalness}
+        roughness={MATERIAL_CONFIG.demo.roughness}
+      />
     </mesh>
   );
 }
 
 function STLModel({ url }: { url: string }) {
   const geometry = useLoader(STLLoader, url);
+  const groupRef = React.useRef<THREE.Group>(null);
+  const { camera, controls } = useThree();
 
-  useEffect(() => {
-    if (geometry) {
-      // 지오메트리 중심 및 정규화
-      geometry.computeBoundingBox();
-      const boundingBox = geometry.boundingBox!;
-      const center = new THREE.Vector3();
-      boundingBox.getCenter(center);
-      geometry.translate(-center.x, -center.y, -center.z);
+  useLayoutEffect(() => {
+    if (!geometry || !groupRef.current) return;
 
-      // 스케일 계산 (모델을 화면에 맞춤)
-      const size = new THREE.Vector3();
-      boundingBox.getSize(size);
-      const maxDim = Math.max(size.x, size.y, size.z);
-      const scale = 2 / maxDim;
-      geometry.scale(scale, scale, scale);
+    // 지오메트리 정보 계산
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
 
-      // 노멀 계산
-      geometry.computeVertexNormals();
+    // 모델을 Z=0 평면에 접지
+    groundModelToZero(groupRef.current);
+
+    // 카메라를 모델에 맞춤
+    const result = fitCameraToModel(camera, controls, groupRef.current);
+    if (result) {
+      const targetPosition = new THREE.Vector3(0, 0, result.size.z / 2);
+      logCameraAdjustment(
+        'STL',
+        result.size,
+        camera.position,
+        targetPosition,
+        result.distance,
+        (camera as any).fov,
+        !!controls
+      );
     }
-  }, [geometry]);
+  }, [geometry, camera, controls]);
 
   return (
-    <mesh geometry={geometry} castShadow receiveShadow>
-      <meshStandardMaterial color="#6ee7b7" metalness={0.3} roughness={0.4} />
-    </mesh>
-  );
-}
-
-function GLBModel({ url, rotation = [0, 0, 0] }: { url: string; rotation?: [number, number, number] }) {
-  const gltf = useLoader(GLTFLoader, url);
-  const [modelGroup] = useState(() => new THREE.Group());
-
-  useEffect(() => {
-    if (gltf && gltf.scene) {
-      // 기존 자식 제거
-      while (modelGroup.children.length > 0) {
-        modelGroup.remove(modelGroup.children[0]);
-      }
-
-      // GLTF 씬 복제
-      const scene = gltf.scene.clone(true);
-
-      // 바운딩 박스 계산
-      const box = new THREE.Box3().setFromObject(scene);
-      const center = box.getCenter(new THREE.Vector3());
-      const size = box.getSize(new THREE.Vector3());
-
-      // 중심 이동
-      scene.position.sub(center);
-
-      // 스케일 정규화 (화면에 맞춤)
-      const maxDim = Math.max(size.x, size.y, size.z);
-      const scale = 2 / maxDim;
-      scene.scale.multiplyScalar(scale);
-
-      // 그룹에 추가
-      modelGroup.add(scene);
-    }
-  }, [gltf, modelGroup]);
-
-  return (
-    <group rotation={rotation}>
-      <primitive object={modelGroup} castShadow receiveShadow />
+    <group ref={groupRef}>
+      <mesh geometry={geometry} castShadow receiveShadow>
+        <meshStandardMaterial
+          color={MATERIAL_CONFIG.stl.color}
+          metalness={MATERIAL_CONFIG.stl.metalness}
+          roughness={MATERIAL_CONFIG.stl.roughness}
+        />
+      </mesh>
     </group>
   );
 }
 
-export default function ModelViewer({ className, height, showDemo = false, placeholderMessage = "모델을 생성하거나 불러오세요", stlUrl, modelUrl, enableRotationControls = false }: ModelViewerProps) {
+function GLBModel({ url, rotation = [0, 0, 0], scale = 1, onSize }: { url: string; rotation?: [number, number, number]; scale?: number; onSize?: (size: { x: number; y: number; z: number }) => void }) {
+  const gltf = useLoader(GLTFLoader, url);
+  const sceneGroupRef = React.useRef<THREE.Group>(null);
+  const { camera, controls } = useThree();
+
+  useEffect(() => {
+    if (!gltf?.scene || !sceneGroupRef.current) return;
+
+    // scene이 렌더링된 후 다음 프레임에서 계산
+    const timeoutId = setTimeout(() => {
+      if (!sceneGroupRef.current) return;
+
+      // 모델을 Z=0 평면에 접지
+      groundModelToZero(sceneGroupRef.current);
+
+      // 카메라를 모델에 맞춤
+      const result = fitCameraToModel(camera, controls, sceneGroupRef.current);
+      if (result) {
+        const targetPosition = new THREE.Vector3(0, 0, result.size.z / 2);
+        logCameraAdjustment(
+          'GLB',
+          result.size,
+          camera.position,
+          targetPosition,
+          result.distance,
+          (camera as any).fov,
+          !!controls
+        );
+
+        // 모델 크기 콜백
+        if (onSize) {
+          onSize({
+            x: result.size.x,
+            y: result.size.y,
+            z: result.size.z,
+          });
+        }
+      }
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gltf, camera, controls, url]);
+
+  if (!gltf?.scene) return null;
+
+  return (
+    <group scale={scale} castShadow receiveShadow>
+      <group ref={sceneGroupRef} rotation={rotation}>
+        <primitive object={gltf.scene} />
+      </group>
+    </group>
+  );
+}
+
+export default function ModelViewer({ className, height, showDemo = false, placeholderMessage = "모델을 생성하거나 불러오세요", stlUrl, modelUrl, modelScale = 1, rotation = [0, 0, 0], modelId, onSize, onSave }: ModelViewerProps) {
   const style: React.CSSProperties = { width: '100%' };
   if (height !== undefined) {
     style.height = typeof height === 'number' ? `${height}px` : height;
   }
   style.position = 'relative';
 
-  // 사용자 회전 컨트롤
-  const [userRotation, setUserRotation] = useState<[number, number, number]>([0, 0, 0]);
-  const [showControls, setShowControls] = useState(false);
-
   const hasContent = showDemo || stlUrl || modelUrl;
 
   return (
     <div className={className} style={style}>
-      <Canvas shadows camera={{ position: [3, 3, 5], fov: 50 }}>
-        <color attach="background" args={["#0b0f17"]} />
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[5, 5, 5]} intensity={1.5} castShadow />
-        <directionalLight position={[-5, -5, -5]} intensity={0.6} />
-        <directionalLight position={[0, 5, 0]} intensity={0.4} />
+      <Canvas
+        shadows
+        camera={{
+          position: CAMERA_CONFIG.position,
+          fov: CAMERA_CONFIG.fov,
+        }}
+        onCreated={({ camera }) => {
+          camera.up.copy(CAMERA_CONFIG.up);
+        }}
+      >
+        <color attach="background" args={[BACKGROUND_COLOR]} />
+        <ambientLight intensity={LIGHTING_CONFIG.ambientIntensity} />
+        <directionalLight
+          position={LIGHTING_CONFIG.mainDirectional.position}
+          intensity={LIGHTING_CONFIG.mainDirectional.intensity}
+          castShadow={LIGHTING_CONFIG.mainDirectional.castShadow}
+        />
+        <directionalLight
+          position={LIGHTING_CONFIG.fillDirectional1.position}
+          intensity={LIGHTING_CONFIG.fillDirectional1.intensity}
+          castShadow={LIGHTING_CONFIG.fillDirectional1.castShadow}
+        />
+        <directionalLight
+          position={LIGHTING_CONFIG.fillDirectional2.position}
+          intensity={LIGHTING_CONFIG.fillDirectional2.intensity}
+          castShadow={LIGHTING_CONFIG.fillDirectional2.castShadow}
+        />
         <Suspense fallback={null}>
           {showDemo && <SpinningObject />}
           {stlUrl && <STLModel url={stlUrl} />}
-          {modelUrl && <GLBModel url={modelUrl} rotation={userRotation} />}
+          {modelUrl && <GLBModel url={modelUrl} rotation={rotation} scale={modelScale} onSize={onSize} />}
         </Suspense>
-        {/* 그리드: 10mm 작은 셀, 50mm 큰 섹션 (3D 프린팅 모델에 적합) */}
+        {/* Z-up: 그리드를 XY 평면으로 회전 */}
         <Grid
-          infiniteGrid
-          cellSize={10}
-          cellThickness={0.5}
-          cellColor="#2a2f3a"
-          sectionSize={50}
-          sectionThickness={1}
-          sectionColor="#3b4252"
-          fadeDistance={2000}
-          fadeStrength={1}
+          rotation={GRID_CONFIG.rotation}
+          infiniteGrid={GRID_CONFIG.infiniteGrid}
+          cellSize={GRID_CONFIG.cellSize}
+          cellThickness={GRID_CONFIG.cellThickness}
+          cellColor={GRID_CONFIG.cellColor}
+          sectionSize={GRID_CONFIG.sectionSize}
+          sectionThickness={GRID_CONFIG.sectionThickness}
+          sectionColor={GRID_CONFIG.sectionColor}
+          fadeDistance={GRID_CONFIG.fadeDistance}
+          fadeStrength={GRID_CONFIG.fadeStrength}
         />
-        <OrbitControls enableDamping dampingFactor={0.05} />
+        {/* 원점 3축 화살표 (X:red, Y:green, Z:blue) */}
+        <axesHelper args={[AXES_HELPER_CONFIG.size]} position={AXES_HELPER_CONFIG.position} />
+        {/* 화면 하단-우측 3축 위젯 */}
+        <GizmoHelper alignment={GIZMO_CONFIG.alignment} margin={GIZMO_CONFIG.margin}>
+          <GizmoViewport
+            axisColors={GIZMO_CONFIG.axisColors}
+            labelColor={GIZMO_CONFIG.labelColor}
+          />
+        </GizmoHelper>
+        <OrbitControls
+          enableDamping={ORBIT_CONTROLS_CONFIG.enableDamping}
+          dampingFactor={ORBIT_CONTROLS_CONFIG.dampingFactor}
+        />
       </Canvas>
-
-      {/* 회전 컨트롤 */}
-      {enableRotationControls && hasContent && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 12,
-            left: 12,
-            right: 12,
-            background: 'rgba(0,0,0,0.7)',
-            borderRadius: 8,
-            padding: showControls ? 12 : 8,
-            backdropFilter: 'blur(4px)',
-          }}
-        >
-          <button
-            onClick={() => setShowControls(!showControls)}
-            style={{
-              width: '100%',
-              padding: 8,
-              background: 'transparent',
-              border: 'none',
-              color: '#fff',
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 4,
-            }}
-          >
-            {showControls ? '▼' : '▲'} Model Rotation
-          </button>
-
-          {showControls && (
-            <div style={{ marginTop: 8, color: '#fff' }}>
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 11 }}>
-                X축: {(userRotation[0] * 180 / Math.PI).toFixed(0)}°
-                <input
-                  type="range"
-                  min={-Math.PI}
-                  max={Math.PI}
-                  step={Math.PI / 36}
-                  value={userRotation[0]}
-                  onChange={(e) => setUserRotation([Number(e.target.value), userRotation[1], userRotation[2]])}
-                  style={{ width: '100%', marginTop: 4 }}
-                />
-              </label>
-
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 11 }}>
-                Y축: {(userRotation[1] * 180 / Math.PI).toFixed(0)}°
-                <input
-                  type="range"
-                  min={-Math.PI}
-                  max={Math.PI}
-                  step={Math.PI / 36}
-                  value={userRotation[1]}
-                  onChange={(e) => setUserRotation([userRotation[0], Number(e.target.value), userRotation[2]])}
-                  style={{ width: '100%', marginTop: 4 }}
-                />
-              </label>
-
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 11 }}>
-                Z축: {(userRotation[2] * 180 / Math.PI).toFixed(0)}°
-                <input
-                  type="range"
-                  min={-Math.PI}
-                  max={Math.PI}
-                  step={Math.PI / 36}
-                  value={userRotation[2]}
-                  onChange={(e) => setUserRotation([userRotation[0], userRotation[1], Number(e.target.value)])}
-                  style={{ width: '100%', marginTop: 4 }}
-                />
-              </label>
-
-              <button
-                onClick={() => setUserRotation([0, 0, 0])}
-                style={{
-                  width: '100%',
-                  padding: 8,
-                  borderRadius: 6,
-                  background: '#374151',
-                  border: '1px solid #4b5563',
-                  color: '#fff',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                }}
-              >
-                초기화
-              </button>
-            </div>
-          )}
-        </div>
-      )}
 
       {!hasContent && (
         <div

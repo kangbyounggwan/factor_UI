@@ -4,6 +4,17 @@ import { Canvas, useLoader, useThree } from "@react-three/fiber";
 import { OrbitControls, Grid, useGLTF, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { Suspense, useMemo, useLayoutEffect, useRef, useState, useEffect } from "react";
 import { Box3, Group, Vector3, Object3D, BufferGeometry, BufferAttribute, Mesh, SkinnedMesh, Matrix4, Euler } from "three";
+import { calculateBoundingBox, getBoundingBoxCenter, getBoundingBoxSize, groundModelToZero, fitCameraToModel, logCameraAdjustment, Size3 } from "@shared/utils/modelViewerUtils";
+import {
+  CAMERA_CONFIG,
+  LIGHTING_CONFIG,
+  GRID_CONFIG,
+  BACKGROUND_COLOR,
+  AXES_HELPER_CONFIG,
+  GIZMO_CONFIG,
+  ORBIT_CONTROLS_CONFIG,
+  MATERIAL_CONFIG,
+} from "@shared/config/modelViewerConfig";
 import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { SimplifyModifier } from "three/examples/jsm/modifiers/SimplifyModifier.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
@@ -44,16 +55,18 @@ interface ModelViewerProps {
 
 function SpinningObject() {
   // Simple demo geometry
-  const color = useMemo(() => "#6ee7b7", []); // matches semantic accent-ish tint
+  const color = useMemo(() => MATERIAL_CONFIG.demo.color, []);
   return (
     <mesh rotation={[0.4, 0.6, 0]} castShadow receiveShadow>
       <torusKnotGeometry args={[1.1, 0.35, 220, 32]} />
-      <meshStandardMaterial color={color} metalness={0.2} roughness={0.2} />
+      <meshStandardMaterial
+        color={color}
+        metalness={MATERIAL_CONFIG.demo.metalness}
+        roughness={MATERIAL_CONFIG.demo.roughness}
+      />
     </mesh>
   );
 }
-
-type Size3 = { x: number; y: number; z: number };
 
 // 메쉬 최적화 옵션/도구
 type OptimizeOptions = {
@@ -145,31 +158,22 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
     console.log('[GLBModel] Processing camera adjustment...');
     try {
       // 모델의 바운딩 박스를 계산해 원점(0,0,0)에 중심을 맞춤
-      const box = new Box3().setFromObject(group.current);
+      const box = calculateBoundingBox(group.current);
+      if (!box) {
+        console.log('[GLBModel] Invalid bounding box - skipping camera adjustment');
+        return;
+      }
+
       console.log('[GLBModel] Bounding box calculated:', {
         min: { x: box.min.x, y: box.min.y, z: box.min.z },
         max: { x: box.max.x, y: box.max.y, z: box.max.z }
       });
 
-      if (!isFinite(box.min.x) || !isFinite(box.max.x) ||
-          !isFinite(box.min.y) || !isFinite(box.max.y) ||
-          !isFinite(box.min.z) || !isFinite(box.max.z)) {
-        console.log('[GLBModel] Invalid bounding box - skipping camera adjustment');
-        return;
-      }
+      // 모델을 Z=0 평면에 접지
+      groundModelToZero(group.current);
 
-      // 바운딩 박스의 중심 계산
-      const center = new Vector3();
-      box.getCenter(center);
-
-      // 모델을 원점으로 이동 (바닥은 Z=0에 맞춤)
-      group.current.position.x -= center.x;
-      group.current.position.y -= center.y;
-      group.current.position.z -= box.min.z; // 바닥이 Z=0이 되도록
-
-      // 크기(mm) 계산 및 보고 (현재 scale 적용된 상태로 계산됨)
-      const scaledSize = new Vector3();
-      box.getSize(scaledSize);
+      // 크기(mm) 계산 및 보고
+      const scaledSize = getBoundingBoxSize(box);
       console.log('[GLBModel] Scaled size calculated:', {
         x: scaledSize.x.toFixed(2),
         y: scaledSize.y.toFixed(2),
@@ -177,67 +181,23 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
       });
 
       // 원본(추가 스케일 미적용) 크기 계산
-      const baseBox = new Box3().setFromObject(scene);
-      const baseSizeVec = new Vector3();
-      baseBox.getSize(baseSizeVec);
-      onSize?.({ x: scaledSize.x, y: scaledSize.y, z: scaledSize.z }, { x: baseSizeVec.x, y: baseSizeVec.y, z: baseSizeVec.z });
+      const baseBox = calculateBoundingBox(scene);
+      const baseSizeVec = baseBox ? getBoundingBoxSize(baseBox) : scaledSize;
+      onSize?.(scaledSize, baseSizeVec);
 
-      // 카메라를 모델에 맞춤 - 모델이 로드될 때마다 초기화
-      console.log('[GLBModel] Checking camera adjustment conditions - controls:', !!controls, 'camera has fov:', 'fov' in camera);
-      if ('fov' in camera) {
-        console.log('[GLBModel] Starting camera position calculation...');
-        // 실제 모델 크기 사용
-        const maxDim = Math.max(scaledSize.x, scaledSize.y, scaledSize.z);
-        const fov = (camera as any).fov * (Math.PI / 180);
-        let cameraDistance = Math.abs(maxDim / Math.tan(fov / 2)) * 1.5; // 1.5배 여유
-
-        // 최소 거리 보장
-        cameraDistance = Math.max(cameraDistance, maxDim * 2);
-
-        // OrbitControls의 target을 모델 중심(높이의 중간)으로 설정
-        const modelCenterZ = scaledSize.z / 2;
-        const targetPosition = new Vector3(0, 0, modelCenterZ);
-        if (controls) {
-          (controls as any).target.copy(targetPosition);
-        }
-
-        // 카메라를 등각 뷰 위치에 배치
-        const angleXY = Math.PI / 4; // 45도
-        const angleZ = Math.PI / 6;   // 30도 위에서
-
-        camera.position.set(
-          cameraDistance * Math.cos(angleXY) * Math.cos(angleZ),
-          cameraDistance * Math.sin(angleXY) * Math.cos(angleZ),
-          modelCenterZ + cameraDistance * Math.sin(angleZ)
+      // 카메라를 모델에 맞춤
+      const result = fitCameraToModel(camera, controls, group.current);
+      if (result) {
+        const targetPosition = new Vector3(0, 0, result.size.z / 2);
+        logCameraAdjustment(
+          'GLB',
+          result.size,
+          camera.position,
+          targetPosition,
+          result.distance,
+          (camera as any).fov,
+          !!controls
         );
-
-        camera.lookAt(targetPosition);
-        camera.updateProjectionMatrix();
-        if (controls) {
-          (controls as any).update();
-        }
-
-        console.log('[GLBModel] ========== CAMERA ADJUSTMENT ==========');
-        console.log('[GLBModel] Model Size (mm):', {
-          x: scaledSize.x.toFixed(2),
-          y: scaledSize.y.toFixed(2),
-          z: scaledSize.z.toFixed(2)
-        });
-        console.log('[GLBModel] Max Dimension:', maxDim.toFixed(2) + 'mm');
-        console.log('[GLBModel] Camera Distance:', cameraDistance.toFixed(2) + 'mm');
-        console.log('[GLBModel] Camera Position:', {
-          x: camera.position.x.toFixed(2),
-          y: camera.position.y.toFixed(2),
-          z: camera.position.z.toFixed(2)
-        });
-        console.log('[GLBModel] Camera Target:', {
-          x: targetPosition.x.toFixed(2),
-          y: targetPosition.y.toFixed(2),
-          z: targetPosition.z.toFixed(2)
-        });
-        console.log('[GLBModel] Camera FOV:', (camera as any).fov + '°');
-        console.log('[GLBModel] Controls available:', !!controls);
-        console.log('[GLBModel] ==========================================');
       }
 
       onReady?.(group.current, scene);
@@ -292,82 +252,32 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
       geometry.computeBoundingBox();
       geometry.computeBoundingSphere();
 
-      const box = new Box3().setFromObject(group.current);
-      if (!isFinite(box.min.x) || !isFinite(box.max.x) ||
-          !isFinite(box.min.y) || !isFinite(box.max.y) ||
-          !isFinite(box.min.z) || !isFinite(box.max.z)) return;
+      const box = calculateBoundingBox(group.current);
+      if (!box) return;
 
-      // 바운딩 박스의 중심 계산
-      const center = new Vector3();
-      box.getCenter(center);
+      // 모델을 Z=0 평면에 접지
+      groundModelToZero(group.current);
 
-      // 모델을 원점으로 이동 (바닥은 Z=0에 맞춤)
-      group.current.position.x -= center.x;
-      group.current.position.y -= center.y;
-      group.current.position.z -= box.min.z; // 바닥이 Z=0이 되도록
+      // 크기 계산 및 보고
+      const scaledSizeVec = getBoundingBoxSize(box);
 
-      const scaledSizeVec = new Vector3();
-      box.getSize(scaledSizeVec);
+      const baseBox = geometry.boundingBox;
+      const baseSizeVec = baseBox ? getBoundingBoxSize(baseBox) : scaledSizeVec;
+      onSize?.(scaledSizeVec, baseSizeVec);
 
-      const baseBox = geometry.boundingBox ?? new Box3().setFromObject(group.current);
-      const baseSizeVec = new Vector3();
-      baseBox.getSize(baseSizeVec);
-      onSize?.({ x: scaledSizeVec.x, y: scaledSizeVec.y, z: scaledSizeVec.z }, { x: baseSizeVec.x, y: baseSizeVec.y, z: baseSizeVec.z });
-
-      // 카메라를 모델에 맞춤 - 모델이 로드될 때마다 초기화
-      if ('fov' in camera) {
-        // 실제 모델 크기 사용
-        const maxDim = Math.max(scaledSizeVec.x, scaledSizeVec.y, scaledSizeVec.z);
-        const fov = (camera as any).fov * (Math.PI / 180);
-        let cameraDistance = Math.abs(maxDim / Math.tan(fov / 2)) * 1.5; // 1.5배 여유
-
-        // 최소 거리 보장
-        cameraDistance = Math.max(cameraDistance, maxDim * 2);
-
-        // OrbitControls의 target을 모델 중심(높이의 중간)으로 설정
-        const modelCenterZ = scaledSizeVec.z / 2;
-        const targetPosition = new Vector3(0, 0, modelCenterZ);
-        if (controls) {
-          (controls as any).target.copy(targetPosition);
-        }
-
-        // 카메라를 등각 뷰 위치에 배치
-        const angleXY = Math.PI / 4; // 45도
-        const angleZ = Math.PI / 6;   // 30도 위에서
-
-        camera.position.set(
-          cameraDistance * Math.cos(angleXY) * Math.cos(angleZ),
-          cameraDistance * Math.sin(angleXY) * Math.cos(angleZ),
-          modelCenterZ + cameraDistance * Math.sin(angleZ)
+      // 카메라를 모델에 맞춤
+      const result = fitCameraToModel(camera, controls, group.current);
+      if (result) {
+        const targetPosition = new Vector3(0, 0, result.size.z / 2);
+        logCameraAdjustment(
+          'STL',
+          result.size,
+          camera.position,
+          targetPosition,
+          result.distance,
+          (camera as any).fov,
+          !!controls
         );
-
-        camera.lookAt(targetPosition);
-        camera.updateProjectionMatrix();
-        if (controls) {
-          (controls as any).update();
-        }
-
-        console.log('[STLModel] ========== CAMERA ADJUSTMENT ==========');
-        console.log('[STLModel] Model Size (mm):', {
-          x: scaledSizeVec.x.toFixed(2),
-          y: scaledSizeVec.y.toFixed(2),
-          z: scaledSizeVec.z.toFixed(2)
-        });
-        console.log('[STLModel] Max Dimension:', maxDim.toFixed(2) + 'mm');
-        console.log('[STLModel] Camera Distance:', cameraDistance.toFixed(2) + 'mm');
-        console.log('[STLModel] Camera Position:', {
-          x: camera.position.x.toFixed(2),
-          y: camera.position.y.toFixed(2),
-          z: camera.position.z.toFixed(2)
-        });
-        console.log('[STLModel] Camera Target:', {
-          x: targetPosition.x.toFixed(2),
-          y: targetPosition.y.toFixed(2),
-          z: targetPosition.z.toFixed(2)
-        });
-        console.log('[STLModel] Camera FOV:', (camera as any).fov + '°');
-        console.log('[STLModel] Controls available:', !!controls);
-        console.log('[STLModel] ==========================================');
       }
 
       onReady?.(group.current);
@@ -385,7 +295,11 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
   return (
     <group ref={group} scale={scale} castShadow receiveShadow>
       <mesh geometry={geometry} castShadow receiveShadow>
-        <meshStandardMaterial color="#bfc7d5" roughness={0.85} metalness={0.0} />
+        <meshStandardMaterial
+          color={MATERIAL_CONFIG.stl.color}
+          roughness={MATERIAL_CONFIG.stl.roughness}
+          metalness={MATERIAL_CONFIG.stl.metalness}
+        />
       </mesh>
     </group>
   );
@@ -471,13 +385,32 @@ export default function ModelViewer({ className, height, showDemo = false, place
     <div className={className} style={style}>
       <Canvas
         shadows
-        camera={{ position: [3, 3, 5], fov: 50 }}
-        onCreated={({ camera }) => { camera.up.set(0, 0, 1); }}
+        camera={{
+          position: CAMERA_CONFIG.position,
+          fov: CAMERA_CONFIG.fov,
+        }}
+        onCreated={({ camera }) => {
+          camera.up.copy(CAMERA_CONFIG.up);
+        }}
         style={{ width: '100%', height: '100%' }}
       >
-        <color attach="background" args={["#2e323a"]} />
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
+        <color attach="background" args={[BACKGROUND_COLOR]} />
+        <ambientLight intensity={LIGHTING_CONFIG.ambientIntensity} />
+        <directionalLight
+          position={LIGHTING_CONFIG.mainDirectional.position}
+          intensity={LIGHTING_CONFIG.mainDirectional.intensity}
+          castShadow={LIGHTING_CONFIG.mainDirectional.castShadow}
+        />
+        <directionalLight
+          position={LIGHTING_CONFIG.fillDirectional1.position}
+          intensity={LIGHTING_CONFIG.fillDirectional1.intensity}
+          castShadow={LIGHTING_CONFIG.fillDirectional1.castShadow}
+        />
+        <directionalLight
+          position={LIGHTING_CONFIG.fillDirectional2.position}
+          intensity={LIGHTING_CONFIG.fillDirectional2.intensity}
+          castShadow={LIGHTING_CONFIG.fillDirectional2.castShadow}
+        />
         <Suspense fallback={null}>
           {effectiveUrl ? (
             (() => {
@@ -511,33 +444,34 @@ export default function ModelViewer({ className, height, showDemo = false, place
           ) : (
             showDemo && <SpinningObject />
           )}
-          {/* 기본 조명 설정 - 외부 HDR 의존성 제거 */}
-          <ambientLight intensity={0.8} />
-          <directionalLight position={[10, 10, 5]} intensity={1.5} castShadow />
-          <directionalLight position={[-10, -10, -5]} intensity={0.6} />
-          <directionalLight position={[0, 10, 0]} intensity={0.4} />
         </Suspense>
-        {/* Z-up: 그리드를 XY 평면으로 회전 (법선 +Z) */}
-        {/* 그리드: 10mm 작은 셀, 50mm 큰 섹션 (3D 프린팅 모델에 적합) */}
+        {/* Z-up: 그리드를 XY 평면으로 회전 */}
         <Grid
-          rotation={[Math.PI / 2, 0, 0]}
-          infiniteGrid
-          cellSize={10}
-          cellThickness={0.5}
-          cellColor="#3a3f47"
-          sectionSize={50}
-          sectionThickness={1}
-          sectionColor="#596273"
-          fadeDistance={2000}
-          fadeStrength={1}
+          rotation={GRID_CONFIG.rotation}
+          infiniteGrid={GRID_CONFIG.infiniteGrid}
+          cellSize={GRID_CONFIG.cellSize}
+          cellThickness={GRID_CONFIG.cellThickness}
+          cellColor={GRID_CONFIG.cellColor}
+          sectionSize={GRID_CONFIG.sectionSize}
+          sectionThickness={GRID_CONFIG.sectionThickness}
+          sectionColor={GRID_CONFIG.sectionColor}
+          fadeDistance={GRID_CONFIG.fadeDistance}
+          fadeStrength={GRID_CONFIG.fadeStrength}
         />
-        {/* 원점 3축 화살표 (X:red, Y:green, Z:blue) - Z가 수직으로 보이도록 */}
-        <axesHelper args={[50]} position={[0, 0, 0.001]} />
+        {/* 원점 3축 화살표 (X:red, Y:green, Z:blue) */}
+        <axesHelper args={[AXES_HELPER_CONFIG.size]} position={AXES_HELPER_CONFIG.position} />
         {/* 화면 하단-우측 3축 위젯 */}
-        <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
-          <GizmoViewport axisColors={["#ff6b6b", "#51cf66", "#4dabf7"]} labelColor="#e5e7eb" />
+        <GizmoHelper alignment={GIZMO_CONFIG.alignment} margin={GIZMO_CONFIG.margin}>
+          <GizmoViewport
+            axisColors={GIZMO_CONFIG.axisColors}
+            labelColor={GIZMO_CONFIG.labelColor}
+          />
         </GizmoHelper>
-        <OrbitControls enableDamping dampingFactor={0.05} enabled={!!effectiveUrl || showDemo} />
+        <OrbitControls
+          enableDamping={ORBIT_CONTROLS_CONFIG.enableDamping}
+          dampingFactor={ORBIT_CONTROLS_CONFIG.dampingFactor}
+          enabled={!!effectiveUrl || showDemo}
+        />
       </Canvas>
 
       {/* 3개 메인 섹션 아코디언 */}

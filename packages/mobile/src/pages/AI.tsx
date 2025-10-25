@@ -12,9 +12,11 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   Sheet,
   SheetContent,
@@ -32,6 +34,7 @@ import {
   ImageIcon,
   Trash2,
   Printer,
+  XCircle,
   Download,
   ChevronDown,
   ChevronRight,
@@ -41,10 +44,18 @@ import {
   Settings,
   History,
   Check,
+  ArrowLeft,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@shared/integrations/supabase/client";
+import { createAIModel, updateAIModel, listAIModels, deleteAIModel } from "@shared/services/supabaseService/aiModel";
+import { downloadAndUploadModel, downloadAndUploadSTL, downloadAndUploadThumbnail, downloadAndUploadGCode, deleteModelFiles } from "@shared/services/supabaseService/aiStorage";
+import { getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
+import { uploadSTLAndSlice, type SlicingSettings, type PrinterDefinition } from "@shared/services/aiService";
+import type { AIGeneratedModel } from "@shared/types/aiModelType";
 
 // 단계 정의
 type Step = "select-input" | "create-prompt" | "configure" | "generate" | "result";
@@ -60,7 +71,7 @@ interface UploadedFile {
 
 // 생성된 모델 타입
 interface GeneratedModel {
-  id: number;
+  id: string | number;
   name: string;
   type: string;
   prompt: string;
@@ -81,22 +92,98 @@ const AI = () => {
   const [generatedModel, setGeneratedModel] = useState<GeneratedModel | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showPrinterModal, setShowPrinterModal] = useState(false);
+  const [modelsList, setModelsList] = useState<AIGeneratedModel[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [historyTab, setHistoryTab] = useState<'all' | 'text_to_3d' | 'image_to_3d' | 'text_to_image'>('all');
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const advancedSectionRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number>(0);
+  const touchEndX = useRef<number>(0);
+
+  // 모델 편집 상태
+  const [userRotation, setUserRotation] = useState<[number, number, number]>([0, 0, 0]);
+  const [uniformScale, setUniformScale] = useState<number>(1);
+  const [maxTriangles, setMaxTriangles] = useState<number>(100000);
+  const [modelDimensions, setModelDimensions] = useState<{ x: number; y: number; z: number } | null>(null);
+
+  // 스와이프 핸들러
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    const diff = touchStartX.current - touchEndX.current;
+    const minSwipeDistance = 50;
+
+    if (Math.abs(diff) > minSwipeDistance) {
+      const tabs: Array<'all' | 'text_to_3d' | 'image_to_3d' | 'text_to_image'> = ['all', 'text_to_3d', 'image_to_3d', 'text_to_image'];
+      const currentIndex = tabs.indexOf(historyTab);
+
+      if (diff > 0 && currentIndex < tabs.length - 1) {
+        // 왼쪽으로 스와이프 (다음 탭)
+        setSlideDirection('left');
+        setTimeout(() => {
+          setHistoryTab(tabs[currentIndex + 1]);
+          setTimeout(() => setSlideDirection(null), 50);
+        }, 0);
+      } else if (diff < 0 && currentIndex > 0) {
+        // 오른쪽으로 스와이프 (이전 탭)
+        setSlideDirection('right');
+        setTimeout(() => {
+          setHistoryTab(tabs[currentIndex - 1]);
+          setTimeout(() => setSlideDirection(null), 50);
+        }, 0);
+      }
+    }
+  };
 
   // 고급 설정
-  const [quality, setQuality] = useState<"low" | "medium" | "high">("medium");
-  const [style, setStyle] = useState<"realistic" | "abstract" | "cartoon">("realistic");
-  const [resolution, setResolution] = useState("1024x1024");
+  const [symmetryMode, setSymmetryMode] = useState<"off" | "auto" | "on">("auto");
+  const [artStyle, setArtStyle] = useState<"realistic" | "sculpture">("realistic");
+  const [targetPolycount, setTargetPolycount] = useState<number>(30000);
 
-  const [connectedPrinters] = useState([
-    { id: "1", name: "Ender 3 Pro", status: "ready", temperature: { nozzle: 25, bed: 22 } },
-    { id: "2", name: "Prusa i3 MK3S+", status: "printing", temperature: { nozzle: 210, bed: 60 }, progress: 45 },
-    { id: "3", name: "Bambu Lab X1 Carbon", status: "ready", temperature: { nozzle: 28, bed: 25 } },
-  ]);
+  const [connectedPrinters, setConnectedPrinters] = useState<any[]>([]);
+
+  // 출력 설정 단계 상태
+  const [printStep, setPrintStep] = useState<'printer' | 'preview'>('printer');
+  const [selectedPrinter, setSelectedPrinter] = useState<any | null>(null);
+  const [isSlicing, setIsSlicing] = useState(false);
+  const [slicingInBackground, setSlicingInBackground] = useState(false); // 백그라운드 처리 상태
+  const [gcodeUrl, setGcodeUrl] = useState<string | null>(null);
+  const [gcodeInfo, setGcodeInfo] = useState<{
+    printTime?: string;
+    filamentLength?: string;
+    filamentWeight?: string;
+    layerCount?: number;
+    nozzleTemp?: number;
+    bedTemp?: number;
+  } | null>(null);
+
+  // 슬라이싱 설정
+  const [printSettings, setPrintSettings] = useState({
+    support_enable: true,
+    support_angle: 50,
+    layer_height: 0.2,
+    line_width: 0.4,
+    speed_print: 50,
+    material_diameter: 1.75,
+    material_flow: 100,
+    infill_sparse_density: 15,
+    wall_line_count: 2,
+    top_layers: 4,
+    bottom_layers: 4,
+    adhesion_type: 'none' as 'none' | 'skirt' | 'brim' | 'raft',
+  });
 
   const { toast } = useToast();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 예시 프롬프트
@@ -114,6 +201,315 @@ const AI = () => {
   useEffect(() => {
     document.title = t('ai.title') || "AI 3D 모델링 스튜디오";
   }, [t]);
+
+  // 프린터 목록 로드
+  useEffect(() => {
+    const loadPrinters = async () => {
+      if (!user) return;
+      try {
+        const printers = await getUserPrintersWithGroup(user.id);
+        setConnectedPrinters(printers);
+      } catch (error) {
+        console.error('[AI] Failed to load printers:', error);
+      }
+    };
+    loadPrinters();
+  }, [user]);
+
+  // 프린터 선택 및 슬라이싱 시작
+  const handlePrinterSelect = async (printer: any) => {
+    console.log('[AI Mobile] Printer selected:', printer.name);
+
+    if (!generatedModel?.glbUrl || !user?.id) {
+      toast({
+        title: t('common.error') || '오류',
+        description: t('ai.noModelOrPrinter') || '3D 모델 파일이나 프린터 정보가 없습니다.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setSelectedPrinter(printer);
+      setIsSlicing(true);
+      setSlicingInBackground(false);
+      setPrintStep('preview'); // 프리뷰 단계로 이동
+
+      toast({
+        title: t('ai.slicing') || '슬라이싱 시작',
+        description: `${printer.name} ${t('ai.slicingStart') || '프린터로 슬라이싱을 시작합니다...'}`,
+      });
+
+      // 20초 타이머 시작
+      const timeoutId = setTimeout(() => {
+        if (isSlicing) {
+          console.log('[AI Mobile] Slicing taking too long, switching to background mode');
+          setSlicingInBackground(true);
+        }
+      }, 20000);
+
+      // 1. 모델 파일 다운로드 (GLB만 사용)
+      const modelUrl = generatedModel.glbUrl;
+
+      console.log('[AI Mobile] ========================================');
+      console.log('[AI Mobile] 📥 DOWNLOADING MODEL FOR SLICING');
+      console.log('[AI Mobile] - Model URL:', modelUrl);
+      console.log('[AI Mobile] ========================================');
+
+      const modelResponse = await fetch(modelUrl);
+      if (!modelResponse.ok) {
+        throw new Error('모델 파일 다운로드 실패');
+      }
+      const modelBlob = await modelResponse.blob();
+
+      // GLB 파일만 사용 (STL 사용 안 함)
+      const fileExtension = modelUrl.endsWith('.stl') ? 'stl' : 'glb';
+      console.log('[AI Mobile] Downloaded model file:');
+      console.log('[AI Mobile] - File format:', fileExtension);
+      console.log('[AI Mobile] - Downloaded blob size:', modelBlob.size, 'bytes');
+      console.log('[AI Mobile] - Downloaded blob type:', modelBlob.type);
+
+      // 2. 슬라이싱 설정 구성
+      const curaSettings: SlicingSettings = {
+        layer_height: printSettings.layer_height.toString(),
+        line_width: printSettings.line_width.toString(),
+        infill_sparse_density: printSettings.infill_sparse_density.toString(),
+        wall_line_count: printSettings.wall_line_count.toString(),
+        top_layers: printSettings.top_layers.toString(),
+        bottom_layers: printSettings.bottom_layers.toString(),
+        speed_print: printSettings.speed_print.toString(),
+        support_enable: printSettings.support_enable.toString(),
+        support_angle: printSettings.support_angle.toString(),
+        adhesion_type: printSettings.adhesion_type,
+        material_diameter: printSettings.material_diameter.toString(),
+        material_flow: printSettings.material_flow.toString(),
+      };
+
+      // 3. 프린터 정보 조회
+      let printerFilename = printer.model || printer.name;
+      if (printer.manufacture_id) {
+        try {
+          const { data: manufacturingPrinter } = await supabase
+            .from('manufacturing_printers')
+            .select('filename, manufacturer, series, display_name')
+            .eq('id', printer.manufacture_id)
+            .single();
+
+          if (manufacturingPrinter) {
+            printerFilename = manufacturingPrinter.filename.replace('.def.json', '');
+          }
+        } catch (error) {
+          console.warn('[AI Mobile] Failed to fetch manufacturing printer:', error);
+        }
+      }
+
+      // 4. 프린터 정의
+      const printerDefinition: PrinterDefinition = {
+        version: 2,
+        overrides: {
+          machine_width: { default_value: 220 },
+          machine_depth: { default_value: 220 },
+          machine_height: { default_value: 250 },
+          machine_extruder_count: { default_value: 1 },
+          mesh_rotation_matrix: { default_value: "[[1,0,0], [0,1,0], [0,0,1]]" },
+        },
+      };
+
+      // 5. DB에서 캐시된 GCode 확인
+      if (generatedModel.id && printer.manufacture_id) {
+        const { data: existingGcode, error: gcodeError } = await supabase
+          .from('gcode_files')
+          .select('*')
+          .eq('model_id', generatedModel.id)
+          .eq('printer_id', printer.manufacture_id)
+          .single();
+
+        if (existingGcode && !gcodeError) {
+          console.log('[AI Mobile] Cached GCode found!');
+          const { data: urlData } = supabase.storage
+            .from('gcode-files')
+            .getPublicUrl(existingGcode.file_path);
+
+          setGcodeInfo({
+            printTime: existingGcode.print_time_formatted,
+            filamentLength: existingGcode.filament_used_m ? `${existingGcode.filament_used_m.toFixed(2)}m` : undefined,
+            filamentWeight: existingGcode.filament_weight_g ? `${existingGcode.filament_weight_g.toFixed(1)}g` : undefined,
+            layerCount: existingGcode.layer_count,
+            nozzleTemp: existingGcode.nozzle_temp,
+            bedTemp: existingGcode.bed_temp,
+          });
+
+          setGcodeUrl(urlData.publicUrl);
+          setIsSlicing(false);
+
+          toast({
+            title: t('ai.slicingComplete') || '슬라이싱 완료',
+            description: t('ai.readyToPrint') || '출력 준비가 완료되었습니다',
+          });
+          return;
+        }
+      }
+
+      // 6. 슬라이싱 API 호출
+      const fileName = `model_${Date.now()}.${fileExtension}`;
+      const slicingResult = await uploadSTLAndSlice(
+        modelBlob,
+        fileName,
+        curaSettings,
+        printerDefinition,
+        printerFilename
+      );
+
+      console.log('[AI Mobile] ========================================');
+      console.log('[AI Mobile] 📦 SLICING RESPONSE FROM SERVER:');
+      console.log(JSON.stringify(slicingResult, null, 2));
+      console.log('[AI Mobile] ========================================');
+
+      if (slicingResult.status === 'error' || !slicingResult.data) {
+        throw new Error(slicingResult.error || '슬라이싱 실패');
+      }
+
+      // 7. GCode 저장 및 정보 설정
+      clearTimeout(timeoutId); // 타이머 클리어
+
+      const gcodeUrl = slicingResult.data.gcode_url;
+      console.log('[AI Mobile] GCode URL from slicing result:', gcodeUrl);
+
+      // 캐시 방지를 위해 타임스탬프를 URL에 추가
+      const gcodeUrlWithTimestamp = `${gcodeUrl}?t=${Date.now()}`;
+      setGcodeUrl(gcodeUrlWithTimestamp);
+
+      // 서버 메타데이터를 UI 형식으로 변환
+      if (slicingResult.data.gcode_metadata) {
+        const metadata = slicingResult.data.gcode_metadata;
+        console.log('[AI Mobile] 📊 GCODE METADATA FROM SERVER:', metadata);
+
+        setGcodeInfo({
+          printTime: metadata.print_time_formatted,
+          filamentLength: metadata.filament_used_m ? `${metadata.filament_used_m.toFixed(2)}m` : undefined,
+          filamentWeight: metadata.filament_weight_g ? `${metadata.filament_weight_g.toFixed(1)}g` : undefined,
+          layerCount: metadata.layer_count,
+          nozzleTemp: metadata.nozzle_temp,
+          bedTemp: metadata.bed_temp,
+        });
+      }
+
+      // 8. GCode를 Supabase Storage에 업로드 및 DB 업데이트
+      if (generatedModel.id && typeof generatedModel.id === 'string') {
+        try {
+          console.log('[AI Mobile] Uploading GCode to Supabase Storage...');
+
+          // 프린터 정보 구성
+          let printerInfoForGCode: { manufacturer?: string; series?: string; model?: string; printer_name?: string } = {};
+          if (printer.manufacture_id) {
+            const { data: manufacturingPrinter } = await supabase
+              .from('manufacturing_printers')
+              .select('manufacturer, series, display_name')
+              .eq('id', printer.manufacture_id)
+              .single();
+
+            if (manufacturingPrinter) {
+              printerInfoForGCode = {
+                manufacturer: manufacturingPrinter.manufacturer,
+                series: manufacturingPrinter.series,
+                model: manufacturingPrinter.display_name,
+                printer_name: printer.name,
+              };
+            }
+          }
+
+          const gcodeUploadResult = await downloadAndUploadGCode(
+            supabase,
+            user.id,
+            generatedModel.id,
+            gcodeUrl,
+            printer.manufacture_id,
+            generatedModel.name || 'Untitled Model',
+            printerInfoForGCode,
+            slicingResult.data.gcode_metadata
+          );
+
+          if (gcodeUploadResult) {
+            console.log('[AI Mobile] GCode uploaded successfully');
+
+            // 캐시된 메타데이터가 있으면 사용
+            if (gcodeUploadResult.metadata) {
+              console.log('[AI Mobile] Using cached metadata from DB');
+              setGcodeInfo({
+                printTime: gcodeUploadResult.metadata.print_time_formatted,
+                filamentLength: gcodeUploadResult.metadata.filament_used_m ? `${gcodeUploadResult.metadata.filament_used_m.toFixed(2)}m` : undefined,
+                filamentWeight: gcodeUploadResult.metadata.filament_weight_g ? `${gcodeUploadResult.metadata.filament_weight_g.toFixed(1)}g` : undefined,
+                layerCount: gcodeUploadResult.metadata.layer_count,
+                nozzleTemp: gcodeUploadResult.metadata.nozzle_temp,
+                bedTemp: gcodeUploadResult.metadata.bed_temp,
+              });
+            }
+
+            // DB에 GCode URL 저장
+            await updateAIModel(supabase, generatedModel.id, {
+              gcode_url: gcodeUploadResult.publicUrl,
+            });
+            console.log('[AI Mobile] GCode saved to DB:', gcodeUploadResult.publicUrl);
+
+            // Supabase URL로 업데이트
+            setGcodeUrl(gcodeUploadResult.publicUrl);
+          }
+        } catch (gcodeError) {
+          console.error('[AI Mobile] Failed to upload GCode:', gcodeError);
+          // GCode 업로드 실패해도 슬라이싱은 성공이므로 계속 진행
+        }
+      }
+
+      // 백그라운드 모드였다면 푸시 알림
+      if (slicingInBackground) {
+        toast({
+          title: t('ai.slicingComplete') || '슬라이싱 완료',
+          description: t('ai.slicingCompletedInBackground') || '백그라운드에서 슬라이싱이 완료되었습니다. 출력 정보를 확인하세요.',
+          duration: 10000,
+        });
+        // TODO: 실제 푸시 알림 구현
+      } else {
+        toast({
+          title: t('ai.slicingComplete') || '슬라이싱 완료',
+          description: t('ai.readyToPrint') || '출력 준비가 완료되었습니다',
+        });
+      }
+    } catch (error) {
+      clearTimeout(timeoutId); // 타이머 클리어
+      console.error('[AI Mobile] Slicing failed:', error);
+      toast({
+        title: t('common.error') || '오류',
+        description: error instanceof Error ? error.message : t('ai.slicingFailed') || '슬라이싱에 실패했습니다',
+        variant: 'destructive',
+      });
+      setPrintStep('printer'); // 실패 시 프린터 선택으로 돌아감
+    } finally {
+      setIsSlicing(false);
+      setSlicingInBackground(false);
+    }
+  };
+
+  // 모델 목록 로드
+  const loadModels = async () => {
+    if (!user?.id) return;
+    setLoadingModels(true);
+    try {
+      const result = await listAIModels(supabase, user.id, {
+        page: 1,
+        pageSize: 50,
+      });
+      setModelsList(result.items);
+    } catch (error) {
+      console.error('[AI] Failed to load models:', error);
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+
+  // 모델 목록 초기 로드
+  useEffect(() => {
+    loadModels();
+  }, [user?.id]);
 
   // 고급 설정 열릴 때 해당 섹션으로 스크롤 이동
   useEffect(() => {
@@ -182,14 +578,28 @@ const AI = () => {
 
     try {
       let result;
+      let dbModelId: string | null = null;
 
       if (inputType === "text" || inputType === "text-to-image") {
-        // 텍스트 → 3D 변환
-        const { postTextTo3D, buildCommon, pollTaskUntilComplete, extractGLBUrl, extractThumbnailUrl } = await import("@/lib/aiService");
+        // 1. DB에 레코드 생성 (status: processing)
+        const dbModel = await createAIModel(supabase, {
+          generation_type: 'text_to_3d',
+          prompt: textPrompt,
+          art_style: artStyle,
+          target_polycount: targetPolycount,
+          symmetry_mode: symmetryMode,
+          model_name: `Text-to-3D: ${textPrompt.substring(0, 30)}...`,
+        }, user.id);
+
+        dbModelId = dbModel.id;
+
+        // 2. 텍스트 → 3D 변환
+        const { postTextTo3D, buildCommon, pollTaskUntilComplete, extractGLBUrl, extractSTLUrl, extractThumbnailUrl, extractMetadata } = await import("@shared/services/aiService");
 
         const payload = {
-          ...buildCommon('flux-kontext', quality, style, user?.id),
-          input: { text: textPrompt },
+          task: 'text_to_3d',
+          prompt: textPrompt,
+          ...buildCommon(symmetryMode, artStyle, targetPolycount, user?.id, 'mobile'),
         };
 
         // 비동기 모드로 요청
@@ -204,24 +614,82 @@ const AI = () => {
               console.log(`[AI] Progress: ${progressValue}% - Status: ${status}`);
             }
           );
+
+          // 3. 파일 다운로드 및 Supabase Storage 업로드
+          const glbUrl = extractGLBUrl(result);
+          const stlUrl = extractSTLUrl(result);
+          const thumbnailUrl = extractThumbnailUrl(result);
+          const metadata = extractMetadata(result);
+
+          if (!glbUrl) {
+            throw new Error('GLB URL을 추출할 수 없습니다.');
+          }
+
+          // 파일 업로드
+          const modelData = await downloadAndUploadModel(supabase, user.id, dbModelId, glbUrl);
+          console.log('[AI] modelData:', modelData);
+          const stlData = stlUrl ? await downloadAndUploadSTL(supabase, user.id, dbModelId, stlUrl) : null;
+          console.log('[AI] stlData:', stlData);
+          const thumbnailData = thumbnailUrl ? await downloadAndUploadThumbnail(supabase, user.id, dbModelId, thumbnailUrl) : null;
+          console.log('[AI] thumbnailData:', thumbnailData);
+
+          // 4. DB 업데이트
+          await updateAIModel(supabase, dbModelId, {
+            storage_path: modelData.path,
+            download_url: modelData.publicUrl,
+            stl_storage_path: stlData?.path,
+            stl_download_url: stlData?.publicUrl,
+            thumbnail_url: thumbnailData?.publicUrl,
+            model_dimensions: metadata?.dimensions,
+            generation_metadata: metadata,
+            status: 'completed',
+          });
+
+          // 5. 상태 업데이트 (Supabase Storage URL 사용)
+          const newModel = {
+            id: dbModelId,
+            name: `Text-to-3D: ${textPrompt.substring(0, 30)}...`,
+            type: inputType,
+            prompt: textPrompt,
+            status: "completed" as const,
+            thumbnail: thumbnailData?.publicUrl || "/placeholder.svg",
+            glbUrl: modelData.publicUrl,
+            createdAt: new Date().toISOString(),
+          };
+
+          console.log('[AI] Setting generated model:', newModel);
+          setGeneratedModel(newModel);
         } else {
           throw new Error('Task ID를 받지 못했습니다.');
         }
       } else if (inputType === "image" && uploadedFiles.length > 0) {
-        // 이미지 → 3D 변환
-        const { postImageTo3D, buildCommon, pollTaskUntilComplete, extractGLBUrl, extractThumbnailUrl } = await import("@/lib/aiService");
+        // 1. DB에 레코드 생성 (status: processing)
+        const uploadedFile = uploadedFiles[0];
+        const dbModel = await createAIModel(supabase, {
+          generation_type: 'image_to_3d',
+          source_image_url: uploadedFile.url,
+          art_style: artStyle,
+          target_polycount: targetPolycount,
+          symmetry_mode: symmetryMode,
+          model_name: `Image-to-3D: ${uploadedFile.name}`,
+        }, user.id);
+
+        dbModelId = dbModel.id;
+
+        // 2. 이미지 → 3D 변환
+        const { postImageTo3D, buildCommon, pollTaskUntilComplete, extractGLBUrl, extractSTLUrl, extractThumbnailUrl, extractMetadata } = await import("@shared/services/aiService");
 
         const formData = new FormData();
 
         // 이미지 파일을 Blob으로 변환하여 추가
-        const uploadedFile = uploadedFiles[0];
         const response = await fetch(uploadedFile.url);
         const blob = await response.blob();
-        formData.append('image', blob, uploadedFile.name);
 
-        // 설정 추가
-        const config = buildCommon('flux-kontext', quality, style, user?.id);
-        formData.append('config', JSON.stringify(config));
+        const common = buildCommon(symmetryMode, artStyle, targetPolycount, user?.id, 'mobile');
+
+        formData.append('task', 'image_to_3d');
+        formData.append('image_file', blob, uploadedFile.name);
+        formData.append('json', JSON.stringify(common));
 
         // 비동기 모드로 요청
         const asyncResult = await postImageTo3D(formData, true);
@@ -235,31 +703,63 @@ const AI = () => {
               console.log(`[AI] Progress: ${progressValue}% - Status: ${status}`);
             }
           );
+
+          // 3. 파일 다운로드 및 Supabase Storage 업로드
+          const glbUrl = extractGLBUrl(result);
+          const stlUrl = extractSTLUrl(result);
+          const thumbnailUrl = extractThumbnailUrl(result);
+          const metadata = extractMetadata(result);
+
+          if (!glbUrl) {
+            throw new Error('GLB URL을 추출할 수 없습니다.');
+          }
+
+          // 파일 업로드
+          const modelData = await downloadAndUploadModel(supabase, user.id, dbModelId, glbUrl);
+          console.log('[AI] modelData (image):', modelData);
+          const stlData = stlUrl ? await downloadAndUploadSTL(supabase, user.id, dbModelId, stlUrl) : null;
+          console.log('[AI] stlData (image):', stlData);
+          const thumbnailData = thumbnailUrl ? await downloadAndUploadThumbnail(supabase, user.id, dbModelId, thumbnailUrl) : null;
+          console.log('[AI] thumbnailData (image):', thumbnailData);
+
+          // 4. DB 업데이트
+          await updateAIModel(supabase, dbModelId, {
+            storage_path: modelData.path,
+            download_url: modelData.publicUrl,
+            stl_storage_path: stlData?.path,
+            stl_download_url: stlData?.publicUrl,
+            thumbnail_url: thumbnailData?.publicUrl,
+            model_dimensions: metadata?.dimensions,
+            generation_metadata: metadata,
+            status: 'completed',
+          });
+
+          // 5. 상태 업데이트 (Supabase Storage URL 사용)
+          const newModel = {
+            id: dbModelId,
+            name: `Image-to-3D: ${uploadedFile.name}`,
+            type: inputType,
+            prompt: textPrompt,
+            status: "completed" as const,
+            thumbnail: thumbnailData?.publicUrl || "/placeholder.svg",
+            glbUrl: modelData.publicUrl,
+            createdAt: new Date().toISOString(),
+          };
+
+          console.log('[AI] Setting generated model (image):', newModel);
+          setGeneratedModel(newModel);
         } else {
           throw new Error('Task ID를 받지 못했습니다.');
         }
       }
 
       // 결과 처리
-      if (result) {
-        const { extractGLBUrl, extractThumbnailUrl } = await import("@/lib/aiService");
-        const glbUrl = extractGLBUrl(result);
-        const thumbnailUrl = extractThumbnailUrl(result);
-
-        const newModel = {
-          id: Date.now(),
-          name: `Model_${Date.now()}`,
-          type: inputType,
-          prompt: textPrompt,
-          status: "completed",
-          thumbnail: thumbnailUrl || "/placeholder.svg",
-          glbUrl: glbUrl || undefined,
-          createdAt: new Date().toISOString(),
-        };
-
-        setGeneratedModel(newModel);
+      if (result && dbModelId) {
         setProgress(100);
         setCurrentStep("result");
+
+        // 모델 목록 새로고침
+        await loadModels();
 
         toast({
           title: t('ai.generationComplete'),
@@ -268,6 +768,18 @@ const AI = () => {
       }
     } catch (error) {
       console.error('[AI] Generation error:', error);
+
+      // DB에 에러 상태 업데이트
+      if (dbModelId) {
+        try {
+          await updateAIModel(supabase, dbModelId, {
+            status: 'failed',
+          });
+        } catch (updateError) {
+          console.error('[AI] Failed to update model status:', updateError);
+        }
+      }
+
       toast({
         title: t('ai.generationFailed') || '생성 실패',
         description: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
@@ -457,59 +969,73 @@ const AI = () => {
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-3 pt-3">
           <div ref={advancedSectionRef} />
-          {/* 품질 선택 */}
+
+          {/* 대칭 모드 */}
           <div className="space-y-2">
-            <Label>{t('ai.quality')}</Label>
+            <Label>{t('ai.symmetryMode')}</Label>
             <div className="grid grid-cols-3 gap-2">
               <Button
-                variant={quality === "low" ? "default" : "outline"}
+                variant={symmetryMode === "off" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setQuality("low")}
+                onClick={() => setSymmetryMode("off")}
               >
-                {t('ai.qualityLow')}
+                {t('ai.symmetryOff')}
               </Button>
               <Button
-                variant={quality === "medium" ? "default" : "outline"}
+                variant={symmetryMode === "auto" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setQuality("medium")}
+                onClick={() => setSymmetryMode("auto")}
               >
-                {t('ai.qualityMedium')}
+                {t('ai.symmetryAuto')}
               </Button>
               <Button
-                variant={quality === "high" ? "default" : "outline"}
+                variant={symmetryMode === "on" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setQuality("high")}
+                onClick={() => setSymmetryMode("on")}
               >
-                {t('ai.qualityHigh')}
+                {t('ai.symmetryOn')}
               </Button>
             </div>
           </div>
 
-          {/* 스타일 선택 */}
+          {/* 아트 스타일 */}
           <div className="space-y-2">
-            <Label>{t('ai.style')}</Label>
-            <div className="grid grid-cols-3 gap-2">
+            <Label>{t('ai.artStyle')}</Label>
+            <div className="grid grid-cols-2 gap-2">
               <Button
-                variant={style === "realistic" ? "default" : "outline"}
+                variant={artStyle === "realistic" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setStyle("realistic")}
+                onClick={() => setArtStyle("realistic")}
               >
                 {t('ai.styleRealistic')}
               </Button>
               <Button
-                variant={style === "cartoon" ? "default" : "outline"}
+                variant={artStyle === "sculpture" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setStyle("cartoon")}
+                onClick={() => setArtStyle("sculpture")}
               >
-                {t('ai.styleCartoon')}
+                {t('ai.styleSculpture')}
               </Button>
-              <Button
-                variant={style === "abstract" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setStyle("abstract")}
-              >
-                {t('ai.styleAbstract')}
-              </Button>
+            </div>
+          </div>
+
+          {/* 목표 폴리곤 수 */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>{t('ai.targetPolycount')}</Label>
+              <span className="text-sm text-muted-foreground">{targetPolycount.toLocaleString()}</span>
+            </div>
+            <Slider
+              min={10000}
+              max={50000}
+              step={200}
+              value={[targetPolycount]}
+              onValueChange={(values) => setTargetPolycount(values[0])}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>10,000</span>
+              <span>50,000</span>
             </div>
           </div>
         </CollapsibleContent>
@@ -565,92 +1091,212 @@ const AI = () => {
                 <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
               </div>
             }>
-              {generatedModel?.glbUrl ? (
-                <ModelViewer
-                  className="w-full h-full"
-                  modelUrl={generatedModel.glbUrl}
-                  enableRotationControls={true}
-                />
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-sm text-muted-foreground">{t('ai.noModelAvailable') || '모델을 불러올 수 없습니다'}</p>
-                </div>
-              )}
+              {(() => {
+                console.log('[AI] Render check - generatedModel:', generatedModel);
+                console.log('[AI] Render check - glbUrl:', generatedModel?.glbUrl);
+                return generatedModel?.glbUrl ? (
+                  <ModelViewer
+                    className="w-full h-full"
+                    modelUrl={generatedModel.glbUrl}
+                    modelScale={uniformScale}
+                    rotation={userRotation}
+                    onSize={(size) => setModelDimensions(size)}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-sm text-muted-foreground">{t('ai.noModelAvailable') || '모델을 불러올 수 없습니다'}</p>
+                  </div>
+                );
+              })()}
             </Suspense>
           </div>
         </CardContent>
       </Card>
 
-      {/* 액션 버튼들 */}
-      <div className="grid grid-cols-2 gap-3">
-        <Button
-          variant="outline"
-          className="h-12"
-          onClick={() => {
-            if (generatedModel?.glbUrl) {
-              // GLB 파일 다운로드
-              const link = document.createElement('a');
-              link.href = generatedModel.glbUrl;
-              link.download = `${generatedModel.name}.glb`;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              toast({
-                title: t('ai.downloadStarted') || '다운로드 시작',
-                description: t('ai.downloadStartedDesc') || 'GLB 파일 다운로드를 시작합니다.',
-              });
-            }
-          }}
-          disabled={!generatedModel?.glbUrl}
-        >
-          <Download className="w-4 h-4 mr-2" />
-          {t('ai.download')}
-        </Button>
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button className="h-12">
-              <Printer className="w-4 h-4 mr-2" />
-              {t('common.download')}
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="bottom" className="h-[80vh]">
-            <SheetHeader>
-              <SheetTitle>{t('ai.selectPrinterTitle')}</SheetTitle>
-              <SheetDescription>{t('ai.selectPrinterDesc')}</SheetDescription>
-            </SheetHeader>
-            <div className="mt-6 space-y-3">
-              {connectedPrinters.map((printer) => (
-                <Card
-                  key={printer.id}
-                  className="cursor-pointer hover:shadow-md transition"
-                  onClick={() => {
-                    toast({
-                      title: t('ai.printStarted'),
-                      description: `${printer.name}${t('ai.printStartedDesc')}`,
-                    });
-                  }}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="font-medium">{printer.name}</p>
-                      <PrinterStatusBadge status={printer.status} />
-                    </div>
-                    <div className="text-xs text-muted-foreground flex justify-between">
-                      <span>{t('printer.nozzle')}: {printer.temperature.nozzle}°C</span>
-                      <span>{t('printer.bed')}: {printer.temperature.bed}°C</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </SheetContent>
-        </Sheet>
-      </div>
+      {/* 모델 편집 아코디언 */}
+      <Card>
+        <CardContent className="p-4">
+          <Accordion type="single" collapsible className="w-full">
+            {/* 모델 회전 섹션 */}
+            <AccordionItem value="rotation" className="border-b">
+              <AccordionTrigger className="py-3 text-sm hover:no-underline">
+                {t('modelViewer.modelRotation') || 'Model Rotation'}
+              </AccordionTrigger>
+              <AccordionContent className="pb-3">
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground">
+                      {t('modelViewer.xAxisRotation') || 'X Axis'}: {Math.round(userRotation[0] * 180 / Math.PI)}°
+                    </label>
+                    <Slider
+                      min={-180}
+                      max={180}
+                      step={5}
+                      value={[userRotation[0] * 180 / Math.PI]}
+                      onValueChange={(value) => setUserRotation([value[0] * Math.PI / 180, userRotation[1], userRotation[2]])}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">
+                      {t('modelViewer.yAxisRotation') || 'Y Axis'}: {Math.round(userRotation[1] * 180 / Math.PI)}°
+                    </label>
+                    <Slider
+                      min={-180}
+                      max={180}
+                      step={5}
+                      value={[userRotation[1] * 180 / Math.PI]}
+                      onValueChange={(value) => setUserRotation([userRotation[0], value[0] * Math.PI / 180, userRotation[2]])}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">
+                      {t('modelViewer.zAxisRotation') || 'Z Axis'}: {Math.round(userRotation[2] * 180 / Math.PI)}°
+                    </label>
+                    <Slider
+                      min={-180}
+                      max={180}
+                      step={5}
+                      value={[userRotation[2] * 180 / Math.PI]}
+                      onValueChange={(value) => setUserRotation([userRotation[0], userRotation[1], value[0] * Math.PI / 180])}
+                      className="mt-2"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setUserRotation([0, 0, 0])}
+                  >
+                    {t('modelViewer.reset') || 'Reset'}
+                  </Button>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
 
-      {/* 다시 만들기 */}
-      <Button variant="ghost" className="w-full" onClick={resetFlow}>
-        {t('ai.createAnother')}
-      </Button>
+            {/* Uniform Scale 섹션 */}
+            <AccordionItem value="scale" className="border-b">
+              <AccordionTrigger className="py-3 text-sm hover:no-underline">
+                {t('modelViewer.uniformScale') || 'Uniform Scale'}
+              </AccordionTrigger>
+              <AccordionContent className="pb-3">
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-xs text-muted-foreground">{t('modelViewer.scale') || 'Scale'}</span>
+                      <strong className="text-xs">{uniformScale.toFixed(2)}x</strong>
+                    </div>
+                    <Slider
+                      min={0.05}
+                      max={10}
+                      step={0.01}
+                      value={[uniformScale]}
+                      onValueChange={(value) => setUniformScale(value[0])}
+                      className="mt-2"
+                    />
+                  </div>
+                  {modelDimensions && (
+                    <div className="flex justify-end gap-2 text-xs">
+                      <div className="text-center">
+                        <div className="text-muted-foreground">X</div>
+                        <div className="font-medium">{(modelDimensions.x * uniformScale).toFixed(1)}mm</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-muted-foreground">Y</div>
+                        <div className="font-medium">{(modelDimensions.y * uniformScale).toFixed(1)}mm</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-muted-foreground">Z</div>
+                        <div className="font-medium">{(modelDimensions.z * uniformScale).toFixed(1)}mm</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* Mesh Optimize 섹션 */}
+            <AccordionItem value="mesh" className="border-b">
+              <AccordionTrigger className="py-3 text-sm hover:no-underline">
+                {t('modelViewer.meshOptimize') || 'Mesh Optimize'}
+              </AccordionTrigger>
+              <AccordionContent className="pb-3">
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground">
+                      maxTriangles: {maxTriangles.toLocaleString()}
+                    </label>
+                    <Slider
+                      min={20000}
+                      max={300000}
+                      step={1000}
+                      value={[maxTriangles]}
+                      onValueChange={(value) => setMaxTriangles(value[0])}
+                      className="mt-2"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      toast({
+                        title: t('modelViewer.optimizing') || 'Optimizing',
+                        description: `Applying mesh optimization with ${maxTriangles.toLocaleString()} triangles...`,
+                      });
+                    }}
+                  >
+                    {t('modelViewer.apply') || 'Apply'}
+                  </Button>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* 모델 저장 섹션 */}
+            <AccordionItem value="export">
+              <AccordionTrigger className="py-3 text-sm hover:no-underline">
+                {t('modelViewer.saveModel') || 'Save Model'}
+              </AccordionTrigger>
+              <AccordionContent className="pb-3">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button className="w-full">
+                      {t('modelViewer.saveButton') || 'Save'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => {
+                        if (generatedModel?.glbUrl) {
+                          const link = document.createElement('a');
+                          link.href = generatedModel.glbUrl;
+                          link.download = `${generatedModel.name}.glb`;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          toast({
+                            title: t('ai.downloadStarted') || '다운로드 시작',
+                            description: t('ai.downloadStartedDesc') || 'GLB 파일 다운로드를 시작합니다.',
+                          });
+                        }
+                      }}
+                      disabled={!generatedModel?.glbUrl}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      {t('common.download')}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t('modelViewer.saveInfo') || 'Saves the model with current rotation, scale, and mesh optimizations applied.'}
+                  </p>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </CardContent>
+      </Card>
+
     </div>
   );
 
@@ -679,7 +1325,7 @@ const AI = () => {
         {currentStep === "result" && renderResult()}
       </div>
 
-      {/* 고정된 하단 버튼 (프롬프트 작성 단계에서만) */}
+      {/* 고정된 하단 버튼 */}
       {currentStep === "create-prompt" && (
         <div className="flex-shrink-0 p-4 bg-background border-t" style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + 16px)` }}>
           <Button
@@ -693,6 +1339,480 @@ const AI = () => {
           </Button>
         </div>
       )}
+
+      {currentStep === "result" && (
+        <div className="flex-shrink-0 p-4 bg-background border-t" style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + 16px)` }}>
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              variant="outline"
+              size="lg"
+              className="h-14 text-lg font-semibold"
+              onClick={resetFlow}
+            >
+              <ArrowLeft className="w-5 h-5 mr-2" />
+              {t('ai.createAnother') || '뒤로'}
+            </Button>
+            <Button
+              size="lg"
+              className="h-14 text-lg font-semibold"
+              onClick={() => setShowPrinterModal(true)}
+              disabled={!generatedModel?.glbUrl}
+            >
+              <Printer className="w-5 h-5 mr-2" />
+              {t('ai.print') || '출력'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* 히스토리 Sheet */}
+      <Sheet open={showHistory} onOpenChange={setShowHistory}>
+        <SheetContent side="bottom" className="h-[85vh] flex flex-col p-0">
+          <SheetHeader className="px-6 pt-6">
+            <SheetTitle>{t('ai.modelArchive') || '모델 아카이브'}</SheetTitle>
+            <SheetDescription>{t('ai.viewYourModels') || '생성한 3D 모델 목록'}</SheetDescription>
+          </SheetHeader>
+
+          {/* 탭 네비게이션 */}
+          <div className="flex gap-0 px-6 mt-4 border-b">
+            <Button
+              variant={historyTab === 'all' ? 'default' : 'secondary'}
+              size="sm"
+              className="rounded-b-none flex-1 border-r border-border/50"
+              onClick={() => setHistoryTab('all')}
+            >
+              {t('common.all') || '전체'}
+            </Button>
+            <Button
+              variant={historyTab === 'text_to_3d' ? 'default' : 'secondary'}
+              size="sm"
+              className="rounded-b-none flex-1 border-r border-border/50"
+              onClick={() => setHistoryTab('text_to_3d')}
+            >
+              Text to 3D
+            </Button>
+            <Button
+              variant={historyTab === 'image_to_3d' ? 'default' : 'secondary'}
+              size="sm"
+              className="rounded-b-none flex-1 border-r border-border/50"
+              onClick={() => setHistoryTab('image_to_3d')}
+            >
+              Image to 3D
+            </Button>
+            <Button
+              variant={historyTab === 'text_to_image' ? 'default' : 'secondary'}
+              size="sm"
+              className="rounded-b-none flex-1"
+              onClick={() => setHistoryTab('text_to_image')}
+            >
+              Text to Image
+            </Button>
+          </div>
+
+          <div
+            className="flex-1 overflow-hidden px-6 py-4"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div
+              key={historyTab}
+              className="h-full overflow-y-auto space-y-3"
+              style={{
+                animation: slideDirection
+                  ? slideDirection === 'left'
+                    ? 'slideInFromRight 0.3s ease-out'
+                    : 'slideInFromLeft 0.3s ease-out'
+                  : 'none'
+              }}
+            >
+              {loadingModels ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : (() => {
+                const filteredModels = historyTab === 'all'
+                  ? modelsList
+                  : modelsList.filter(m => m.generation_type === historyTab);
+
+                if (filteredModels.length === 0) {
+                  return (
+                    <div className="text-center py-12">
+                      <p className="text-muted-foreground">{t('ai.noModels') || '생성된 모델이 없습니다'}</p>
+                    </div>
+                  );
+                }
+
+                return filteredModels.map((model) => {
+                const isProcessing = model.status === 'processing';
+
+                return (
+                  <Card
+                    key={model.id}
+                    className={`transition-all duration-150 ${
+                      isProcessing
+                        ? 'opacity-60 cursor-not-allowed'
+                        : 'cursor-pointer hover:bg-accent hover:border-primary/50'
+                    }`}
+                    onClick={() => {
+                      if (!isProcessing && model.download_url) {
+                        console.log('[AI] Model clicked:', model);
+                        // 선택한 모델을 GeneratedModel 형식으로 변환
+                        setGeneratedModel({
+                          id: model.id,
+                          name: model.model_name || 'Untitled Model',
+                          type: model.generation_type === 'text_to_3d' ? 'text' : model.generation_type === 'image_to_3d' ? 'image' : 'text-to-image',
+                          prompt: model.prompt || '',
+                          status: 'completed',
+                          thumbnail: model.thumbnail_url || '/placeholder.svg',
+                          glbUrl: model.download_url || undefined,
+                          createdAt: model.created_at,
+                        });
+                        // 결과 화면으로 전환
+                        setCurrentStep('result');
+                        // 히스토리 패널 닫기
+                        setShowHistory(false);
+                      }
+                    }}
+                  >
+                    <CardContent className="p-3 flex gap-3">
+                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative">
+                        {isProcessing ? (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : model.thumbnail_url ? (
+                          <img
+                            src={model.thumbnail_url}
+                            alt={model.model_name || 'Model'}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Layers className="w-6 h-6 text-muted-foreground" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {/* 생성 방식 */}
+                        <div className="flex items-center gap-1.5 mb-1">
+                          {model.generation_type === 'text_to_3d' && (
+                            <Badge variant="outline" className="text-xs px-1.5 py-0">
+                              <FileText className="w-3 h-3 mr-1" />
+                              Text to 3D
+                            </Badge>
+                          )}
+                          {model.generation_type === 'image_to_3d' && (
+                            <Badge variant="outline" className="text-xs px-1.5 py-0">
+                              <ImageIcon className="w-3 h-3 mr-1" />
+                              Image to 3D
+                            </Badge>
+                          )}
+                          {model.generation_type === 'text_to_image' && (
+                            <Badge variant="outline" className="text-xs px-1.5 py-0">
+                              <Sparkles className="w-3 h-3 mr-1" />
+                              Text to Image
+                            </Badge>
+                          )}
+                          {isProcessing && (
+                            <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                              {t('ai.generating') || '생성 중'}
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* 프롬프트 또는 이미지 정보 */}
+                        <p className="text-sm font-medium truncate">
+                          {model.prompt || model.source_image_url ? (
+                            model.prompt || '이미지 업로드'
+                          ) : (
+                            'Untitled Model'
+                          )}
+                        </p>
+
+                        {/* 날짜 */}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {new Date(model.created_at).toLocaleString('ko-KR', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              });
+            })()}
+            </div>
+          </div>
+
+          {/* 하단 닫기 버튼 */}
+          <div className="flex-shrink-0 p-6 border-t bg-background">
+            <Button
+              variant="default"
+              className="w-full"
+              onClick={() => setShowHistory(false)}
+            >
+              {t('common.close') || '닫기'}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* 출력 설정 다단계 모달 */}
+      <Sheet
+        open={showPrinterModal}
+        onOpenChange={(open) => {
+          // 슬라이싱 중에는 모달을 닫을 수 없음 (백그라운드 모드 제외)
+          if (isSlicing && !slicingInBackground) return;
+
+          setShowPrinterModal(open);
+          if (!open) {
+            // 모달 닫힐 때 상태 초기화
+            setPrintStep('printer');
+            setSelectedPrinter(null);
+            setGcodeUrl(null);
+            setGcodeInfo(null);
+          }
+        }}
+      >
+        <SheetContent side="bottom" className="h-[85vh] flex flex-col p-0">
+          {/* 1단계: 프린터 선택 */}
+          {printStep === 'printer' && (
+            <>
+              <SheetHeader className="px-6 pt-6">
+                <SheetTitle>{t('ai.selectPrinterTitle') || '프린터 선택'}</SheetTitle>
+                <SheetDescription>{t('ai.selectPrinterDesc') || '출력할 프린터를 선택하세요'}</SheetDescription>
+              </SheetHeader>
+              <div className="flex-1 overflow-y-auto px-6 mt-6">
+                <div className="space-y-3 pb-6">
+                  {connectedPrinters.length > 0 ? (
+                    connectedPrinters.map((printer) => (
+                      <Card
+                        key={printer.id}
+                        className="cursor-pointer hover:bg-accent transition-all duration-150"
+                        onClick={() => handlePrinterSelect(printer)}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <p className="font-medium">{printer.name}</p>
+                              <p className="text-xs text-muted-foreground">{printer.model}</p>
+                            </div>
+                            <PrinterStatusBadge status={printer.status} />
+                          </div>
+                          <div className="text-xs text-muted-foreground flex justify-between">
+                            <span>{t('printer.nozzle') || '노즐'}: {printer.nozzle_temp || 0}°C</span>
+                            <span>{t('printer.bed') || '베드'}: {printer.bed_temp || 0}°C</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  ) : (
+                    <div className="text-center py-12">
+                      <Printer className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">
+                        {t('printer.noConnectedPrinters') || '연결된 프린터가 없습니다'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* 2단계: 출력 정보 & 출력 시작 */}
+          {printStep === 'preview' && (
+            <>
+              <SheetHeader className="px-6 pt-6 pb-4 border-b text-left">
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPrintStep('printer')}
+                    disabled={isSlicing}
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </Button>
+                  <div className="flex-1">
+                    <SheetTitle className="text-left">{t('ai.printSettings') || '출력 설정'}</SheetTitle>
+                    <SheetDescription className="text-left">
+                      {selectedPrinter?.name || ''}{selectedPrinter?.model ? ` - ${selectedPrinter.model}` : ''}
+                    </SheetDescription>
+                  </div>
+                </div>
+              </SheetHeader>
+
+              <div className="flex-1 overflow-y-auto px-6 py-6">
+                {isSlicing ? (
+                  <div className="flex flex-col items-center justify-center h-full">
+                    <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
+                    <p className="text-lg font-medium">{t('ai.slicing') || '슬라이싱 중...'}</p>
+                    {slicingInBackground ? (
+                      <div className="text-center mt-4 space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          {t('ai.modelSizeLarge') || '모델의 크기가 커서 시간이 오래 걸려요'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {t('ai.notifyWhenComplete') || '완료되면 푸시 알람으로 알려드릴게요'}
+                        </p>
+                        <Button
+                          variant="link"
+                          className="underline text-primary"
+                          onClick={() => {
+                            setShowPrinterModal(false);
+                            navigate('/dashboard');
+                          }}
+                        >
+                          {t('ai.goToHome') || '홈으로 가기'}
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground mt-2">{t('ai.pleaseWait') || '잠시만 기다려주세요'}</p>
+                    )}
+                  </div>
+                ) : gcodeUrl && gcodeInfo ? (
+                  <div className="space-y-4">
+                    {/* 슬라이싱 완료 표시 */}
+                    <div className="bg-muted rounded-lg p-8 text-center">
+                      <Check className="w-12 h-12 mx-auto text-green-500 mb-3" />
+                      <p className="font-medium">{t('ai.slicingComplete') || '슬라이싱 완료'}</p>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        {t('ai.readyToPrint') || '출력 준비가 완료되었습니다'}
+                      </p>
+                    </div>
+
+                    {/* 출력 정보 표시 */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">{t('ai.printInfo') || '출력 정보'}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">{t('ai.estimatedTime') || '예상 시간'}</span>
+                            <span className="font-medium">{gcodeInfo.printTime || '-'}</span>
+                          </div>
+                          {gcodeInfo.filamentLength && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">{t('ai.filamentLength') || '사용량 (길이)'}</span>
+                              <span className="font-medium">{gcodeInfo.filamentLength}</span>
+                            </div>
+                          )}
+                          {gcodeInfo.filamentWeight && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">{t('ai.filamentWeight') || '사용량 (무게)'}</span>
+                              <span className="font-medium">{gcodeInfo.filamentWeight}</span>
+                            </div>
+                          )}
+                          {gcodeInfo.layerCount && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">{t('ai.totalLayers') || '총 레이어 수'}</span>
+                              <span className="font-medium">{gcodeInfo.layerCount}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <Separator />
+
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">{t('printer.nozzle') || '노즐'}</span>
+                            <span className="font-medium">{gcodeInfo.nozzleTemp || 0}°C</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">{t('printer.bed') || '베드'}</span>
+                            <span className="font-medium">{gcodeInfo.bedTemp || 0}°C</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground">{t('ai.noGcode') || 'GCode를 생성해주세요'}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* 하단 버튼 */}
+              <div className="flex-shrink-0 p-6 border-t bg-background">
+                <Button
+                  size="lg"
+                  className="w-full"
+                  variant={!selectedPrinter?.connected ? "destructive" : "default"}
+                  disabled={!gcodeUrl || isSlicing}
+                  onClick={() => {
+                    if (!selectedPrinter?.connected) {
+                      // 프린터 연결 없을 때: 프린터 선택 화면으로 돌아가기
+                      setPrintStep('printer');
+                      setSelectedPrinter(null);
+                      setGcodeUrl(null);
+                      setGcodeInfo(null);
+                    } else {
+                      // 프린터 연결됨: 출력 시작
+                      toast({
+                        title: t('ai.printStarted') || '출력 시작',
+                        description: `${selectedPrinter?.name}에서 출력을 시작합니다`,
+                      });
+                      setShowPrinterModal(false);
+                    }
+                  }}
+                >
+                  {!selectedPrinter?.connected ? (
+                    <>
+                      <XCircle className="w-5 h-5 mr-2" />
+                      {t('printer.notConnected') || '연결 없음'}
+                    </>
+                  ) : (
+                    <>
+                      <Printer className="w-5 h-5 mr-2" />
+                      {t('ai.startPrint') || '출력 시작'}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* CSS 애니메이션 정의 */}
+      <style>{`
+        @keyframes slideInFromRight {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+
+        @keyframes slideInFromLeft {
+          from {
+            transform: translateX(-100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
     </div>
   );
 };

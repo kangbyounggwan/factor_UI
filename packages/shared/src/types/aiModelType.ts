@@ -42,9 +42,9 @@ export interface AIGeneratedModel {
   source_image_url?: string;
 
   // AI 설정
-  ai_model?: string;
-  quality?: string;
-  style?: string;
+  art_style?: string;
+  target_polycount?: number;
+  symmetry_mode?: string;
 
   // 파일 정보
   model_name: string;
@@ -138,9 +138,9 @@ export interface CreateModelRequest {
   generation_type: GenerationType;
   prompt?: string;
   source_image_url?: string;
-  ai_model?: string;
-  quality?: string;
-  style?: string;
+  art_style?: string;
+  target_polycount?: number;
+  symmetry_mode?: string;
   model_name: string;
 }
 

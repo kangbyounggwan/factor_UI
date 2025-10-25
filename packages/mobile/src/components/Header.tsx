@@ -113,12 +113,9 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60" style={{ paddingTop: safeTop }}>
-      <div className="container flex h-20 items-center justify-between px-4 relative">
-        {/* 빈 공간 (왼쪽) */}
-        <div className="w-[100px]"></div>
-
-        {/* 로고 (가운데) */}
-        <Link to="/dashboard" className="flex items-center space-x-3 absolute left-1/2 transform -translate-x-1/2">
+      <div className="container flex h-20 items-center justify-between px-4">
+        {/* 로고 (왼쪽) */}
+        <Link to="/dashboard" className="flex items-center space-x-3">
           <div className="flex items-center justify-center w-10 h-10 bg-primary rounded-lg">
             <Activity className="w-6 h-6 text-primary-foreground" />
           </div>

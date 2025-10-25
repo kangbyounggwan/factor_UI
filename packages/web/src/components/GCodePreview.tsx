@@ -11,6 +11,7 @@ import { OrbitControls, Grid } from "@react-three/drei";
 import { Box3, Vector3 } from "three";
 import { Slider } from "@/components/ui/slider";
 import pako from "pako";
+import { useTranslation } from "react-i18next";
 
 interface GCodePreviewProps {
   gcodeUrl?: string;
@@ -449,6 +450,7 @@ export default function GCodePreview({
   gcodeContent,
   className = "",
 }: GCodePreviewProps) {
+  const { t } = useTranslation();
   const [gcode, setGcode] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [layers, setLayers] = useState<GCodeLayer[]>([]);
@@ -610,15 +612,15 @@ export default function GCodePreview({
           <div className="absolute left-4 top-4 bg-black/70 backdrop-blur-sm rounded-lg p-3 text-white text-xs space-y-2">
             <div className="flex items-center gap-2">
               <div className="w-6 h-1 bg-cyan-400"></div>
-              <span>출력 경로</span>
+              <span>{t('gcode.extrusionPath')}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-6 h-1 bg-orange-500"></div>
-              <span>서포트</span>
+              <span>{t('gcode.support')}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-6 h-1 bg-gray-500 opacity-20"></div>
-              <span>이동 경로</span>
+              <span>{t('gcode.travelPath')}</span>
             </div>
             {/* Travel 토글 버튼 */}
             <div className="pt-2 border-t border-white/20">
@@ -629,7 +631,7 @@ export default function GCodePreview({
                   onChange={(e) => setShowTravels(e.target.checked)}
                   className="w-3 h-3 cursor-pointer"
                 />
-                <span className="text-xs">이동 경로 표시</span>
+                <span className="text-xs">{t('gcode.showTravelPath')}</span>
               </label>
             </div>
           </div>
