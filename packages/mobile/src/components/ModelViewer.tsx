@@ -130,7 +130,18 @@ export default function ModelViewer({ className, height, showDemo = false, place
           {stlUrl && <STLModel url={stlUrl} />}
           {modelUrl && <GLBModel url={modelUrl} rotation={userRotation} />}
         </Suspense>
-        <Grid infiniteGrid cellColor="#2a2f3a" sectionColor="#3b4252" args={[20, 20]} />
+        {/* 그리드: 10mm 작은 셀, 50mm 큰 섹션 (3D 프린팅 모델에 적합) */}
+        <Grid
+          infiniteGrid
+          cellSize={10}
+          cellThickness={0.5}
+          cellColor="#2a2f3a"
+          sectionSize={50}
+          sectionThickness={1}
+          sectionColor="#3b4252"
+          fadeDistance={2000}
+          fadeStrength={1}
+        />
         <OrbitControls enableDamping dampingFactor={0.05} />
       </Canvas>
 

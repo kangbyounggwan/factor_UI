@@ -128,18 +128,35 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
   const gltf = useGLTF(url);
   const scene = gltf?.scene;
 
+  // URL 변경 감지
   useLayoutEffect(() => {
+    console.log('[GLBModel] URL changed:', url);
+  }, [url]);
+
+  useLayoutEffect(() => {
+    console.log('[GLBModel] useLayoutEffect triggered - scene:', !!scene, 'group:', !!group.current);
+
     // scene이나 group이 유효하지 않으면 조기 종료
     if (!scene || !group.current) {
+      console.log('[GLBModel] Early return - scene or group not ready');
       return;
     }
 
+    console.log('[GLBModel] Processing camera adjustment...');
     try {
       // 모델의 바운딩 박스를 계산해 원점(0,0,0)에 중심을 맞춤
       const box = new Box3().setFromObject(group.current);
+      console.log('[GLBModel] Bounding box calculated:', {
+        min: { x: box.min.x, y: box.min.y, z: box.min.z },
+        max: { x: box.max.x, y: box.max.y, z: box.max.z }
+      });
+
       if (!isFinite(box.min.x) || !isFinite(box.max.x) ||
           !isFinite(box.min.y) || !isFinite(box.max.y) ||
-          !isFinite(box.min.z) || !isFinite(box.max.z)) return;
+          !isFinite(box.min.z) || !isFinite(box.max.z)) {
+        console.log('[GLBModel] Invalid bounding box - skipping camera adjustment');
+        return;
+      }
 
       // 바운딩 박스의 중심 계산
       const center = new Vector3();
@@ -153,6 +170,11 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
       // 크기(mm) 계산 및 보고 (현재 scale 적용된 상태로 계산됨)
       const scaledSize = new Vector3();
       box.getSize(scaledSize);
+      console.log('[GLBModel] Scaled size calculated:', {
+        x: scaledSize.x.toFixed(2),
+        y: scaledSize.y.toFixed(2),
+        z: scaledSize.z.toFixed(2)
+      });
 
       // 원본(추가 스케일 미적용) 크기 계산
       const baseBox = new Box3().setFromObject(scene);
@@ -161,11 +183,13 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
       onSize?.({ x: scaledSize.x, y: scaledSize.y, z: scaledSize.z }, { x: baseSizeVec.x, y: baseSizeVec.y, z: baseSizeVec.z });
 
       // 카메라를 모델에 맞춤 - 모델이 로드될 때마다 초기화
-      if (controls && 'fov' in camera) {
-        // 모델 크기에 따라 카메라 거리 자동 조정
+      console.log('[GLBModel] Checking camera adjustment conditions - controls:', !!controls, 'camera has fov:', 'fov' in camera);
+      if ('fov' in camera) {
+        console.log('[GLBModel] Starting camera position calculation...');
+        // 실제 모델 크기 사용
         const maxDim = Math.max(scaledSize.x, scaledSize.y, scaledSize.z);
         const fov = (camera as any).fov * (Math.PI / 180);
-        let cameraDistance = Math.abs(maxDim / Math.tan(fov / 2)) * 1.2; // 1.2배 여유
+        let cameraDistance = Math.abs(maxDim / Math.tan(fov / 2)) * 1.5; // 1.5배 여유
 
         // 최소 거리 보장
         cameraDistance = Math.max(cameraDistance, maxDim * 2);
@@ -173,7 +197,9 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
         // OrbitControls의 target을 모델 중심(높이의 중간)으로 설정
         const modelCenterZ = scaledSize.z / 2;
         const targetPosition = new Vector3(0, 0, modelCenterZ);
-        (controls as any).target.copy(targetPosition);
+        if (controls) {
+          (controls as any).target.copy(targetPosition);
+        }
 
         // 카메라를 등각 뷰 위치에 배치
         const angleXY = Math.PI / 4; // 45도
@@ -187,21 +213,39 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
 
         camera.lookAt(targetPosition);
         camera.updateProjectionMatrix();
-        (controls as any).update();
+        if (controls) {
+          (controls as any).update();
+        }
 
-        console.log('[ModelViewer] Camera adjusted:', {
-          modelSize: { x: scaledSize.x, y: scaledSize.y, z: scaledSize.z },
-          cameraDistance,
-          cameraPosition: camera.position,
-          target: targetPosition
+        console.log('[GLBModel] ========== CAMERA ADJUSTMENT ==========');
+        console.log('[GLBModel] Model Size (mm):', {
+          x: scaledSize.x.toFixed(2),
+          y: scaledSize.y.toFixed(2),
+          z: scaledSize.z.toFixed(2)
         });
+        console.log('[GLBModel] Max Dimension:', maxDim.toFixed(2) + 'mm');
+        console.log('[GLBModel] Camera Distance:', cameraDistance.toFixed(2) + 'mm');
+        console.log('[GLBModel] Camera Position:', {
+          x: camera.position.x.toFixed(2),
+          y: camera.position.y.toFixed(2),
+          z: camera.position.z.toFixed(2)
+        });
+        console.log('[GLBModel] Camera Target:', {
+          x: targetPosition.x.toFixed(2),
+          y: targetPosition.y.toFixed(2),
+          z: targetPosition.z.toFixed(2)
+        });
+        console.log('[GLBModel] Camera FOV:', (camera as any).fov + '°');
+        console.log('[GLBModel] Controls available:', !!controls);
+        console.log('[GLBModel] ==========================================');
       }
 
       onReady?.(group.current, scene);
     } catch (error) {
       console.error('[ModelViewer] Error in GLBModel layout effect:', error);
     }
-  }, [scene, scale, version, url, onSize, onReady, camera, controls]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scene, scale, version, url]);
 
   // scene이 없으면 아무것도 렌더링하지 않음
   if (!scene) {
@@ -227,12 +271,21 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
   // 유효하지 않은 URL은 에러를 발생시킬 수 있으므로, 상위에서 유효성 검증 후 렌더링해야 함
   const geometry = useLoader(STLLoader, url);
 
+  // URL 변경 감지
   useLayoutEffect(() => {
+    console.log('[STLModel] URL changed:', url);
+  }, [url]);
+
+  useLayoutEffect(() => {
+    console.log('[STLModel] useLayoutEffect triggered - geometry:', !!geometry, 'group:', !!group.current);
+
     // geometry나 group이 유효하지 않으면 조기 종료
     if (!geometry || !group.current) {
+      console.log('[STLModel] Early return - geometry or group not ready');
       return;
     }
 
+    console.log('[STLModel] Processing camera adjustment...');
     try {
       // 기본 지오메트리 정보 계산
       geometry.computeVertexNormals();
@@ -262,11 +315,11 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
       onSize?.({ x: scaledSizeVec.x, y: scaledSizeVec.y, z: scaledSizeVec.z }, { x: baseSizeVec.x, y: baseSizeVec.y, z: baseSizeVec.z });
 
       // 카메라를 모델에 맞춤 - 모델이 로드될 때마다 초기화
-      if (controls && 'fov' in camera) {
-        // 모델 크기에 따라 카메라 거리 자동 조정
+      if ('fov' in camera) {
+        // 실제 모델 크기 사용
         const maxDim = Math.max(scaledSizeVec.x, scaledSizeVec.y, scaledSizeVec.z);
         const fov = (camera as any).fov * (Math.PI / 180);
-        let cameraDistance = Math.abs(maxDim / Math.tan(fov / 2)) * 1.2; // 1.2배 여유
+        let cameraDistance = Math.abs(maxDim / Math.tan(fov / 2)) * 1.5; // 1.5배 여유
 
         // 최소 거리 보장
         cameraDistance = Math.max(cameraDistance, maxDim * 2);
@@ -274,7 +327,9 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
         // OrbitControls의 target을 모델 중심(높이의 중간)으로 설정
         const modelCenterZ = scaledSizeVec.z / 2;
         const targetPosition = new Vector3(0, 0, modelCenterZ);
-        (controls as any).target.copy(targetPosition);
+        if (controls) {
+          (controls as any).target.copy(targetPosition);
+        }
 
         // 카메라를 등각 뷰 위치에 배치
         const angleXY = Math.PI / 4; // 45도
@@ -288,21 +343,39 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
 
         camera.lookAt(targetPosition);
         camera.updateProjectionMatrix();
-        (controls as any).update();
+        if (controls) {
+          (controls as any).update();
+        }
 
-        console.log('[ModelViewer] Camera adjusted:', {
-          modelSize: { x: scaledSizeVec.x, y: scaledSizeVec.y, z: scaledSizeVec.z },
-          cameraDistance,
-          cameraPosition: camera.position,
-          target: targetPosition
+        console.log('[STLModel] ========== CAMERA ADJUSTMENT ==========');
+        console.log('[STLModel] Model Size (mm):', {
+          x: scaledSizeVec.x.toFixed(2),
+          y: scaledSizeVec.y.toFixed(2),
+          z: scaledSizeVec.z.toFixed(2)
         });
+        console.log('[STLModel] Max Dimension:', maxDim.toFixed(2) + 'mm');
+        console.log('[STLModel] Camera Distance:', cameraDistance.toFixed(2) + 'mm');
+        console.log('[STLModel] Camera Position:', {
+          x: camera.position.x.toFixed(2),
+          y: camera.position.y.toFixed(2),
+          z: camera.position.z.toFixed(2)
+        });
+        console.log('[STLModel] Camera Target:', {
+          x: targetPosition.x.toFixed(2),
+          y: targetPosition.y.toFixed(2),
+          z: targetPosition.z.toFixed(2)
+        });
+        console.log('[STLModel] Camera FOV:', (camera as any).fov + '°');
+        console.log('[STLModel] Controls available:', !!controls);
+        console.log('[STLModel] ==========================================');
       }
 
       onReady?.(group.current);
     } catch (error) {
       console.error('[ModelViewer] Error in STLModel layout effect:', error);
     }
-  }, [geometry, scale, version, url, onSize, onReady, camera, controls]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geometry, scale, version, url]);
 
   // geometry가 없으면 아무것도 렌더링하지 않음
   if (!geometry) {
@@ -379,13 +452,20 @@ export default function ModelViewer({ className, height, showDemo = false, place
     return () => { cancelled = true; };
   }, [modelId]);
 
-  // stlUrl이 제공되면 modelUrl보다 우선 사용
-  const urlToUse = stlUrl || modelUrl;
+  // GLB/GLTF(modelUrl) 우선, 없으면 STL(stlUrl) 사용
+  const urlToUse = modelUrl || stlUrl;
 
   // URL 유효성 검증 강화
   const effectiveUrl = (urlToUse && urlToUse.trim().length > 0 && (urlToUse.startsWith('http://') || urlToUse.startsWith('https://') || urlToUse.startsWith('/')))
     ? urlToUse
     : undefined;
+
+  // 새 모델 URL 로드 시, 뷰어 변환 상태(회전/스케일) 초기화하여 중복 적용 방지
+  useEffect(() => {
+    if (!effectiveUrl) return;
+    setUserRotation([0, 0, 0]);
+    setUniformScale(1);
+  }, [effectiveUrl]);
 
   return (
     <div className={className} style={style}>
@@ -438,7 +518,19 @@ export default function ModelViewer({ className, height, showDemo = false, place
           <directionalLight position={[0, 10, 0]} intensity={0.4} />
         </Suspense>
         {/* Z-up: 그리드를 XY 평면으로 회전 (법선 +Z) */}
-        <Grid rotation={[Math.PI / 2, 0, 0]} infiniteGrid cellColor="#3a3f47" sectionColor="#596273" args={[20, 20]} />
+        {/* 그리드: 10mm 작은 셀, 50mm 큰 섹션 (3D 프린팅 모델에 적합) */}
+        <Grid
+          rotation={[Math.PI / 2, 0, 0]}
+          infiniteGrid
+          cellSize={10}
+          cellThickness={0.5}
+          cellColor="#3a3f47"
+          sectionSize={50}
+          sectionThickness={1}
+          sectionColor="#596273"
+          fadeDistance={2000}
+          fadeStrength={1}
+        />
         {/* 원점 3축 화살표 (X:red, Y:green, Z:blue) - Z가 수직으로 보이도록 */}
         <axesHelper args={[50]} position={[0, 0, 0.001]} />
         {/* 화면 하단-우측 3축 위젯 */}
@@ -724,6 +816,10 @@ export default function ModelViewer({ className, height, showDemo = false, place
                                 format: 'glb'
                               });
                               console.log('[ModelViewer] Model saved to DB successfully');
+                              // 저장된 GLB에는 변환이 이미 베이킹되었으므로,
+                              // 뷰어 상태를 초기화하여 재적용(중복)되지 않도록 함
+                              setUserRotation([0, 0, 0]);
+                              setUniformScale(1);
                             } catch (error) {
                               toast({
                                 title: t('modelViewer.saveFailed') || '저장 실패',

@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -16,11 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ModelArchive from "@/components/ai/ModelArchive";
 import UploadArchive from "@/components/ai/UploadArchive";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -152,6 +147,18 @@ const AI = () => {
   const [currentGlbUrl, setCurrentGlbUrl] = useState<string | null>(null); // 현재 모델의 GLB URL
   const [currentStlUrl, setCurrentStlUrl] = useState<string | null>(null); // 현재 모델의 STL URL
   const [currentGCodeUrl, setCurrentGCodeUrl] = useState<string | null>(null); // 현재 모델의 GCode URL
+  const [gcodeInfo, setGcodeInfo] = useState<{
+    printTime?: string;
+    filamentLength?: string;
+    filamentWeight?: string;
+    filamentCost?: string;
+    layerCount?: number;
+    layerHeight?: number;
+    modelSize?: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
+    nozzleTemp?: number;
+    bedTemp?: number;
+    printerName?: string;
+  } | null>(null); // GCode 메타데이터
   const [isSlicing, setIsSlicing] = useState<boolean>(false); // 슬라이싱 진행 중
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null); // Text-to-Image 생성 이미지 URL
   const [selectedImageHasModel, setSelectedImageHasModel] = useState<boolean>(false); // 선택된 이미지의 3D 모델 존재 여부
@@ -480,12 +487,10 @@ const AI = () => {
 
       console.log('[AI] Local state updated with new GLB URL');
 
-      // 6. Reload models list - call directly instead of from deps
-      if (typeof window !== 'undefined') {
-        window.location.reload();
-      }
+      // 6. 모델 목록만 새로고침 (전체 페이지 리로드 제거)
+      await reloadModels();
 
-      console.log('[AI] Model list reloaded');
+      console.log('[AI] Model list reloaded without full page refresh');
       console.log('[AI] ========================================');
       console.log('[AI] Model save completed successfully');
       console.log('[AI] ========================================');
@@ -527,16 +532,15 @@ const AI = () => {
     console.log('[AI] 체크 - currentModelId:', currentModelId);
     console.log('[AI] 체크 - user?.id:', user?.id);
 
-    // STL이 없으면 GLB 사용 (폴백)
-    const modelUrl = currentStlUrl || currentGlbUrl;
+    // GLB 파일만 사용 (STL 사용 안 함)
+    const modelUrl = currentGlbUrl;
 
     console.log('[AI] 슬라이싱에 사용할 모델 URL:', modelUrl);
-    console.log('[AI] URL 타입:', currentStlUrl ? 'STL' : 'GLB');
+    console.log('[AI] URL 타입: GLB');
 
     if (!printerToConfirm || !modelUrl || !user?.id) {
       console.error('[AI] 필수 데이터 부족:');
       console.error('  - printerToConfirm:', printerToConfirm ? '있음' : '없음');
-      console.error('  - currentStlUrl:', currentStlUrl ? currentStlUrl : '없음');
       console.error('  - currentGlbUrl:', currentGlbUrl ? currentGlbUrl : '없음');
       console.error('  - user?.id:', user?.id ? user.id : '없음');
 
@@ -561,7 +565,11 @@ const AI = () => {
       });
 
       // 1. 모델 파일 다운로드 (STL 또는 GLB)
-      console.log('[AI] Downloading model file from URL:', modelUrl);
+      console.log('[AI] ========================================');
+      console.log('[AI] 📥 DOWNLOADING MODEL FOR SLICING');
+      console.log('[AI] - Model URL:', modelUrl);
+      console.log('[AI] ========================================');
+
       const modelResponse = await fetch(modelUrl);
       if (!modelResponse.ok) {
         throw new Error('모델 파일 다운로드 실패');
@@ -622,28 +630,86 @@ const AI = () => {
         printerDefinition
       );
 
-      console.log('[AI] Slicing result received:', slicingResult);
+      console.log('[AI] ========================================');
+      console.log('[AI] 📦 SLICING RESPONSE FROM SERVER:');
+      console.log(JSON.stringify(slicingResult, null, 2));
+      console.log('[AI] ========================================');
 
       if (slicingResult.status === 'error' || !slicingResult.data) {
         throw new Error(slicingResult.error || '슬라이싱 실패');
       }
 
-      console.log('[AI] Slicing completed:', slicingResult.data);
+      console.log('[AI] Slicing completed successfully');
+      console.log('[AI] - GCode URL:', slicingResult.data.gcode_url);
+      console.log('[AI] - Task ID:', slicingResult.data.task_id);
+      if (slicingResult.data.gcode_metadata) {
+        console.log('[AI] - Metadata available:', Object.keys(slicingResult.data.gcode_metadata));
+      }
 
-      // 5. GCode URL 저장
+      // 5. GCode URL 저장 (캐시 방지를 위한 타임스탬프 추가)
       const gcodeUrl = slicingResult.data.gcode_url;
       console.log('[AI] GCode URL from slicing result:', gcodeUrl);
 
+      // 캐시 방지를 위해 타임스탬프를 URL에 추가
+      const gcodeUrlWithTimestamp = `${gcodeUrl}?t=${Date.now()}`;
+      console.log('[AI] GCode URL with cache-busting:', gcodeUrlWithTimestamp);
+
       // GCode 파일 크기 확인
       try {
-        const gcodeResponse = await fetch(gcodeUrl, { method: 'HEAD' });
+        const gcodeResponse = await fetch(gcodeUrl, {
+          method: 'HEAD',
+          cache: 'no-store'
+        });
         const gcodeSize = gcodeResponse.headers.get('content-length');
         console.log('[AI] Generated GCode file size:', gcodeSize ? `${gcodeSize} bytes` : 'unknown');
       } catch (error) {
         console.warn('[AI] Could not get GCode file size:', error);
       }
 
-      setCurrentGCodeUrl(gcodeUrl);
+      setCurrentGCodeUrl(gcodeUrlWithTimestamp);
+
+      // 5.5. GCode 메타데이터 처리 (서버 응답에서 받은 메타데이터 사용)
+      if (slicingResult.data.gcode_metadata) {
+        const metadata = slicingResult.data.gcode_metadata;
+        console.log('[AI] ========================================');
+        console.log('[AI] 📊 GCODE METADATA FROM SERVER:');
+        console.log(JSON.stringify(metadata, null, 2));
+        console.log('[AI] ========================================');
+
+        // 모델 사이즈 비교 (원본 파일 vs 슬라이싱 결과)
+        if (metadata.bounding_box) {
+          console.log('[AI] ========================================');
+          console.log('[AI] 🔍 MODEL SIZE COMPARISON:');
+          console.log('[AI] Sliced model bounding box:');
+          console.log('[AI] - X:', metadata.bounding_box.min_x.toFixed(2), 'to', metadata.bounding_box.max_x.toFixed(2), '= size:', metadata.bounding_box.size_x.toFixed(2), 'mm');
+          console.log('[AI] - Y:', metadata.bounding_box.min_y.toFixed(2), 'to', metadata.bounding_box.max_y.toFixed(2), '= size:', metadata.bounding_box.size_y.toFixed(2), 'mm');
+          console.log('[AI] - Z:', metadata.bounding_box.min_z.toFixed(2), 'to', metadata.bounding_box.max_z.toFixed(2), '= size:', metadata.bounding_box.size_z.toFixed(2), 'mm');
+          console.log('[AI] ========================================');
+        }
+
+        // 서버 메타데이터를 UI 형식으로 변환
+        setGcodeInfo({
+          printTime: metadata.print_time_formatted,
+          filamentLength: metadata.filament_used_m ? `${metadata.filament_used_m.toFixed(2)}m` : undefined,
+          filamentWeight: metadata.filament_weight_g ? `${metadata.filament_weight_g.toFixed(1)}g` : undefined,
+          filamentCost: metadata.filament_cost ? `$${metadata.filament_cost.toFixed(2)}` : undefined,
+          layerCount: metadata.layer_count,
+          layerHeight: metadata.layer_height,
+          modelSize: metadata.bounding_box ? {
+            minX: metadata.bounding_box.min_x,
+            maxX: metadata.bounding_box.max_x,
+            minY: metadata.bounding_box.min_y,
+            maxY: metadata.bounding_box.max_y,
+            minZ: metadata.bounding_box.min_z,
+            maxZ: metadata.bounding_box.max_z,
+          } : undefined,
+          nozzleTemp: metadata.nozzle_temp,
+          bedTemp: metadata.bed_temp,
+          printerName: metadata.printer_name,
+        });
+      } else {
+        console.warn('[AI] ⚠️ No gcode_metadata in server response');
+      }
 
       // 6. GCode를 Supabase Storage에 업로드 및 DB 업데이트
       if (currentModelId) {
@@ -705,10 +771,6 @@ const AI = () => {
         variant: 'destructive',
       });
     }
-  };
-
-  const updateSetting = (key: keyof PrintSettings, value: string | number | boolean) => {
-    setPrintSettings((prev) => ({ ...prev, [key]: value }));
   };
 
   const startPrint = async () => {
@@ -981,8 +1043,8 @@ const AI = () => {
           }
 
           // 4. DB 업데이트 (Supabase Storage URL 사용)
-          // STL URL을 우선적으로 렌더링에 사용
-          const renderUrl = stlUploadResult?.publicUrl || glbUploadResult?.publicUrl;
+          // GLB URL을 우선적으로 렌더링에 사용
+          const renderUrl = glbUploadResult?.publicUrl || stlUploadResult?.publicUrl;
 
           await updateAIModel(supabase, dbModelId, {
             storage_path: glbUploadResult?.path || undefined,           // GLB Supabase Storage 경로
@@ -1127,8 +1189,8 @@ const AI = () => {
           }
 
           // 4. DB 업데이트 (Supabase Storage URL 사용)
-          // STL URL을 우선적으로 렌더링에 사용
-          const renderUrl = stlUploadResult?.publicUrl || glbUploadResult?.publicUrl;
+          // GLB URL을 우선적으로 렌더링에 사용
+          const renderUrl = glbUploadResult?.publicUrl || stlUploadResult?.publicUrl;
 
           await updateAIModel(supabase, dbModelId, {
             storage_path: glbUploadResult?.path || undefined,           // GLB Supabase Storage 경로
@@ -1290,6 +1352,7 @@ const AI = () => {
                           </div>
                         }>
                           <ModelViewer
+                            key={currentModelId || modelViewerUrl || 'default'} // 모델 변경 시 뷰어 재생성하여 카메라 리셋
                             className="w-full h-full"
                             modelUrl={modelViewerUrl ?? undefined}
                             modelScale={1}
@@ -1702,8 +1765,11 @@ const AI = () => {
                       // 모델 ID 설정
                       setCurrentModelId(model.id);
 
-                      // STL 우선, GLB 폴백으로 뷰어 URL 설정
-                      const viewerUrl = model.stl_download_url || model.download_url;
+                      // GLB 우선, STL 폴백으로 뷰어 URL 설정
+                      const viewerUrl = model.download_url || model.stl_download_url;
+                      console.log('[AI] ===== MODEL SELECTION =====');
+                      console.log('[AI] Setting modelViewerUrl to:', viewerUrl);
+                      console.log('[AI] Previous modelViewerUrl was:', modelViewerUrl);
                       setModelViewerUrl(viewerUrl);
 
                       // 다운로드 버튼용 URL 설정
@@ -1884,111 +1950,136 @@ const AI = () => {
                 </CardContent>
               </Card>
 
-              {/* 우: 설정 폼 */}
+              {/* 우: 출력 정보 */}
               <div className="h-[68vh] overflow-y-auto pr-1">
-                <div className="space-y-6">
-                  {/* 서포트 */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium">서포트</h4>
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-lg">출력 정보</h3>
+
+                  {gcodeInfo ? (
+                    <>
+                      {/* 시간 정보 */}
+                      <Card>
+                        <CardContent className="p-4 space-y-3">
+                          <h4 className="font-medium text-sm text-muted-foreground">시간</h4>
+                          {gcodeInfo.printTime && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">예상 출력 시간</span>
+                              <span className="font-semibold">{gcodeInfo.printTime}</span>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* 필라멘트 정보 */}
+                      <Card>
+                        <CardContent className="p-4 space-y-3">
+                          <h4 className="font-medium text-sm text-muted-foreground">필라멘트</h4>
+                          {gcodeInfo.filamentLength && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">사용량 (길이)</span>
+                              <span className="font-semibold">{gcodeInfo.filamentLength}</span>
+                            </div>
+                          )}
+                          {gcodeInfo.filamentWeight && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">사용량 (무게)</span>
+                              <span className="font-semibold">{gcodeInfo.filamentWeight}</span>
+                            </div>
+                          )}
+                          {gcodeInfo.filamentCost && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">예상 비용</span>
+                              <span className="font-semibold">${gcodeInfo.filamentCost}</span>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* 레이어 정보 */}
+                      <Card>
+                        <CardContent className="p-4 space-y-3">
+                          <h4 className="font-medium text-sm text-muted-foreground">레이어</h4>
+                          {gcodeInfo.layerCount && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">총 레이어 수</span>
+                              <span className="font-semibold">{gcodeInfo.layerCount}개</span>
+                            </div>
+                          )}
+                          {gcodeInfo.layerHeight && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">레이어 높이</span>
+                              <span className="font-semibold">{gcodeInfo.layerHeight}mm</span>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* 모델 크기 */}
+                      {gcodeInfo.modelSize && (
+                        <Card>
+                          <CardContent className="p-4 space-y-3">
+                            <h4 className="font-medium text-sm text-muted-foreground">모델 크기 (mm)</h4>
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                              <div className="p-2 rounded bg-muted">
+                                <div className="text-xs text-muted-foreground">X</div>
+                                <div className="font-semibold text-sm">
+                                  {(gcodeInfo.modelSize.maxX - gcodeInfo.modelSize.minX).toFixed(1)}
+                                </div>
+                              </div>
+                              <div className="p-2 rounded bg-muted">
+                                <div className="text-xs text-muted-foreground">Y</div>
+                                <div className="font-semibold text-sm">
+                                  {(gcodeInfo.modelSize.maxY - gcodeInfo.modelSize.minY).toFixed(1)}
+                                </div>
+                              </div>
+                              <div className="p-2 rounded bg-muted">
+                                <div className="text-xs text-muted-foreground">Z</div>
+                                <div className="font-semibold text-sm">
+                                  {(gcodeInfo.modelSize.maxZ - gcodeInfo.modelSize.minZ).toFixed(1)}
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* 온도 설정 */}
+                      <Card>
+                        <CardContent className="p-4 space-y-3">
+                          <h4 className="font-medium text-sm text-muted-foreground">온도</h4>
+                          {gcodeInfo.nozzleTemp && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">노즐 온도</span>
+                              <span className="font-semibold">{gcodeInfo.nozzleTemp}°C</span>
+                            </div>
+                          )}
+                          {gcodeInfo.bedTemp && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">베드 온도</span>
+                              <span className="font-semibold">{gcodeInfo.bedTemp}°C</span>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* 프린터 정보 */}
+                      {gcodeInfo.printerName && (
+                        <Card>
+                          <CardContent className="p-4 space-y-3">
+                            <h4 className="font-medium text-sm text-muted-foreground">프린터</h4>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">모델명</span>
+                              <span className="font-semibold text-sm">{gcodeInfo.printerName}</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-12 text-muted-foreground text-sm">
+                      슬라이싱을 완료하면<br />출력 정보가 표시됩니다.
                     </div>
-                    <div className="flex items-center justify-between p-3 rounded-lg border">
-                      <Label htmlFor="support_enable">서포트 활성화</Label>
-                      <Switch id="support_enable" checked={printSettings.support_enable} onCheckedChange={(v)=>updateSetting('support_enable', v)} />
-                    </div>
-                    <div className="mt-3 grid grid-cols-2 gap-3">
-                      <div>
-                        <Label htmlFor="support_angle">오버행 임계각(°)</Label>
-                        <Input id="support_angle" type="number" step="1" value={printSettings.support_angle} onChange={(e)=>updateSetting('support_angle', Number(e.target.value))} />
-                      </div>
-                      <div>
-                        <Label htmlFor="adhesion_type">빌드플레이트 접착</Label>
-                        <Select value={printSettings.adhesion_type} onValueChange={(v)=>updateSetting('adhesion_type', v)}>
-                          <SelectTrigger id="adhesion_type" className="w-full">
-                            <SelectValue placeholder="없음" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-background z-50">
-                            <SelectItem value="none">없음</SelectItem>
-                            <SelectItem value="skirt">Skirt</SelectItem>
-                            <SelectItem value="brim">Brim</SelectItem>
-                            <SelectItem value="raft">Raft</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* 품질 */}
-                  <div>
-                    <h4 className="font-medium mb-3">품질</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label htmlFor="layer_height">레이어 높이(mm)</Label>
-                        <Input id="layer_height" type="number" step="0.01" value={printSettings.layer_height} onChange={(e)=>updateSetting('layer_height', Number(e.target.value))} />
-                      </div>
-                      <div>
-                        <Label htmlFor="line_width">라인 너비(mm)</Label>
-                        <Input id="line_width" type="number" step="0.01" value={printSettings.line_width} onChange={(e)=>updateSetting('line_width', Number(e.target.value))} />
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* 속도 */}
-                  <div>
-                    <h4 className="font-medium mb-3">속도</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label htmlFor="speed_print">프린트 속도(mm/s)</Label>
-                        <Input id="speed_print" type="number" step="1" value={printSettings.speed_print} onChange={(e)=>updateSetting('speed_print', Number(e.target.value))} />
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* 재료 */}
-                  <div>
-                    <h4 className="font-medium mb-3">재료</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label htmlFor="material_diameter">재료 직경(mm)</Label>
-                        <Input id="material_diameter" type="number" step="0.01" value={printSettings.material_diameter} onChange={(e)=>updateSetting('material_diameter', Number(e.target.value))} />
-                      </div>
-                      <div>
-                        <Label htmlFor="material_flow">재료 유량(%)</Label>
-                        <Input id="material_flow" type="number" step="1" value={printSettings.material_flow} onChange={(e)=>updateSetting('material_flow', Number(e.target.value))} />
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* 쉘/인필 */}
-                  <div>
-                    <h4 className="font-medium mb-3">쉘/인필</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label htmlFor="infill_sparse_density">인필 밀도(%)</Label>
-                        <Input id="infill_sparse_density" type="number" step="1" value={printSettings.infill_sparse_density} onChange={(e)=>updateSetting('infill_sparse_density', Number(e.target.value))} />
-                      </div>
-                      <div>
-                        <Label htmlFor="wall_line_count">벽 라인 수</Label>
-                        <Input id="wall_line_count" type="number" step="1" value={printSettings.wall_line_count} onChange={(e)=>updateSetting('wall_line_count', Number(e.target.value))} />
-                      </div>
-                      <div>
-                        <Label htmlFor="top_layers">탑 레이어</Label>
-                        <Input id="top_layers" type="number" step="1" value={printSettings.top_layers} onChange={(e)=>updateSetting('top_layers', Number(e.target.value))} />
-                      </div>
-                      <div>
-                        <Label htmlFor="bottom_layers">바닥 레이어</Label>
-                        <Input id="bottom_layers" type="number" step="1" value={printSettings.bottom_layers} onChange={(e)=>updateSetting('bottom_layers', Number(e.target.value))} />
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>

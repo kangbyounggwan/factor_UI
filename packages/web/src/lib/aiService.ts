@@ -420,6 +420,29 @@ export interface SlicingResponse {
     gcode_path: string;
     gcode_url: string;
     cura_settings: Record<string, string>;
+    gcode_metadata?: {
+      print_time_seconds?: number;
+      print_time_formatted?: string;
+      filament_used_m?: number;
+      filament_weight_g?: number;
+      filament_cost?: number;
+      layer_count?: number;
+      layer_height?: number;
+      bounding_box?: {
+        min_x: number;
+        max_x: number;
+        min_y: number;
+        max_y: number;
+        min_z: number;
+        max_z: number;
+        size_x: number;
+        size_y: number;
+        size_z: number;
+      };
+      nozzle_temp?: number;
+      bed_temp?: number;
+      printer_name?: string;
+    };
   };
   error?: string;
 }
@@ -433,7 +456,7 @@ export async function uploadSTLAndSlice(
   const SLICE_ENDPOINT = `${AI_PYTHON_URL}/v1/process/upload-stl-and-slice`;
 
   const formData = new FormData();
-  formData.append('model_file', stlBlob, filename);
+  formData.append('file', stlBlob, filename); // Python 서버가 'file' 필드를 기대함
 
   if (curaSettings) {
     formData.append('cura_settings_json', JSON.stringify(curaSettings));
@@ -450,7 +473,7 @@ export async function uploadSTLAndSlice(
       method: 'POST',
       content_type: 'multipart/form-data',
       fields: {
-        model_file: {
+        file: {
           filename: filename,
           size: stlBlob.size,
           type: stlBlob.type || 'application/octet-stream',

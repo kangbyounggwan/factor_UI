@@ -280,7 +280,11 @@ export default {
     createAnother: "Create Another Model",
     inputRequiredDesc: "Please enter text or upload an image",
     uploadSuccess: "Upload Complete",
-    styleCartoon: "Cartoon"
+    styleCartoon: "Cartoon",
+    // Model Save
+    modelSaved: "Model Saved",
+    modelSavedDescription: "Model has been saved with current rotation and scale.",
+    modelSaveFailed: "Save Failed"
   },
   printer: {
     title: "Printer Management",

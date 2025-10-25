@@ -280,7 +280,11 @@ export default {
     createAnother: "다른 모델 만들기",
     inputRequiredDesc: "텍스트를 입력하거나 이미지를 업로드해주세요",
     uploadSuccess: "업로드 완료",
-    styleCartoon: "카툰"
+    styleCartoon: "카툰",
+    // 모델 저장
+    modelSaved: "모델 저장 완료",
+    modelSavedDescription: "모델이 현재 회전 및 크기로 저장되었습니다.",
+    modelSaveFailed: "모델 저장 실패"
   },
   printer: {
     title: "프린터 관리",
