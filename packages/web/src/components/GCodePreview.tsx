@@ -18,20 +18,6 @@ interface GCodePreviewProps {
   className?: string;
 }
 
-// OrbitControls의 초기 target을 설정하는 컴포넌트
-function CameraController() {
-  const { camera, controls } = useThree();
-
-  useEffect(() => {
-    if (controls) {
-      // XYZ 축이 있는 위치로 target 설정 (원점)
-      (controls as any).target.set(100, 100, 0);
-      (controls as any).update();
-    }
-  }, [controls, camera]);
-
-  return null;
-}
 
 interface GCodeLayer {
   z: number;
@@ -271,42 +257,11 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
     return layers.filter(layer => layer.z <= maxLayer);
   }, [layers, maxLayer]);
 
-  // 모델 중심 오프셋 계산 (모델을 원점으로 이동시키기 위한 오프셋)
+  // 모델 오프셋 계산 (GCode 원본 좌표 유지, 오프셋 없음)
   const modelOffset = useMemo(() => {
-    if (layers.length === 0) return new Vector3(0, 0, 0);
-
-    const allPoints: number[] = [];
-    layers.forEach(layer => {
-      if (layer.extrusions.length > 0) {
-        layer.extrusions.forEach(polyline => {
-          polyline.forEach(point => allPoints.push(...point));
-        });
-      }
-    });
-
-    if (allPoints.length === 0) {
-      layers.forEach(layer => {
-        layer.moves.forEach(p => allPoints.push(...p));
-      });
-    }
-
-    if (allPoints.length === 0) return new Vector3(0, 0, 0);
-
-    const box = new Box3();
-    for (let i = 0; i < allPoints.length; i += 3) {
-      box.expandByPoint(new Vector3(allPoints[i], allPoints[i + 1], allPoints[i + 2]));
-    }
-
-    // XY는 첫 번째 압출 시작점을 원점으로, Z는 바닥이 0이 되도록
-    if (firstExtrusionPoint) {
-      console.log('[GCodeLayers] Using first extrusion point as origin:', firstExtrusionPoint);
-      return new Vector3(-firstExtrusionPoint.x, -firstExtrusionPoint.y, -box.min.z);
-    }
-
-    // 첫 번째 압출점이 없으면 기존 방식 사용 (중심점)
-    const center = new Vector3();
-    box.getCenter(center);
-    return new Vector3(-center.x, -center.y, -box.min.z);
+    // GCode 원본 좌표를 그대로 사용 (오프셋 없음)
+    console.log('[GCodeLayers] Using original GCode coordinates (no offset)');
+    return new Vector3(0, 0, 0);
   }, [layers, firstExtrusionPoint]);
 
   // 카메라 자동 조정
@@ -339,32 +294,38 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
     const size = new Vector3();
     box.getSize(size);
 
+    // 모델의 실제 중심 계산
+    const modelCenter = new Vector3();
+    box.getCenter(modelCenter);
+
+    console.log('[GCodeLayers] Model bounding box:', {
+      min: { x: box.min.x.toFixed(2), y: box.min.y.toFixed(2), z: box.min.z.toFixed(2) },
+      max: { x: box.max.x.toFixed(2), y: box.max.y.toFixed(2), z: box.max.z.toFixed(2) },
+      center: { x: modelCenter.x.toFixed(2), y: modelCenter.y.toFixed(2), z: modelCenter.z.toFixed(2) },
+      size: { x: size.x.toFixed(2), y: size.y.toFixed(2), z: size.z.toFixed(2) }
+    });
+
     // 카메라가 준비되면 즉시 조정
     const adjustCamera = () => {
       if (!controls) return;
 
-      // 프린터 베드 크기 (200x200x250mm)
-      const bedCenterX = 100;
-      const bedCenterY = 100;
-      const bedCenterZ = 125;
-
-      // OrbitControls target을 베드 중심으로 설정
-      (controls as any).target.set(bedCenterX, bedCenterY, bedCenterZ);
+      // OrbitControls target을 모델 중심으로 설정
+      (controls as any).target.set(modelCenter.x, modelCenter.y, modelCenter.z);
 
       // 카메라 거리 조정
       const maxDim = Math.max(size.x, size.y, size.z);
       const fov = 'fov' in camera ? (camera as any).fov * (Math.PI / 180) : Math.PI / 4;
-      const cameraDistance = Math.abs(maxDim / Math.tan(fov / 2)) * 1.2;
+      const cameraDistance = Math.abs(maxDim / Math.tan(fov / 2)) * 1.5;
 
-      // 카메라를 45도 각도로 배치 (베드 중심 기준)
+      // 카메라를 45도 각도로 배치 (모델 중심 기준)
       const angle = Math.PI / 4;
       camera.position.set(
-        bedCenterX + cameraDistance * Math.cos(angle),
-        bedCenterY + cameraDistance * Math.sin(angle),
-        bedCenterZ + cameraDistance * 0.7
+        modelCenter.x + cameraDistance * Math.cos(angle),
+        modelCenter.y + cameraDistance * Math.sin(angle),
+        modelCenter.z + cameraDistance * 0.7
       );
 
-      camera.lookAt(bedCenterX, bedCenterY, bedCenterZ);
+      camera.lookAt(modelCenter.x, modelCenter.y, modelCenter.z);
       camera.updateProjectionMatrix();
       (controls as any).update();
 
@@ -475,8 +436,8 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
           </group>
         ))}
       </group>
-      {/* 축을 베드 중심(100, 100, 0)에 고정 표시 */}
-      <group position={[100, 100, 0]}>
+      {/* 축을 원점(0, 0, 0)에 고정 표시 */}
+      <group position={[0, 0, 0]}>
         <axesHelper args={[axesSize]} />
       </group>
     </>
@@ -594,8 +555,6 @@ export default function GCodePreview({
             camera={{ position: [300, 300, 400], fov: 50 }}
             onCreated={({ camera }) => {
               camera.up.set(0, 0, 1);
-              // 카메라가 XYZ 축 위치를 바라보도록 설정
-              camera.lookAt(100, 100, 0);
             }}
             style={{ width: "100%", height: "100%" }}
           >
@@ -604,7 +563,6 @@ export default function GCodePreview({
             <directionalLight position={[10, 10, 5]} intensity={1.8} castShadow />
             <directionalLight position={[-10, -10, -5]} intensity={0.8} />
             <directionalLight position={[0, 10, 0]} intensity={0.6} />
-            <CameraController />
             <GCodeLayers
               layers={layers}
               maxLayer={currentLayer}
@@ -618,16 +576,16 @@ export default function GCodePreview({
               cellSize={10}
               cellThickness={0.5}
               cellColor="#3a3f47"
-              sectionSize={100}
+              sectionSize={200}
               sectionThickness={1.5}
               sectionColor="#596273"
-              fadeDistance={500}
+              fadeDistance={1000}
               fadeStrength={1}
             />
             <OrbitControls
               enableDamping
               dampingFactor={0.05}
-              target={[100, 100, 0]}
+              enabled={layers.length > 0}
             />
           </Canvas>
 

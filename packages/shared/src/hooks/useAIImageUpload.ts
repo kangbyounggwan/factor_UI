@@ -78,6 +78,13 @@ export function useAIImageUpload({
       }
     } catch (error) {
       console.error('[useAIImageUpload] Failed to load stored images:', error);
+
+      // HTML 응답이 온 경우 더 자세한 로그
+      if (error instanceof Error && error.message.includes('HTML')) {
+        console.error('[useAIImageUpload] Received HTML instead of JSON - possible Storage bucket issue');
+        console.error('[useAIImageUpload] Check if "ai-models" bucket exists and has correct permissions');
+      }
+
       onError?.(error as Error);
     }
   }, [supabase, userId, selectedImageId, onError]);

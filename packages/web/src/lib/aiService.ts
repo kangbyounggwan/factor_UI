@@ -403,7 +403,6 @@ export interface SlicingSettings {
 
 export interface PrinterDefinition {
   version: number;
-  name: string;
   overrides: {
     machine_width?: { default_value: number };
     machine_depth?: { default_value: number };
@@ -451,7 +450,8 @@ export async function uploadSTLAndSlice(
   stlBlob: Blob,
   filename: string,
   curaSettings?: SlicingSettings,
-  printerDefinition?: PrinterDefinition
+  printerDefinition?: PrinterDefinition,
+  printerName?: string
 ): Promise<SlicingResponse> {
   const SLICE_ENDPOINT = `${AI_PYTHON_URL}/v1/process/upload-stl-and-slice`;
 
@@ -464,6 +464,10 @@ export async function uploadSTLAndSlice(
 
   if (printerDefinition) {
     formData.append('printer_definition_json', JSON.stringify(printerDefinition));
+  }
+
+  if (printerName) {
+    formData.append('printer_name', printerName);
   }
 
   try {
@@ -480,7 +484,8 @@ export async function uploadSTLAndSlice(
           content: '[BINARY FILE DATA]'
         },
         cura_settings_json: curaSettings || null,
-        printer_definition_json: printerDefinition || null
+        printer_definition_json: printerDefinition || null,
+        printer_name: printerName || null
       }
     };
 

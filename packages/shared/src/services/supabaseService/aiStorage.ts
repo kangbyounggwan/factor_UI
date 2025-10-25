@@ -226,28 +226,100 @@ export async function deleteStorageFile(
 }
 
 /**
- * 모델과 관련된 모든 파일 삭제
+ * 모델과 관련된 모든 파일 삭제 (GLB, STL, 썸네일, GCode)
  */
 export async function deleteModelFiles(
   supabase: SupabaseClient,
+  userId: string,
   modelData: {
-    source_image_url?: string;
+    id: string;
     storage_path?: string;
+    stl_url?: string;
     thumbnail_url?: string;
+    gcode_url?: string;
+    model_name?: string;
+    prompt?: string;
   }
 ): Promise<void> {
-  const filesToDelete = [
-    modelData.source_image_url,
-    modelData.storage_path,
-    modelData.thumbnail_url
-  ].filter(Boolean) as string[];
+  const filesToDelete: string[] = [];
 
+  // URL에서 경로 추출하는 함수
+  const extractPath = (url: string | undefined): string | null => {
+    if (!url) return null;
+    try {
+      const urlObj = new URL(url);
+      // Supabase storage URL 형식: https://{project}.supabase.co/storage/v1/object/public/{bucket}/{path}
+      const match = urlObj.pathname.match(/\/storage\/v1\/object\/public\/[^/]+\/(.+)/);
+      if (match) {
+        return decodeURIComponent(match[1].split('?')[0]); // 쿼리 파라미터 제거
+      }
+    } catch (e) {
+      console.warn('[deleteModelFiles] Failed to parse URL:', url);
+    }
+    return null;
+  };
+
+  // 1. GLB 파일 (ai-models 버킷)
+  if (modelData.storage_path) {
+    const path = extractPath(modelData.storage_path);
+    if (path) filesToDelete.push(path);
+  }
+
+  // 2. STL 파일 (ai-models 버킷)
+  if (modelData.stl_url) {
+    const path = extractPath(modelData.stl_url);
+    if (path) filesToDelete.push(path);
+  }
+
+  // 3. 썸네일 (ai-models 버킷)
+  if (modelData.thumbnail_url) {
+    const path = extractPath(modelData.thumbnail_url);
+    if (path) filesToDelete.push(path);
+  }
+
+  // ai-models 버킷에서 파일 삭제
   if (filesToDelete.length > 0) {
+    console.log('[deleteModelFiles] Deleting from ai-models:', filesToDelete);
     const { error } = await supabase.storage
       .from(BUCKET_NAME)
       .remove(filesToDelete);
 
-    if (error) throw error;
+    if (error) {
+      console.error('[deleteModelFiles] Error deleting from ai-models:', error);
+    }
+  }
+
+  // 4. GCode 파일들 삭제 (gcode-files 버킷의 모델 폴더 전체)
+  const modelName = (modelData.model_name || modelData.prompt || modelData.id).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const gcodeFolderPath = `${userId}/${modelName}`;
+
+  try {
+    console.log('[deleteModelFiles] Deleting GCode folder:', gcodeFolderPath);
+
+    // 폴더 내 모든 파일 목록 가져오기
+    const { data: gcodeFiles, error: listError } = await supabase.storage
+      .from('gcode-files')
+      .list(gcodeFolderPath);
+
+    if (listError) {
+      console.warn('[deleteModelFiles] Error listing GCode files:', listError);
+    } else if (gcodeFiles && gcodeFiles.length > 0) {
+      // 파일 경로 생성
+      const gcodeFilesToDelete = gcodeFiles.map(file => `${gcodeFolderPath}/${file.name}`);
+
+      console.log('[deleteModelFiles] Deleting GCode files:', gcodeFilesToDelete);
+
+      // GCode 파일들 삭제
+      const { error: deleteError } = await supabase.storage
+        .from('gcode-files')
+        .remove(gcodeFilesToDelete);
+
+      if (deleteError) {
+        console.error('[deleteModelFiles] Error deleting GCode files:', deleteError);
+      }
+    }
+  } catch (error) {
+    console.error('[deleteModelFiles] Failed to delete GCode folder:', error);
   }
 }
 
@@ -295,12 +367,46 @@ export async function downloadAndUploadGCode(
   supabase: SupabaseClient,
   userId: string,
   modelId: string,
-  gcodeUrl: string
+  gcodeUrl: string,
+  printerModelId?: string,
+  modelName?: string
 ): Promise<{ path: string; publicUrl: string } | null> {
   try {
-    console.log('[aiStorage] Downloading GCode from AI server:', gcodeUrl);
+    const GCODE_BUCKET = 'gcode-files';
 
-    // 1. Python 서버에서 GCode 다운로드
+    // 3D 모델명 폴더 내에 프린터별 GCode 파일 저장
+    // 경로: {userId}/{modelName}/{printerModelId}.gcode
+    const sanitizedModelName = (modelName || modelId).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filename = printerModelId
+      ? `${printerModelId}.gcode`
+      : 'default.gcode';
+    const path = `${userId}/${sanitizedModelName}/${filename}`;
+
+    console.log('[aiStorage] Checking if GCode already exists:', path);
+
+    // 1. 이미 저장된 GCode가 있는지 확인
+    const folderPath = `${userId}/${sanitizedModelName}`;
+    const { data: existingFiles } = await supabase.storage
+      .from(GCODE_BUCKET)
+      .list(folderPath, {
+        search: filename
+      });
+
+    if (existingFiles && existingFiles.length > 0) {
+      console.log('[aiStorage] GCode already exists in storage, using existing file');
+      const { data: urlData } = supabase.storage
+        .from(GCODE_BUCKET)
+        .getPublicUrl(path);
+
+      return {
+        path: path,
+        publicUrl: urlData.publicUrl
+      };
+    }
+
+    console.log('[aiStorage] GCode not found in storage, downloading from AI server:', gcodeUrl);
+
+    // 2. Python 서버에서 GCode 다운로드
     const response = await fetch(gcodeUrl);
     if (!response.ok) {
       throw new Error(`Failed to download GCode: ${response.status} ${response.statusText}`);
@@ -309,12 +415,11 @@ export async function downloadAndUploadGCode(
     const gcodeBlob = await response.blob();
     console.log('[aiStorage] GCode downloaded, size:', gcodeBlob.size, 'bytes');
 
-    // 2. Supabase Storage에 업로드
-    const path = `${userId}/generated-models/${modelId}.gcode`;
+    // 3. Supabase Storage에 업로드
     const { data, error } = await supabase.storage
-      .from(BUCKET_NAME)
+      .from(GCODE_BUCKET)
       .upload(path, gcodeBlob, {
-        contentType: 'text/plain',
+        contentType: 'text/x-gcode',
         cacheControl: '3600',
         upsert: true
       });
@@ -324,9 +429,9 @@ export async function downloadAndUploadGCode(
       throw error;
     }
 
-    // 3. Public URL 생성
+    // 4. Public URL 생성
     const { data: urlData } = supabase.storage
-      .from(BUCKET_NAME)
+      .from(GCODE_BUCKET)
       .getPublicUrl(path);
 
     console.log('[aiStorage] GCode uploaded successfully:', urlData.publicUrl);

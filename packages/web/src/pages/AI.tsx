@@ -70,6 +70,7 @@ interface Printer {
   print_time_left?: number;
   current_file?: string;
   device_uuid?: string;
+  manufacture_id?: string; // manufacturing_printers 테이블의 ID
 }
 
 interface PrintSettings {
@@ -117,6 +118,7 @@ import {
   Trash2,
   Eye,
   RotateCcw,
+  RefreshCw,
   FolderOpen,
   Grid3X3,
   Image as ImageFile,
@@ -131,7 +133,8 @@ import { buildCommon, postTextTo3D, postImageTo3D, extractGLBUrl, extractSTLUrl,
 import { createAIModel, updateAIModel, listAIModels, deleteAIModel } from "@shared/services/supabaseService/aiModel";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useAIImageUpload } from "@shared/hooks/useAIImageUpload";
-import { downloadAndUploadModel, downloadAndUploadSTL, downloadAndUploadThumbnail, downloadAndUploadGCode } from "@shared/services/supabaseService/aiStorage";
+import { downloadAndUploadModel, downloadAndUploadSTL, downloadAndUploadThumbnail, downloadAndUploadGCode, deleteModelFiles } from "@shared/services/supabaseService/aiStorage";
+import { getManufacturers, getSeriesByManufacturer, getModelsByManufacturerAndSeries, getManufacturingPrinterById } from "@shared/api/manufacturingPrinter";
 
 const AI = () => {
   const { t } = useTranslation();
@@ -161,6 +164,15 @@ const AI = () => {
   } | null>(null); // GCode 메타데이터
   const [isSlicing, setIsSlicing] = useState<boolean>(false); // 슬라이싱 진행 중
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null); // Text-to-Image 생성 이미지 URL
+
+  // 재슬라이스용 프린터 선택 state
+  const [resliceManufacturer, setResliceManufacturer] = useState<string>('');
+  const [resliceSeries, setResliceSeries] = useState<string>('');
+  const [resliceModelId, setResliceModelId] = useState<string>('');
+  const [manufacturers, setManufacturers] = useState<string[]>([]);
+  const [seriesList, setSeriesList] = useState<string[]>([]);
+  const [modelsList, setModelsList] = useState<Array<{id: string; display_name: string}>>([]);
+  const isLoadingDefaultPrinter = useRef<boolean>(false); // 기본값 로딩 중 플래그
   const [selectedImageHasModel, setSelectedImageHasModel] = useState<boolean>(false); // 선택된 이미지의 3D 모델 존재 여부
   // 모델 아카이브 필터 상태
   type ArchiveFilter = 'all' | 'text-to-3d' | 'image-to-3d' | 'text-to-image';
@@ -242,6 +254,7 @@ const AI = () => {
           print_time_left: undefined,
           current_file: undefined,
           device_uuid: r.device_uuid,
+          manufacture_id: r.manufacture_id,
         }));
         setPrinters(mapped);
       } catch (e) {
@@ -601,10 +614,34 @@ const AI = () => {
 
       console.log('[AI] Cura settings prepared:', curaSettings);
 
+      // 3. manufacturing_printers에서 프린터 정보 조회
+      let printerFilename = printerToConfirm.model || printerToConfirm.name;
+
+      if (printerToConfirm.manufacture_id) {
+        try {
+          console.log('[AI] Fetching printer info from manufacturing_printers:', printerToConfirm.manufacture_id);
+          const { data: manufacturingPrinter, error } = await supabase
+            .from('manufacturing_printers')
+            .select('filename, build_volume')
+            .eq('id', printerToConfirm.manufacture_id)
+            .single();
+
+          if (error) {
+            console.warn('[AI] Failed to fetch manufacturing printer:', error);
+          } else if (manufacturingPrinter) {
+            console.log('[AI] Manufacturing printer found:', manufacturingPrinter);
+            // .def.json 제거
+            printerFilename = manufacturingPrinter.filename.replace('.def.json', '');
+            console.log('[AI] Using printer filename:', printerFilename);
+          }
+        } catch (error) {
+          console.warn('[AI] Error fetching manufacturing printer:', error);
+        }
+      }
+
       // 3. 프린터 정의 (기본값 사용, 필요시 프린터별로 커스터마이징 가능)
       const printerDefinition: PrinterDefinition = {
         version: 2,
-        name: printerToConfirm.model || printerToConfirm.name,
         overrides: {
           machine_width: { default_value: 220 },
           machine_depth: { default_value: 220 },
@@ -627,7 +664,8 @@ const AI = () => {
         modelBlob,
         fileName,
         curaSettings,
-        printerDefinition
+        printerDefinition,
+        printerFilename
       );
 
       console.log('[AI] ========================================');
@@ -715,11 +753,18 @@ const AI = () => {
       if (currentModelId) {
         try {
           console.log('[AI] Uploading GCode to Supabase Storage...');
+
+          // 현재 모델 정보 가져오기
+          const currentModel = generatedModels.find(m => m.id === currentModelId);
+          const modelName = currentModel?.model_name || currentModel?.prompt || currentModelId;
+
           const gcodeUploadResult = await downloadAndUploadGCode(
             supabase,
             user.id,
             currentModelId,
-            gcodeUrl
+            gcodeUrl,
+            printerToConfirm.manufacture_id,
+            modelName
           );
 
           if (gcodeUploadResult) {
@@ -803,6 +848,293 @@ const AI = () => {
     }
   };
 
+  // 제조사 목록 로드
+  const loadManufacturers = useCallback(async () => {
+    try {
+      const data = await getManufacturers();
+      setManufacturers(data.map(m => m.manufacturer));
+    } catch (error) {
+      console.error('[AI] Failed to load manufacturers:', error);
+    }
+  }, []);
+
+  // 시리즈 목록 로드
+  const loadSeriesByManufacturer = useCallback(async (manufacturer: string) => {
+    try {
+      const data = await getSeriesByManufacturer(manufacturer);
+      setSeriesList(data.map(s => s.series));
+    } catch (error) {
+      console.error('[AI] Failed to load series:', error);
+    }
+  }, []);
+
+  // 모델 목록 로드
+  const loadModelsByManufacturerAndSeries = useCallback(async (manufacturer: string, series: string) => {
+    try {
+      const data = await getModelsByManufacturerAndSeries(manufacturer, series);
+      setModelsList(data);
+    } catch (error) {
+      console.error('[AI] Failed to load models:', error);
+    }
+  }, []);
+
+  // 저장된 기본 프린터 설정 로드
+  const loadDefaultPrinterSettings = useCallback(async () => {
+    if (!selectedPrinter) {
+      return;
+    }
+
+    const printerExt = selectedPrinter as Printer & { manufacture_id?: string };
+    if (printerExt.manufacture_id) {
+      isLoadingDefaultPrinter.current = true;
+      try {
+        const { data: manufacturingPrinter, error } = await supabase
+          .from('manufacturing_printers')
+          .select('id, manufacturer, series, model, display_name')
+          .eq('id', printerExt.manufacture_id)
+          .single();
+
+        if (error) {
+          console.error('[AI] Error loading manufacturing printer:', error);
+          isLoadingDefaultPrinter.current = false;
+          return;
+        }
+
+        if (manufacturingPrinter) {
+          // 1단계: 제조사 설정
+          setResliceManufacturer(manufacturingPrinter.manufacturer);
+
+          // 2단계: 시리즈 목록 로드 후 시리즈 설정
+          const seriesData = await getSeriesByManufacturer(manufacturingPrinter.manufacturer);
+          setSeriesList(seriesData.map(s => s.series));
+          setResliceSeries(manufacturingPrinter.series);
+
+          // 3단계: 모델 목록 로드 후 모델 설정
+          const modelsData = await getModelsByManufacturerAndSeries(
+            manufacturingPrinter.manufacturer,
+            manufacturingPrinter.series
+          );
+          setModelsList(modelsData);
+          setResliceModelId(manufacturingPrinter.id);
+
+          console.log('[AI] Loaded default printer settings:', {
+            manufacturer: manufacturingPrinter.manufacturer,
+            series: manufacturingPrinter.series,
+            model: manufacturingPrinter.display_name,
+            id: manufacturingPrinter.id
+          });
+        }
+      } catch (error) {
+        console.error('[AI] Error in loadDefaultPrinterSettings:', error);
+      } finally {
+        isLoadingDefaultPrinter.current = false;
+      }
+    }
+  }, [selectedPrinter]);
+
+  // 재슬라이스 핸들러
+  const handleReslice = async () => {
+    // 현재 모델 찾기
+    const currentModel = currentModelId ? generatedModels.find(m => m.id === currentModelId) : null;
+
+    if (!resliceModelId || !selectedPrinter || !currentModel || !currentGlbUrl) {
+      toast({
+        title: t('ai.resliceFailed'),
+        description: t('ai.resliceFailedDesc'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsSlicing(true);
+
+      toast({
+        title: t('ai.resliceStart'),
+        description: t('ai.resliceStartDesc'),
+      });
+
+      // 선택한 프린터 정보 가져오기
+      const manufacturingPrinter = await getManufacturingPrinterById(resliceModelId);
+      if (!manufacturingPrinter) {
+        throw new Error('선택한 프린터 정보를 찾을 수 없습니다.');
+      }
+
+      const printerFilename = manufacturingPrinter.filename.replace('.def.json', '');
+      const buildVolume = manufacturingPrinter.build_volume || { x: 220, y: 220, z: 250 };
+
+      // 프린터 정의 생성
+      const printerDefinition: PrinterDefinition = {
+        version: 2,
+        overrides: {
+          machine_width: { default_value: buildVolume.x },
+          machine_depth: { default_value: buildVolume.y },
+          machine_height: { default_value: buildVolume.z },
+        },
+      };
+
+      // Cura 설정 (API는 문자열 값을 요구함)
+      const curaSettings: SlicingSettings = {
+        layer_height: printSettings.layer_height.toString(),
+        line_width: printSettings.line_width.toString(),
+        infill_sparse_density: printSettings.infill_sparse_density.toString(),
+        wall_line_count: printSettings.wall_line_count.toString(),
+        top_layers: printSettings.top_layers.toString(),
+        bottom_layers: printSettings.bottom_layers.toString(),
+        speed_print: printSettings.speed_print.toString(),
+        support_enable: printSettings.support_enable.toString(),
+        support_angle: printSettings.support_angle.toString(),
+        adhesion_type: printSettings.adhesion_type,
+        material_diameter: printSettings.material_diameter.toString(),
+        material_flow: printSettings.material_flow.toString(),
+      };
+
+      // GLB 파일 가져오기 (기존 슬라이싱과 동일하게 GLB 사용)
+      const modelUrl = currentGlbUrl;
+      console.log('[AI] 재슬라이싱에 사용할 모델 URL:', modelUrl);
+
+      const response = await fetch(modelUrl);
+      if (!response.ok) {
+        throw new Error(`모델 다운로드 실패: ${response.status}`);
+      }
+
+      const modelBlob = await response.blob();
+      const fileExtension = modelUrl.endsWith('.stl') ? 'stl' : 'glb';
+      const fileName = currentModel.model_name ? `${currentModel.model_name}.${fileExtension}` : `model.${fileExtension}`;
+
+      // 슬라이싱 API 호출
+      const slicingResult = await uploadSTLAndSlice(
+        modelBlob,
+        fileName,
+        curaSettings,
+        printerDefinition,
+        printerFilename
+      );
+
+      if (slicingResult.status === 'error' || !slicingResult.data) {
+        throw new Error(slicingResult.error || '슬라이싱 실패');
+      }
+
+      console.log('[AI] 재슬라이싱 결과:', {
+        gcode_url: slicingResult.data.gcode_url,
+        task_id: slicingResult.data.task_id,
+        has_metadata: !!slicingResult.data.gcode_metadata
+      });
+
+      // GCode 업로드
+      const gcodeUrl = slicingResult.data.gcode_url;
+      let uploadedGcodeUrl = gcodeUrl;
+
+      if (gcodeUrl && user?.id) {
+        const modelName = currentModel.model_name || currentModel.prompt || currentModel.id;
+        const uploaded = await downloadAndUploadGCode(
+          supabase,
+          user.id,
+          currentModel.id,
+          gcodeUrl,
+          resliceModelId,
+          modelName
+        );
+        if (uploaded) {
+          uploadedGcodeUrl = uploaded.publicUrl;
+        }
+      }
+
+      // DB 업데이트 (GCode URL만 저장)
+      if (user?.id && uploadedGcodeUrl) {
+        await updateAIModel(supabase, currentModel.id, {
+          gcode_url: uploadedGcodeUrl,
+        });
+        console.log('[AI] 재슬라이싱 - GCode URL을 DB에 저장:', uploadedGcodeUrl);
+      }
+
+      // UI 업데이트
+      const gcodeUrlWithTimestamp = uploadedGcodeUrl ? `${uploadedGcodeUrl}?t=${Date.now()}` : null;
+      setCurrentGCodeUrl(gcodeUrlWithTimestamp);
+
+      // 메타데이터를 UI 형식으로 변환하여 설정
+      if (slicingResult.data.gcode_metadata) {
+        const metadata = slicingResult.data.gcode_metadata;
+        setGcodeInfo({
+          printTime: metadata.print_time_formatted,
+          filamentLength: metadata.filament_used_m ? `${metadata.filament_used_m.toFixed(2)}m` : undefined,
+          filamentWeight: metadata.filament_weight_g ? `${metadata.filament_weight_g.toFixed(1)}g` : undefined,
+          filamentCost: metadata.filament_cost ? `$${metadata.filament_cost.toFixed(2)}` : undefined,
+          layerCount: metadata.layer_count,
+          layerHeight: metadata.layer_height,
+          modelSize: metadata.bounding_box ? {
+            minX: metadata.bounding_box.min_x,
+            maxX: metadata.bounding_box.max_x,
+            minY: metadata.bounding_box.min_y,
+            maxY: metadata.bounding_box.max_y,
+            minZ: metadata.bounding_box.min_z,
+            maxZ: metadata.bounding_box.max_z,
+          } : undefined,
+          nozzleTemp: metadata.nozzle_temp,
+          bedTemp: metadata.bed_temp,
+          printerName: metadata.printer_name,
+        });
+      }
+
+      toast({
+        title: t('ai.resliceComplete'),
+        description: t('ai.resliceCompleteDesc'),
+      });
+    } catch (error) {
+      console.error('[AI] Reslice failed:', error);
+      toast({
+        title: t('ai.resliceFailed'),
+        description: error instanceof Error ? error.message : t('ai.resliceFailedError'),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSlicing(false);
+    }
+  };
+
+  // 제조사 목록 로드 및 기본값 설정 (다이얼로그가 열릴 때)
+  useEffect(() => {
+    if (printDialogOpen) {
+      loadManufacturers();
+      loadDefaultPrinterSettings();
+    } else {
+      // 다이얼로그가 닫힐 때 초기화
+      setResliceManufacturer('');
+      setResliceSeries('');
+      setResliceModelId('');
+      setSeriesList([]);
+      setModelsList([]);
+    }
+  }, [printDialogOpen, selectedPrinter, loadManufacturers, loadDefaultPrinterSettings]);
+
+  // 제조사 선택 시 시리즈 목록 로드 (수동 선택 시에만)
+  useEffect(() => {
+    // 기본값 로딩 중에는 실행하지 않음
+    if (isLoadingDefaultPrinter.current) return;
+
+    if (resliceManufacturer) {
+      loadSeriesByManufacturer(resliceManufacturer);
+    } else {
+      setSeriesList([]);
+      setResliceSeries('');
+      setModelsList([]);
+      setResliceModelId('');
+    }
+  }, [resliceManufacturer, loadSeriesByManufacturer]);
+
+  // 시리즈 선택 시 모델 목록 로드 (수동 선택 시에만)
+  useEffect(() => {
+    // 기본값 로딩 중에는 실행하지 않음
+    if (isLoadingDefaultPrinter.current) return;
+
+    if (resliceManufacturer && resliceSeries) {
+      loadModelsByManufacturerAndSeries(resliceManufacturer, resliceSeries);
+    } else {
+      setModelsList([]);
+      setResliceModelId('');
+    }
+  }, [resliceManufacturer, resliceSeries, loadModelsByManufacturerAndSeries]);
+
   // Shared 훅의 함수를 래핑
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -854,6 +1186,20 @@ const AI = () => {
       );
 
       for (const model of linkedModels) {
+        // 스토리지 파일 삭제 (GLB, STL, 썸네일, GCode)
+        if (user?.id) {
+          console.log('[AI] Deleting storage files for linked model:', model);
+          await deleteModelFiles(supabase, user.id, {
+            id: model.id,
+            storage_path: model.storage_path,
+            stl_url: model.stl_download_url,
+            thumbnail_url: model.thumbnail_url,
+            gcode_url: model.gcode_url,
+            model_name: model.model_name,
+            prompt: model.prompt
+          });
+        }
+        // DB에서 모델 삭제
         await deleteAIModel(supabase, model.id);
       }
 
@@ -901,8 +1247,28 @@ const AI = () => {
   const handleModelDelete = async (item: { id: string | number; name: string }) => {
     try {
       setModelViewerUrl(null);
+
+      // 모델 정보 가져오기
+      const modelToDelete = generatedModels.find(m => m.id === item.id.toString());
+
+      // 스토리지 파일 삭제 (GLB, STL, 썸네일, GCode)
+      if (modelToDelete && user?.id) {
+        console.log('[AI] Deleting storage files for model:', modelToDelete);
+        await deleteModelFiles(supabase, user.id, {
+          id: modelToDelete.id,
+          storage_path: modelToDelete.storage_path,
+          stl_url: modelToDelete.stl_download_url,
+          thumbnail_url: modelToDelete.thumbnail_url,
+          gcode_url: modelToDelete.gcode_url,
+          model_name: modelToDelete.model_name,
+          prompt: modelToDelete.prompt
+        });
+      }
+
+      // DB에서 모델 삭제
       await deleteAIModel(supabase, item.id.toString());
       await reloadModels();
+
       toast({
         title: t('ai.modelDeleted'),
         description: `${item.name}${t('ai.modelDeleteSuccess')}`,
@@ -1933,17 +2299,93 @@ const AI = () => {
             {/* 헤더 */}
             <div className="px-6 py-4 border-b">
               <DialogHeader className="flex flex-row items-center justify-between w-full">
-                <DialogTitle className="text-lg font-semibold">
-                  출력 설정{selectedPrinter ? ` - ${selectedPrinter.name}` : ''}
-                </DialogTitle>
+                <div className="flex items-center gap-2">
+                  <DialogTitle className="text-lg font-semibold">
+                    {t('ai.printSettings')}{selectedPrinter ? ` - ${selectedPrinter.name}` : ''}
+                  </DialogTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={() => {
+                      // 기본값으로 되돌리기
+                      loadDefaultPrinterSettings();
+                    }}
+                    title={t('ai.resetToDefault')}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </div>
               </DialogHeader>
+            </div>
+
+            {/* 프린터 선택 바 (상단 수평 레이아웃) */}
+            <div className="px-6 pt-4 pb-2 bg-muted/30">
+              <div className="flex items-end gap-4">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="text-xs text-muted-foreground block mb-1.5">{t('ai.manufacturer')}</label>
+                  <select
+                    className="w-full px-3 py-2 text-sm border rounded-md bg-background"
+                    value={resliceManufacturer}
+                    onChange={(e) => setResliceManufacturer(e.target.value)}
+                  >
+                    <option value="">{t('ai.selectOption')}</option>
+                    {manufacturers.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex-1 min-w-[200px]">
+                  <label className="text-xs text-muted-foreground block mb-1.5">{t('ai.series')}</label>
+                  <select
+                    className="w-full px-3 py-2 text-sm border rounded-md bg-background"
+                    value={resliceSeries}
+                    onChange={(e) => setResliceSeries(e.target.value)}
+                    disabled={!resliceManufacturer}
+                  >
+                    <option value="">{t('ai.selectOption')}</option>
+                    {seriesList.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex-1 min-w-[200px]">
+                  <label className="text-xs text-muted-foreground block mb-1.5">{t('ai.model')}</label>
+                  <select
+                    className="w-full px-3 py-2 text-sm border rounded-md bg-background"
+                    value={resliceModelId}
+                    onChange={(e) => setResliceModelId(e.target.value)}
+                    disabled={!resliceSeries}
+                  >
+                    <option value="">{t('ai.selectOption')}</option>
+                    {modelsList.map(model => (
+                      <option key={model.id} value={model.id}>{model.display_name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <Button
+                  variant="default"
+                  className="px-8"
+                  disabled={
+                    isSlicing ||
+                    !resliceModelId ||
+                    (selectedPrinter as any)?.manufacture_id === resliceModelId
+                  }
+                  onClick={handleReslice}
+                >
+                  {isSlicing ? t('ai.reslicing') : t('ai.reslice')}
+                </Button>
+              </div>
             </div>
 
             {/* 본문 */}
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(560px,1fr)_440px] gap-6 p-6 overflow-hidden flex-1">
               {/* 좌: G-code 프리뷰 */}
               <Card className="overflow-hidden">
-                <CardContent className="p-0 h-[68vh]">
+                <CardContent className="p-0 h-[60vh]">
                   <Suspense fallback={<div className="w-full h-full flex items-center justify-center">Loading...</div>}>
                     <GCodePreview gcodeUrl={currentGCodeUrl ?? modelViewerUrl ?? undefined} />
                   </Suspense>
@@ -1951,19 +2393,19 @@ const AI = () => {
               </Card>
 
               {/* 우: 출력 정보 */}
-              <div className="h-[68vh] overflow-y-auto pr-1">
+              <div className="h-[60vh] overflow-y-auto pr-1">
                 <div className="space-y-4">
-                  <h3 className="font-semibold text-lg">출력 정보</h3>
+                  <h3 className="font-semibold text-lg">{t('ai.printInfo')}</h3>
 
                   {gcodeInfo ? (
                     <>
                       {/* 시간 정보 */}
                       <Card>
                         <CardContent className="p-4 space-y-3">
-                          <h4 className="font-medium text-sm text-muted-foreground">시간</h4>
+                          <h4 className="font-medium text-sm text-muted-foreground">{t('ai.printTime')}</h4>
                           {gcodeInfo.printTime && (
                             <div className="flex justify-between items-center">
-                              <span className="text-sm">예상 출력 시간</span>
+                              <span className="text-sm">{t('ai.estimatedPrintTime')}</span>
                               <span className="font-semibold">{gcodeInfo.printTime}</span>
                             </div>
                           )}
@@ -1973,22 +2415,22 @@ const AI = () => {
                       {/* 필라멘트 정보 */}
                       <Card>
                         <CardContent className="p-4 space-y-3">
-                          <h4 className="font-medium text-sm text-muted-foreground">필라멘트</h4>
+                          <h4 className="font-medium text-sm text-muted-foreground">{t('ai.filament')}</h4>
                           {gcodeInfo.filamentLength && (
                             <div className="flex justify-between items-center">
-                              <span className="text-sm">사용량 (길이)</span>
+                              <span className="text-sm">{t('ai.filamentLength')}</span>
                               <span className="font-semibold">{gcodeInfo.filamentLength}</span>
                             </div>
                           )}
                           {gcodeInfo.filamentWeight && (
                             <div className="flex justify-between items-center">
-                              <span className="text-sm">사용량 (무게)</span>
+                              <span className="text-sm">{t('ai.filamentWeight')}</span>
                               <span className="font-semibold">{gcodeInfo.filamentWeight}</span>
                             </div>
                           )}
                           {gcodeInfo.filamentCost && (
                             <div className="flex justify-between items-center">
-                              <span className="text-sm">예상 비용</span>
+                              <span className="text-sm">{t('ai.estimatedCost')}</span>
                               <span className="font-semibold">${gcodeInfo.filamentCost}</span>
                             </div>
                           )}
@@ -1998,16 +2440,16 @@ const AI = () => {
                       {/* 레이어 정보 */}
                       <Card>
                         <CardContent className="p-4 space-y-3">
-                          <h4 className="font-medium text-sm text-muted-foreground">레이어</h4>
+                          <h4 className="font-medium text-sm text-muted-foreground">{t('ai.layer')}</h4>
                           {gcodeInfo.layerCount && (
                             <div className="flex justify-between items-center">
-                              <span className="text-sm">총 레이어 수</span>
+                              <span className="text-sm">{t('ai.totalLayers')}</span>
                               <span className="font-semibold">{gcodeInfo.layerCount}개</span>
                             </div>
                           )}
                           {gcodeInfo.layerHeight && (
                             <div className="flex justify-between items-center">
-                              <span className="text-sm">레이어 높이</span>
+                              <span className="text-sm">{t('ai.layerHeight')}</span>
                               <span className="font-semibold">{gcodeInfo.layerHeight}mm</span>
                             </div>
                           )}
@@ -2018,7 +2460,7 @@ const AI = () => {
                       {gcodeInfo.modelSize && (
                         <Card>
                           <CardContent className="p-4 space-y-3">
-                            <h4 className="font-medium text-sm text-muted-foreground">모델 크기 (mm)</h4>
+                            <h4 className="font-medium text-sm text-muted-foreground">{t('ai.modelSize')}</h4>
                             <div className="grid grid-cols-3 gap-2 text-center">
                               <div className="p-2 rounded bg-muted">
                                 <div className="text-xs text-muted-foreground">X</div>
@@ -2046,16 +2488,16 @@ const AI = () => {
                       {/* 온도 설정 */}
                       <Card>
                         <CardContent className="p-4 space-y-3">
-                          <h4 className="font-medium text-sm text-muted-foreground">온도</h4>
+                          <h4 className="font-medium text-sm text-muted-foreground">{t('ai.printTemperature')}</h4>
                           {gcodeInfo.nozzleTemp && (
                             <div className="flex justify-between items-center">
-                              <span className="text-sm">노즐 온도</span>
+                              <span className="text-sm">{t('ai.nozzleTemperature')}</span>
                               <span className="font-semibold">{gcodeInfo.nozzleTemp}°C</span>
                             </div>
                           )}
                           {gcodeInfo.bedTemp && (
                             <div className="flex justify-between items-center">
-                              <span className="text-sm">베드 온도</span>
+                              <span className="text-sm">{t('ai.bedTemperature')}</span>
                               <span className="font-semibold">{gcodeInfo.bedTemp}°C</span>
                             </div>
                           )}
@@ -2066,9 +2508,9 @@ const AI = () => {
                       {gcodeInfo.printerName && (
                         <Card>
                           <CardContent className="p-4 space-y-3">
-                            <h4 className="font-medium text-sm text-muted-foreground">프린터</h4>
+                            <h4 className="font-medium text-sm text-muted-foreground">{t('ai.printerInfo')}</h4>
                             <div className="flex justify-between items-center">
-                              <span className="text-sm">모델명</span>
+                              <span className="text-sm">{t('ai.printerName')}</span>
                               <span className="font-semibold text-sm">{gcodeInfo.printerName}</span>
                             </div>
                           </CardContent>
@@ -2077,7 +2519,7 @@ const AI = () => {
                     </>
                   ) : (
                     <div className="text-center py-12 text-muted-foreground text-sm">
-                      슬라이싱을 완료하면<br />출력 정보가 표시됩니다.
+                      {t('ai.noSlicingData')}
                     </div>
                   )}
                 </div>
@@ -2086,10 +2528,10 @@ const AI = () => {
 
             {/* 푸터 */}
             <div className="px-6 py-4 border-t flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => setPrintDialogOpen(false)}>취소</Button>
+              <Button variant="outline" onClick={() => setPrintDialogOpen(false)}>{t('common.cancel')}</Button>
               <Button onClick={startPrint} disabled={!currentGCodeUrl}>
                 <Printer className="w-4 h-4 mr-2" />
-                출력 시작
+                {t('ai.startPrint')}
               </Button>
             </div>
           </div>

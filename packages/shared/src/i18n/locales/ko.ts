@@ -284,7 +284,44 @@ export default {
     // 모델 저장
     modelSaved: "모델 저장 완료",
     modelSavedDescription: "모델이 현재 회전 및 크기로 저장되었습니다.",
-    modelSaveFailed: "모델 저장 실패"
+    modelSaveFailed: "모델 저장 실패",
+    // 재슬라이스
+    reslice: "재 슬라이스",
+    reslicing: "슬라이싱 중...",
+    resliceStart: "재 슬라이스 시작",
+    resliceStartDesc: "새로운 프린터 설정으로 슬라이싱을 시작합니다...",
+    resliceComplete: "재 슬라이스 완료",
+    resliceCompleteDesc: "새로운 프린터 설정으로 슬라이싱이 완료되었습니다.",
+    resliceFailed: "재 슬라이스 실패",
+    resliceFailedDesc: "프린터 모델을 선택하고 3D 모델이 있는지 확인해주세요.",
+    resliceFailedError: "알 수 없는 오류가 발생했습니다.",
+    resetToDefault: "기본 프린터 설정으로 되돌리기",
+    // 출력 정보
+    printInfo: "출력 정보",
+    printTime: "시간",
+    estimatedPrintTime: "예상 출력 시간",
+    filament: "필라멘트",
+    filamentLength: "사용량 (길이)",
+    filamentWeight: "사용량 (무게)",
+    layer: "레이어",
+    totalLayers: "총 레이어 수",
+    modelSize: "모델 크기 (mm)",
+    printTemperature: "출력 온도",
+    nozzleTemperature: "노즐 온도",
+    bedTemperature: "베드 온도",
+    printerInfo: "프린터 정보",
+    printerName: "프린터 이름",
+    // 프린터 선택
+    manufacturer: "제조사",
+    series: "시리즈",
+    model: "모델",
+    selectOption: "선택하세요",
+    printSettings: "출력 설정",
+    // 기타
+    estimatedCost: "예상 비용",
+    layerHeight: "레이어 높이",
+    noSlicingData: "슬라이싱을 완료하면\n출력 정보가 표시됩니다.",
+    startPrint: "출력 시작"
   },
   printer: {
     title: "프린터 관리",

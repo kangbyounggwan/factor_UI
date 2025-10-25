@@ -553,6 +553,15 @@ const Settings = () => {
   const handleEditPrinter = async (printer: PrinterConfig) => {
     setEditingPrinter(printer);
     setShowEditPrinter(true);
+
+    // 먼저 모든 선택 state 초기화 (이전 프린터의 state가 남아있지 않도록)
+    setSelectedManufacturer("");
+    setSelectedSeries("");
+    setSelectedModel("");
+    setSelectedModelId("");
+    setSeriesList([]);
+    setModelsList([]);
+
     // 초기 프리필 중에는 의도치 않은 reset을 방지
     isPrefillingRef.current = true;
 

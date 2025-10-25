@@ -537,7 +537,7 @@ export default function ModelViewer({ className, height, showDemo = false, place
         <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
           <GizmoViewport axisColors={["#ff6b6b", "#51cf66", "#4dabf7"]} labelColor="#e5e7eb" />
         </GizmoHelper>
-        <OrbitControls enableDamping dampingFactor={0.05} />
+        <OrbitControls enableDamping dampingFactor={0.05} enabled={!!effectiveUrl || showDemo} />
       </Canvas>
 
       {/* 3개 메인 섹션 아코디언 */}
