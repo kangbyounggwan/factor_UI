@@ -443,23 +443,11 @@ export async function downloadAndUploadGCode(
   try {
     const GCODE_BUCKET = 'gcode-files';
 
-    // 3D 모델명 폴더 내에 프린터별 GCode 파일 저장
-    // 경로: {userId}/{modelName}/{series}-{model}-{filename}.gcode
-    const sanitizedModelName = (modelName || modelId).replace(/[^a-zA-Z0-9._-]/g, '_');
-
-    // 파일명 생성: {series}-{model}-{파일명}.gcode
-    let filename: string;
-    if (printerInfo?.series && printerInfo?.model) {
-      const sanitizedSeries = printerInfo.series.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const sanitizedModel = printerInfo.model.replace(/[^a-zA-Z0-9._-]/g, '_');
-      filename = `${sanitizedSeries}-${sanitizedModel}-${sanitizedModelName}.gcode`;
-    } else if (printerModelId) {
-      filename = `${printerModelId}.gcode`;
-    } else {
-      filename = 'default.gcode';
-    }
-
-    const path = `${userId}/${sanitizedModelName}/${filename}`;
+    // 간단한 파일 구조: {userId}/{modelId}/{printerId}.gcode
+    // UUID만 사용하여 짧고 명확한 경로 생성
+    const printerIdForFilename = printerModelId || 'default';
+    const path = `${userId}/${modelId}/${printerIdForFilename}.gcode`;
+    const filename = `${printerIdForFilename}.gcode`;
 
     console.log('[aiStorage] Downloading GCode from AI server:', gcodeUrl);
 

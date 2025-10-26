@@ -945,6 +945,7 @@ export default {
     pay: "결제하기",
     processing: "처리 중...",
     error: "결제 오류",
+    userNotFound: "로그인 정보를 찾을 수 없습니다. 다시 로그인해주세요.",
     fillAllFields: "모든 필드를 입력해주세요.",
     requestFailed: "결제 요청에 실패했습니다. 다시 시도해주세요.",
     verifying: "결제 확인 중",
@@ -967,7 +968,7 @@ export default {
     failNotice: "문제가 지속되면 고객센터로 문의해주세요.",
     retryPayment: "다시 시도",
   },
-  settings: {
+  userSettings: {
     title: "사용자 설정",
     description: "계정 정보 및 환경 설정을 관리합니다",
     // Tabs

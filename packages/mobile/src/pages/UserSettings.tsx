@@ -392,7 +392,7 @@ const UserSettings = () => {
             >
               <ChevronRight className="h-5 w-5 rotate-180" />
             </Button>
-            <h1 className="text-xl font-semibold">{t("settings.title")}</h1>
+            <h1 className="text-xl font-semibold">{t("userSettings.title")}</h1>
           </div>
         </div>
       </div>
@@ -405,10 +405,10 @@ const UserSettings = () => {
               <div className="space-y-3">
                 <CardTitle className="flex items-center gap-2">
                   <User className="h-5 w-5" />
-                  {t("settings.profile")}
+                  {t("userSettings.profile")}
                 </CardTitle>
                 <CardDescription>
-                  {t("settings.profileDescription")}
+                  {t("userSettings.profileDescription")}
                 </CardDescription>
               </div>
               <AlertDialog>
@@ -423,9 +423,9 @@ const UserSettings = () => {
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>{t("settings.resetProfileTitle")}</AlertDialogTitle>
+                    <AlertDialogTitle>{t("userSettings.resetProfileTitle")}</AlertDialogTitle>
                     <AlertDialogDescription>
-                      {t("settings.resetProfileDescription")}
+                      {t("userSettings.resetProfileDescription")}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -437,7 +437,7 @@ const UserSettings = () => {
                         setIsEditingProfile(false);
                       }}
                     >
-                      {t("settings.reset")}
+                      {t("userSettings.reset")}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -485,8 +485,8 @@ const UserSettings = () => {
                 </label>
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium">{t("settings.profilePicture")}</p>
-                <p className="text-xs text-muted-foreground">{t("settings.profilePictureDesc")}</p>
+                <p className="text-sm font-medium">{t("userSettings.profilePicture")}</p>
+                <p className="text-xs text-muted-foreground">{t("userSettings.profilePictureDesc")}</p>
               </div>
             </div>
 
@@ -494,7 +494,7 @@ const UserSettings = () => {
 
             {/* Display Name */}
             <div className="space-y-2">
-              <Label htmlFor="displayName">{t("settings.name")}</Label>
+              <Label htmlFor="displayName">{t("userSettings.name")}</Label>
               <Input
                 id="displayName"
                 value={displayName}
@@ -502,13 +502,13 @@ const UserSettings = () => {
                   setDisplayName(e.target.value);
                   setIsEditingProfile(true);
                 }}
-                placeholder={t("settings.namePlaceholder")}
+                placeholder={t("userSettings.namePlaceholder")}
               />
             </div>
 
             {/* Email (read-only) */}
             <div className="space-y-2">
-              <Label htmlFor="email">{t("settings.email")}</Label>
+              <Label htmlFor="email">{t("userSettings.email")}</Label>
               <div className="relative">
                 <Input
                   id="email"
@@ -521,17 +521,17 @@ const UserSettings = () => {
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-xs"
                 >
                   <Check className="h-3 w-3 mr-1" />
-                  {t("settings.verified")}
+                  {t("userSettings.verified")}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                {t("settings.emailChangeNote")}
+                {t("userSettings.emailChangeNote")}
               </p>
             </div>
 
             {/* Bio */}
             <div className="space-y-2">
-              <Label htmlFor="bio">{t("settings.bio")}</Label>
+              <Label htmlFor="bio">{t("userSettings.bio")}</Label>
               <textarea
                 id="bio"
                 value={bio}
@@ -539,7 +539,7 @@ const UserSettings = () => {
                   setBio(e.target.value);
                   setIsEditingProfile(true);
                 }}
-                placeholder={t("settings.bioPlaceholder")}
+                placeholder={t("userSettings.bioPlaceholder")}
                 className="w-full min-h-[80px] px-3 py-2 text-sm rounded-md border border-input bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                 maxLength={200}
               />
@@ -551,7 +551,7 @@ const UserSettings = () => {
             {isEditingProfile && (
               <div className="flex justify-end">
                 <Button onClick={handleSaveProfile}>
-                  {t("settings.saveChanges")}
+                  {t("userSettings.saveChanges")}
                 </Button>
               </div>
             )}
@@ -564,10 +564,10 @@ const UserSettings = () => {
             <div className="space-y-3">
               <CardTitle className="flex items-center gap-2">
                 <LinkIcon className="h-5 w-5" />
-                {t("settings.socialAccounts")}
+                {t("userSettings.socialAccounts")}
               </CardTitle>
               <CardDescription>
-                {t("settings.socialAccountsDescription")}
+                {t("userSettings.socialAccountsDescription")}
               </CardDescription>
             </div>
           </CardHeader>
@@ -660,10 +660,10 @@ const UserSettings = () => {
             <div className="space-y-3">
               <CardTitle className="flex items-center gap-2">
                 <CreditCard className="h-5 w-5" />
-                {t("settings.subscription")}
+                {t("userSettings.subscription")}
               </CardTitle>
               <CardDescription>
-                {t("settings.subscriptionDescription")}
+                {t("userSettings.subscriptionDescription")}
               </CardDescription>
             </div>
           </CardHeader>
@@ -756,10 +756,10 @@ const UserSettings = () => {
               <div className="space-y-3">
                 <CardTitle className="flex items-center gap-2">
                   <Bell className="h-5 w-5" />
-                  {t("settings.notificationSettings")}
+                  {t("userSettings.notificationSettings")}
                 </CardTitle>
                 <CardDescription>
-                  {t("settings.notificationDescription")}
+                  {t("userSettings.notificationDescription")}
                 </CardDescription>
               </div>
               <Button
@@ -784,10 +784,10 @@ const UserSettings = () => {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="push-notif" className="text-sm font-medium">
-                  {t("settings.pushNotifications")}
+                  {t("userSettings.pushNotifications")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  {t("settings.pushNotificationsDesc")}
+                  {t("userSettings.pushNotificationsDesc")}
                 </p>
               </div>
               <Switch
@@ -807,10 +807,10 @@ const UserSettings = () => {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="print-complete" className="text-sm font-medium">
-                  {t("settings.printComplete")}
+                  {t("userSettings.printComplete")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  {t("settings.printCompleteDesc")}
+                  {t("userSettings.printCompleteDesc")}
                 </p>
               </div>
               <Switch
@@ -830,10 +830,10 @@ const UserSettings = () => {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="error-notif" className="text-sm font-medium">
-                  {t("settings.errorNotifications")}
+                  {t("userSettings.errorNotifications")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  {t("settings.errorNotificationsDesc")}
+                  {t("userSettings.errorNotificationsDesc")}
                 </p>
               </div>
               <Switch
@@ -854,7 +854,7 @@ const UserSettings = () => {
               <div className="space-y-0.5 flex-1">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="email-notif" className="text-sm font-medium">
-                    {t("settings.emailNotifications")}
+                    {t("userSettings.emailNotifications")}
                   </Label>
                   <Badge
                     className="text-xs bg-gradient-to-r from-blue-600 to-blue-500 text-white border-0"
@@ -867,7 +867,7 @@ const UserSettings = () => {
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {t("settings.emailNotificationsDesc")}
+                  {t("userSettings.emailNotificationsDesc")}
                 </p>
               </div>
               <Switch
@@ -888,7 +888,7 @@ const UserSettings = () => {
               <div className="space-y-0.5 flex-1">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="weekly-report" className="text-sm font-medium">
-                    {t("settings.weeklyReport")}
+                    {t("userSettings.weeklyReport")}
                   </Label>
                   <Badge
                     className="text-xs bg-gradient-to-r from-blue-600 to-blue-500 text-white border-0"
@@ -901,7 +901,7 @@ const UserSettings = () => {
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {t("settings.weeklyReportDesc")}
+                  {t("userSettings.weeklyReportDesc")}
                 </p>
               </div>
               <Switch
@@ -931,10 +931,10 @@ const UserSettings = () => {
             <div className="space-y-3">
               <CardTitle className="flex items-center gap-2 text-destructive">
                 <AlertTriangle className="h-5 w-5" />
-                {t("settings.dangerZone")}
+                {t("userSettings.dangerZone")}
               </CardTitle>
               <CardDescription>
-                {t("settings.dangerZoneDescription")}
+                {t("userSettings.dangerZoneDescription")}
               </CardDescription>
             </div>
           </CardHeader>
@@ -943,19 +943,19 @@ const UserSettings = () => {
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" className="w-full">
                   <Trash2 className="h-4 w-4 mr-2" />
-                  {t("settings.deleteAccount")}
+                  {t("userSettings.deleteAccount")}
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>{t("settings.deleteAccountConfirmTitle")}</AlertDialogTitle>
+                  <AlertDialogTitle>{t("userSettings.deleteAccountConfirmTitle")}</AlertDialogTitle>
                   <AlertDialogDescription className="space-y-2">
-                    <p>{t("settings.deleteAccountWarning")}</p>
+                    <p>{t("userSettings.deleteAccountWarning")}</p>
                     <ul className="list-disc list-inside space-y-1 text-sm">
-                      <li>{t("settings.deleteWarning1")}</li>
-                      <li>{t("settings.deleteWarning2")}</li>
-                      <li>{t("settings.deleteWarning3")}</li>
-                      <li>{t("settings.deleteWarning4")}</li>
+                      <li>{t("userSettings.deleteWarning1")}</li>
+                      <li>{t("userSettings.deleteWarning2")}</li>
+                      <li>{t("userSettings.deleteWarning3")}</li>
+                      <li>{t("userSettings.deleteWarning4")}</li>
                     </ul>
                   </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -965,7 +965,7 @@ const UserSettings = () => {
                     onClick={handleDeleteAccount}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    {t("settings.deleteAccount")}
+                    {t("userSettings.deleteAccount")}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
