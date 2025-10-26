@@ -25,6 +25,7 @@ import {
   Check,
   Link as LinkIcon,
   Unlink,
+  RefreshCw,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -63,11 +64,22 @@ const UserSettings = () => {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // Notification preferences
-  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [emailNotifications, setEmailNotifications] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [printCompleteNotif, setPrintCompleteNotif] = useState(true);
   const [errorNotif, setErrorNotif] = useState(true);
   const [weeklyReport, setWeeklyReport] = useState(false);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
+  const [isEditingNotifications, setIsEditingNotifications] = useState(false);
+
+  // Original notification settings for cancel functionality
+  const [originalNotifications, setOriginalNotifications] = useState({
+    email: false,
+    push: true,
+    printComplete: true,
+    error: true,
+    weekly: false,
+  });
 
   // Check if Google is linked
   const googleIdentity = user?.identities?.find(id => id.provider === 'google');
@@ -141,6 +153,93 @@ const UserSettings = () => {
 
     loadSubscription();
   }, [user]);
+
+  // Load notification settings from Supabase
+  useEffect(() => {
+    const loadNotificationSettings = async () => {
+      if (!user) return;
+
+      try {
+        setLoadingNotifications(true);
+
+        const { data, error } = await supabase
+          .from("user_notification_settings")
+          .select("*")
+          .eq("user_id", user.id)
+          .single();
+
+        if (error) {
+          console.error("Error loading notification settings:", error);
+          return;
+        }
+
+        if (data) {
+          const settings = {
+            push: data.push_notifications ?? true,
+            printComplete: data.print_complete_notifications ?? true,
+            error: data.error_notifications ?? true,
+            email: data.email_notifications ?? false,
+            weekly: data.weekly_report ?? false,
+          };
+
+          setPushNotifications(settings.push);
+          setPrintCompleteNotif(settings.printComplete);
+          setErrorNotif(settings.error);
+          setEmailNotifications(settings.email);
+          setWeeklyReport(settings.weekly);
+          setOriginalNotifications(settings);
+        }
+      } catch (error) {
+        console.error("Error loading notification settings:", error);
+      } finally {
+        setLoadingNotifications(false);
+      }
+    };
+
+    loadNotificationSettings();
+  }, [user]);
+
+  // Save notification settings to Supabase
+  const handleSaveNotifications = async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from("user_notification_settings")
+        .update({
+          push_notifications: pushNotifications,
+          print_complete_notifications: printCompleteNotif,
+          error_notifications: errorNotif,
+          email_notifications: emailNotifications,
+          weekly_report: weeklyReport,
+        })
+        .eq("user_id", user.id);
+
+      if (error) {
+        console.error("Error updating notification settings:", error);
+        toast({
+          title: "오류",
+          description: "알림 설정 업데이트에 실패했습니다.",
+          variant: "destructive",
+        });
+      } else {
+        setOriginalNotifications({
+          email: emailNotifications,
+          push: pushNotifications,
+          printComplete: printCompleteNotif,
+          error: errorNotif,
+          weekly: weeklyReport,
+        });
+        setIsEditingNotifications(false);
+        toast({
+          title: "성공",
+          description: "알림 설정이 저장되었습니다.",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating notification settings:", error);
+    }
+  };
 
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -293,7 +392,7 @@ const UserSettings = () => {
             >
               <ChevronRight className="h-5 w-5 rotate-180" />
             </Button>
-            <h1 className="text-xl font-semibold">사용자 설정</h1>
+            <h1 className="text-xl font-semibold">{t("settings.title")}</h1>
           </div>
         </div>
       </div>
@@ -302,13 +401,48 @@ const UserSettings = () => {
         {/* Profile Section */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              프로필
-            </CardTitle>
-            <CardDescription>
-              프로필 정보를 관리하세요
-            </CardDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-3">
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  {t("settings.profile")}
+                </CardTitle>
+                <CardDescription>
+                  {t("settings.profileDescription")}
+                </CardDescription>
+              </div>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{t("settings.resetProfileTitle")}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {t("settings.resetProfileDescription")}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        setDisplayName(user?.user_metadata?.full_name || "");
+                        setBio(user?.user_metadata?.bio || "");
+                        setIsEditingProfile(false);
+                      }}
+                    >
+                      {t("settings.reset")}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Avatar */}
@@ -351,8 +485,8 @@ const UserSettings = () => {
                 </label>
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium">프로필 사진</p>
-                <p className="text-xs text-muted-foreground">JPG, PNG 또는 GIF (최대 2MB)</p>
+                <p className="text-sm font-medium">{t("settings.profilePicture")}</p>
+                <p className="text-xs text-muted-foreground">{t("settings.profilePictureDesc")}</p>
               </div>
             </div>
 
@@ -360,7 +494,7 @@ const UserSettings = () => {
 
             {/* Display Name */}
             <div className="space-y-2">
-              <Label htmlFor="displayName">이름</Label>
+              <Label htmlFor="displayName">{t("settings.name")}</Label>
               <Input
                 id="displayName"
                 value={displayName}
@@ -368,13 +502,13 @@ const UserSettings = () => {
                   setDisplayName(e.target.value);
                   setIsEditingProfile(true);
                 }}
-                placeholder="이름을 입력하세요"
+                placeholder={t("settings.namePlaceholder")}
               />
             </div>
 
             {/* Email (read-only) */}
             <div className="space-y-2">
-              <Label htmlFor="email">이메일</Label>
+              <Label htmlFor="email">{t("settings.email")}</Label>
               <div className="relative">
                 <Input
                   id="email"
@@ -387,17 +521,17 @@ const UserSettings = () => {
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-xs"
                 >
                   <Check className="h-3 w-3 mr-1" />
-                  인증됨
+                  {t("settings.verified")}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                이메일 변경은 고객지원팀에 문의하세요
+                {t("settings.emailChangeNote")}
               </p>
             </div>
 
             {/* Bio */}
             <div className="space-y-2">
-              <Label htmlFor="bio">소개</Label>
+              <Label htmlFor="bio">{t("settings.bio")}</Label>
               <textarea
                 id="bio"
                 value={bio}
@@ -405,7 +539,7 @@ const UserSettings = () => {
                   setBio(e.target.value);
                   setIsEditingProfile(true);
                 }}
-                placeholder="간단한 소개를 입력하세요"
+                placeholder={t("settings.bioPlaceholder")}
                 className="w-full min-h-[80px] px-3 py-2 text-sm rounded-md border border-input bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                 maxLength={200}
               />
@@ -415,19 +549,9 @@ const UserSettings = () => {
             </div>
 
             {isEditingProfile && (
-              <div className="flex gap-2">
-                <Button onClick={handleSaveProfile} className="flex-1">
-                  변경사항 저장
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setDisplayName(user?.user_metadata?.full_name || "");
-                    setBio(user?.user_metadata?.bio || "");
-                    setIsEditingProfile(false);
-                  }}
-                >
-                  취소
+              <div className="flex justify-end">
+                <Button onClick={handleSaveProfile}>
+                  {t("settings.saveChanges")}
                 </Button>
               </div>
             )}
@@ -437,13 +561,15 @@ const UserSettings = () => {
         {/* Account Linking */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <LinkIcon className="h-5 w-5" />
-              계정 연동
-            </CardTitle>
-            <CardDescription>
-              소셜 계정을 연동하여 간편하게 로그인하세요
-            </CardDescription>
+            <div className="space-y-3">
+              <CardTitle className="flex items-center gap-2">
+                <LinkIcon className="h-5 w-5" />
+                {t("settings.socialAccounts")}
+              </CardTitle>
+              <CardDescription>
+                {t("settings.socialAccountsDescription")}
+              </CardDescription>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             {/* Google Account Linking */}
@@ -531,13 +657,15 @@ const UserSettings = () => {
         {/* Subscription */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5" />
-              구독 정보
-            </CardTitle>
-            <CardDescription>
-              현재 플랜 및 결제 정보
-            </CardDescription>
+            <div className="space-y-3">
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                {t("settings.subscription")}
+              </CardTitle>
+              <CardDescription>
+                {t("settings.subscriptionDescription")}
+              </CardDescription>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {loadingPlan ? (
@@ -546,23 +674,31 @@ const UserSettings = () => {
               </div>
             ) : currentPlan ? (
               <div className="flex items-start justify-between p-4 rounded-lg bg-muted/50">
-                <div className="space-y-1">
+                <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Badge className="text-sm px-2 py-1">
                       <Crown className="h-3 w-3 mr-1" />
                       {currentPlan.name} 플랜
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {currentPlan.billingCycle === 'yearly' ? '연' : '월'} ₩{currentPlan.price.toLocaleString()}
-                  </p>
-                  {currentPlan.nextBillingDate && (
-                    <p className="text-xs text-muted-foreground">
-                      다음 결제일: {new Date(currentPlan.nextBillingDate).toLocaleDateString('ko-KR')}
+                  {currentPlan.price > 0 ? (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        {currentPlan.billingCycle === 'yearly' ? '연' : '월'} ₩{currentPlan.price.toLocaleString()}
+                      </p>
+                      {currentPlan.nextBillingDate && (
+                        <p className="text-xs text-muted-foreground">
+                          다음 결제일: {new Date(currentPlan.nextBillingDate).toLocaleDateString('ko-KR')}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-base font-semibold text-muted-foreground">
+                      무료 플랜
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    최대 프린터: {currentPlan.maxPrinters === -1 ? '무제한' : `${currentPlan.maxPrinters}대`}
+                    최대 2대 프린터 연결 가능
                   </p>
                 </div>
                 <Button
@@ -616,48 +752,52 @@ const UserSettings = () => {
         {/* Notifications */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5" />
-              알림 설정
-            </CardTitle>
-            <CardDescription>
-              알림 수신 방법을 선택하세요
-            </CardDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-3">
+                <CardTitle className="flex items-center gap-2">
+                  <Bell className="h-5 w-5" />
+                  {t("settings.notificationSettings")}
+                </CardTitle>
+                <CardDescription>
+                  {t("settings.notificationDescription")}
+                </CardDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setPushNotifications(originalNotifications.push);
+                  setPrintCompleteNotif(originalNotifications.printComplete);
+                  setErrorNotif(originalNotifications.error);
+                  setEmailNotifications(originalNotifications.email);
+                  setWeeklyReport(originalNotifications.weekly);
+                  setIsEditingNotifications(false);
+                }}
+                className="h-9 w-9 shrink-0"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Email Notifications */}
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="email-notif" className="text-sm font-medium">
-                  이메일 알림
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  중요한 업데이트를 이메일로 받기
-                </p>
-              </div>
-              <Switch
-                id="email-notif"
-                checked={emailNotifications}
-                onCheckedChange={setEmailNotifications}
-              />
-            </div>
-
-            <Separator />
-
             {/* Push Notifications */}
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="push-notif" className="text-sm font-medium">
-                  푸시 알림
+                  {t("settings.pushNotifications")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  앱 알림 받기
+                  {t("settings.pushNotificationsDesc")}
                 </p>
               </div>
               <Switch
                 id="push-notif"
                 checked={pushNotifications}
-                onCheckedChange={setPushNotifications}
+                onCheckedChange={(value) => {
+                  setPushNotifications(value);
+                  setIsEditingNotifications(true);
+                }}
+                disabled={loadingNotifications}
               />
             </div>
 
@@ -667,16 +807,20 @@ const UserSettings = () => {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="print-complete" className="text-sm font-medium">
-                  출력 완료 알림
+                  {t("settings.printComplete")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  3D 프린트가 완료되면 알림
+                  {t("settings.printCompleteDesc")}
                 </p>
               </div>
               <Switch
                 id="print-complete"
                 checked={printCompleteNotif}
-                onCheckedChange={setPrintCompleteNotif}
+                onCheckedChange={(value) => {
+                  setPrintCompleteNotif(value);
+                  setIsEditingNotifications(true);
+                }}
+                disabled={loadingNotifications}
               />
             </div>
 
@@ -686,16 +830,54 @@ const UserSettings = () => {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="error-notif" className="text-sm font-medium">
-                  오류 알림
+                  {t("settings.errorNotifications")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  프린터 오류 발생 시 즉시 알림
+                  {t("settings.errorNotificationsDesc")}
                 </p>
               </div>
               <Switch
                 id="error-notif"
                 checked={errorNotif}
-                onCheckedChange={setErrorNotif}
+                onCheckedChange={(value) => {
+                  setErrorNotif(value);
+                  setIsEditingNotifications(true);
+                }}
+                disabled={loadingNotifications}
+              />
+            </div>
+
+            <Separator />
+
+            {/* Email Notifications */}
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5 flex-1">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="email-notif" className="text-sm font-medium">
+                    {t("settings.emailNotifications")}
+                  </Label>
+                  <Badge
+                    className="text-xs bg-gradient-to-r from-blue-600 to-blue-500 text-white border-0"
+                    style={{
+                      boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                    }}
+                  >
+                    <Crown className="h-3 w-3 mr-1" />
+                    Pro
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.emailNotificationsDesc")}
+                </p>
+              </div>
+              <Switch
+                id="email-notif"
+                checked={emailNotifications}
+                onCheckedChange={(value) => {
+                  setEmailNotifications(value);
+                  setIsEditingNotifications(true);
+                }}
+                disabled={loadingNotifications}
               />
             </div>
 
@@ -703,62 +885,87 @@ const UserSettings = () => {
 
             {/* Weekly Report */}
             <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="weekly-report" className="text-sm font-medium">
-                  주간 리포트
-                </Label>
+              <div className="space-y-0.5 flex-1">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="weekly-report" className="text-sm font-medium">
+                    {t("settings.weeklyReport")}
+                  </Label>
+                  <Badge
+                    className="text-xs bg-gradient-to-r from-blue-600 to-blue-500 text-white border-0"
+                    style={{
+                      boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                    }}
+                  >
+                    <Crown className="h-3 w-3 mr-1" />
+                    Pro
+                  </Badge>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  매주 프린터 사용 통계 받기
+                  {t("settings.weeklyReportDesc")}
                 </p>
               </div>
               <Switch
                 id="weekly-report"
                 checked={weeklyReport}
-                onCheckedChange={setWeeklyReport}
+                onCheckedChange={(value) => {
+                  setWeeklyReport(value);
+                  setIsEditingNotifications(true);
+                }}
+                disabled={loadingNotifications}
               />
             </div>
+
+            {isEditingNotifications && (
+              <div className="flex justify-end pt-4 border-t">
+                <Button onClick={handleSaveNotifications}>
+                  {t("common.save")}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Danger Zone */}
         <Card className="border-destructive/50">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" />
-              위험 구역
-            </CardTitle>
-            <CardDescription>
-              계정 삭제는 되돌릴 수 없습니다
-            </CardDescription>
+            <div className="space-y-3">
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <AlertTriangle className="h-5 w-5" />
+                {t("settings.dangerZone")}
+              </CardTitle>
+              <CardDescription>
+                {t("settings.dangerZoneDescription")}
+              </CardDescription>
+            </div>
           </CardHeader>
           <CardContent>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" className="w-full">
                   <Trash2 className="h-4 w-4 mr-2" />
-                  계정 삭제
+                  {t("settings.deleteAccount")}
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>정말 계정을 삭제하시겠습니까?</AlertDialogTitle>
+                  <AlertDialogTitle>{t("settings.deleteAccountConfirmTitle")}</AlertDialogTitle>
                   <AlertDialogDescription className="space-y-2">
-                    <p>이 작업은 되돌릴 수 없습니다. 계정을 삭제하면:</p>
+                    <p>{t("settings.deleteAccountWarning")}</p>
                     <ul className="list-disc list-inside space-y-1 text-sm">
-                      <li>모든 프린터 데이터가 영구적으로 삭제됩니다</li>
-                      <li>출력 기록 및 통계가 삭제됩니다</li>
-                      <li>구독이 즉시 취소됩니다</li>
-                      <li>저장된 모든 파일이 삭제됩니다</li>
+                      <li>{t("settings.deleteWarning1")}</li>
+                      <li>{t("settings.deleteWarning2")}</li>
+                      <li>{t("settings.deleteWarning3")}</li>
+                      <li>{t("settings.deleteWarning4")}</li>
                     </ul>
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>취소</AlertDialogCancel>
+                  <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={handleDeleteAccount}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    계정 삭제
+                    {t("settings.deleteAccount")}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

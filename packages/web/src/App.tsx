@@ -53,6 +53,7 @@ const AppContent = () => {
     '/printer',
     '/create',
     '/settings',
+    '/user-settings',
     '/admin',
     '/auth'
   ];

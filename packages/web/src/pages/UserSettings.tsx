@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -26,6 +32,7 @@ import {
   Unlink,
   Shield,
   LogOut,
+  RefreshCw,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -41,11 +48,29 @@ import {
 
 // Google Logo SVG Component
 const GoogleLogo = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M17.64 9.20443C17.64 8.56625 17.5827 7.95262 17.4764 7.36353H9V10.8449H13.8436C13.635 11.9699 13.0009 12.9231 12.0477 13.5613V15.8194H14.9564C16.6582 14.2526 17.64 11.9453 17.64 9.20443Z" fill="#4285F4"/>
-    <path d="M8.99976 18C11.4298 18 13.467 17.1941 14.9561 15.8195L12.0475 13.5613C11.2416 14.1013 10.2107 14.4204 8.99976 14.4204C6.65567 14.4204 4.67158 12.8372 3.96385 10.71H0.957031V13.0418C2.43794 15.9831 5.48158 18 8.99976 18Z" fill="#34A853"/>
-    <path d="M3.96409 10.7098C3.78409 10.1698 3.68182 9.59301 3.68182 8.99983C3.68182 8.40665 3.78409 7.82983 3.96409 7.28983V4.95801H0.957273C0.347727 6.17301 0 7.54755 0 8.99983C0 10.4521 0.347727 11.8266 0.957273 13.0416L3.96409 10.7098Z" fill="#FBBC05"/>
-    <path d="M8.99976 3.57955C10.3211 3.57955 11.5075 4.03364 12.4402 4.92545L15.0216 2.34409C13.4629 0.891818 11.4257 0 8.99976 0C5.48158 0 2.43794 2.01682 0.957031 4.95818L3.96385 7.29C4.67158 5.16273 6.65567 3.57955 8.99976 3.57955Z" fill="#EA4335"/>
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 18 18"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M17.64 9.20443C17.64 8.56625 17.5827 7.95262 17.4764 7.36353H9V10.8449H13.8436C13.635 11.9699 13.0009 12.9231 12.0477 13.5613V15.8194H14.9564C16.6582 14.2526 17.64 11.9453 17.64 9.20443Z"
+      fill="#4285F4"
+    />
+    <path
+      d="M8.99976 18C11.4298 18 13.467 17.1941 14.9561 15.8195L12.0475 13.5613C11.2416 14.1013 10.2107 14.4204 8.99976 14.4204C6.65567 14.4204 4.67158 12.8372 3.96385 10.71H0.957031V13.0418C2.43794 15.9831 5.48158 18 8.99976 18Z"
+      fill="#34A853"
+    />
+    <path
+      d="M3.96409 10.7098C3.78409 10.1698 3.68182 9.59301 3.68182 8.99983C3.68182 8.40665 3.78409 7.82983 3.96409 7.28983V4.95801H0.957273C0.347727 6.17301 0 7.54755 0 8.99983C0 10.4521 0.347727 11.8266 0.957273 13.0416L3.96409 10.7098Z"
+      fill="#FBBC05"
+    />
+    <path
+      d="M8.99976 3.57955C10.3211 3.57955 11.5075 4.03364 12.4402 4.92545L15.0216 2.34409C13.4629 0.891818 11.4257 0 8.99976 0C5.48158 0 2.43794 2.01682 0.957031 4.95818L3.96385 7.29C4.67158 5.16273 6.65567 3.57955 8.99976 3.57955Z"
+      fill="#EA4335"
+    />
   </svg>
 );
 
@@ -56,20 +81,35 @@ const UserSettings = () => {
   const { toast } = useToast();
 
   // Form states
-  const [displayName, setDisplayName] = useState(user?.user_metadata?.full_name || "");
+  const [displayName, setDisplayName] = useState(
+    user?.user_metadata?.full_name || "",
+  );
   const [email, setEmail] = useState(user?.email || "");
   const [bio, setBio] = useState(user?.user_metadata?.bio || "");
   const [isEditingProfile, setIsEditingProfile] = useState(false);
 
   // Notification preferences
-  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [emailNotifications, setEmailNotifications] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [printCompleteNotif, setPrintCompleteNotif] = useState(true);
   const [errorNotif, setErrorNotif] = useState(true);
   const [weeklyReport, setWeeklyReport] = useState(false);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
+  const [isEditingNotifications, setIsEditingNotifications] = useState(false);
+
+  // Original notification settings for cancel functionality
+  const [originalNotifications, setOriginalNotifications] = useState({
+    email: false,
+    push: true,
+    printComplete: true,
+    error: true,
+    weekly: false,
+  });
 
   // Check if Google is linked
-  const googleIdentity = user?.identities?.find(id => id.provider === 'google');
+  const googleIdentity = user?.identities?.find(
+    (id) => id.provider === "google",
+  );
   const isGoogleLinked = !!googleIdentity;
 
   // Subscription state
@@ -91,8 +131,9 @@ const UserSettings = () => {
         setLoadingPlan(true);
 
         const { data: subscription, error } = await supabase
-          .from('user_subscriptions')
-          .select(`
+          .from("user_subscriptions")
+          .select(
+            `
             *,
             subscription_plans (
               name,
@@ -100,17 +141,18 @@ const UserSettings = () => {
               interval,
               max_printers
             )
-          `)
-          .eq('user_id', user.id)
-          .eq('status', 'active')
+          `,
+          )
+          .eq("user_id", user.id)
+          .eq("status", "active")
           .single();
 
         if (error || !subscription) {
           // No active subscription - use Basic plan
           setCurrentPlan({
-            name: 'Basic',
+            name: "Basic",
             price: 0,
-            billingCycle: 'free',
+            billingCycle: "free",
             nextBillingDate: null,
             maxPrinters: 1,
           });
@@ -121,16 +163,16 @@ const UserSettings = () => {
         setCurrentPlan({
           name: planData.name,
           price: planData.price || 0,
-          billingCycle: planData.interval || 'month',
+          billingCycle: planData.interval || "month",
           nextBillingDate: subscription.current_period_end,
           maxPrinters: planData.max_printers || 1,
         });
       } catch (error) {
-        console.error('Error loading subscription:', error);
+        console.error("Error loading subscription:", error);
         setCurrentPlan({
-          name: 'Basic',
+          name: "Basic",
           price: 0,
-          billingCycle: 'free',
+          billingCycle: "free",
           nextBillingDate: null,
           maxPrinters: 1,
         });
@@ -142,13 +184,58 @@ const UserSettings = () => {
     loadSubscription();
   }, [user]);
 
+  // Load notification settings from Supabase
+  useEffect(() => {
+    const loadNotificationSettings = async () => {
+      if (!user) return;
+
+      try {
+        setLoadingNotifications(true);
+
+        const { data, error } = await supabase
+          .from("user_notification_settings")
+          .select("*")
+          .eq("user_id", user.id)
+          .single();
+
+        if (error) {
+          console.error("Error loading notification settings:", error);
+          return;
+        }
+
+        if (data) {
+          const settings = {
+            push: data.push_notifications ?? true,
+            printComplete: data.print_complete_notifications ?? true,
+            error: data.error_notifications ?? true,
+            email: data.email_notifications ?? false,
+            weekly: data.weekly_report ?? false,
+          };
+
+          setPushNotifications(settings.push);
+          setPrintCompleteNotif(settings.printComplete);
+          setErrorNotif(settings.error);
+          setEmailNotifications(settings.email);
+          setWeeklyReport(settings.weekly);
+          setOriginalNotifications(settings);
+        }
+      } catch (error) {
+        console.error("Error loading notification settings:", error);
+      } finally {
+        setLoadingNotifications(false);
+      }
+    };
+
+    loadNotificationSettings();
+  }, [user]);
+
   const handleSaveProfile = async () => {
     // TODO: Implement profile update logic with Supabase
     console.log("Saving profile:", { displayName, bio });
     setIsEditingProfile(false);
     toast({
-      title: "프로필 업데이트",
-      description: "프로필이 성공적으로 업데이트되었습니다.",
+      title: t("settings.profileUpdated"),
+      description: t("settings.profileUpdatedDesc"),
     });
   };
 
@@ -157,26 +244,26 @@ const UserSettings = () => {
     if (error) {
       console.error("Failed to link Google account:", error);
       toast({
-        title: "연동 실패",
-        description: "Google 계정 연동에 실패했습니다. 다시 시도해주세요.",
+        title: t("settings.linkFailed"),
+        description: t("settings.linkFailedDescription"),
         variant: "destructive",
       });
     }
   };
 
   const handleUnlinkGoogle = async () => {
-    const { error } = await unlinkProvider('google');
+    const { error } = await unlinkProvider("google");
     if (error) {
       console.error("Failed to unlink Google account:", error);
       toast({
-        title: "연결 해제 실패",
-        description: "Google 계정 연결 해제에 실패했습니다. 다시 시도해주세요.",
+        title: t("settings.unlinkFailed"),
+        description: t("settings.unlinkFailedDescription"),
         variant: "destructive",
       });
     } else {
       toast({
-        title: "연결 해제 완료",
-        description: "Google 계정 연결이 해제되었습니다.",
+        title: t("settings.unlinkSuccess"),
+        description: t("settings.unlinkSuccessDescription"),
       });
       setTimeout(() => window.location.reload(), 1000);
     }
@@ -188,13 +275,57 @@ const UserSettings = () => {
     navigate("/", { replace: true });
   };
 
+  // Save notification settings to Supabase
+  const handleSaveNotifications = async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from("user_notification_settings")
+        .update({
+          push_notifications: pushNotifications,
+          print_complete_notifications: printCompleteNotif,
+          error_notifications: errorNotif,
+          email_notifications: emailNotifications,
+          weekly_report: weeklyReport,
+        })
+        .eq("user_id", user.id);
+
+      if (error) {
+        console.error("Error updating notification settings:", error);
+        toast({
+          title: t("common.error"),
+          description: "알림 설정 업데이트에 실패했습니다.",
+          variant: "destructive",
+        });
+      } else {
+        setOriginalNotifications({
+          email: emailNotifications,
+          push: pushNotifications,
+          printComplete: printCompleteNotif,
+          error: errorNotif,
+          weekly: weeklyReport,
+        });
+        setIsEditingNotifications(false);
+        toast({
+          title: t("common.success"),
+          description: "알림 설정이 저장되었습니다.",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating notification settings:", error);
+    }
+  };
+
   return (
     <div className="container mx-auto py-8 max-w-6xl">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">사용자 설정</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          {t("settings.title")}
+        </h1>
         <p className="text-muted-foreground mt-2">
-          계정 정보 및 환경 설정을 관리합니다
+          {t("settings.description")}
         </p>
       </div>
 
@@ -202,19 +333,19 @@ const UserSettings = () => {
         <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
           <TabsTrigger value="profile" className="gap-2">
             <User className="h-4 w-4" />
-            프로필
+            {t("settings.profile")}
           </TabsTrigger>
           <TabsTrigger value="account" className="gap-2">
             <Shield className="h-4 w-4" />
-            계정
+            {t("settings.account")}
           </TabsTrigger>
           <TabsTrigger value="subscription" className="gap-2">
             <CreditCard className="h-4 w-4" />
-            구독
+            {t("settings.subscription")}
           </TabsTrigger>
           <TabsTrigger value="notifications" className="gap-2">
             <Bell className="h-4 w-4" />
-            알림
+            {t("settings.notifications")}
           </TabsTrigger>
         </TabsList>
 
@@ -222,10 +353,45 @@ const UserSettings = () => {
         <TabsContent value="profile" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>프로필 정보</CardTitle>
-              <CardDescription>
-                공개적으로 표시되는 프로필 정보를 관리합니다
-              </CardDescription>
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-3">
+                  <CardTitle>{t("settings.profileInfo")}</CardTitle>
+                  <CardDescription>
+                    {t("settings.profileDescription")}
+                  </CardDescription>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>프로필 정보 초기화</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        정말로 프로필 정보를 초기화하시겠습니까? 변경된 내용이 모두 삭제됩니다.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>취소</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => {
+                          setDisplayName(user?.user_metadata?.full_name || "");
+                          setBio(user?.user_metadata?.bio || "");
+                          setIsEditingProfile(false);
+                        }}
+                      >
+                        초기화
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Avatar */}
@@ -243,13 +409,19 @@ const UserSettings = () => {
                   </Button>
                 </div>
                 <div className="space-y-2">
-                  <h3 className="font-medium">프로필 사진</h3>
+                  <h3 className="font-medium">
+                    {t("settings.profilePicture")}
+                  </h3>
                   <p className="text-sm text-muted-foreground">
-                    JPG, PNG 또는 GIF 형식 (최대 2MB)
+                    {t("settings.profilePictureDesc")}
                   </p>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline">업로드</Button>
-                    <Button size="sm" variant="ghost">삭제</Button>
+                    <Button size="sm" variant="outline">
+                      {t("settings.uploadPhoto")}
+                    </Button>
+                    <Button size="sm" variant="ghost">
+                      {t("settings.deletePhoto")}
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -259,7 +431,7 @@ const UserSettings = () => {
               {/* Form */}
               <div className="grid gap-6 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="displayName">이름</Label>
+                  <Label htmlFor="displayName">{t("settings.name")}</Label>
                   <Input
                     id="displayName"
                     value={displayName}
@@ -267,12 +439,12 @@ const UserSettings = () => {
                       setDisplayName(e.target.value);
                       setIsEditingProfile(true);
                     }}
-                    placeholder="이름을 입력하세요"
+                    placeholder={t("settings.namePlaceholder")}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email">이메일</Label>
+                  <Label htmlFor="email">{t("settings.email")}</Label>
                   <div className="relative">
                     <Input
                       id="email"
@@ -285,13 +457,13 @@ const UserSettings = () => {
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-xs"
                     >
                       <Check className="h-3 w-3 mr-1" />
-                      인증됨
+                      {t("settings.verified")}
                     </Badge>
                   </div>
                 </div>
 
                 <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="bio">소개</Label>
+                  <Label htmlFor="bio">{t("settings.bio")}</Label>
                   <textarea
                     id="bio"
                     value={bio}
@@ -299,7 +471,7 @@ const UserSettings = () => {
                       setBio(e.target.value);
                       setIsEditingProfile(true);
                     }}
-                    placeholder="간단한 소개를 입력하세요"
+                    placeholder={t("settings.bioPlaceholder")}
                     className="w-full min-h-[100px] px-3 py-2 text-sm rounded-md border border-input bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                     maxLength={200}
                   />
@@ -310,19 +482,9 @@ const UserSettings = () => {
               </div>
 
               {isEditingProfile && (
-                <div className="flex gap-3 justify-end pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setDisplayName(user?.user_metadata?.full_name || "");
-                      setBio(user?.user_metadata?.bio || "");
-                      setIsEditingProfile(false);
-                    }}
-                  >
-                    취소
-                  </Button>
+                <div className="flex justify-end pt-4 border-t">
                   <Button onClick={handleSaveProfile}>
-                    변경사항 저장
+                    {t("settings.saveChanges")}
                   </Button>
                 </div>
               )}
@@ -334,10 +496,12 @@ const UserSettings = () => {
         <TabsContent value="account" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>소셜 계정 연동</CardTitle>
-              <CardDescription>
-                소셜 계정을 연동하여 간편하게 로그인하세요
-              </CardDescription>
+              <div className="space-y-3">
+                <CardTitle>{t("settings.socialAccounts")}</CardTitle>
+                <CardDescription>
+                  {t("settings.socialAccountsDescription")}
+                </CardDescription>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Google Account Linking */}
@@ -350,7 +514,8 @@ const UserSettings = () => {
                     <div>
                       <p className="font-medium">Google</p>
                       <p className="text-sm text-muted-foreground">
-                        {googleIdentity?.identity_data?.email || '연동됨'}
+                        {googleIdentity?.identity_data?.email ||
+                          t("settings.linkedAccount")}
                       </p>
                     </div>
                   </div>
@@ -362,23 +527,25 @@ const UserSettings = () => {
                         className="text-destructive hover:text-destructive"
                       >
                         <Unlink className="h-4 w-4 mr-2" />
-                        연결 해제
+                        {t("settings.unlinkAccount")}
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Google 계정 연결을 해제하시겠습니까?</AlertDialogTitle>
+                        <AlertDialogTitle>
+                          {t("settings.unlinkConfirmTitle")}
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
-                          연결 해제 후에도 이메일과 비밀번호로 로그인할 수 있습니다.
+                          {t("settings.unlinkConfirmDescription")}
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>취소</AlertDialogCancel>
+                        <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                         <AlertDialogAction
                           onClick={handleUnlinkGoogle}
                           className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
-                          연결 해제
+                          {t("settings.unlinkAccount")}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -395,9 +562,11 @@ const UserSettings = () => {
                       <GoogleLogo />
                     </div>
                     <div className="flex-1 text-left">
-                      <p className="font-medium">Google 계정 연결</p>
+                      <p className="font-medium">
+                        {t("settings.linkGoogleAccount")}
+                      </p>
                       <p className="text-sm text-muted-foreground">
-                        Google로 간편하게 로그인하세요
+                        {t("settings.linkGoogleDescription")}
                       </p>
                     </div>
                   </div>
@@ -409,42 +578,46 @@ const UserSettings = () => {
           {/* Danger Zone */}
           <Card className="border-destructive">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-destructive">
-                <AlertTriangle className="h-5 w-5" />
-                위험 구역
-              </CardTitle>
-              <CardDescription>
-                아래 작업은 되돌릴 수 없으니 신중하게 진행하세요
-              </CardDescription>
+              <div className="space-y-3">
+                <CardTitle className="flex items-center gap-2 text-destructive">
+                  <AlertTriangle className="h-5 w-5" />
+                  {t("settings.dangerZone")}
+                </CardTitle>
+                <CardDescription>
+                  {t("settings.dangerZoneDescription")}
+                </CardDescription>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="destructive" className="w-full">
                     <Trash2 className="h-4 w-4 mr-2" />
-                    계정 영구 삭제
+                    {t("settings.deleteAccount")}
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>정말 계정을 삭제하시겠습니까?</AlertDialogTitle>
+                    <AlertDialogTitle>
+                      {t("settings.deleteAccountConfirmTitle")}
+                    </AlertDialogTitle>
                     <AlertDialogDescription className="space-y-2">
-                      <p>이 작업은 되돌릴 수 없습니다. 계정을 삭제하면:</p>
+                      <p>{t("settings.deleteAccountWarning")}</p>
                       <ul className="list-disc list-inside space-y-1 text-sm">
-                        <li>모든 프린터 데이터가 영구적으로 삭제됩니다</li>
-                        <li>출력 기록 및 통계가 삭제됩니다</li>
-                        <li>구독이 즉시 취소됩니다</li>
-                        <li>저장된 모든 파일이 삭제됩니다</li>
+                        <li>{t("settings.deleteWarning1")}</li>
+                        <li>{t("settings.deleteWarning2")}</li>
+                        <li>{t("settings.deleteWarning3")}</li>
+                        <li>{t("settings.deleteWarning4")}</li>
                       </ul>
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>취소</AlertDialogCancel>
+                    <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={handleDeleteAccount}
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     >
-                      계정 삭제
+                      {t("settings.deleteAccount")}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -457,24 +630,28 @@ const UserSettings = () => {
         <TabsContent value="subscription" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>현재 플랜</CardTitle>
-              <CardDescription>
-                구독 플랜 및 결제 정보를 관리합니다
-              </CardDescription>
+              <div className="space-y-3">
+                <CardTitle>{t("settings.currentPlan")}</CardTitle>
+                <CardDescription>
+                  {t("settings.subscriptionDescription")}
+                </CardDescription>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               {loadingPlan ? (
                 <div className="flex items-center justify-center p-12">
-                  <div className="text-sm text-muted-foreground">로딩 중...</div>
+                  <div className="text-sm text-muted-foreground">
+                    {t("settings.loadingSubscription")}
+                  </div>
                 </div>
               ) : currentPlan ? (
                 <>
                   <div className="flex items-center justify-between p-6 rounded-lg border bg-muted/50">
-                    <div className="space-y-1">
+                    <div className="space-y-3">
                       <div className="flex items-center gap-3">
                         <Badge className="text-base px-3 py-1">
                           <Crown className="h-4 w-4 mr-2" />
-                          {currentPlan.name} 플랜
+                          {currentPlan.name} {t("settings.plan")}
                         </Badge>
                       </div>
                       {currentPlan.price > 0 ? (
@@ -482,27 +659,32 @@ const UserSettings = () => {
                           <p className="text-2xl font-bold">
                             ₩{currentPlan.price.toLocaleString()}
                             <span className="text-sm font-normal text-muted-foreground ml-1">
-                              / {currentPlan.billingCycle === 'year' ? '년' : '월'}
+                              /{" "}
+                              {currentPlan.billingCycle === "year"
+                                ? t("settings.perYear")
+                                : t("settings.perMonth")}
                             </span>
                           </p>
                           {currentPlan.nextBillingDate && (
                             <p className="text-sm text-muted-foreground">
-                              다음 결제일: {new Date(currentPlan.nextBillingDate).toLocaleDateString('ko-KR')}
+                              {t("settings.nextBillingDate")}:{" "}
+                              {new Date(
+                                currentPlan.nextBillingDate,
+                              ).toLocaleDateString("ko-KR")}
                             </p>
                           )}
                         </>
                       ) : (
-                        <p className="text-xl font-semibold text-muted-foreground">무료 플랜</p>
+                        <p className="text-xl font-semibold text-muted-foreground">
+                          {t("settings.freePlan")}
+                        </p>
                       )}
-                      <p className="text-sm text-muted-foreground pt-2">
-                        최대 {currentPlan.maxPrinters}대 프린터 연결 가능
+                      <p className="text-sm text-muted-foreground">
+                        {t("settings.maxPrinters")}
                       </p>
                     </div>
-                    <Button
-                      size="lg"
-                      onClick={() => navigate("/subscription")}
-                    >
-                      플랜 업그레이드
+                    <Button size="lg" onClick={() => navigate("/subscription")}>
+                      {t("settings.upgradePlan")}
                     </Button>
                   </div>
 
@@ -516,7 +698,7 @@ const UserSettings = () => {
                     >
                       <span className="flex items-center gap-2">
                         <Mail className="h-4 w-4" />
-                        <span>결제 내역 확인</span>
+                        <span>{t("settings.viewBillingHistory")}</span>
                       </span>
                     </Button>
 
@@ -527,14 +709,14 @@ const UserSettings = () => {
                     >
                       <span className="flex items-center gap-2">
                         <CreditCard className="h-4 w-4" />
-                        <span>결제 수단 관리</span>
+                        <span>{t("settings.managePaymentMethod")}</span>
                       </span>
                     </Button>
                   </div>
                 </>
               ) : (
                 <div className="text-center p-12 text-sm text-muted-foreground">
-                  구독 정보를 불러올 수 없습니다
+                  {t("settings.subscriptionLoadFailed")}
                 </div>
               )}
             </CardContent>
@@ -545,27 +727,53 @@ const UserSettings = () => {
         <TabsContent value="notifications" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>알림 환경설정</CardTitle>
-              <CardDescription>
-                알림 수신 방법 및 종류를 설정합니다
-              </CardDescription>
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-3">
+                  <CardTitle>{t("settings.notificationSettings")}</CardTitle>
+                  <CardDescription>
+                    {t("settings.notificationDescription")}
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setPushNotifications(originalNotifications.push);
+                    setPrintCompleteNotif(originalNotifications.printComplete);
+                    setErrorNotif(originalNotifications.error);
+                    setEmailNotifications(originalNotifications.email);
+                    setWeeklyReport(originalNotifications.weekly);
+                    setIsEditingNotifications(false);
+                  }}
+                  className="h-9 w-9 shrink-0"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
                 {/* Push Notifications */}
                 <div className="flex items-center justify-between py-3">
                   <div className="space-y-0.5 flex-1">
-                    <Label htmlFor="push-notif" className="text-base font-medium cursor-pointer">
-                      푸시 알림
+                    <Label
+                      htmlFor="push-notif"
+                      className="text-base font-medium cursor-pointer"
+                    >
+                      {t("settings.pushNotifications")}
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      브라우저 알림을 받습니다
+                      {t("settings.pushNotificationsDesc")}
                     </p>
                   </div>
                   <Switch
                     id="push-notif"
                     checked={pushNotifications}
-                    onCheckedChange={setPushNotifications}
+                    onCheckedChange={(value) => {
+                      setPushNotifications(value);
+                      setIsEditingNotifications(true);
+                    }}
+                    disabled={loadingNotifications}
                   />
                 </div>
 
@@ -574,17 +782,24 @@ const UserSettings = () => {
                 {/* Print Complete */}
                 <div className="flex items-center justify-between py-3">
                   <div className="space-y-0.5 flex-1">
-                    <Label htmlFor="print-complete" className="text-base font-medium cursor-pointer">
-                      출력 완료 알림
+                    <Label
+                      htmlFor="print-complete"
+                      className="text-base font-medium cursor-pointer"
+                    >
+                      {t("settings.printComplete")}
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      3D 프린팅이 완료되면 알림을 받습니다
+                      {t("settings.printCompleteDesc")}
                     </p>
                   </div>
                   <Switch
                     id="print-complete"
                     checked={printCompleteNotif}
-                    onCheckedChange={setPrintCompleteNotif}
+                    onCheckedChange={(value) => {
+                      setPrintCompleteNotif(value);
+                      setIsEditingNotifications(true);
+                    }}
+                    disabled={loadingNotifications}
                   />
                 </div>
 
@@ -593,17 +808,24 @@ const UserSettings = () => {
                 {/* Error Notifications */}
                 <div className="flex items-center justify-between py-3">
                   <div className="space-y-0.5 flex-1">
-                    <Label htmlFor="error-notif" className="text-base font-medium cursor-pointer">
-                      오류 알림
+                    <Label
+                      htmlFor="error-notif"
+                      className="text-base font-medium cursor-pointer"
+                    >
+                      {t("settings.errorNotifications")}
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      프린터 오류 발생 시 즉시 알림을 받습니다
+                      {t("settings.errorNotificationsDesc")}
                     </p>
                   </div>
                   <Switch
                     id="error-notif"
                     checked={errorNotif}
-                    onCheckedChange={setErrorNotif}
+                    onCheckedChange={(value) => {
+                      setErrorNotif(value);
+                      setIsEditingNotifications(true);
+                    }}
+                    disabled={loadingNotifications}
                   />
                 </div>
 
@@ -616,32 +838,40 @@ const UserSettings = () => {
                       <Label
                         htmlFor="email-notif"
                         className={`text-base font-medium ${
-                          currentPlan?.name === 'Basic' ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                          currentPlan?.name === "Basic"
+                            ? "cursor-not-allowed opacity-50"
+                            : "cursor-pointer"
                         }`}
                       >
-                        이메일 알림
+                        {t("settings.emailNotifications")}
                       </Label>
                       <Badge
                         className="text-xs bg-gradient-to-r from-blue-600 to-blue-500 text-white border-0"
                         style={{
-                          boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                          boxShadow:
+                            "0 2px 8px rgba(37, 99, 235, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)",
                         }}
                       >
                         <Crown className="h-3 w-3 mr-1" />
                         Pro
                       </Badge>
                     </div>
-                    <p className={`text-sm text-muted-foreground ${
-                      currentPlan?.name === 'Basic' ? 'opacity-50' : ''
-                    }`}>
-                      중요한 업데이트를 이메일로 받습니다
+                    <p
+                      className={`text-sm text-muted-foreground ${
+                        currentPlan?.name === "Basic" ? "opacity-50" : ""
+                      }`}
+                    >
+                      {t("settings.emailNotificationsDesc")}
                     </p>
                   </div>
                   <Switch
                     id="email-notif"
                     checked={emailNotifications}
-                    onCheckedChange={setEmailNotifications}
-                    disabled={currentPlan?.name === 'Basic'}
+                    onCheckedChange={(value) => {
+                      setEmailNotifications(value);
+                      setIsEditingNotifications(true);
+                    }}
+                    disabled={currentPlan?.name === "Basic" || loadingNotifications}
                   />
                 </div>
 
@@ -654,35 +884,51 @@ const UserSettings = () => {
                       <Label
                         htmlFor="weekly-report"
                         className={`text-base font-medium ${
-                          currentPlan?.name === 'Basic' ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                          currentPlan?.name === "Basic"
+                            ? "cursor-not-allowed opacity-50"
+                            : "cursor-pointer"
                         }`}
                       >
-                        주간 리포트
+                        {t("settings.weeklyReport")}
                       </Label>
                       <Badge
                         className="text-xs bg-gradient-to-r from-blue-600 to-blue-500 text-white border-0"
                         style={{
-                          boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                          boxShadow:
+                            "0 2px 8px rgba(37, 99, 235, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)",
                         }}
                       >
                         <Crown className="h-3 w-3 mr-1" />
                         Pro
                       </Badge>
                     </div>
-                    <p className={`text-sm text-muted-foreground ${
-                      currentPlan?.name === 'Basic' ? 'opacity-50' : ''
-                    }`}>
-                      매주 프린터 사용 통계를 이메일로 받습니다
+                    <p
+                      className={`text-sm text-muted-foreground ${
+                        currentPlan?.name === "Basic" ? "opacity-50" : ""
+                      }`}
+                    >
+                      {t("settings.weeklyReportDesc")}
                     </p>
                   </div>
                   <Switch
                     id="weekly-report"
                     checked={weeklyReport}
-                    onCheckedChange={setWeeklyReport}
-                    disabled={currentPlan?.name === 'Basic'}
+                    onCheckedChange={(value) => {
+                      setWeeklyReport(value);
+                      setIsEditingNotifications(true);
+                    }}
+                    disabled={currentPlan?.name === "Basic" || loadingNotifications}
                   />
                 </div>
               </div>
+
+              {isEditingNotifications && (
+                <div className="flex justify-end pt-4 border-t">
+                  <Button onClick={handleSaveNotifications}>
+                    {t("settings.saveChanges")}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
