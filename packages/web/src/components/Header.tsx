@@ -4,7 +4,33 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { Monitor, Settings, Menu, Activity, LogOut, Sun, Moon, BookOpen, ShoppingCart, CreditCard, Code2, Layers, Shield } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Monitor, Settings, Menu, Activity, LogOut, Sun, Moon, BookOpen, ShoppingCart, CreditCard, Code2, Layers, Shield, User, Globe, Check, Bell, MessageSquare, Lightbulb, AlertTriangle, Upload, X, Image as ImageIcon } from "lucide-react";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useDashboardSummary } from "@shared/component/dashboardSummary";
 import { useTheme } from "next-themes";
@@ -12,17 +38,33 @@ import { supabase } from "@shared/integrations/supabase/client";
 import LanguageSwitcher from "./LanguageSwitcher";
 
 export const Header = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [systemStatus, setSystemStatus] = useState({
     connectedPrinters: 0,
     activePrints: 0,
     totalPrinters: 0
   });
+  const [userPlan, setUserPlan] = useState<string>('basic');
+  const [unreadNotifications, setUnreadNotifications] = useState<number>(0);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
+  const [feedbackType, setFeedbackType] = useState<'issue' | 'idea' | null>(null);
+  const [feedbackTitle, setFeedbackTitle] = useState('');
+  const [feedbackDescription, setFeedbackDescription] = useState('');
+  const [selectedPrinter, setSelectedPrinter] = useState<string>('');
+  const [printers, setPrinters] = useState<any[]>([]);
+  const [attachedImages, setAttachedImages] = useState<File[]>([]);
   const location = useLocation();
   const { user, signOut, isAdmin } = useAuth();
   const { theme, setTheme } = useTheme();
   const summary = useDashboardSummary();
+
+  const currentLanguage = i18n.language || 'ko';
+
+  const changeLanguage = (lng: string) => {
+    i18n.changeLanguage(lng);
+  };
 
   // 동적 네비게이션 메뉴
   const navigation = [
@@ -43,26 +85,53 @@ export const Header = () => {
   useEffect(() => {
     if (user) {
       loadPrinterStatus();
+      loadUserPlan();
+      loadNotifications();
+
+      // 실시간 알림 구독
+      const notificationSubscription = supabase
+        .channel('notifications')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            console.log('New notification:', payload);
+            setNotifications((prev) => [payload.new, ...prev]);
+            setUnreadNotifications((prev) => prev + 1);
+          }
+        )
+        .subscribe();
+
+      return () => {
+        notificationSubscription.unsubscribe();
+      };
     }
   }, [user]);
 
   const loadPrinterStatus = async () => {
     try {
-      const { data: printers, error } = await supabase
+      const { data: printerData, error } = await supabase
         .from('printers')
         .select('*')
         .eq('user_id', user.id);
-      
+
       if (error) {
         console.error('Error loading printer status:', error);
         return;
       }
-      
-      if (printers) {
-        const total = printers.length;
-        const connected = printers.filter(p => p.status === 'connected').length;
-        const printing = printers.filter(p => p.status === 'printing').length;
-        
+
+      if (printerData) {
+        setPrinters(printerData); // 프린터 목록 저장
+
+        const total = printerData.length;
+        const connected = printerData.filter(p => p.status === 'connected').length;
+        const printing = printerData.filter(p => p.status === 'printing').length;
+
         setSystemStatus({
           totalPrinters: total,
           connectedPrinters: connected,
@@ -71,6 +140,103 @@ export const Header = () => {
       }
     } catch (error) {
       console.error('Error loading printer status:', error);
+    }
+  };
+
+  const loadUserPlan = async () => {
+    try {
+      const { data: subscription, error } = await supabase
+        .from('user_subscriptions')
+        .select('plan_name, status')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error loading user subscription:', error);
+        setUserPlan('basic'); // 기본값
+        return;
+      }
+
+      if (subscription && subscription.status === 'active') {
+        setUserPlan(subscription.plan_name);
+      } else {
+        setUserPlan('basic');
+      }
+    } catch (error) {
+      console.error('Error loading user subscription:', error);
+      setUserPlan('basic');
+    }
+  };
+
+  const loadNotifications = async () => {
+    try {
+      const { data: notificationData, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.error('Error loading notifications:', error);
+        return;
+      }
+
+      if (notificationData) {
+        setNotifications(notificationData);
+        const unreadCount = notificationData.filter((n) => !n.read).length;
+        setUnreadNotifications(unreadCount);
+      }
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const newImages = Array.from(files).filter((file) => {
+        // 이미지 파일만 허용
+        if (!file.type.startsWith('image/')) {
+          console.warn('이미지 파일만 업로드 가능합니다:', file.name);
+          return false;
+        }
+        // 파일 크기 제한 (5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          console.warn('파일 크기는 5MB를 초과할 수 없습니다:', file.name);
+          return false;
+        }
+        return true;
+      });
+
+      setAttachedImages((prev) => [...prev, ...newImages].slice(0, 5)); // 최대 5개
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setAttachedImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const markNotificationAsRead = async (notificationId: string) => {
+    try {
+      const { error } = await supabase.rpc('mark_notification_as_read', {
+        notification_id: notificationId,
+      });
+
+      if (error) {
+        console.error('Error marking notification as read:', error);
+        return;
+      }
+
+      // Update local state
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === notificationId ? { ...n, read: true, read_at: new Date().toISOString() } : n
+        )
+      );
+      setUnreadNotifications((prev) => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
     }
   };
 
@@ -221,37 +387,401 @@ export const Header = () => {
               </Badge>
             </div>
           )}
-          
-          {/* 언어 전환 */}
-          <LanguageSwitcher />
 
-          {/* 테마 토글 버튼 */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="w-9 h-9 p-0"
-          >
-            <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            <span className="sr-only">Toggle theme</span>
-          </Button>
-
-          {/* 사용자 정보 및 로그아웃 */}
-          {user ? (
-            <div className="flex items-center space-x-2 pl-4 border-l">
-              <span className="text-sm text-muted-foreground">
-                {user?.email}
-              </span>
+          {/* 비로그인 상태: 언어 및 테마 표시 */}
+          {!user && (
+            <>
+              <LanguageSwitcher />
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                onClick={signOut}
-                className="text-xs"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                className="w-9 h-9 p-0"
               >
-                <LogOut className="h-3 w-3 mr-1" />
-                {t('nav.logout')}
+                <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                <span className="sr-only">Toggle theme</span>
               </Button>
+            </>
+          )}
+
+          {/* 알림 및 사용자 프로필 */}
+          {user ? (
+            <div className="flex items-center gap-2 pl-4 border-l">
+              {/* 피드백 버튼 */}
+              <Dialog
+                open={feedbackDialogOpen}
+                onOpenChange={(open) => {
+                  setFeedbackDialogOpen(open);
+                  if (!open) {
+                    setFeedbackType(null);
+                    setFeedbackTitle('');
+                    setFeedbackDescription('');
+                    setSelectedPrinter('');
+                    setAttachedImages([]);
+                  }
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 w-9 p-0"
+                  >
+                    <MessageSquare className="h-5 w-5" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[500px]">
+                  {feedbackType === null ? (
+                    <>
+                      <DialogHeader>
+                        <DialogTitle>{t('feedback.whatToShare')}</DialogTitle>
+                        <DialogDescription>
+                          {t('feedback.chooseType')}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid grid-cols-2 gap-4 py-4">
+                        <button
+                          onClick={() => setFeedbackType('issue')}
+                          className="flex flex-col items-center justify-center gap-4 p-6 rounded-lg border-2 border-border hover:border-destructive hover:bg-destructive/5 transition-colors"
+                        >
+                          <AlertTriangle className="h-12 w-12 text-destructive" />
+                          <div className="text-center">
+                            <p className="text-lg font-semibold">{t('feedback.issue')}</p>
+                            <p className="text-sm text-muted-foreground mt-1">{t('feedback.issueDescription')}</p>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => setFeedbackType('idea')}
+                          className="flex flex-col items-center justify-center gap-4 p-6 rounded-lg border-2 border-border hover:border-yellow-500 hover:bg-yellow-500/5 transition-colors"
+                        >
+                          <Lightbulb className="h-12 w-12 text-yellow-500" />
+                          <div className="text-center">
+                            <p className="text-lg font-semibold">{t('feedback.idea')}</p>
+                            <p className="text-sm text-muted-foreground mt-1">{t('feedback.ideaDescription')}</p>
+                          </div>
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <DialogHeader>
+                        <DialogTitle>
+                          {feedbackType === 'issue' ? t('feedback.reportIssue') : t('feedback.shareIdea')}
+                        </DialogTitle>
+                        <DialogDescription>
+                          {feedbackType === 'issue'
+                            ? t('feedback.issuePrompt')
+                            : t('feedback.ideaPrompt')}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        {feedbackType === 'issue' && printers.length > 0 && (
+                          <div>
+                            <label className="text-sm font-medium">{t('feedback.selectPrinter')}</label>
+                            <Select value={selectedPrinter} onValueChange={setSelectedPrinter}>
+                              <SelectTrigger className="w-full mt-2">
+                                <SelectValue placeholder={t('feedback.selectPrinterPlaceholder')} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {printers.map((printer) => {
+                                  const displayName = printer.name || `Printer ${printer.id.slice(0, 8)}`;
+                                  const displayModel = printer.model || 'Unknown Model';
+                                  return (
+                                    <SelectItem key={printer.id} value={printer.id}>
+                                      {displayName} ({displayModel})
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-sm font-medium">{t('feedback.titleLabel')}</label>
+                          <input
+                            type="text"
+                            value={feedbackTitle}
+                            onChange={(e) => setFeedbackTitle(e.target.value)}
+                            placeholder={feedbackType === 'issue' ? t('feedback.issueTitlePlaceholder') : t('feedback.ideaTitlePlaceholder')}
+                            className="w-full mt-2 px-3 py-2 border rounded-md bg-background"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">{t('feedback.descriptionLabel')}</label>
+                          <textarea
+                            value={feedbackDescription}
+                            onChange={(e) => setFeedbackDescription(e.target.value)}
+                            placeholder={feedbackType === 'issue' ? t('feedback.issueDescriptionPlaceholder') : t('feedback.ideaDescriptionPlaceholder')}
+                            rows={5}
+                            className="w-full mt-2 px-3 py-2 border rounded-md bg-background resize-none"
+                          />
+                        </div>
+
+                        {/* 이미지 첨부 (아이디어 타입에만 표시) */}
+                        {feedbackType === 'idea' && (
+                          <div>
+                            <label className="text-sm font-medium">{t('feedback.attachImages')}</label>
+                            <div className="mt-2 space-y-3">
+                              {/* 이미지 업로드 버튼 */}
+                              <label className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary hover:bg-accent/50 transition-colors">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  onChange={handleImageUpload}
+                                  className="hidden"
+                                />
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Upload className="h-4 w-4" />
+                                  <span>{t('feedback.uploadImages')}</span>
+                                </div>
+                              </label>
+
+                              {/* 첨부된 이미지 미리보기 */}
+                              {attachedImages.length > 0 && (
+                                <div className="grid grid-cols-3 gap-2">
+                                  {attachedImages.map((image, index) => (
+                                    <div
+                                      key={index}
+                                      className="relative aspect-square rounded-lg border overflow-hidden group"
+                                    >
+                                      <img
+                                        src={URL.createObjectURL(image)}
+                                        alt={`Preview ${index + 1}`}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      <button
+                                        onClick={() => removeImage(index)}
+                                        className="absolute top-1 right-1 p-1 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {attachedImages.length > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                  {t('feedback.imageCount', { count: attachedImages.length, max: 5 })}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setFeedbackType(null);
+                              setFeedbackTitle('');
+                              setFeedbackDescription('');
+                              setSelectedPrinter('');
+                              setAttachedImages([]);
+                              setFeedbackDialogOpen(false);
+                            }}
+                          >
+                            {t('feedback.cancel')}
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              // TODO: Submit feedback
+                              console.log('Feedback:', {
+                                type: feedbackType,
+                                title: feedbackTitle,
+                                description: feedbackDescription,
+                                printerId: selectedPrinter,
+                                images: attachedImages,
+                              });
+                              setFeedbackType(null);
+                              setFeedbackTitle('');
+                              setFeedbackDescription('');
+                              setSelectedPrinter('');
+                              setAttachedImages([]);
+                              setFeedbackDialogOpen(false);
+                            }}
+                          >
+                            {t('feedback.submit')}
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </DialogContent>
+              </Dialog>
+
+              {/* 알림 드롭다운 */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="relative h-9 w-9 p-0"
+                  >
+                    <Bell className="h-5 w-5" />
+                    {unreadNotifications > 0 && (
+                      <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+                        {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                      </span>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80">
+                  <DropdownMenuLabel className="flex items-center justify-between">
+                    <span>알림</span>
+                    {unreadNotifications > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {unreadNotifications}개의 새 알림
+                      </Badge>
+                    )}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {notifications.length === 0 ? (
+                    <div className="py-8 text-center text-sm text-muted-foreground">
+                      {t('notifications.noNotifications')}
+                    </div>
+                  ) : (
+                    <div className="max-h-[400px] overflow-y-auto">
+                      {notifications.map((notification) => (
+                        <DropdownMenuItem
+                          key={notification.id}
+                          className="flex flex-col items-start p-3 cursor-pointer hover:bg-accent"
+                          onClick={() => {
+                            if (!notification.read) {
+                              markNotificationAsRead(notification.id);
+                            }
+                          }}
+                        >
+                          <div className="flex items-start gap-2 w-full">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">{notification.title}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {notification.message}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {new Date(notification.created_at).toLocaleString('ko-KR')}
+                              </p>
+                            </div>
+                            {!notification.read && (
+                              <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1" />
+                            )}
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* 프로필 드롭다운 */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 rounded-full hover:bg-accent"
+                  >
+                    <div className="flex items-center justify-center w-8 h-8 bg-primary rounded-full">
+                      <User className="w-4 h-4 text-primary-foreground" />
+                    </div>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>
+                    <div className="flex flex-col space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium leading-none">
+                          {user?.user_metadata?.full_name || user?.email?.split('@')[0]}
+                        </p>
+                        <Badge variant={userPlan === 'basic' ? 'secondary' : 'default'} className="text-xs capitalize">
+                          {userPlan}
+                        </Badge>
+                      </div>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {user?.email}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+
+                  {/* 사용자 설정 */}
+                  <DropdownMenuItem asChild>
+                    <Link to="/user-settings" className="cursor-pointer">
+                      <User className="mr-2 h-4 w-4" />
+                      <span>{t('nav.userSettings')}</span>
+                    </Link>
+                  </DropdownMenuItem>
+
+                  {/* 구독 관리 */}
+                  <DropdownMenuItem asChild>
+                    <Link to="/subscription" className="cursor-pointer">
+                      <CreditCard className="mr-2 h-4 w-4" />
+                      <span>{t('nav.subscriptionManagement')}</span>
+                    </Link>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator />
+
+                  {/* 테마 설정 서브메뉴 */}
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <div className="relative mr-2 h-4 w-4">
+                        <Sun className="absolute h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                        <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                      </div>
+                      <span>{t('nav.theme')}</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      <DropdownMenuItem onClick={() => setTheme('light')}>
+                        <Sun className="mr-2 h-4 w-4" />
+                        <span>{t('nav.themeLight')}</span>
+                        {theme === 'light' && <Check className="ml-auto h-4 w-4" />}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setTheme('dark')}>
+                        <Moon className="mr-2 h-4 w-4" />
+                        <span>{t('nav.themeDark')}</span>
+                        {theme === 'dark' && <Check className="ml-auto h-4 w-4" />}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setTheme('system')}>
+                        <Monitor className="mr-2 h-4 w-4" />
+                        <span>{t('nav.themeSystem')}</span>
+                        {theme === 'system' && <Check className="ml-auto h-4 w-4" />}
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+
+                  {/* 언어 설정 서브메뉴 */}
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <Globe className="mr-2 h-4 w-4" />
+                      <span>{t('nav.language')}</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      <DropdownMenuItem onClick={() => changeLanguage('ko')}>
+                        <span>한국어</span>
+                        {currentLanguage === 'ko' && <Check className="ml-auto h-4 w-4" />}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => changeLanguage('en')}>
+                        <span>English</span>
+                        {currentLanguage === 'en' && <Check className="ml-auto h-4 w-4" />}
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+
+                  <DropdownMenuSeparator />
+
+                  {/* 로그아웃 */}
+                  <DropdownMenuItem
+                    className="cursor-pointer text-destructive focus:text-destructive"
+                    onClick={signOut}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>{t('nav.logout')}</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           ) : (
             <div className="pl-4 border-l">

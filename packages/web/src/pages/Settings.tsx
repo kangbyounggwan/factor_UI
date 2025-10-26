@@ -12,9 +12,6 @@ import {
   Edit,
   Monitor,
   Wifi,
-  Crown,
-  Check,
-  Zap,
   Settings as SettingsIcon,
   FolderPlus,
   Palette
@@ -76,18 +73,7 @@ interface PrinterConfig {
   last_connected?: Date;
   manufacture_id?: string; // manufacturing_printers ID 저장
   device_uuid?: string; // MQTT 상태 추적용 device_uuid
-}
-
-// 구독 플랜 타입
-interface SubscriptionPlan {
-  id: string;
-  name: string;
-  price: number;
-  interval: "month" | "year";
-  features: string[];
-  max_printers: number;
-  popular?: boolean;
-  current?: boolean;
+  stream_url?: string; // cameras 테이블의 stream_url (읽기 전용)
 }
 
 // 미리 정의된 색상 팔레트
@@ -95,43 +81,6 @@ const colorPalette = [
   "#3b82f6", "#ef4444", "#10b981", "#f59e0b", 
   "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16",
   "#f97316", "#6366f1", "#14b8a6", "#eab308"
-];
-
-// 구독 플랜 features keys
-const planFeaturesKeys = {
-  basic: ["planFeature1", "planFeature2", "planFeature3", "planFeature4"],
-  pro: ["planFeature5", "planFeature6", "planFeature7", "planFeature8", "planFeature9", "planFeature10"],
-  enterprise: ["planFeature11", "planFeature12", "planFeature13", "planFeature14", "planFeature15", "planFeature16"]
-};
-
-// 구독 플랜 (features는 번역 키로 참조)
-const getSubscriptionPlans = (t: (key: string) => string): SubscriptionPlan[] => [
-  {
-    id: "basic",
-    name: "Basic",
-    price: 0,
-    interval: "month",
-    max_printers: 2,
-    features: planFeaturesKeys.basic.map(key => t(`settings.${key}`)),
-    current: true
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: 19900,
-    interval: "month",
-    max_printers: 10,
-    features: planFeaturesKeys.pro.map(key => t(`settings.${key}`)),
-    popular: true
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    price: 49900,
-    interval: "month",
-    max_printers: -1, // 무제한
-    features: planFeaturesKeys.enterprise.map(key => t(`settings.${key}`))
-  }
 ];
 
 const Settings = () => {
@@ -144,9 +93,6 @@ const Settings = () => {
 
   // MQTT WebSocket 연결 (실시간 상태 추적용)
   const { isConnected: mqttConnected } = useWebSocket();
-
-  // 구독 플랜 (번역 적용)
-  const subscriptionPlans = getSubscriptionPlans(t);
 
   // 상태 관리
   const [groups, setGroups] = useState<PrinterGroup[]>([]);
@@ -194,33 +140,67 @@ const Settings = () => {
 
     try {
       setLoading(true);
-      
+
       // 그룹/프린터 데이터 로드 (공용 서비스 재사용)
       const groupsData = await getUserPrinterGroups(user.id);
       setGroups(groupsData || []);
 
-      const printersData = await getUserPrintersWithGroup(user.id);
-      
+      // 프린터 데이터 가져오기
+      const { data: printersData, error: printersError } = await supabase
+        .from('printers')
+        .select(`
+          *,
+          printer_groups (
+            id,
+            name,
+            color,
+            description
+          )
+        `)
+        .eq('user_id', user.id);
+
+      if (printersError) throw printersError;
+
+      // cameras 테이블에서 stream_url 가져오기
+      const { data: camerasData } = await supabase
+        .from('cameras')
+        .select('device_uuid, stream_url')
+        .eq('user_id', user.id);
+
+      // device_uuid를 key로 하는 Map 생성
+      const cameraMap = new Map<string, string>();
+      (camerasData || []).forEach(camera => {
+        if (camera.device_uuid && camera.stream_url) {
+          cameraMap.set(camera.device_uuid, camera.stream_url);
+        }
+      });
+
       // 타입 변환 및 안전한 할당
       const formattedPrinters: PrinterConfig[] = (printersData || []).map(printer => {
-        const printerExt = printer as typeof printer & { name?: string; manufacture_id?: string; device_uuid?: string };
+        const printerExt = printer as typeof printer & {
+          name?: string;
+          manufacture_id?: string;
+          device_uuid?: string;
+          printer_groups?: Array<any>;
+        };
         return {
         id: printer.id,
         name: printerExt.name ?? printer.model,
         model: printer.model,
         group_id: printer.group_id,
-        group: printer.group?.[0] || undefined,
+        group: printerExt.printer_groups?.[0] || undefined,
         ip_address: printer.ip_address,
         port: printer.port,
         api_key: printer.api_key,
         firmware: printer.firmware as "marlin" | "klipper" | "repetier" | "octoprint",
         status: printer.status as "connected" | "disconnected" | "error",
         last_connected: printer.last_connected ? new Date(printer.last_connected) : undefined,
-        manufacture_id: printerExt.manufacture_id, // manufacture_id 포함
-        device_uuid: printerExt.device_uuid // device_uuid 포함
+        manufacture_id: printerExt.manufacture_id,
+        device_uuid: printerExt.device_uuid,
+        stream_url: printerExt.device_uuid ? cameraMap.get(printerExt.device_uuid) : undefined
       };
       });
-      
+
       setPrinters(formattedPrinters);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -473,7 +453,8 @@ const Settings = () => {
           group_id: newPrinter.group_id || null,
           ip_address: newPrinter.ip_address,
           port: newPrinter.port || 80,
-          firmware: newPrinter.firmware || "marlin"
+          firmware: newPrinter.firmware || "marlin",
+          device_uuid: newPrinter.device_uuid || null
         }])
         .select(`
           *,
@@ -495,7 +476,8 @@ const Settings = () => {
         api_key: data.api_key,
         firmware: data.firmware as "marlin" | "klipper" | "repetier" | "octoprint",
         status: data.status as "connected" | "disconnected" | "error",
-        last_connected: data.last_connected ? new Date(data.last_connected) : undefined
+        last_connected: data.last_connected ? new Date(data.last_connected) : undefined,
+        device_uuid: data.device_uuid
       };
       
       setPrinters([...printers, formattedPrinter]);
@@ -512,6 +494,7 @@ const Settings = () => {
       toast({
         title: t('settings.success'),
         description: t('settings.printerAdded'),
+        duration: 3000, // 3초 후 자동 닫힘
       });
     } catch (error) {
       console.error('Error adding printer:', error);
@@ -629,7 +612,12 @@ const Settings = () => {
     if (!user || !editingPrinter) return;
 
     try {
-      const updateData: { name: string; model: string; group_id: string | null; manufacture_id?: string } = {
+      const updateData: {
+        name: string;
+        model: string;
+        group_id: string | null;
+        manufacture_id?: string;
+      } = {
         name: editingPrinter.name,
         model: editingPrinter.model,
         group_id: editingPrinter.group_id || null,
@@ -640,6 +628,7 @@ const Settings = () => {
         updateData.manufacture_id = selectedModelId;
       }
 
+      // 프린터 정보 업데이트
       const { error } = await supabase
         .from('printers')
         .update(updateData)
@@ -647,6 +636,20 @@ const Settings = () => {
         .eq('user_id', user.id);
 
       if (error) throw error;
+
+      // cameras 테이블 업데이트 (device_uuid가 있는 경우)
+      if (editingPrinter.device_uuid && editingPrinter.stream_url !== undefined) {
+        const { error: cameraError } = await supabase
+          .from('cameras')
+          .update({ stream_url: editingPrinter.stream_url || null })
+          .eq('device_uuid', editingPrinter.device_uuid)
+          .eq('user_id', user.id);
+
+        if (cameraError) {
+          console.error('Error updating camera URL:', cameraError);
+          // 카메라 업데이트 실패는 무시 (프린터 업데이트는 성공)
+        }
+      }
 
       // 로컬 상태 업데이트
       setPrinters(prev => prev.map(p => {
@@ -725,8 +728,6 @@ const Settings = () => {
     }
   };
 
-
-  const currentPlan = subscriptionPlans.find(plan => plan.current);
 
   if (!user) {
     return (
@@ -995,6 +996,16 @@ const Settings = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="device_uuid">{t('settings.deviceUUID')}</Label>
+                    <Input
+                      id="device_uuid"
+                      placeholder={t('settings.deviceUUIDPlaceholder')}
+                      value={newPrinter.device_uuid || ""}
+                      onChange={(e) => setNewPrinter({...newPrinter, device_uuid: e.target.value})}
+                    />
+                    <p className="text-xs text-muted-foreground">{t('settings.deviceUUIDHelper')}</p>
+                  </div>
                   <div className="flex gap-2">
                     <Button onClick={handleAddPrinter} className="flex-1">
                       {t('settings.add')}
@@ -1224,12 +1235,12 @@ const Settings = () => {
                       <Label htmlFor="edit-camera-url">{t('settings.cameraUrl')}</Label>
                       <Input
                         id="edit-camera-url"
-                        placeholder="rtsp://..."
-                        disabled
-                        className="opacity-50"
+                        placeholder="rtsp://... or http://..."
+                        value={editingPrinter.stream_url || ""}
+                        onChange={(e) => setEditingPrinter({ ...editingPrinter, stream_url: e.target.value })}
                       />
-                      <p className="text-xs text-muted-foreground italic">
-                        {t('settings.cameraUrlComingSoon')}
+                      <p className="text-xs text-muted-foreground">
+                        {t('settings.cameraUrlHelper')}
                       </p>
                     </div>
                   </div>
@@ -1251,117 +1262,6 @@ const Settings = () => {
 
         <Separator />
 
-        {/* 구독 관리 섹션 */}
-        <section className="space-y-6">
-          <div className="space-y-2">
-            <h2 className="text-2xl font-semibold">{t('settings.subscriptionManagement')}</h2>
-            <p className="text-muted-foreground">
-              {t('settings.subscriptionDescription')}
-            </p>
-          </div>
-
-          {/* 현재 구독 정보 */}
-          {currentPlan && (
-            <Card className="border-primary bg-primary/5">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Crown className="h-5 w-5 text-primary" />
-                  {t('settings.currentPlan')} {currentPlan.name}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl font-bold">
-                    {currentPlan.price === 0 ? t('settings.free') : `₩${currentPlan.price.toLocaleString()}`}
-                  </span>
-                  {currentPlan.price > 0 && (
-                    <Badge variant="outline">{t('settings.monthlyPayment')}</Badge>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <h4 className="font-medium">{t('settings.includedFeatures')}</h4>
-                  <ul className="space-y-1">
-                    {currentPlan.features.map((feature, index) => (
-                      <li key={index} className="flex items-center gap-2 text-sm">
-                        <Check className="h-4 w-4 text-success" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t">
-                  <span className="text-sm text-muted-foreground">
-                    {t('settings.registeredPrinters')} {printers.length} / {currentPlan.max_printers === -1 ? t('settings.unlimited') : currentPlan.max_printers}
-                  </span>
-                  {currentPlan.price > 0 && (
-                    <Button variant="outline" size="sm">
-                      {t('settings.manageSubscription')}
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* 사용 가능한 플랜 */}
-          <div className="space-y-4">
-            <h3 className="text-xl font-semibold">{t('settings.availablePlans')}</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {subscriptionPlans.map((plan) => (
-                <Card
-                  key={plan.id}
-                  className={`relative ${plan.popular ? "border-primary shadow-lg" : ""} ${plan.current ? "opacity-60" : ""}`}
-                >
-                  {plan.popular && (
-                    <div className="absolute -top-2 left-1/2 transform -translate-x-1/2">
-                      <Badge className="bg-primary text-primary-foreground">
-                        {t('settings.popularPlan')}
-                      </Badge>
-                    </div>
-                  )}
-                  <CardHeader className="text-center pb-2">
-                    <CardTitle className="text-2xl">{plan.name}</CardTitle>
-                    <div className="space-y-1">
-                      <div className="text-3xl font-bold">
-                        {plan.price === 0 ? t('settings.free') : `₩${plan.price.toLocaleString()}`}
-                      </div>
-                      {plan.price > 0 && (
-                        <div className="text-sm text-muted-foreground">{t('settings.monthlyPayment')}</div>
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <ul className="space-y-2">
-                      {plan.features.map((feature, index) => (
-                        <li key={index} className="flex items-center gap-2 text-sm">
-                          <Check className="h-4 w-4 text-success flex-shrink-0" />
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
-                    <Button
-                      className="w-full"
-                      variant={plan.current ? "outline" : "default"}
-                      disabled={plan.current}
-                      onClick={() => window.location.href = '/subscription'}
-                    >
-                      {plan.current ? (
-                        t('settings.currentPlanButton')
-                      ) : plan.price === 0 ? (
-                        t('settings.freeStart')
-                      ) : (
-                        <>
-                          <Zap className="h-4 w-4 mr-2" />
-                          {t('settings.viewDetails')}
-                        </>
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </section>
       </div>
     </div>
   );

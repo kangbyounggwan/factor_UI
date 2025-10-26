@@ -151,21 +151,23 @@ const Auth = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary via-primary/90 to-primary/80">
-        <Loader2 className="h-8 w-8 animate-spin text-white" />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary via-primary/90 to-primary/80 flex items-start justify-center p-6 overflow-y-auto relative">
-      {/* 배경 장식 */}
+    <div className="min-h-screen bg-background flex items-start justify-center p-6 overflow-y-auto relative">
+      {/* 배경 장식 - 미묘한 그라데이션 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5" />
         <div className="absolute top-0 left-0 w-full h-full">
-          <svg className="absolute bottom-0 w-full" viewBox="0 0 1440 320" preserveAspectRatio="none">
+          <svg className="absolute bottom-0 w-full opacity-5" viewBox="0 0 1440 320" preserveAspectRatio="none">
             <path
-              fill="rgba(255,255,255,0.1)"
+              fill="currentColor"
               fillOpacity="1"
+              className="text-primary"
               d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,138.7C960,139,1056,117,1152,106.7C1248,96,1344,96,1392,96L1440,96L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"
             />
           </svg>

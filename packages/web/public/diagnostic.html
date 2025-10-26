@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>토스페이먼츠 SDK 진단 도구</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        padding: 30px;
+      }
+      h1 {
+        color: #333;
+        margin-bottom: 10px;
+        font-size: 24px;
+      }
+      .subtitle {
+        color: #666;
+        margin-bottom: 30px;
+        font-size: 14px;
+      }
+      .test-section {
+        margin-bottom: 25px;
+        padding: 20px;
+        background: #f9f9f9;
+        border-radius: 8px;
+        border-left: 4px solid #667eea;
+      }
+      .test-section h3 {
+        margin-bottom: 15px;
+        color: #333;
+        font-size: 16px;
+      }
+      .result {
+        padding: 12px;
+        border-radius: 6px;
+        margin-top: 10px;
+        font-family: "Courier New", monospace;
+        font-size: 13px;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      .success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      .info {
+        background: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
+      }
+      .warning {
+        background: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+      }
+      button {
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        margin-right: 10px;
+        margin-top: 10px;
+        transition: background 0.2s;
+      }
+      button:hover {
+        background: #5568d3;
+      }
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+      .status-icon {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+      .loading {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔍 토스페이먼츠 SDK 진단 도구</h1>
+      <p class="subtitle">결제위젯 연동 문제를 진단합니다</p>
+
+      <div class="test-section">
+        <h3>1. npm 패키지 확인</h3>
+        <button onclick="testPackage()">패키지 테스트</button>
+        <div id="package-result"></div>
+      </div>
+
+      <div class="test-section">
+        <h3>2. SDK 초기화 테스트</h3>
+        <button onclick="testSDK()">SDK 테스트</button>
+        <div id="sdk-result"></div>
+      </div>
+
+      <div class="test-section">
+        <h3>3. 위젯 렌더링 테스트</h3>
+        <div id="test-payment-area" style="min-height: 200px; background: white; border: 2px dashed #ddd; border-radius: 8px; margin: 10px 0;"></div>
+        <button onclick="testWidget()">위젯 렌더링</button>
+        <div id="widget-result"></div>
+      </div>
+
+      <div class="test-section">
+        <h3>4. 환경 정보</h3>
+        <div id="env-info" class="result info"></div>
+      </div>
+
+      <div class="test-section">
+        <h3>5. 종합 진단</h3>
+        <button onclick="runFullDiagnostic()">전체 진단 실행</button>
+        <div id="diagnostic-result"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      // 환경 정보 표시
+      document.getElementById('env-info').textContent = `
+브라우저: ${navigator.userAgent}
+언어: ${navigator.language}
+화면 크기: ${window.innerWidth}x${window.innerHeight}
+현재 URL: ${window.location.href}
+      `.trim();
+
+      // 전역으로 노출
+      window.testPackage = testPackage;
+      window.testSDK = testSDK;
+      window.testWidget = testWidget;
+      window.runFullDiagnostic = runFullDiagnostic;
+
+      async function testPackage() {
+        const resultDiv = document.getElementById('package-result');
+        resultDiv.innerHTML = '<div class="result info"><span class="loading"></span> 패키지를 확인하는 중...</div>';
+
+        try {
+          const { loadPaymentWidget } = await import('@tosspayments/payment-widget-sdk');
+
+          if (typeof loadPaymentWidget === 'function') {
+            resultDiv.innerHTML = '<div class="result success">✅ @tosspayments/payment-widget-sdk 패키지 로드 성공</div>';
+            return true;
+          } else {
+            throw new Error('loadPaymentWidget이 함수가 아닙니다');
+          }
+        } catch (error) {
+          resultDiv.innerHTML = `<div class="result error">❌ 패키지 로드 실패: ${error.message}</div>`;
+          return false;
+        }
+      }
+
+      async function testSDK() {
+        const resultDiv = document.getElementById('sdk-result');
+        resultDiv.innerHTML = '<div class="result info"><span class="loading"></span> SDK를 초기화하는 중...</div>';
+
+        try {
+          const { loadPaymentWidget } = await import('@tosspayments/payment-widget-sdk');
+
+          const clientKey = 'test_gck_docs_Ovk5rk1EwkEbP0W43n07xlzm';
+          const customerKey = 'diagnostic_test_' + Date.now();
+
+          const widget = await loadPaymentWidget(clientKey, customerKey);
+
+          resultDiv.innerHTML = `<div class="result success">✅ SDK 초기화 성공
+클라이언트 키: ${clientKey}
+Customer Key: ${customerKey}
+위젯 인스턴스: ${typeof widget}</div>`;
+
+          window.testWidgetInstance = widget;
+          return widget;
+        } catch (error) {
+          resultDiv.innerHTML = `<div class="result error">❌ SDK 초기화 실패
+에러: ${error.message}
+스택: ${error.stack}</div>`;
+          return null;
+        }
+      }
+
+      async function testWidget() {
+        const resultDiv = document.getElementById('widget-result');
+        resultDiv.innerHTML = '<div class="result info"><span class="loading"></span> 위젯을 렌더링하는 중...</div>';
+
+        try {
+          let widget = window.testWidgetInstance;
+
+          if (!widget) {
+            resultDiv.innerHTML = '<div class="result warning">⚠️ 먼저 "SDK 테스트"를 실행해주세요</div>';
+            return;
+          }
+
+          // 금액 설정
+          await widget.setAmount({
+            currency: "KRW",
+            value: 50000,
+          });
+
+          // 위젯 렌더링
+          await widget.renderPaymentMethods({
+            selector: "#test-payment-area",
+            variantKey: "DEFAULT",
+          });
+
+          resultDiv.innerHTML = `<div class="result success">✅ 위젯 렌더링 성공
+금액: ₩50,000
+Selector: #test-payment-area
+위 박스에 결제 수단이 표시되어야 합니다.</div>`;
+        } catch (error) {
+          resultDiv.innerHTML = `<div class="result error">❌ 위젯 렌더링 실패
+에러: ${error.message}
+스택: ${error.stack}</div>`;
+        }
+      }
+
+      async function runFullDiagnostic() {
+        const resultDiv = document.getElementById('diagnostic-result');
+        resultDiv.innerHTML = '<div class="result info"><span class="loading"></span> 전체 진단을 실행하는 중...</div>';
+
+        const results = [];
+
+        // 1. 패키지 테스트
+        const packageOk = await testPackage();
+        results.push({ name: '패키지', ok: packageOk });
+
+        // 대기
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // 2. SDK 테스트
+        const sdkOk = await testSDK();
+        results.push({ name: 'SDK', ok: !!sdkOk });
+
+        // 대기
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // 3. 위젯 테스트
+        if (sdkOk) {
+          try {
+            await testWidget();
+            results.push({ name: '위젯', ok: true });
+          } catch (error) {
+            results.push({ name: '위젯', ok: false });
+          }
+        } else {
+          results.push({ name: '위젯', ok: false, skip: true });
+        }
+
+        // 결과 요약
+        const allOk = results.every(r => r.ok);
+        const summary = results.map(r =>
+          r.skip ? `⊘ ${r.name}: 건너뜀` :
+          r.ok ? `✅ ${r.name}: 정상` : `❌ ${r.name}: 실패`
+        ).join('\n');
+
+        if (allOk) {
+          resultDiv.innerHTML = `<div class="result success">
+🎉 모든 진단 통과!
+
+${summary}
+
+결제위젯이 정상적으로 작동합니다.
+React 앱에서도 같은 방식으로 작동해야 합니다.
+</div>`;
+        } else {
+          resultDiv.innerHTML = `<div class="result error">
+⚠️ 일부 진단 실패
+
+${summary}
+
+실패한 항목을 확인하고 문제를 해결해주세요.
+TROUBLESHOOTING.md 파일을 참고하세요.
+</div>`;
+        }
+      }
+
+      // 페이지 로드 시 자동 실행
+      window.addEventListener('load', () => {
+        console.log('진단 도구 준비 완료');
+      });
+    </script>
+  </body>
+</html>

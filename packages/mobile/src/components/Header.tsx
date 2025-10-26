@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { Monitor, Settings, Menu, Activity, LogOut, Sun, Moon, BookOpen, ShoppingCart, CreditCard, Code2, Layers, Shield } from "lucide-react";
+import { Monitor, Settings, Menu, Activity, LogOut, Sun, Moon, BookOpen, ShoppingCart, CreditCard, Code2, Layers, Shield, User, Crown } from "lucide-react";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useTheme } from "next-themes";
 import { supabase } from "@shared/integrations/supabase/client";
@@ -26,6 +26,9 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
   const location = useLocation();
   const { user, signOut, isAdmin } = useAuth();
   const { theme, setTheme } = useTheme();
+
+  // 구독 플랜 상태
+  const [userPlan, setUserPlan] = useState<string>('Basic');
 
   // Navigation arrays with translation keys
   const navigation = [
@@ -101,6 +104,40 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
       loadPrinterStatus();
     }
   }, [user, loadPrinterStatus]);
+
+  // 구독 플랜 로드
+  useEffect(() => {
+    const loadUserPlan = async () => {
+      if (!user) return;
+
+      try {
+        const { data: subscription, error } = await supabase
+          .from('user_subscriptions')
+          .select(`
+            *,
+            subscription_plans (
+              name
+            )
+          `)
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .single();
+
+        if (error || !subscription) {
+          setUserPlan('Basic');
+          return;
+        }
+
+        const planData = subscription.subscription_plans as any;
+        setUserPlan(planData?.name || 'Basic');
+      } catch (error) {
+        console.error('Error loading user plan:', error);
+        setUserPlan('Basic');
+      }
+    };
+
+    loadUserPlan();
+  }, [user]);
 
   const isActive = (path: string) => {
     if (path === "/" && location.pathname === "/") return true;
@@ -249,32 +286,74 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
                 <span className="sr-only">{t('nav.openMenu')}</span>
               </Button>
             </SheetTrigger>
-          <SheetContent side="right" className="w-[300px] sm:w-[400px] flex flex-col">
+          <SheetContent side="right" className="w-[300px] sm:w-[400px] flex flex-col [&>button]:hidden">
             {/* 접근성: DialogTitle 요구 충족 (시각적으로 숨김) */}
             <SheetHeader>
               <SheetTitle className="sr-only">{t('nav.openMenu')}</SheetTitle>
             </SheetHeader>
-            {/* 모바일 로고 - 고정 */}
-            <Link
-              to="/dashboard"
-              className="flex items-center space-x-3 pb-4 border-b flex-shrink-0"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <div className="flex items-center justify-center w-8 h-8 bg-primary rounded-lg">
-                <Activity className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xl font-bold font-orbitron text-primary tracking-wide">
-                  FACTOR
-                </span>
-                <span className="text-xs text-muted-foreground font-inter -mt-1">
-                  3D PRINTER FARM
-                </span>
-              </div>
-            </Link>
+            {/* 사용자 프로필 카드 - 고정 */}
+            <div className="pb-4 border-b flex-shrink-0">
+              {user ? (
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
+                  {/* 프로필 이미지 */}
+                  {user?.user_metadata?.avatar_url ? (
+                    <img
+                      src={user.user_metadata.avatar_url}
+                      alt="Profile"
+                      className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center w-12 h-12 bg-primary rounded-full flex-shrink-0">
+                      <User className="w-6 h-6 text-primary-foreground" />
+                    </div>
+                  )}
+
+                  {/* 사용자 정보 */}
+                  <div className="flex-1 min-w-0 relative">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-base font-semibold truncate">
+                        {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
+                      </h3>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 flex-shrink-0"
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          navigate('/user-settings');
+                        }}
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">
+                      {user?.email}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
+                  <div className="flex items-center justify-center w-12 h-12 bg-muted rounded-full">
+                    <User className="w-6 h-6 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{t('nav.notLoggedIn')}</p>
+                    <Button
+                      asChild
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-xs"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <Link to="/">{t('nav.login')}</Link>
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* 스크롤 가능한 컨텐츠 영역 */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto min-h-0">
               <div className="flex flex-col space-y-4 pb-6 pt-4">
 
               {/* 모바일 상태 표시 */}
@@ -333,7 +412,29 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
                     </Link>
                   );
                   })}
-                  
+
+                  {/* 구독 플랜 메뉴 */}
+                  <Link
+                    to="/subscription"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center justify-between px-3 py-3 rounded-md text-sm font-medium transition-colors ${
+                      isActive("/subscription")
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Crown className="w-5 h-5" />
+                      <span>Plan</span>
+                    </div>
+                    <Badge
+                      variant="secondary"
+                      className="text-xs px-2 py-0.5"
+                    >
+                      Basic Plan
+                    </Badge>
+                  </Link>
+
                   {/* 관리자 메뉴 (모바일, 관리자만 표시) */}
                   {user && isAdmin && (
                     <Link
@@ -350,44 +451,6 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
                     </Link>
                   )}
                 </nav>
-              </div>
-
-              {/* 모바일 사용자 메뉴 */}
-              <div className="pt-4 border-t">
-                <h3 className="text-sm font-medium mb-3">User</h3>
-                {user ? (
-                  <div className="space-y-3">
-                    <div className="text-sm text-muted-foreground">
-                      {user?.email}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        setMobileMenuOpen(false);
-                        await signOut();
-                        navigate("/", { replace: true });
-                      }}
-                      className="w-full justify-start"
-                    >
-                      <LogOut className="h-4 w-4 mr-2" />
-                      {t('nav.logout')}
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="w-full justify-start"
-                  >
-                    <Link to="/">
-                      <LogOut className="h-4 w-4 mr-2" />
-                      {t('nav.login')}
-                    </Link>
-                  </Button>
-                )}
               </div>
 
               {/* 언어 설정 섹션 */}
@@ -416,6 +479,25 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
               </div>
               </div>
             </div>
+
+            {/* 로그아웃 버튼 - 바닥에 고정 */}
+            {user && (
+              <div className="pt-4 border-t mt-auto flex-shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    setMobileMenuOpen(false);
+                    await signOut();
+                    navigate("/", { replace: true });
+                  }}
+                  className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  {t('nav.logout')}
+                </Button>
+              </div>
+            )}
           </SheetContent>
           </Sheet>
         </div>

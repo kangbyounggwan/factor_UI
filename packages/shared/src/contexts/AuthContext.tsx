@@ -16,6 +16,8 @@ interface AuthContextType {
   signUp: (email: string, password: string, displayName?: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
+  linkGoogleAccount: () => Promise<{ error: any }>;
+  unlinkProvider: (provider: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -286,12 +288,36 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     return { error };
   };
 
+  const linkGoogleAccount = async () => {
+    const { data, error } = await supabase.auth.linkIdentity({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/user-settings`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+    return { error };
+  };
+
+  const unlinkProvider = async (provider: string) => {
+    if (!user) return { error: new Error("No user logged in") };
+
+    const identity = user.identities?.find(id => id.provider === provider);
+    if (!identity) return { error: new Error("Provider not linked") };
+
+    const { data, error } = await supabase.auth.unlinkIdentity(identity);
+    return { error };
+  };
+
   const signOut = async () => {
     setUserRole(null);
     try {
       // 현재 사용자의 MQTT client ID 삭제
       if (user) { clearMqttClientId(user.id); }
-      
+
       if (!signOutInProgressRef.current) {
         signOutInProgressRef.current = true;
         // 즉시 상태 클리어로 UI 전환
@@ -322,6 +348,8 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     signUp,
     signIn,
     signInWithGoogle,
+    linkGoogleAccount,
+    unlinkProvider,
     signOut,
   };
 

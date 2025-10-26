@@ -20,7 +20,11 @@ const Home = lazy(() => import("./pages/Home"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const PrinterDetail = lazy(() => import("./pages/PrinterDetail"));
 const Settings = lazy(() => import("./pages/Settings"));
+const UserSettings = lazy(() => import("./pages/UserSettings"));
 const Subscription = lazy(() => import("./pages/Subscription"));
+const PaymentCheckout = lazy(() => import("./pages/PaymentCheckout"));
+const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
+const PaymentFail = lazy(() => import("./pages/PaymentFail"));
 const SupportedPrinters = lazy(() => import("./pages/SupportedPrinters"));
 const AI = lazy(() => import("./pages/AI"));
 const Auth = lazy(() => import("./pages/Auth"));
@@ -136,7 +140,19 @@ const AppContent = () => {
                 <Settings />
               </ProtectedRoute>
             } />
+            <Route path="/user-settings" element={
+              <ProtectedRoute>
+                <UserSettings />
+              </ProtectedRoute>
+            } />
             <Route path="/subscription" element={<Subscription />} />
+            <Route path="/payment/checkout" element={
+              <ProtectedRoute>
+                <PaymentCheckout />
+              </ProtectedRoute>
+            } />
+            <Route path="/payment/success" element={<PaymentSuccess />} />
+            <Route path="/payment/fail" element={<PaymentFail />} />
             <Route path="/supported-printers" element={<SupportedPrinters />} />
             <Route path="/create" element={
               <ProtectedRoute>

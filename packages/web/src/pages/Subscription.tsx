@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
@@ -6,20 +6,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { 
+import {
   Crown,
   Check,
   Zap,
-  ArrowLeft,
+  X,
   CreditCard,
   Calendar,
   Users,
   Shield,
   Headphones,
   Rocket,
-  Mail
+  Mail,
+  ChevronDown
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PaymentDialog } from "@/components/PaymentDialog";
 
 // 구독 플랜 타입
 interface SubscriptionPlan {
@@ -96,11 +98,27 @@ const Subscription = () => {
   const { t } = useTranslation();
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [isYearly, setIsYearly] = useState(false);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [showDetailedTable, setShowDetailedTable] = useState(false);
+  const tableRef = useRef<HTMLDivElement>(null);
 
   const subscriptionPlans = getSubscriptionPlans(isYearly, t);
 
   // 로그인된 사용자일 때만 현재 플랜 표시
   const currentPlan = user ? subscriptionPlans.find(plan => plan.current) : null;
+
+  // 테이블로 스크롤하는 함수
+  const handleScrollToTable = () => {
+    setShowDetailedTable(true);
+
+    // 테이블이 렌더링된 후 스크롤
+    setTimeout(() => {
+      tableRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    }, 100);
+  };
 
   const handleUpgrade = (planId: string) => {
     if (planId === 'enterprise') {
@@ -108,9 +126,13 @@ const Subscription = () => {
       window.open('mailto:contact@example.com?subject=Enterprise Plan Inquiry', '_blank');
       return;
     }
-    setSelectedPlan(planId);
-    // 여기에 결제 로직 구현
-    console.log(`Upgrading to plan: ${planId}`);
+    if (planId === 'basic') {
+      // Basic 플랜은 무료이므로 바로 전환
+      console.log('Switching to Basic plan');
+      return;
+    }
+    // 유료 플랜은 새로운 결제 페이지로 이동
+    navigate(`/payment/checkout?plan=${planId}&cycle=${isYearly ? 'yearly' : 'monthly'}`);
   };
 
   const formatPrice = (price: number) => {
@@ -167,291 +189,277 @@ const Subscription = () => {
   }, [subscriptionPlans]);
 
   return (
-    <div className="bg-background min-h-screen p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* 헤더 */}
-        <header className="space-y-4">
-          <Button
-            variant="ghost"
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            {t('subscription.backButton')}
-          </Button>
+    <div className="fixed inset-0 z-50 bg-background">
+      {/* 닫기 버튼 */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute top-4 right-4 z-10"
+        onClick={() => navigate(-1)}
+      >
+        <X className="h-5 w-5" />
+      </Button>
 
-          <div className="space-y-2">
-            <h1 className="text-4xl font-bold flex items-center gap-3">
-              <Crown className="h-10 w-10 text-primary" />
+      {/* 스크롤 가능한 컨텐츠 영역 */}
+      <div className="h-full overflow-y-auto">
+        <div className="max-w-7xl mx-auto px-4 lg:px-6 py-8 lg:py-16 space-y-6 lg:space-y-10">
+          {/* 헤더 */}
+          <header className="space-y-2 lg:space-y-4 text-center">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
               {t('subscription.title')}
             </h1>
-            <p className="text-lg text-muted-foreground">
+            <p className="text-sm lg:text-base text-muted-foreground">
               {t('subscription.subtitle')}
             </p>
-          </div>
-        </header>
+          </header>
 
-        {/* 현재 구독 정보 - 로그인된 사용자만 표시 */}
-        {currentPlan && user && (
-          <Card className="border-primary bg-primary/5 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full -translate-y-16 translate-x-16"></div>
-            <CardHeader className="relative">
-              <CardTitle className="flex items-center gap-3 text-2xl">
-                <Crown className="h-6 w-6 text-primary" />
-                {t('subscription.currentPlan')}: {currentPlan.name}
-                <Badge variant="outline" className="ml-2">{t('subscription.active')}</Badge>
-              </CardTitle>
-              <p className="text-muted-foreground">{currentPlan.description}</p>
-            </CardHeader>
-            <CardContent className="space-y-6 relative">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <div className="text-3xl font-bold">
-                    {formatPrice(currentPlan.price)}
-                  </div>
-                  {currentPlan.price > 0 && (
-                    <div className="text-sm text-muted-foreground">{t('subscription.billedMonthly')}</div>
-                  )}
-                </div>
-                <div className="text-right space-y-1">
-                  <div className="text-sm text-muted-foreground">{t('subscription.nextBillingDate')}</div>
-                  <div className="font-medium">2024년 8월 15일</div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-3">
-                  <h4 className="font-semibold flex items-center gap-2">
-                    <Check className="h-4 w-4 text-success" />
-                    {t('subscription.includedFeatures')}
-                  </h4>
-                  <div className="grid grid-cols-1 gap-2">
-                    {currentPlan.features.map((feature, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm">
-                        <Check className="h-3 w-3 text-success flex-shrink-0" />
-                        {feature}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <h4 className="font-semibold">{t('subscription.usageStatus')}</h4>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>{t('subscription.registeredPrinters')}</span>
-                      <span>4 / {currentPlan.max_printers === -1 ? t('subscription.unlimited') : currentPlan.max_printers}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>{t('subscription.printJobsThisMonth')}</span>
-                      <span>127개</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>{t('subscription.dataUsage')}</span>
-                      <span>2.4GB / 10GB</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {currentPlan.price > 0 && (
-                <div className="flex gap-3 pt-4 border-t">
-                  <Button variant="outline" className="flex-1">
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    {t('subscription.updatePayment')}
-                  </Button>
-                  <Button variant="outline" className="flex-1">
-                    <Calendar className="h-4 w-4 mr-2" />
-                    {t('subscription.cancelSubscription')}
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* 로그인된 사용자만 구분선 표시 */}
-        {user && <Separator />}
-
-        {/* 사용 가능한 플랜 */}
-        <section className="space-y-6">
-          <div className="text-center space-y-4 mb-10 md:mb-16 lg:mb-20">
-            <h2 className="text-3xl font-bold">{t('subscription.allPlans')}</h2>
-            <p className="text-muted-foreground text-lg">
-              {t('subscription.allPlansSubtitle')}
-            </p>
-
-            {/* 월간/연간 탭 */}
+          {/* 월간/연간 탭 */}
+          <div className="flex justify-center">
             <Tabs
               value={isYearly ? "yearly" : "monthly"}
               onValueChange={(value) => setIsYearly(value === "yearly")}
-              className="w-fit mx-auto"
+              className="inline-flex"
             >
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="monthly" className="flex items-center gap-2">
+              <TabsList className="grid grid-cols-2 h-10 lg:h-11 bg-muted p-1 rounded-lg w-fit">
+                <TabsTrigger
+                  value="monthly"
+                  className="min-w-[100px] lg:min-w-[120px] px-4 lg:px-6 py-2 text-xs lg:text-sm font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm rounded-md transition-all"
+                >
                   {t('subscription.monthly')}
                 </TabsTrigger>
-                <TabsTrigger value="yearly" className="flex items-center gap-2">
+                <TabsTrigger
+                  value="yearly"
+                  className="min-w-[100px] lg:min-w-[120px] px-4 lg:px-6 py-2 text-xs lg:text-sm font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm rounded-md transition-all"
+                >
                   {t('subscription.yearly')}
-                  <Badge variant="secondary" className="text-xs">{t('subscription.yearlyDiscount')}</Badge>
+                  <Badge variant="secondary" className="ml-1 lg:ml-2 bg-primary/10 text-primary hover:bg-primary/20 text-[10px] lg:text-xs px-1 lg:px-1.5 py-0">
+                    {t('subscription.yearlyDiscount')}
+                  </Badge>
                 </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-16">
+          {/* 플랜 카드 */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
             {subscriptionPlans.map((plan) => (
               <Card
                 key={plan.id}
-                className={`relative transition-all duration-300 hover:shadow-2xl flex flex-col ${
-                  plan.popular ? "border-2 border-primary shadow-xl scale-105" : ""
-                } ${plan.current ? "opacity-75" : "hover:scale-105"}`}
+                className={`relative flex flex-col overflow-hidden rounded-2xl lg:rounded-3xl min-h-[500px] lg:min-h-[38.25rem] ${
+                  plan.popular
+                    ? "border-2 border-blue-500/50 bg-gradient-to-r from-blue-950 via-blue-900/60 to-blue-950"
+                    : "border border-border bg-card"
+                }`}
+                style={plan.popular ? {
+                  boxShadow: '0 0 20px rgba(37, 99, 235, 0.2)'
+                } : undefined}
               >
+                {/* Popular Badge */}
                 {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-10">
-                    <Badge className="bg-primary text-primary-foreground px-4 py-1 text-sm font-medium">
-                      {t('subscription.popularPlan')}
+                  <div className="absolute top-4 right-4">
+                    <Badge className="bg-primary text-primary-foreground px-2.5 py-0.5 text-xs font-medium rounded-md shadow-sm">
+                      인기
                     </Badge>
                   </div>
                 )}
 
-                {plan.current && (
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-10">
-                    <Badge variant="secondary" className="px-4 py-1 text-sm font-medium">
-                      {t('subscription.currentPlanButton')}
-                    </Badge>
-                  </div>
-                )}
-
-                <CardHeader className="text-center pb-6 relative overflow-hidden">
-                  <div className={`absolute inset-0 ${plan.color} opacity-5`}></div>
-
+                <CardHeader className="px-6 lg:px-8 pt-6 lg:pt-9 pb-4 lg:pb-6 space-y-4 lg:space-y-6">
                   {/* 플랜명 */}
-                  <CardTitle className="text-2xl relative z-10 mb-2">{plan.name}</CardTitle>
-
-                  {/* 설명 - 고정 높이 */}
-                  <p className="text-muted-foreground relative z-10 min-h-[3rem] mb-4">{plan.description}</p>
+                  <CardTitle className="text-2xl lg:text-[28px] font-medium tracking-tight">
+                    {plan.name}
+                  </CardTitle>
 
                   {/* 가격 */}
-                  <div className="space-y-2 relative z-10">
-                    <div className="text-4xl font-bold">
-                      {formatPrice(plan.price)}
+                  <div className="flex items-end gap-1.5 min-h-[50px] lg:min-h-[60px]">
+                    <div className="flex items-start">
+                      <span className="text-lg lg:text-xl text-muted-foreground mr-0.5">$</span>
+                      <span className="text-4xl lg:text-5xl font-normal leading-none tracking-tight">
+                        {plan.price === 0 ? "0" : plan.price === -1 ? "" : plan.price}
+                      </span>
                     </div>
-                    <div className="h-10 flex flex-col justify-center">
-                      {plan.price > 0 && (
-                        <div className="text-sm text-muted-foreground">{isYearly ? t('subscription.billedYearly') : t('subscription.billedMonthly')}</div>
-                      )}
-                      {isYearly && plan.price > 0 && (
-                        <div className="text-xs text-muted-foreground">{t('subscription.basedOnMonthly', { price: (plan.price / 12).toFixed(2) })}</div>
-                      )}
-                      {plan.price === -1 && (
-                        <div className="text-sm text-muted-foreground">{t('subscription.customPricing')}</div>
-                      )}
-                    </div>
+                    {plan.price >= 0 && (
+                      <div className="mb-0.5 flex flex-col items-start">
+                        <span className="text-muted-foreground text-[10px] lg:text-[11px] leading-tight">
+                          USD /<br />{isYearly ? '월' : '월'}
+                        </span>
+                      </div>
+                    )}
+                    {plan.price === -1 && (
+                      <span className="text-4xl lg:text-5xl font-normal leading-none tracking-tight">Custom</span>
+                    )}
                   </div>
+
+                  {/* 설명 */}
+                  <p className="text-sm lg:text-base text-foreground font-medium leading-snug mt-3 lg:mt-4 min-h-[40px] lg:min-h-[48px]">
+                    {plan.description}
+                  </p>
                 </CardHeader>
 
-                {/* 컨텐츠 영역 - flex-1로 남은 공간 차지 */}
-                <CardContent className="flex-1 flex flex-col pb-6">
-                  {/* 주요 기능 - flex-1로 확장 */}
-                  <div className="flex-1 space-y-3 mb-6">
-                    <h4 className="font-semibold text-center">{t('subscription.keyFeatures')}</h4>
-                    <div className="space-y-2.5">
+                <CardContent className="px-6 lg:px-8 pb-6 lg:pb-9 pt-0 flex flex-col flex-1">
+                  {/* Features */}
+                  <div className="flex flex-col grow gap-2 mb-3 lg:mb-4">
+                    <ul className="mb-2 flex flex-col gap-3 lg:gap-5">
                       {plan.features.map((feature, index) => (
-                        <div key={index} className="flex items-start gap-2 text-sm">
-                          <Check className="h-4 w-4 text-success flex-shrink-0 mt-0.5" />
-                          <span>{feature}</span>
-                        </div>
+                        <li key={index} className="relative">
+                          <div className="flex items-start gap-2.5 lg:gap-3.5">
+                            <Check className="h-4 w-4 lg:h-5 lg:w-5 text-foreground flex-shrink-0 mt-0.5" strokeWidth={2} />
+                            <span className="text-xs lg:text-sm text-foreground font-normal leading-snug">
+                              {feature}
+                            </span>
+                          </div>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   </div>
 
-                  {/* 버튼 - 하단 고정 */}
-                  <Button
-                    className="w-full mt-auto"
-                    variant={plan.current ? "outline" : plan.popular ? "default" : "outline"}
-                    disabled={plan.current}
-                    onClick={() => handleUpgrade(plan.id)}
-                  >
-                    {plan.current ? (
-                      <>
-                        <Crown className="h-4 w-4 mr-2" />
-                        {t('subscription.currentPlanButton')}
-                      </>
-                    ) : plan.price === 0 ? (
-                      <>
-                        <Rocket className="h-4 w-4 mr-2" />
-                        {t('subscription.startFree')}
-                      </>
-                    ) : plan.price === -1 ? (
-                      <>
-                        <Mail className="h-4 w-4 mr-2" />
-                        {t('subscription.contactUs')}
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="h-4 w-4 mr-2" />
-                        {t('subscription.upgrade')} ({formatPrice(plan.price)})
-                      </>
-                    )}
-                  </Button>
+                  {/* CTA Button - 하단 정렬 */}
+                  <div className="mt-auto w-full">
+                    <Button
+                      className={`w-full h-11 lg:h-9 text-sm lg:text-sm font-semibold rounded-full transition-colors ${
+                        plan.popular
+                          ? "bg-blue-600 hover:bg-blue-700 text-white"
+                          : plan.current
+                          ? "opacity-50 cursor-not-allowed bg-muted text-foreground"
+                          : plan.price === -1
+                          ? "bg-foreground hover:bg-foreground/90 text-background"
+                          : "bg-muted hover:bg-muted/80 text-foreground"
+                      }`}
+                      disabled={plan.current}
+                      onClick={() => handleUpgrade(plan.id)}
+                    >
+                      {plan.current
+                        ? t('subscription.currentPlanButton')
+                        : plan.price === 0
+                        ? "나의 현재 플랜"
+                        : plan.price === -1
+                        ? "Contact Us"
+                        : `${plan.name} 사용하기`
+                      }
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
           </div>
-        </section>
 
-        {/* 자주 묻는 질문 */}
-        <section className="space-y-6">
-          <h2 className="text-2xl font-bold text-center">{t('subscription.faq')}</h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">{t('subscription.faqQuestion1')}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  {t('subscription.faqAnswer1')}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">{t('subscription.faqQuestion2')}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  {t('subscription.faqAnswer2')}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">{t('subscription.faqQuestion3')}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  {t('subscription.faqAnswer3')}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">{t('subscription.faqQuestion4')}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  {t('subscription.faqAnswer4')}
-                </p>
-              </CardContent>
-            </Card>
+          {/* 모든 플랜 비교하기 버튼 */}
+          <div
+            className="flex flex-col items-center mt-8 lg:mt-16 mb-6 lg:mb-8 cursor-pointer group"
+            onClick={handleScrollToTable}
+          >
+            <p className="text-xs lg:text-sm text-muted-foreground mb-3 lg:mb-4 group-hover:text-foreground transition-colors">
+              모든 플랜 비교하기
+            </p>
+            <div className="animate-bounce">
+              <ChevronDown className="h-6 w-6 lg:h-8 lg:w-8 text-muted-foreground group-hover:text-foreground transition-colors" />
+            </div>
           </div>
-        </section>
+
+          {/* 플랜 상세 비교 테이블 */}
+          {showDetailedTable && (
+          <div ref={tableRef} className="mt-12 lg:mt-20 space-y-6 lg:space-y-8">
+            <div className="text-center space-y-1 lg:space-y-2">
+              <h2 className="text-2xl lg:text-3xl font-bold">플랜별 세부 사항</h2>
+              <p className="text-sm lg:text-base text-muted-foreground">모든 기능을 자세히 비교해보세요</p>
+            </div>
+
+            {/* 비교 테이블 */}
+            <div className="w-full overflow-x-auto -mx-4 lg:mx-0">
+              <table className="w-full border-collapse min-w-[600px]">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 lg:py-4 px-3 lg:px-6 font-semibold text-xs lg:text-sm min-w-[140px] lg:min-w-[200px]"></th>
+                    <th className="text-center py-3 lg:py-4 px-2 lg:px-6 font-semibold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px]">Basic</th>
+                    <th className="text-center py-3 lg:py-4 px-2 lg:px-6 font-semibold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px] bg-primary/5">PRO</th>
+                    <th className="text-center py-3 lg:py-4 px-2 lg:px-6 font-semibold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px]">Enterprise</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* 프린터 관리 섹션 */}
+                  <tr className="border-b border-border bg-muted/30">
+                    <td colSpan={4} className="py-2 lg:py-3 px-3 lg:px-6 font-semibold text-xs lg:text-sm">프린터 관리</td>
+                  </tr>
+                  <tr className="border-b border-border hover:bg-muted/20">
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">최대 프린터 연결</td>
+                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center text-xs lg:text-sm">2대</td>
+                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center bg-primary/5 text-xs lg:text-sm">10대</td>
+                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center text-xs lg:text-sm">무제한</td>
+                  </tr>
+                  <tr className="border-b border-border hover:bg-muted/20">
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">실시간 모니터링</td>
+                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                    <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                  </tr>
+                  <tr className="border-b border-border hover:bg-muted/20">
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">원격 제어</td>
+                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                    <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                  </tr>
+
+                  {/* 기능 섹션 */}
+                  <tr className="border-b border-border bg-muted/30">
+                    <td colSpan={4} className="py-2 lg:py-3 px-3 lg:px-6 font-semibold text-xs lg:text-sm">주요 기능</td>
+                  </tr>
+                  <tr className="border-b border-border hover:bg-muted/20">
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">AI 모델 생성</td>
+                    <td className="py-4 px-6 text-center">제한적</td>
+                    <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                  </tr>
+                  <tr className="border-b border-border hover:bg-muted/20">
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">고급 분석 및 통계</td>
+                    <td className="py-4 px-6 text-center">-</td>
+                    <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                  </tr>
+                  <tr className="border-b border-border hover:bg-muted/20">
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">API 접근</td>
+                    <td className="py-4 px-6 text-center">-</td>
+                    <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                  </tr>
+
+                  {/* 지원 섹션 */}
+                  <tr className="border-b border-border bg-muted/30">
+                    <td colSpan={4} className="py-2 lg:py-3 px-3 lg:px-6 font-semibold text-xs lg:text-sm">고객 지원</td>
+                  </tr>
+                  <tr className="border-b border-border hover:bg-muted/20">
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">지원 방식</td>
+                    <td className="py-4 px-6 text-center">커뮤니티</td>
+                    <td className="py-4 px-6 text-center bg-primary/5">이메일 (24시간 이내)</td>
+                    <td className="py-4 px-6 text-center">24/7 전담 매니저</td>
+                  </tr>
+                  <tr className="border-b border-border hover:bg-muted/20">
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">전용 Slack 채널</td>
+                    <td className="py-4 px-6 text-center">-</td>
+                    <td className="py-4 px-6 text-center bg-primary/5">-</td>
+                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                  </tr>
+                  <tr className="border-b border-border hover:bg-muted/20">
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">SLA 보장</td>
+                    <td className="py-4 px-6 text-center">-</td>
+                    <td className="py-4 px-6 text-center bg-primary/5">-</td>
+                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          )}
+        </div>
       </div>
+
+      {/* 결제 다이얼로그 */}
+      {selectedPlan && (
+        <PaymentDialog
+          open={showPaymentDialog}
+          onOpenChange={setShowPaymentDialog}
+          planId={selectedPlan}
+          isYearly={isYearly}
+        />
+      )}
     </div>
   );
 };

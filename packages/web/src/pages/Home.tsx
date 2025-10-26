@@ -92,7 +92,7 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-background scroll-smooth">
       {/* Hero Section */}
-      <section className="relative overflow-hidden py-24 px-6">
+      <section className="relative overflow-hidden py-24 px-6 bg-background">
         <div className="max-w-7xl mx-auto text-center">
           <div className="space-y-6">
             <div className="space-y-4">
@@ -130,7 +130,7 @@ const Home = () => {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="scroll-mt-16 py-24 px-6 bg-muted/30">
+      <section id="features" className="scroll-mt-16 py-24 px-6 bg-muted/65">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold mb-4">{t('home.featuresTitle')}</h2>
@@ -158,7 +158,7 @@ const Home = () => {
       </section>
 
       {/* AI Features Section */}
-      <section id="ai-features" className="scroll-mt-16 py-24 px-6">
+      <section id="ai-features" className="scroll-mt-16 py-24 px-6 bg-background">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold mb-4">{t('home.aiFeaturesTitle')}</h2>
@@ -194,30 +194,8 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Additional Features */}
-      <section id="marketplace" className="scroll-mt-16 py-24 px-6 bg-muted/30">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">{t('home.marketplaceTitle')}</h2>
-            <p className="text-xl text-muted-foreground">
-              {t('home.marketplaceSubtitle')}
-            </p>
-          </div>
-
-          <div className="text-center">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-              <ShoppingCart className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold mb-4">{t('home.comingSoon')}</h3>
-            <p className="text-muted-foreground leading-relaxed max-w-2xl mx-auto">
-              {t('home.marketplaceDesc')}
-            </p>
-          </div>
-        </div>
-      </section>
-
       {/* Supported Printers */}
-      <section id="printers" className="scroll-mt-16 py-24 px-6">
+      <section id="printers" className="scroll-mt-16 py-24 px-6 bg-muted/65">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold mb-4">{t('home.supportedPrintersTitle')}</h2>
@@ -283,8 +261,30 @@ const Home = () => {
         </div>
       </section>
 
+      {/* Marketplace Section */}
+      <section id="marketplace" className="scroll-mt-16 py-24 px-6 bg-background">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold mb-4">{t('home.marketplaceTitle')}</h2>
+            <p className="text-xl text-muted-foreground">
+              {t('home.marketplaceSubtitle')}
+            </p>
+          </div>
+
+          <div className="text-center">
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+              <ShoppingCart className="h-8 w-8 text-primary" />
+            </div>
+            <h3 className="text-xl font-semibold mb-4">{t('home.comingSoon')}</h3>
+            <p className="text-muted-foreground leading-relaxed max-w-2xl mx-auto">
+              {t('home.marketplaceDesc')}
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Connection Features */}
-      <section className="py-24 px-6 bg-muted/30">
+      <section className="py-24 px-6 bg-muted/65">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold mb-4">{t('home.stayConnectedTitle')}</h2>
@@ -310,7 +310,7 @@ const Home = () => {
       </section>
 
       {/* API Documentation Section */}
-      <section id="api" className="scroll-mt-16 py-24 px-6">
+      <section id="api" className="scroll-mt-16 py-24 px-6 bg-background">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold mb-4">{t('home.apiTitle')}</h2>
@@ -375,32 +375,6 @@ POST /api/v1/printers/{id}/print
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-24 px-6 bg-primary text-primary-foreground">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl font-bold mb-6">
-            {t('home.ctaTitle')}
-          </h2>
-          <p className="text-xl mb-8 opacity-90">
-            {t('home.ctaSubtitle')}
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button asChild size="lg" variant="secondary" className="text-lg px-8 py-6">
-              <Link to={user ? "/dashboard" : "/auth"}>
-                <Monitor className="h-5 w-5 mr-2" />
-                {user ? t('home.goToDashboard') : t('home.startFree')}
-              </Link>
-            </Button>
-          </div>
-
-          {!user && (
-            <p className="text-sm mt-4 opacity-80">
-              {t('home.noCreditCard')} • {t('home.cancelAnytime')}
-            </p>
-          )}
-        </div>
-      </section>
     </div>
   );
 };
