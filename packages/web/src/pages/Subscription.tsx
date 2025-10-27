@@ -106,6 +106,13 @@ const Subscription = () => {
   const [currentPlanId, setCurrentPlanId] = useState<string>('basic');
   const tableRef = useRef<HTMLDivElement>(null);
 
+  // 로그인 체크 - 로그인하지 않은 경우 로그인 페이지로 리다이렉트
+  useEffect(() => {
+    if (!user) {
+      navigate('/auth', { replace: true });
+    }
+  }, [user, navigate]);
+
   // DB에서 현재 플랜 가져오기
   useEffect(() => {
     const loadCurrentPlan = async () => {

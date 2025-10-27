@@ -105,6 +105,13 @@ const Subscription = () => {
   const [userPlanId, setUserPlanId] = useState<string>('basic');
   const [loadingPlan, setLoadingPlan] = useState(true);
 
+  // 로그인 체크 - 로그인하지 않은 경우 로그인 페이지로 리다이렉트
+  useEffect(() => {
+    if (!user) {
+      navigate('/', { replace: true });
+    }
+  }, [user, navigate]);
+
   const subscriptionPlans = getSubscriptionPlans(isYearly).map(plan => ({
     ...plan,
     current: plan.id === userPlanId
