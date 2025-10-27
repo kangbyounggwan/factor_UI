@@ -181,7 +181,7 @@ const Settings = () => {
           name?: string;
           manufacture_id?: string;
           device_uuid?: string;
-          printer_groups?: Array<any>;
+          printer_groups?: Array<PrinterGroup>;
         };
         return {
         id: printer.id,

@@ -141,7 +141,7 @@ const Subscription = () => {
           return;
         }
 
-        const planData = subscription.subscription_plans as any;
+        const planData = subscription.subscription_plans as { name: string } | null;
         // subscription_plans의 name을 id 형식으로 변환 (예: "Pro" -> "pro")
         const planId = planData?.name?.toLowerCase() || 'basic';
         setUserPlanId(planId);

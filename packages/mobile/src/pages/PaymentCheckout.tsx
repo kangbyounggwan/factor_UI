@@ -136,14 +136,15 @@ const PaymentCheckout = () => {
       });
 
       setLoading(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("결제 요청 실패:", error);
       setLoading(false);
 
-      if (!error.message?.includes('취소')) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (!errorMessage.includes('취소')) {
         toast({
           title: "결제 실패",
-          description: error.message || "결제 요청에 실패했습니다.",
+          description: errorMessage || "결제 요청에 실패했습니다.",
           variant: "destructive",
         });
       }

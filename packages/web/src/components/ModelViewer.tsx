@@ -3,7 +3,7 @@
 import { Canvas, useLoader, useThree } from "@react-three/fiber";
 import { OrbitControls, Grid, useGLTF, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { Suspense, useMemo, useLayoutEffect, useRef, useState, useEffect } from "react";
-import { Box3, Group, Vector3, Object3D, BufferGeometry, BufferAttribute, Mesh, SkinnedMesh, Matrix4, Euler } from "three";
+import { Box3, Group, Vector3, Object3D, BufferGeometry, BufferAttribute, Mesh, SkinnedMesh, Matrix4, Euler, PerspectiveCamera } from "three";
 import { calculateBoundingBox, getBoundingBoxCenter, getBoundingBoxSize, groundModelToZero, fitCameraToModel, logCameraAdjustment, Size3 } from "@shared/utils/modelViewerUtils";
 import {
   CAMERA_CONFIG,
@@ -195,7 +195,7 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
           camera.position,
           targetPosition,
           result.distance,
-          (camera as any).fov,
+          camera instanceof PerspectiveCamera ? camera.fov : 50,
           !!controls
         );
       }
@@ -275,7 +275,7 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
           camera.position,
           targetPosition,
           result.distance,
-          (camera as any).fov,
+          camera instanceof PerspectiveCamera ? camera.fov : 50,
           !!controls
         );
       }
@@ -343,7 +343,7 @@ export default function ModelViewer({ className, height, showDemo = false, place
         if (cancelled || error || !data) return;
 
         // generation_metadata에서 저장된 변환 정보 읽기
-        const saved: any = (data as any)?.generation_metadata;
+        const saved = (data as Record<string, unknown>)?.generation_metadata as Record<string, unknown> | undefined;
         if (saved) {
           // 스케일과 회전 모두 복원하지 않음 - 이미 GLB에 베이킹되어 있음
           // if (Array.isArray(saved.rotation) && saved.rotation.length === 3) {

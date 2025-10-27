@@ -21,9 +21,9 @@ import {
   getPlanAmount,
   getPlanName,
 } from "@/lib/tossPaymentsService";
+import { PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
 
 interface PaymentDialogProps {
   open: boolean;

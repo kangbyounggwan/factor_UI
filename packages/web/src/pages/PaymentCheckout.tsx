@@ -134,15 +134,16 @@ const PaymentCheckout = () => {
 
       // 결제 요청 성공 (Redirect 방식이므로 successUrl로 이동)
       setLoading(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("결제 요청 실패:", error);
       setLoading(false);
 
       // 사용자가 취소한 경우가 아닌 경우에만 에러 토스트 표시
-      if (!error.message?.includes('취소')) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (!errorMessage.includes('취소')) {
         toast({
           title: t("payment.error"),
-          description: error.message || t("payment.requestFailed"),
+          description: errorMessage || t("payment.requestFailed"),
           variant: "destructive",
         });
       }

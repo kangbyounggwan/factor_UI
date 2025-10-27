@@ -128,7 +128,7 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
           return;
         }
 
-        const planData = subscription.subscription_plans as any;
+        const planData = subscription.subscription_plans as { name: string } | null;
         setUserPlan(planData?.name || 'Basic');
       } catch (error) {
         console.error('Error loading user plan:', error);

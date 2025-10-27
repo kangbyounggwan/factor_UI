@@ -8,7 +8,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, Grid } from "@react-three/drei";
-import { Box3, Vector3 } from "three";
+import { Box3, Vector3, PerspectiveCamera } from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { Slider } from "@/components/ui/slider";
 import pako from "pako";
 import { useTranslation } from "react-i18next";
@@ -311,11 +312,11 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
       if (!controls) return;
 
       // OrbitControls target을 모델 중심으로 설정
-      (controls as any).target.set(modelCenter.x, modelCenter.y, modelCenter.z);
+      (controls as unknown as OrbitControlsImpl).target.set(modelCenter.x, modelCenter.y, modelCenter.z);
 
       // 카메라 거리 조정
       const maxDim = Math.max(size.x, size.y, size.z);
-      const fov = 'fov' in camera ? (camera as any).fov * (Math.PI / 180) : Math.PI / 4;
+      const fov = camera instanceof PerspectiveCamera ? camera.fov * (Math.PI / 180) : Math.PI / 4;
       const cameraDistance = Math.abs(maxDim / Math.tan(fov / 2)) * 1.5;
 
       // 카메라를 45도 각도로 배치 (모델 중심 기준)
@@ -328,7 +329,7 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
 
       camera.lookAt(modelCenter.x, modelCenter.y, modelCenter.z);
       camera.updateProjectionMatrix();
-      (controls as any).update();
+      (controls as unknown as OrbitControlsImpl).update();
 
       // 축 크기를 모델 크기의 20%로 설정
       setAxesSize(maxDim * 0.2);

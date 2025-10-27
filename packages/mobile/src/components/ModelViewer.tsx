@@ -89,7 +89,7 @@ function STLModel({ url }: { url: string }) {
         camera.position,
         targetPosition,
         result.distance,
-        (camera as any).fov,
+        camera instanceof THREE.PerspectiveCamera ? camera.fov : 50,
         !!controls
       );
     }
@@ -133,7 +133,7 @@ function GLBModel({ url, rotation = [0, 0, 0], scale = 1, onSize }: { url: strin
           camera.position,
           targetPosition,
           result.distance,
-          (camera as any).fov,
+          camera instanceof THREE.PerspectiveCamera ? camera.fov : 50,
           !!controls
         );
 

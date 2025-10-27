@@ -46,17 +46,28 @@ export function createMqttProxy(server) {
   console.log('[MqttProxy] Starting MQTT Proxy Server...');
 
   // MQTT 클라이언트 초기화 (서버에서 단일 연결)
-  const mqttClient = mqtt.connect(process.env.VITE_MQTT_URL, {
+  // 서버는 mosquitto에 직접 연결 (localhost:1883)
+  const mqttBrokerUrl = process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883';
+
+  console.log(`[MqttProxy] Connecting to MQTT broker: ${mqttBrokerUrl}`);
+
+  const mqttClient = mqtt.connect(mqttBrokerUrl, {
     username: process.env.VITE_MQTT_USERNAME || '',
     password: process.env.VITE_MQTT_PASSWORD || '',
-    clientId: 'factor-server-proxy',
-    reconnectPeriod: 3000,
+    clientId: `factor-server-proxy-${process.pid}`,
+    reconnectPeriod: 5000,
     clean: true,
     keepalive: 60,
+    will: {
+      topic: 'server/status',
+      payload: 'Server disconnected',
+      qos: 1,
+      retain: false
+    }
   });
 
   mqttClient.on('connect', () => {
-    console.log('[MqttProxy] Connected to MQTT broker:', process.env.VITE_MQTT_URL);
+    console.log('[MqttProxy] ✅ Connected to MQTT broker:', mqttBrokerUrl);
   });
 
   mqttClient.on('error', (err) => {
@@ -65,6 +76,18 @@ export function createMqttProxy(server) {
 
   mqttClient.on('reconnect', () => {
     console.log('[MqttProxy] Reconnecting to MQTT broker...');
+  });
+
+  mqttClient.on('close', () => {
+    console.log('[MqttProxy] ⚠️  Connection closed');
+  });
+
+  mqttClient.on('disconnect', (packet) => {
+    console.log('[MqttProxy] ⚠️  Disconnected:', packet);
+  });
+
+  mqttClient.on('offline', () => {
+    console.warn('[MqttProxy] ⚠️  Client went offline');
   });
 
   // 연결된 클라이언트 관리

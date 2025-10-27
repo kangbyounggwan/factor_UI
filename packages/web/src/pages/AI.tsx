@@ -495,7 +495,7 @@ const AI = () => {
 
   // 알림으로부터 GCode 자동 로드
   useEffect(() => {
-    const state = location.state as any;
+    const state = location.state as Record<string, unknown> | null;
     if (state?.autoLoadGCode && user) {
       const { modelId, gcodeUrl, printerModelId } = state.autoLoadGCode;
       console.log('[AI] Auto-loading GCode from notification:', { modelId, gcodeUrl, printerModelId });
@@ -2618,7 +2618,7 @@ const AI = () => {
                   disabled={
                     isSlicing ||
                     !resliceModelId ||
-                    (selectedPrinter as any)?.manufacture_id === resliceModelId
+                    selectedPrinter?.manufacture_id === resliceModelId
                   }
                   onClick={handleReslice}
                 >

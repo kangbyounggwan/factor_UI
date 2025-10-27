@@ -35,6 +35,8 @@ import { useAuth } from "@shared/contexts/AuthContext";
 import { useDashboardSummary } from "@shared/component/dashboardSummary";
 import { useTheme } from "next-themes";
 import { supabase } from "@shared/integrations/supabase/client";
+import type { Notification } from "@shared/services/supabaseService/notifications";
+import type { PrinterStatusInfo } from "@shared/types/printerType";
 import LanguageSwitcher from "./LanguageSwitcher";
 
 export const Header = () => {
@@ -47,13 +49,13 @@ export const Header = () => {
   });
   const [userPlan, setUserPlan] = useState<string>('basic');
   const [unreadNotifications, setUnreadNotifications] = useState<number>(0);
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [feedbackType, setFeedbackType] = useState<'issue' | 'idea' | null>(null);
   const [feedbackTitle, setFeedbackTitle] = useState('');
   const [feedbackDescription, setFeedbackDescription] = useState('');
   const [selectedPrinter, setSelectedPrinter] = useState<string>('');
-  const [printers, setPrinters] = useState<any[]>([]);
+  const [printers, setPrinters] = useState<PrinterStatusInfo[]>([]);
   const [attachedImages, setAttachedImages] = useState<File[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
@@ -218,7 +220,7 @@ export const Header = () => {
     setAttachedImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleNotificationClick = async (notification: any) => {
+  const handleNotificationClick = async (notification: Notification) => {
     // 알림을 읽음 처리
     if (!notification.read) {
       await markNotificationAsRead(notification.id);

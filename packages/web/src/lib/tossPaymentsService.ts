@@ -47,16 +47,11 @@ export const renderPaymentWidget = async (params: RenderPaymentWidgetParams) => 
   const { paymentWidget, amount, selector, variantKey = "DEFAULT" } = params;
 
   try {
-    // npm 패키지 API: renderPaymentMethods(selector, amount, options)
+    // npm 패키지 API: renderPaymentMethods(selector, { value, currency }, { variantKey })
     await paymentWidget.renderPaymentMethods(
       selector,
-      {
-        value: amount,
-        currency: "KRW"
-      },
-      {
-        variantKey
-      }
+      { value: amount, currency: "KRW" },
+      { variantKey }
     );
   } catch (error) {
     console.error('결제 위젯 렌더링 실패:', error);
@@ -95,7 +90,15 @@ export const requestPayment = async (params: RequestPaymentParams) => {
     } = params;
 
     // windowTarget이 제공된 경우에만 포함
-    const paymentRequest: any = {
+    const paymentRequest: {
+      orderId: string;
+      orderName: string;
+      successUrl: string;
+      failUrl: string;
+      customerEmail?: string;
+      customerName?: string;
+      windowTarget?: 'self' | 'iframe';
+    } = {
       orderId,
       orderName,
       successUrl,
@@ -186,3 +189,6 @@ export const getPlanName = (planId: string): string => {
 
   return planNames[planId] || '알 수 없는 플랜';
 };
+
+// PaymentWidgetInstance 타입을 export
+export type { PaymentWidgetInstance };

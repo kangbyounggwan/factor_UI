@@ -149,11 +149,11 @@ const AI = () => {
   const [artStyle, setArtStyle] = useState<"realistic" | "sculpture">("realistic");
   const [targetPolycount, setTargetPolycount] = useState<number>(30000);
 
-  const [connectedPrinters, setConnectedPrinters] = useState<any[]>([]);
+  const [connectedPrinters, setConnectedPrinters] = useState<PrinterDefinition[]>([]);
 
   // 출력 설정 단계 상태
   const [printStep, setPrintStep] = useState<'printer' | 'preview'>('printer');
-  const [selectedPrinter, setSelectedPrinter] = useState<any | null>(null);
+  const [selectedPrinter, setSelectedPrinter] = useState<PrinterDefinition | null>(null);
   const [isSlicing, setIsSlicing] = useState(false);
   const [slicingInBackground, setSlicingInBackground] = useState(false); // 백그라운드 처리 상태
   const [gcodeUrl, setGcodeUrl] = useState<string | null>(null);
@@ -263,7 +263,7 @@ const AI = () => {
   }, [user]);
 
   // 프린터 선택 및 슬라이싱 시작
-  const handlePrinterSelect = async (printer: any) => {
+  const handlePrinterSelect = async (printer: PrinterDefinition) => {
     console.log('[AI Mobile] Printer selected:', printer.name);
 
     if (!generatedModel?.glbUrl || !user?.id) {

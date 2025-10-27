@@ -203,9 +203,25 @@ export async function clearAllNotifications() {
   return { success: true };
 }
 
+// Extend Window interface for test notifications
+declare global {
+  interface Window {
+    testNotifications?: {
+      simple: typeof testSimpleNotification;
+      aiModel: typeof testAIModelNotification;
+      printComplete: typeof testPrintCompleteNotification;
+      printError: typeof testPrintErrorNotification;
+      payment: typeof testPaymentNotification;
+      subscriptionExpiring: typeof testSubscriptionExpiringNotification;
+      all: typeof testAllNotifications;
+      clear: typeof clearAllNotifications;
+    };
+  }
+}
+
 // Make functions available in browser console
 if (typeof window !== 'undefined') {
-  (window as any).testNotifications = {
+  window.testNotifications = {
     simple: testSimpleNotification,
     aiModel: testAIModelNotification,
     printComplete: testPrintCompleteNotification,
