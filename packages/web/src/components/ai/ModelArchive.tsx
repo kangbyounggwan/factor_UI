@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Box, Trash2 } from "lucide-react";
+import { Box, Trash2, Loader2 } from "lucide-react";
 
 export interface ModelArchiveItem {
   id: string | number;  // UUID 또는 숫자 모두 허용
@@ -9,6 +9,8 @@ export interface ModelArchiveItem {
   createdAt: string;
   download_url?: string;  // Supabase Storage URL for rendering
   thumbnail_url?: string;  // Optional thumbnail
+  gcode_url?: string;  // GCode URL if slicing is complete
+  isGenerating?: boolean;  // 생성 중인지 여부
 }
 
 export interface ModelArchiveProps {
@@ -50,60 +52,66 @@ export default function ModelArchive({ items, onSelect, onDelete }: ModelArchive
             <p className="text-sm">생성된 3D 모델이 없습니다</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
             {items.map((model) => (
               <Card
                 key={model.id}
-                className="p-3 hover:bg-accent/50 transition-colors group"
+                className={`p-2 hover:bg-accent/50 transition-colors group relative ${
+                  model.gcode_url ? 'border-2 border-green-400/30' : ''
+                } ${model.isGenerating ? 'opacity-60' : ''}`}
               >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
-                    onClick={() => onSelect?.(model)}
-                  >
-                    {model.thumbnail_url ? (
-                      <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                        <img
-                          src={model.thumbnail_url}
-                          alt={model.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <Box className="w-6 h-6 text-primary" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium" title={model.name}>
-                        {shortenFileName(model.name)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(model.createdAt).toLocaleString('ko-KR', {
-                          year: 'numeric',
-                          month: '2-digit',
-                          day: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
+                <div
+                  className={model.isGenerating ? 'pointer-events-none' : 'cursor-pointer'}
+                  onClick={() => !model.isGenerating && onSelect?.(model)}
+                >
+                  {model.thumbnail_url ? (
+                    <div className="w-full aspect-square rounded-lg overflow-hidden bg-muted mb-2 relative">
+                      <img
+                        src={model.thumbnail_url}
+                        alt={model.name}
+                        className="w-full h-full object-cover"
+                      />
+                      {model.isGenerating && (
+                        <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
+                          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  {onDelete && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete(model);
-                      }}
-                      title="모델 삭제"
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                  ) : (
+                    <div className="w-full aspect-square bg-primary/10 rounded-lg flex items-center justify-center mb-2 relative">
+                      {model.isGenerating ? (
+                        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                      ) : (
+                        <Box className="w-8 h-8 text-primary" />
+                      )}
+                    </div>
                   )}
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium truncate" title={model.name}>
+                      {shortenFileName(model.name, 15)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {new Date(model.createdAt).toLocaleDateString('ko-KR', {
+                        month: '2-digit',
+                        day: '2-digit'
+                      })}
+                    </p>
+                  </div>
                 </div>
+                {onDelete && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(model);
+                    }}
+                    title="모델 삭제"
+                  >
+                    <Trash2 className="w-3 h-3 text-destructive" />
+                  </Button>
+                )}
               </Card>
             ))}
           </div>

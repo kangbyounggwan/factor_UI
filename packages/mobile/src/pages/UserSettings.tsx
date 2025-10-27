@@ -106,20 +106,11 @@ const UserSettings = () => {
         // user_subscriptions 테이블에서 현재 활성 구독 가져오기
         const { data: subscription, error } = await supabase
           .from('user_subscriptions')
-          .select(`
-            *,
-            subscription_plans (
-              name,
-              price_monthly,
-              price_yearly,
-              max_printers
-            )
-          `)
+          .select('*')
           .eq('user_id', user.id)
-          .eq('status', 'active')
           .single();
 
-        if (error) {
+        if (error || !subscription) {
           console.error('Error loading subscription:', error);
           // 구독이 없는 경우 기본 플랜 표시
           setCurrentPlan({
@@ -132,18 +123,23 @@ const UserSettings = () => {
           return;
         }
 
-        if (subscription) {
-          const planData = subscription.subscription_plans as any;
-          setCurrentPlan({
-            name: planData?.name || 'Unknown',
-            price: subscription.billing_cycle === 'yearly'
-              ? planData?.price_yearly || 0
-              : planData?.price_monthly || 0,
-            billingCycle: subscription.billing_cycle || 'monthly',
-            nextBillingDate: subscription.current_period_end || null,
-            maxPrinters: planData?.max_printers || 2
-          });
-        }
+        // Plan 정보 매핑
+        const planName = subscription.plan_name?.toLowerCase() || 'basic';
+        const planInfo = {
+          basic: { name: "Basic", price: 0, maxPrinters: 2 },
+          pro: { name: "Pro", price: 19900, maxPrinters: 10 },
+          enterprise: { name: "Enterprise", price: 99000, maxPrinters: 100 }
+        };
+
+        const plan = planInfo[planName as keyof typeof planInfo] || planInfo.basic;
+
+        setCurrentPlan({
+          name: plan.name,
+          price: plan.price,
+          billingCycle: subscription.current_period_end ? 'monthly' : 'free',
+          nextBillingDate: subscription.current_period_end || null,
+          maxPrinters: plan.maxPrinters
+        });
       } catch (error) {
         console.error('Failed to load subscription:', error);
       } finally {

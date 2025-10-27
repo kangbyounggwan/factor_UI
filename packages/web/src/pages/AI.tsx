@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -133,6 +134,7 @@ import { supabase } from "@shared/integrations/supabase/client";
 import { useAIImageUpload } from "@shared/hooks/useAIImageUpload";
 import { downloadAndUploadModel, downloadAndUploadSTL, downloadAndUploadThumbnail, downloadAndUploadGCode, deleteModelFiles } from "@shared/services/supabaseService/aiStorage";
 import { getManufacturers, getSeriesByManufacturer, getModelsByManufacturerAndSeries, getManufacturingPrinterById } from "@shared/api/manufacturingPrinter";
+import { createSlicingTask, subscribeToTaskUpdates, processSlicingTask, BackgroundTask } from "@shared/services/backgroundSlicing";
 
 const AI = () => {
   const { t } = useTranslation();
@@ -162,6 +164,7 @@ const AI = () => {
   } | null>(null); // GCode 메타데이터
   const [isSlicing, setIsSlicing] = useState<boolean>(false); // 슬라이싱 진행 중
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null); // Text-to-Image 생성 이미지 URL
+  const [targetPrinterModelId, setTargetPrinterModelId] = useState<string | null>(null); // 슬라이싱된 프린터 모델 ID (알림용)
 
   // 재슬라이스용 프린터 선택 state
   const [resliceManufacturer, setResliceManufacturer] = useState<string>('');
@@ -191,6 +194,45 @@ const AI = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const location = useLocation();
+
+  // 프린터 영역 높이 조절
+  const [printerAreaHeight, setPrinterAreaHeight] = useState<number>(25); // 기본값 25% (flex-[1] 대신 사용)
+  const [isResizing, setIsResizing] = useState<boolean>(false);
+  const resizeStartY = useRef<number>(0);
+  const resizeStartHeight = useRef<number>(0);
+
+  // 리사이즈 핸들러
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    resizeStartY.current = e.clientY;
+    resizeStartHeight.current = printerAreaHeight;
+  }, [printerAreaHeight]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const containerHeight = window.innerHeight - 64; // 헤더 높이 제외
+      const deltaY = e.clientY - resizeStartY.current;
+      const deltaPercent = (deltaY / containerHeight) * 100;
+      const newHeight = Math.max(10, Math.min(70, resizeStartHeight.current - deltaPercent)); // 10% ~ 70% 제한
+      setPrinterAreaHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
 
   // Shared 훅 사용 - 이미지 업로드 관리
   const {
@@ -261,6 +303,63 @@ const AI = () => {
       }
     })();
     return () => { active = false; };
+  }, [user?.id]);
+
+  // Subscribe to background task updates
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const subscription = subscribeToTaskUpdates(supabase, user.id, (task: BackgroundTask) => {
+      console.log('[AI] Background task updated:', task);
+
+      if (task.status === 'completed' && task.output_url) {
+        // Update UI with completed task
+        setCurrentGCodeUrl(task.output_url);
+        setIsSlicing(false);
+
+        // Update gcode info if metadata available
+        if (task.output_metadata) {
+          const metadata = task.output_metadata;
+          setGcodeInfo({
+            printTime: metadata.print_time_formatted,
+            filamentLength: metadata.filament_used_m ? `${metadata.filament_used_m.toFixed(2)}m` : undefined,
+            filamentWeight: metadata.filament_weight_g ? `${metadata.filament_weight_g.toFixed(1)}g` : undefined,
+            filamentCost: metadata.filament_cost ? `$${metadata.filament_cost.toFixed(2)}` : undefined,
+            layerCount: metadata.layer_count,
+            layerHeight: metadata.layer_height,
+            modelSize: metadata.bounding_box ? {
+              minX: metadata.bounding_box.min_x,
+              maxX: metadata.bounding_box.max_x,
+              minY: metadata.bounding_box.min_y,
+              maxY: metadata.bounding_box.max_y,
+              minZ: metadata.bounding_box.min_z,
+              maxZ: metadata.bounding_box.max_z,
+            } : undefined,
+            nozzleTemp: metadata.nozzle_temp,
+            bedTemp: metadata.bed_temp,
+            printerName: metadata.printer_name,
+          });
+        }
+
+        toast({
+          title: t('ai.slicingComplete'),
+          description: t('ai.slicingCompleteNotification'),
+          duration: 7000,
+        });
+      } else if (task.status === 'failed') {
+        setIsSlicing(false);
+        toast({
+          title: t('ai.slicingFailed'),
+          description: task.error_message || t('common.error'),
+          variant: 'destructive',
+          duration: 7000,
+        });
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [user?.id]);
 
   // MQTT 실시간 상태 업데이트 (Dashboard와 동일)
@@ -393,6 +492,71 @@ const AI = () => {
       setArchiveFilter(activeTab as ArchiveFilter);
     }
   }, [activeTab]);
+
+  // 알림으로부터 GCode 자동 로드
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.autoLoadGCode && user) {
+      const { modelId, gcodeUrl, printerModelId } = state.autoLoadGCode;
+      console.log('[AI] Auto-loading GCode from notification:', { modelId, gcodeUrl, printerModelId });
+
+      // GCode 정보 로드
+      const loadGCodeFromNotification = async () => {
+        try {
+          // model_id로 모델 정보 가져오기
+          const { data: model, error: modelError } = await supabase
+            .from('ai_generated_models')
+            .select('*')
+            .eq('id', modelId)
+            .single();
+
+          if (modelError || !model) {
+            console.error('[AI] Failed to load model:', modelError);
+            return;
+          }
+
+          // GCode 메타데이터 가져오기
+          const { data: gcodeData, error: gcodeError } = await supabase
+            .from('gcode_files')
+            .select('*')
+            .eq('model_id', modelId)
+            .single();
+
+          // 모델 뷰어 및 GCode 정보 설정
+          setCurrentModelId(modelId);
+          setCurrentGlbUrl(model.download_url);
+          setCurrentStlUrl(model.stl_download_url);
+          setCurrentGCodeUrl(gcodeUrl);
+          setModelViewerUrl(model.download_url);
+          setTargetPrinterModelId(printerModelId); // 프린터 모델 ID 저장
+
+          if (gcodeData && !gcodeError) {
+            setGcodeInfo({
+              printTime: gcodeData.print_time_formatted,
+              filamentLength: gcodeData.filament_used_m ? `${gcodeData.filament_used_m.toFixed(2)}m` : undefined,
+              filamentWeight: gcodeData.filament_weight_g ? `${gcodeData.filament_weight_g.toFixed(1)}g` : undefined,
+              layerCount: gcodeData.layer_count,
+              nozzleTemp: gcodeData.nozzle_temp,
+              bedTemp: gcodeData.bed_temp,
+            });
+          }
+
+          toast({
+            title: t('ai.slicingComplete'),
+            description: t('ai.readyToPrint'),
+            duration: 5000,
+          });
+        } catch (error) {
+          console.error('[AI] Error loading GCode from notification:', error);
+        }
+      };
+
+      loadGCodeFromNotification();
+
+      // state 초기화 (뒤로가기 시 재로드 방지)
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, user]);
 
   // 출력 설정 다이얼로그 상태
   const [printDialogOpen, setPrintDialogOpen] = useState<boolean>(false);
@@ -672,11 +836,17 @@ const AI = () => {
         console.log('[AI] - printerId:', printerToConfirm.manufacture_id);
         console.log('[AI] ========================================');
 
+        // 캐시 확인 중 토스트 표시
+        toast({
+          title: t('ai.loadingCachedGcode'),
+          description: t('ai.loadingCachedGcodeDescription'),
+          duration: 2000,
+        });
+
         const { data: existingGcode, error: gcodeError } = await supabase
           .from('gcode_files')
           .select('*')
           .eq('model_id', currentModelId)
-          .eq('printer_id', printerToConfirm.manufacture_id)
           .single();
 
         if (existingGcode && !gcodeError) {
@@ -725,184 +895,72 @@ const AI = () => {
         }
       }
 
-      // 5. 슬라이싱 API 호출
-      const fileName = `model_${Date.now()}.${fileExtension}`;
-      console.log('[AI] Uploading model and slicing...');
-      console.log('[AI] - File name:', fileName);
-      console.log('[AI] - File size:', modelBlob.size, 'bytes');
-      console.log('[AI] - File type:', modelBlob.type);
+      // 5. Create background slicing task
+      console.log('[AI] Creating background slicing task...');
+      console.log('[AI] - Model URL:', modelUrl);
+      console.log('[AI] - Model ID:', currentModelId);
+      console.log('[AI] - Printer ID:', printerToConfirm.id);
+      console.log('[AI] - Printer Model ID:', printerToConfirm.manufacture_id);
 
-      const slicingResult = await uploadSTLAndSlice(
-        modelBlob,
-        fileName,
-        curaSettings,
-        printerDefinition,
-        printerFilename
+      const currentModel = generatedModels.find(m => m.id === currentModelId);
+      const modelName = currentModel?.model_name || currentModel?.prompt || currentModelId;
+
+      const taskId = await createSlicingTask(
+        supabase,
+        currentModelId,
+        printerToConfirm.id,
+        printerToConfirm.manufacture_id,
+        modelUrl,
+        {
+          curaSettings,
+          printerDefinition,
+          printerName: printerFilename,
+          modelName,
+          printerInfo: printerInfoForGCode,
+        }
       );
 
-      console.log('[AI] ========================================');
-      console.log('[AI] 📦 SLICING RESPONSE FROM SERVER:');
-      console.log(JSON.stringify(slicingResult, null, 2));
-      console.log('[AI] ========================================');
-
-      if (slicingResult.status === 'error' || !slicingResult.data) {
-        throw new Error(slicingResult.error || '슬라이싱 실패');
-      }
-
-      console.log('[AI] Slicing completed successfully');
-      console.log('[AI] - GCode URL:', slicingResult.data.gcode_url);
-      console.log('[AI] - Task ID:', slicingResult.data.task_id);
-      if (slicingResult.data.gcode_metadata) {
-        console.log('[AI] - Metadata available:', Object.keys(slicingResult.data.gcode_metadata));
-      }
-
-      // 5. GCode URL 저장 (캐시 방지를 위한 타임스탬프 추가)
-      const gcodeUrl = slicingResult.data.gcode_url;
-      console.log('[AI] GCode URL from slicing result:', gcodeUrl);
-
-      // 캐시 방지를 위해 타임스탬프를 URL에 추가
-      const gcodeUrlWithTimestamp = `${gcodeUrl}?t=${Date.now()}`;
-      console.log('[AI] GCode URL with cache-busting:', gcodeUrlWithTimestamp);
-
-      // GCode 파일 크기 확인
-      try {
-        const gcodeResponse = await fetch(gcodeUrl, {
-          method: 'HEAD',
-          cache: 'no-store'
-        });
-        const gcodeSize = gcodeResponse.headers.get('content-length');
-        console.log('[AI] Generated GCode file size:', gcodeSize ? `${gcodeSize} bytes` : 'unknown');
-      } catch (error) {
-        console.warn('[AI] Could not get GCode file size:', error);
-      }
-
-      setCurrentGCodeUrl(gcodeUrlWithTimestamp);
-
-      // 5.5. GCode 메타데이터 처리 (서버 응답에서 받은 메타데이터 사용)
-      if (slicingResult.data.gcode_metadata) {
-        const metadata = slicingResult.data.gcode_metadata;
-        console.log('[AI] ========================================');
-        console.log('[AI] 📊 GCODE METADATA FROM SERVER:');
-        console.log(JSON.stringify(metadata, null, 2));
-        console.log('[AI] ========================================');
-
-        // 모델 사이즈 비교 (원본 파일 vs 슬라이싱 결과)
-        if (metadata.bounding_box) {
-          console.log('[AI] ========================================');
-          console.log('[AI] 🔍 MODEL SIZE COMPARISON:');
-          console.log('[AI] Sliced model bounding box:');
-          console.log('[AI] - X:', metadata.bounding_box.min_x.toFixed(2), 'to', metadata.bounding_box.max_x.toFixed(2), '= size:', metadata.bounding_box.size_x.toFixed(2), 'mm');
-          console.log('[AI] - Y:', metadata.bounding_box.min_y.toFixed(2), 'to', metadata.bounding_box.max_y.toFixed(2), '= size:', metadata.bounding_box.size_y.toFixed(2), 'mm');
-          console.log('[AI] - Z:', metadata.bounding_box.min_z.toFixed(2), 'to', metadata.bounding_box.max_z.toFixed(2), '= size:', metadata.bounding_box.size_z.toFixed(2), 'mm');
-          console.log('[AI] ========================================');
-        }
-
-        // 서버 메타데이터를 UI 형식으로 변환
-        setGcodeInfo({
-          printTime: metadata.print_time_formatted,
-          filamentLength: metadata.filament_used_m ? `${metadata.filament_used_m.toFixed(2)}m` : undefined,
-          filamentWeight: metadata.filament_weight_g ? `${metadata.filament_weight_g.toFixed(1)}g` : undefined,
-          filamentCost: metadata.filament_cost ? `$${metadata.filament_cost.toFixed(2)}` : undefined,
-          layerCount: metadata.layer_count,
-          layerHeight: metadata.layer_height,
-          modelSize: metadata.bounding_box ? {
-            minX: metadata.bounding_box.min_x,
-            maxX: metadata.bounding_box.max_x,
-            minY: metadata.bounding_box.min_y,
-            maxY: metadata.bounding_box.max_y,
-            minZ: metadata.bounding_box.min_z,
-            maxZ: metadata.bounding_box.max_z,
-          } : undefined,
-          nozzleTemp: metadata.nozzle_temp,
-          bedTemp: metadata.bed_temp,
-          printerName: metadata.printer_name,
-        });
-      } else {
-        console.warn('[AI] ⚠️ No gcode_metadata in server response');
-      }
-
-      // 6. GCode를 Supabase Storage에 업로드 및 DB 업데이트
-      if (currentModelId) {
-        try {
-          console.log('[AI] Uploading GCode to Supabase Storage...');
-
-          // 현재 모델 정보 가져오기
-          const currentModel = generatedModels.find(m => m.id === currentModelId);
-          const modelName = currentModel?.model_name || currentModel?.prompt || currentModelId;
-
-          console.log('[AI] ========================================');
-          console.log('[AI] Uploading GCode with params:');
-          console.log('[AI] - modelId:', currentModelId);
-          console.log('[AI] - printerModelId:', printerToConfirm.manufacture_id);
-          console.log('[AI] - modelName:', modelName);
-          console.log('[AI] - printerInfo:', printerInfoForGCode);
-          console.log('[AI] - metadata:', slicingResult.data.gcode_metadata);
-          console.log('[AI] ========================================');
-
-          const gcodeUploadResult = await downloadAndUploadGCode(
-            supabase,
-            user.id,
-            currentModelId,
-            gcodeUrl,
-            printerToConfirm.manufacture_id,
-            modelName,
-            printerInfoForGCode,
-            slicingResult.data.gcode_metadata
-          );
-
-          if (gcodeUploadResult) {
-            // 캐시된 메타데이터가 있으면 사용
-            if (gcodeUploadResult.metadata) {
-              console.log('[AI] Using cached metadata from DB');
-              setGcodeInfo({
-                printTime: gcodeUploadResult.metadata.print_time_formatted,
-                filamentLength: gcodeUploadResult.metadata.filament_used_m ? `${gcodeUploadResult.metadata.filament_used_m.toFixed(2)}m` : undefined,
-                filamentWeight: gcodeUploadResult.metadata.filament_weight_g ? `${gcodeUploadResult.metadata.filament_weight_g.toFixed(1)}g` : undefined,
-                filamentCost: gcodeUploadResult.metadata.filament_cost ? `$${gcodeUploadResult.metadata.filament_cost.toFixed(2)}` : undefined,
-                layerCount: gcodeUploadResult.metadata.layer_count,
-                layerHeight: gcodeUploadResult.metadata.layer_height,
-                modelSize: gcodeUploadResult.metadata.bounding_box ? {
-                  minX: gcodeUploadResult.metadata.bounding_box.min_x,
-                  maxX: gcodeUploadResult.metadata.bounding_box.max_x,
-                  minY: gcodeUploadResult.metadata.bounding_box.min_y,
-                  maxY: gcodeUploadResult.metadata.bounding_box.max_y,
-                  minZ: gcodeUploadResult.metadata.bounding_box.min_z,
-                  maxZ: gcodeUploadResult.metadata.bounding_box.max_z,
-                } : undefined,
-                nozzleTemp: gcodeUploadResult.metadata.nozzle_temp,
-                bedTemp: gcodeUploadResult.metadata.bed_temp,
-                printerName: gcodeUploadResult.metadata.printer_name,
-              });
-            }
-
-            // DB에 GCode URL 저장
-            await updateAIModel(supabase, currentModelId, {
-              gcode_url: gcodeUploadResult.publicUrl,
-            });
-            console.log('[AI] GCode saved to DB:', gcodeUploadResult.publicUrl);
-
-            // Supabase URL로 업데이트
-            console.log('[AI] Updating currentGCodeUrl to:', gcodeUploadResult.publicUrl);
-            setCurrentGCodeUrl(gcodeUploadResult.publicUrl);
-          } else {
-            console.warn('[AI] GCode upload result is null, keeping original URL:', gcodeUrl);
-          }
-        } catch (gcodeError) {
-          console.error('[AI] Failed to upload GCode:', gcodeError);
-          // GCode 업로드 실패해도 계속 진행
-        }
-      }
-
-      console.log('[AI] ========================================');
-      console.log('[AI] Slicing workflow completed successfully');
-      console.log('[AI] ========================================');
+      console.log('[AI] Background task created:', taskId);
+      console.log('[AI] Task will continue in background even if tab is closed');
 
       toast({
-        title: '슬라이싱 완료',
-        description: 'GCode 생성이 완료되었습니다.',
+        title: t('ai.slicingBackgroundStart'),
+        description: t('ai.slicingBackgroundDescription'),
+        duration: 5000,
       });
 
-      setIsSlicing(false);
+      // Immediately process the task in background
+      processSlicingTask(supabase, {
+        id: taskId,
+        user_id: user.id,
+        task_type: 'slicing',
+        status: 'pending',
+        model_id: currentModelId,
+        printer_id: printerToConfirm.id,
+        printer_model_id: printerToConfirm.manufacture_id,
+        input_url: modelUrl,
+        input_params: {
+          curaSettings,
+          printerDefinition,
+          printerName: printerFilename,
+          modelName,
+          printerInfo: printerInfoForGCode,
+        },
+        output_url: null,
+        output_metadata: null,
+        error_message: null,
+        retry_count: 0,
+        max_retries: 3,
+        created_at: new Date().toISOString(),
+        started_at: null,
+        completed_at: null,
+        updated_at: new Date().toISOString(),
+      }).catch(error => {
+        console.error('[AI] Background task failed to start:', error);
+      });
+
+      // Don't wait for slicing to complete - it runs in background
+      // The useEffect subscription will update the UI when complete
 
     } catch (error) {
       console.error('[AI] Slicing failed:', error);
@@ -2137,8 +2195,11 @@ const AI = () => {
 
         {/* 사이드바 - 모든 탭에서 모델 아카이브 통일 */}
         <div className="w-[340px] border-l bg-muted/5 flex flex-col overflow-hidden">
-          {/* 모델 아카이브 영역 (75%) */}
-          <div className="flex-[3] flex flex-col p-6 overflow-hidden">
+          {/* 모델 아카이브 영역 (동적 높이) */}
+          <div
+            className="flex flex-col p-6 overflow-hidden"
+            style={{ height: (activeTab === 'text-to-3d' || activeTab === 'image-to-3d') ? `${100 - printerAreaHeight}%` : '100%' }}
+          >
             <div className="flex items-center justify-between mb-4">
               {/* 제목 - 왼쪽 */}
               <h2 className="text-lg font-semibold">{t('ai.modelArchive').toUpperCase()}</h2>
@@ -2215,6 +2276,8 @@ const AI = () => {
                         createdAt: model.created_at,
                         download_url: undefined, // RAW 모드에서는 다운로드 URL 숨김
                         thumbnail_url: undefined,
+                        gcode_url: model.gcode_url, // GCode URL 추가
+                        isGenerating: model.status === 'processing', // 생성 중인지 확인
                       }))}
                     onSelect={(model) => {
                       toast({
@@ -2275,6 +2338,8 @@ const AI = () => {
                         createdAt: model.created_at,
                         download_url: isSupabaseUrl ? model.download_url : undefined,
                         thumbnail_url: isThumbnailSupabaseUrl ? model.thumbnail_url : undefined,
+                        gcode_url: model.gcode_url, // GCode URL 추가
+                        isGenerating: model.status === 'processing', // 생성 중인지 확인
                         _originalModel: model, // 원본 모델 정보 저장
                       };
                     })
@@ -2420,35 +2485,53 @@ const AI = () => {
             </div>
           </div>
 
-          {/* 연결된 프린터 영역 (25%) - 3D 관련 탭에서만 표시 */}
+          {/* 연결된 프린터 영역 (높이 조절 가능) - 3D 관련 탭에서만 표시 */}
           {(activeTab === 'text-to-3d' || activeTab === 'image-to-3d') && (
-            <div className="flex-[1] flex flex-col border-t p-6 overflow-hidden">
-              <div className="flex items-center justify-between mb-3 shrink-0">
-                <h3 className="font-medium">{t('ai.connectedPrinters')}</h3>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
-                    {t('ai.connection')}: {connectedCount}/{totalPrinters}
-                  </Badge>
-                  <Badge className="rounded-full px-3 py-1 text-xs">
-                    {t('ai.printing')}: {printingCount}
-                  </Badge>
-                </div>
+            <div
+              className="flex flex-col border-t overflow-hidden relative"
+              style={{ height: `${printerAreaHeight}%` }}
+            >
+              {/* 리사이저 핸들 */}
+              <div
+                className="absolute top-0 left-0 right-0 h-1 cursor-ns-resize hover:bg-primary/50 transition-colors z-10 group"
+                onMouseDown={handleResizeStart}
+              >
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-1 bg-border group-hover:bg-primary rounded-full transition-colors" />
               </div>
-              <ScrollArea className="flex-1">
-                <div className="space-y-3 pr-4">
-                  {printers.map((printer) => (
-                    <PrinterCard
-                      key={printer.id}
-                      id={printer.id}
-                      name={printer.name}
-                      status={printer.state}
-                      temperature={printer.temperature}
-                      progress={printer.completion}
-                      onClick={() => openPrinterSettings(printer)}
-                    />
-                  ))}
+
+              <div className="flex flex-col p-6 pt-8 h-full overflow-hidden">
+                <div className="flex items-center justify-between mb-3 shrink-0">
+                  <h3 className="font-medium">{t('ai.connectedPrinters')}</h3>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
+                      {t('ai.connection')}: {connectedCount}/{totalPrinters}
+                    </Badge>
+                    <Badge className="rounded-full px-3 py-1 text-xs">
+                      {t('ai.printing')}: {printingCount}
+                    </Badge>
+                  </div>
                 </div>
-              </ScrollArea>
+                <ScrollArea className="flex-1">
+                  <div className="space-y-3 pr-4">
+                    {printers.map((printer) => (
+                      <PrinterCard
+                        key={printer.id}
+                        id={printer.id}
+                        name={printer.name}
+                        status={printer.state}
+                        temperature={printer.temperature}
+                        progress={printer.completion}
+                        onClick={() => openPrinterSettings(printer)}
+                        isAvailable={
+                          !!currentGCodeUrl &&
+                          (printer.state === 'idle' || printer.state === 'disconnected') &&
+                          (!targetPrinterModelId || printer.manufacture_id === targetPrinterModelId)
+                        }
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
             </div>
           )}
         </div>
@@ -2549,10 +2632,10 @@ const AI = () => {
               {/* 슬라이싱 중 오버레이 */}
               {isSlicing && (
                 <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center">
-                  <div className="flex flex-col items-center gap-4">
+                  <div className="flex flex-col items-center gap-4 max-w-md text-center px-6">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-                    <p className="text-lg font-medium">슬라이싱 진행 중...</p>
-                    <p className="text-sm text-muted-foreground">잠시만 기다려주세요</p>
+                    <p className="text-lg font-medium">{t('ai.slicingInProgress')}</p>
+                    <p className="text-sm text-muted-foreground">{t('ai.slicingInProgressDescription')}</p>
                   </div>
                 </div>
               )}

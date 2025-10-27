@@ -480,9 +480,9 @@ export const Header = ({ onBack }: { onBack?: () => void }) => {
               </div>
             </div>
 
-            {/* 로그아웃 버튼 - 바닥에 고정 */}
+            {/* 로그아웃 버튼 - 바닥에 고정 + Safe Area 패딩 */}
             {user && (
-              <div className="pt-4 border-t mt-auto flex-shrink-0">
+              <div className="pt-4 border-t mt-auto flex-shrink-0 pb-[env(safe-area-inset-bottom,1rem)]">
                 <Button
                   variant="outline"
                   size="sm"

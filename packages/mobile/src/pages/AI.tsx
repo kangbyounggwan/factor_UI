@@ -55,6 +55,7 @@ import { createAIModel, updateAIModel, listAIModels, deleteAIModel } from "@shar
 import { downloadAndUploadModel, downloadAndUploadSTL, downloadAndUploadThumbnail, downloadAndUploadGCode, deleteModelFiles } from "@shared/services/supabaseService/aiStorage";
 import { getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { uploadSTLAndSlice, type SlicingSettings, type PrinterDefinition } from "@shared/services/aiService";
+import { createSlicingTask, subscribeToTaskUpdates, processSlicingTask, BackgroundTask } from "@shared/services/backgroundSlicing";
 import type { AIGeneratedModel } from "@shared/types/aiModelType";
 
 // 단계 정의
@@ -202,6 +203,51 @@ const AI = () => {
     document.title = t('ai.title') || "AI 3D 모델링 스튜디오";
   }, [t]);
 
+  // Subscribe to background task updates
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const subscription = subscribeToTaskUpdates(supabase, user.id, (task: BackgroundTask) => {
+      console.log('[Mobile AI] Background task updated:', task);
+
+      if (task.status === 'completed' && task.output_url) {
+        // Update UI with completed task
+        setCurrentGCodeUrl(task.output_url);
+        setIsSlicing(false);
+
+        // Update gcode info if metadata available
+        if (task.output_metadata) {
+          const metadata = task.output_metadata;
+          setGcodeInfo({
+            printTime: metadata.print_time_formatted,
+            filamentLength: metadata.filament_used_m ? `${metadata.filament_used_m.toFixed(2)}m` : undefined,
+            filamentWeight: metadata.filament_weight_g ? `${metadata.filament_weight_g.toFixed(1)}g` : undefined,
+            layerCount: metadata.layer_count,
+            layerHeight: metadata.layer_height,
+          });
+        }
+
+        toast({
+          title: t('ai.slicingComplete'),
+          description: t('ai.slicingCompleteNotification'),
+          duration: 7000,
+        });
+      } else if (task.status === 'failed') {
+        setIsSlicing(false);
+        toast({
+          title: t('ai.slicingFailed'),
+          description: task.error_message || t('common.error'),
+          variant: 'destructive',
+          duration: 7000,
+        });
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [user?.id]);
+
   // 프린터 목록 로드
   useEffect(() => {
     const loadPrinters = async () => {
@@ -317,11 +363,17 @@ const AI = () => {
 
       // 5. DB에서 캐시된 GCode 확인
       if (generatedModel.id && printer.manufacture_id) {
+        // Show loading toast
+        toast({
+          title: t('ai.loadingCachedGcode'),
+          description: t('ai.loadingCachedGcodeDescription'),
+          duration: 2000,
+        });
+
         const { data: existingGcode, error: gcodeError } = await supabase
           .from('gcode_files')
           .select('*')
           .eq('model_id', generatedModel.id)
-          .eq('printer_id', printer.manufacture_id)
           .single();
 
         if (existingGcode && !gcodeError) {
@@ -350,130 +402,91 @@ const AI = () => {
         }
       }
 
-      // 6. 슬라이싱 API 호출
-      const fileName = `model_${Date.now()}.${fileExtension}`;
-      const slicingResult = await uploadSTLAndSlice(
-        modelBlob,
-        fileName,
-        curaSettings,
-        printerDefinition,
-        printerFilename
-      );
+      // 6. Create background slicing task
+      console.log('[AI Mobile] Creating background slicing task...');
+      console.log('[AI Mobile] - Model URL:', modelUrl);
+      console.log('[AI Mobile] - Model ID:', generatedModel.id);
+      console.log('[AI Mobile] - Printer ID:', printer.id);
+      console.log('[AI Mobile] - Printer Model ID:', printer.manufacture_id);
 
-      console.log('[AI Mobile] ========================================');
-      console.log('[AI Mobile] 📦 SLICING RESPONSE FROM SERVER:');
-      console.log(JSON.stringify(slicingResult, null, 2));
-      console.log('[AI Mobile] ========================================');
+      const modelName = generatedModel.model_name || generatedModel.prompt || generatedModel.id;
 
-      if (slicingResult.status === 'error' || !slicingResult.data) {
-        throw new Error(slicingResult.error || '슬라이싱 실패');
-      }
+      // Get printer info for GCode
+      let printerInfoForGCode: { manufacturer?: string; series?: string; model?: string; printer_name?: string } = {};
+      if (printer.manufacture_id) {
+        const { data: manufacturingPrinter } = await supabase
+          .from('manufacturing_printers')
+          .select('manufacturer, series, display_name')
+          .eq('id', printer.manufacture_id)
+          .single();
 
-      // 7. GCode 저장 및 정보 설정
-      clearTimeout(timeoutId); // 타이머 클리어
-
-      const gcodeUrl = slicingResult.data.gcode_url;
-      console.log('[AI Mobile] GCode URL from slicing result:', gcodeUrl);
-
-      // 캐시 방지를 위해 타임스탬프를 URL에 추가
-      const gcodeUrlWithTimestamp = `${gcodeUrl}?t=${Date.now()}`;
-      setGcodeUrl(gcodeUrlWithTimestamp);
-
-      // 서버 메타데이터를 UI 형식으로 변환
-      if (slicingResult.data.gcode_metadata) {
-        const metadata = slicingResult.data.gcode_metadata;
-        console.log('[AI Mobile] 📊 GCODE METADATA FROM SERVER:', metadata);
-
-        setGcodeInfo({
-          printTime: metadata.print_time_formatted,
-          filamentLength: metadata.filament_used_m ? `${metadata.filament_used_m.toFixed(2)}m` : undefined,
-          filamentWeight: metadata.filament_weight_g ? `${metadata.filament_weight_g.toFixed(1)}g` : undefined,
-          layerCount: metadata.layer_count,
-          nozzleTemp: metadata.nozzle_temp,
-          bedTemp: metadata.bed_temp,
-        });
-      }
-
-      // 8. GCode를 Supabase Storage에 업로드 및 DB 업데이트
-      if (generatedModel.id && typeof generatedModel.id === 'string') {
-        try {
-          console.log('[AI Mobile] Uploading GCode to Supabase Storage...');
-
-          // 프린터 정보 구성
-          let printerInfoForGCode: { manufacturer?: string; series?: string; model?: string; printer_name?: string } = {};
-          if (printer.manufacture_id) {
-            const { data: manufacturingPrinter } = await supabase
-              .from('manufacturing_printers')
-              .select('manufacturer, series, display_name')
-              .eq('id', printer.manufacture_id)
-              .single();
-
-            if (manufacturingPrinter) {
-              printerInfoForGCode = {
-                manufacturer: manufacturingPrinter.manufacturer,
-                series: manufacturingPrinter.series,
-                model: manufacturingPrinter.display_name,
-                printer_name: printer.name,
-              };
-            }
-          }
-
-          const gcodeUploadResult = await downloadAndUploadGCode(
-            supabase,
-            user.id,
-            generatedModel.id,
-            gcodeUrl,
-            printer.manufacture_id,
-            generatedModel.name || 'Untitled Model',
-            printerInfoForGCode,
-            slicingResult.data.gcode_metadata
-          );
-
-          if (gcodeUploadResult) {
-            console.log('[AI Mobile] GCode uploaded successfully');
-
-            // 캐시된 메타데이터가 있으면 사용
-            if (gcodeUploadResult.metadata) {
-              console.log('[AI Mobile] Using cached metadata from DB');
-              setGcodeInfo({
-                printTime: gcodeUploadResult.metadata.print_time_formatted,
-                filamentLength: gcodeUploadResult.metadata.filament_used_m ? `${gcodeUploadResult.metadata.filament_used_m.toFixed(2)}m` : undefined,
-                filamentWeight: gcodeUploadResult.metadata.filament_weight_g ? `${gcodeUploadResult.metadata.filament_weight_g.toFixed(1)}g` : undefined,
-                layerCount: gcodeUploadResult.metadata.layer_count,
-                nozzleTemp: gcodeUploadResult.metadata.nozzle_temp,
-                bedTemp: gcodeUploadResult.metadata.bed_temp,
-              });
-            }
-
-            // DB에 GCode URL 저장
-            await updateAIModel(supabase, generatedModel.id, {
-              gcode_url: gcodeUploadResult.publicUrl,
-            });
-            console.log('[AI Mobile] GCode saved to DB:', gcodeUploadResult.publicUrl);
-
-            // Supabase URL로 업데이트
-            setGcodeUrl(gcodeUploadResult.publicUrl);
-          }
-        } catch (gcodeError) {
-          console.error('[AI Mobile] Failed to upload GCode:', gcodeError);
-          // GCode 업로드 실패해도 슬라이싱은 성공이므로 계속 진행
+        if (manufacturingPrinter) {
+          printerInfoForGCode = {
+            manufacturer: manufacturingPrinter.manufacturer,
+            series: manufacturingPrinter.series,
+            model: manufacturingPrinter.display_name,
+            printer_name: printer.name
+          };
         }
       }
 
-      // 백그라운드 모드였다면 푸시 알림
-      if (slicingInBackground) {
-        toast({
-          title: t('ai.slicingComplete') || '슬라이싱 완료',
-          description: t('ai.slicingCompletedInBackground') || '백그라운드에서 슬라이싱이 완료되었습니다. 출력 정보를 확인하세요.',
-          duration: 10000,
-        });
-        // TODO: 실제 푸시 알림 구현
-      } else {
-        toast({
-          title: t('ai.slicingComplete') || '슬라이싱 완료',
-          description: t('ai.readyToPrint') || '출력 준비가 완료되었습니다',
-        });
-      }
+      const taskId = await createSlicingTask(
+        supabase,
+        generatedModel.id as string,
+        printer.id,
+        printer.manufacture_id!,
+        modelUrl,
+        {
+          curaSettings,
+          printerDefinition,
+          printerName: printerFilename,
+          modelName,
+          printerInfo: printerInfoForGCode,
+        }
+      );
+
+      console.log('[AI Mobile] Background task created:', taskId);
+      console.log('[AI Mobile] Task will continue in background even if app is closed');
+
+      toast({
+        title: t('ai.slicingBackgroundStart'),
+        description: t('ai.slicingBackgroundDescription'),
+        duration: 5000,
+      });
+
+      // Immediately process the task in background
+      processSlicingTask(supabase, {
+        id: taskId,
+        user_id: user!.id,
+        task_type: 'slicing',
+        status: 'pending',
+        model_id: generatedModel.id as string,
+        printer_id: printer.id,
+        printer_model_id: printer.manufacture_id!,
+        input_url: modelUrl,
+        input_params: {
+          curaSettings,
+          printerDefinition,
+          printerName: printerFilename,
+          modelName,
+          printerInfo: printerInfoForGCode,
+        },
+        output_url: null,
+        output_metadata: null,
+        error_message: null,
+        retry_count: 0,
+        max_retries: 3,
+        created_at: new Date().toISOString(),
+        started_at: null,
+        completed_at: null,
+        updated_at: new Date().toISOString(),
+      }).catch(error => {
+        console.error('[AI Mobile] Background task failed to start:', error);
+      });
+
+      // Don't wait for slicing to complete - it runs in background
+      // The useEffect subscription will update the UI when complete
+      clearTimeout(timeoutId); // 타이머 클리어
     } catch (error) {
       clearTimeout(timeoutId); // 타이머 클리어
       console.error('[AI Mobile] Slicing failed:', error);

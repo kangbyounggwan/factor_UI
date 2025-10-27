@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaymentDialog } from "@/components/PaymentDialog";
+import { supabase } from "@shared/integrations/supabase/client";
 
 // 구독 플랜 타입
 interface SubscriptionPlan {
@@ -38,7 +39,7 @@ interface SubscriptionPlan {
 }
 
 // 구독 플랜 상세 정보
-const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string): SubscriptionPlan[] => [
+const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string, currentPlanId?: string): SubscriptionPlan[] => [
   {
     id: "basic",
     name: t('subscription.plans.basic.name'),
@@ -53,7 +54,7 @@ const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string): Su
       t('subscription.plans.basic.feature3'),
       t('subscription.plans.basic.feature4')
     ],
-    current: true
+    current: currentPlanId === 'basic'
   },
   {
     id: "pro",
@@ -71,7 +72,8 @@ const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string): Su
       t('subscription.plans.pro.feature5'),
       t('subscription.plans.pro.feature6')
     ],
-    popular: true
+    popular: true,
+    current: currentPlanId === 'pro'
   },
   {
     id: "enterprise",
@@ -88,7 +90,8 @@ const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string): Su
       t('subscription.plans.enterprise.feature4'),
       t('subscription.plans.enterprise.feature5'),
       t('subscription.plans.enterprise.feature6')
-    ]
+    ],
+    current: currentPlanId === 'enterprise'
   }
 ];
 
@@ -100,9 +103,40 @@ const Subscription = () => {
   const [isYearly, setIsYearly] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showDetailedTable, setShowDetailedTable] = useState(false);
+  const [currentPlanId, setCurrentPlanId] = useState<string>('basic');
   const tableRef = useRef<HTMLDivElement>(null);
 
-  const subscriptionPlans = getSubscriptionPlans(isYearly, t);
+  // DB에서 현재 플랜 가져오기
+  useEffect(() => {
+    const loadCurrentPlan = async () => {
+      if (!user) {
+        setCurrentPlanId('basic');
+        return;
+      }
+
+      try {
+        const { data: subscription, error } = await supabase
+          .from('user_subscriptions')
+          .select('plan_name')
+          .eq('user_id', user.id)
+          .single();
+
+        if (error || !subscription) {
+          setCurrentPlanId('basic');
+          return;
+        }
+
+        setCurrentPlanId(subscription.plan_name?.toLowerCase() || 'basic');
+      } catch (error) {
+        console.error('Error loading current plan:', error);
+        setCurrentPlanId('basic');
+      }
+    };
+
+    loadCurrentPlan();
+  }, [user]);
+
+  const subscriptionPlans = getSubscriptionPlans(isYearly, t, currentPlanId);
 
   // 로그인된 사용자일 때만 현재 플랜 표시
   const currentPlan = user ? subscriptionPlans.find(plan => plan.current) : null;
@@ -247,11 +281,11 @@ const Subscription = () => {
                 key={plan.id}
                 className={`relative flex flex-col overflow-hidden rounded-2xl lg:rounded-3xl min-h-[500px] lg:min-h-[38.25rem] ${
                   plan.popular
-                    ? "border-2 border-blue-500/50 bg-gradient-to-r from-blue-950 via-blue-900/60 to-blue-950"
+                    ? "border-2 border-blue-500/50 bg-gradient-to-br from-slate-200 via-blue-100/80 to-slate-300 dark:from-blue-950 dark:via-blue-900/60 dark:to-blue-950"
                     : "border border-border bg-card"
                 }`}
                 style={plan.popular ? {
-                  boxShadow: '0 0 20px rgba(37, 99, 235, 0.2)'
+                  boxShadow: '0 0 20px rgba(37, 99, 235, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.6)'
                 } : undefined}
               >
                 {/* Popular Badge */}
@@ -329,11 +363,19 @@ const Subscription = () => {
                     >
                       {plan.current
                         ? t('subscription.currentPlanButton')
-                        : plan.price === 0
-                        ? "나의 현재 플랜"
                         : plan.price === -1
                         ? "Contact Us"
-                        : `${plan.name} 사용하기`
+                        : (() => {
+                            const planOrder = { basic: 0, pro: 1, enterprise: 2 };
+                            const currentOrder = planOrder[currentPlanId as keyof typeof planOrder] || 0;
+                            const targetOrder = planOrder[plan.id as keyof typeof planOrder] || 0;
+
+                            if (targetOrder > currentOrder) {
+                              return t('subscription.upgrade'); // 업그레이드
+                            } else {
+                              return t('subscription.downgrade'); // 다운그레이드
+                            }
+                          })()
                       }
                     </Button>
                   </div>
@@ -359,8 +401,8 @@ const Subscription = () => {
           {showDetailedTable && (
           <div ref={tableRef} className="mt-12 lg:mt-20 space-y-6 lg:space-y-8">
             <div className="text-center space-y-1 lg:space-y-2">
-              <h2 className="text-2xl lg:text-3xl font-bold">플랜별 세부 사항</h2>
-              <p className="text-sm lg:text-base text-muted-foreground">모든 기능을 자세히 비교해보세요</p>
+              <h2 className="text-2xl lg:text-3xl font-bold">{t('subscription.compareTitle')}</h2>
+              <p className="text-sm lg:text-base text-muted-foreground">{t('subscription.compareSubtitle')}</p>
             </div>
 
             {/* 비교 테이블 */}
@@ -377,22 +419,22 @@ const Subscription = () => {
                 <tbody>
                   {/* 프린터 관리 섹션 */}
                   <tr className="border-b border-border bg-muted/30">
-                    <td colSpan={4} className="py-2 lg:py-3 px-3 lg:px-6 font-semibold text-xs lg:text-sm">프린터 관리</td>
+                    <td colSpan={4} className="py-2 lg:py-3 px-3 lg:px-6 font-semibold text-xs lg:text-sm">{t('subscription.comparison.printerManagement')}</td>
                   </tr>
                   <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">최대 프린터 연결</td>
-                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center text-xs lg:text-sm">2대</td>
-                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center bg-primary/5 text-xs lg:text-sm">10대</td>
-                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center text-xs lg:text-sm">무제한</td>
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.maxPrinters')}</td>
+                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.printersCount', { count: 2 })}</td>
+                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center bg-primary/5 text-xs lg:text-sm">{t('subscription.comparison.printersCount', { count: 10 })}</td>
+                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.unlimited')}</td>
                   </tr>
                   <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">실시간 모니터링</td>
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.realtimeMonitoring')}</td>
                     <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
                     <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
                     <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
                   </tr>
                   <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">원격 제어</td>
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.remoteControl')}</td>
                     <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
                     <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
                     <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
@@ -400,22 +442,22 @@ const Subscription = () => {
 
                   {/* 기능 섹션 */}
                   <tr className="border-b border-border bg-muted/30">
-                    <td colSpan={4} className="py-2 lg:py-3 px-3 lg:px-6 font-semibold text-xs lg:text-sm">주요 기능</td>
+                    <td colSpan={4} className="py-2 lg:py-3 px-3 lg:px-6 font-semibold text-xs lg:text-sm">{t('subscription.comparison.keyFeatures')}</td>
                   </tr>
                   <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">AI 모델 생성</td>
-                    <td className="py-4 px-6 text-center">제한적</td>
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.aiModelGeneration')}</td>
+                    <td className="py-4 px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.limited')}</td>
                     <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
                     <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
                   </tr>
                   <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">고급 분석 및 통계</td>
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.advancedAnalytics')}</td>
                     <td className="py-4 px-6 text-center">-</td>
                     <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
                     <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
                   </tr>
                   <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">API 접근</td>
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.apiAccess')}</td>
                     <td className="py-4 px-6 text-center">-</td>
                     <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
                     <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
@@ -423,22 +465,22 @@ const Subscription = () => {
 
                   {/* 지원 섹션 */}
                   <tr className="border-b border-border bg-muted/30">
-                    <td colSpan={4} className="py-2 lg:py-3 px-3 lg:px-6 font-semibold text-xs lg:text-sm">고객 지원</td>
+                    <td colSpan={4} className="py-2 lg:py-3 px-3 lg:px-6 font-semibold text-xs lg:text-sm">{t('subscription.comparison.customerSupport')}</td>
                   </tr>
                   <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">지원 방식</td>
-                    <td className="py-4 px-6 text-center">커뮤니티</td>
-                    <td className="py-4 px-6 text-center bg-primary/5">이메일 (24시간 이내)</td>
-                    <td className="py-4 px-6 text-center">24/7 전담 매니저</td>
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.supportType')}</td>
+                    <td className="py-4 px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.community')}</td>
+                    <td className="py-4 px-6 text-center bg-primary/5 text-xs lg:text-sm">{t('subscription.comparison.email24h')}</td>
+                    <td className="py-4 px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.dedicatedManager')}</td>
                   </tr>
                   <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">전용 Slack 채널</td>
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.slackChannel')}</td>
                     <td className="py-4 px-6 text-center">-</td>
                     <td className="py-4 px-6 text-center bg-primary/5">-</td>
                     <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
                   </tr>
                   <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">SLA 보장</td>
+                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.slaGuarantee')}</td>
                     <td className="py-4 px-6 text-center">-</td>
                     <td className="py-4 px-6 text-center bg-primary/5">-</td>
                     <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -56,6 +56,7 @@ export const Header = () => {
   const [printers, setPrinters] = useState<any[]>([]);
   const [attachedImages, setAttachedImages] = useState<File[]>([]);
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, signOut, isAdmin } = useAuth();
   const { theme, setTheme } = useTheme();
   const summary = useDashboardSummary();
@@ -215,6 +216,26 @@ export const Header = () => {
 
   const removeImage = (index: number) => {
     setAttachedImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleNotificationClick = async (notification: any) => {
+    // 알림을 읽음 처리
+    if (!notification.read) {
+      await markNotificationAsRead(notification.id);
+    }
+
+    // 슬라이싱 완료 알림인 경우 Create 페이지로 이동하고 모델 정보 전달
+    if (notification.metadata?.model_id && notification.metadata?.gcode_url) {
+      navigate('/create', {
+        state: {
+          autoLoadGCode: {
+            modelId: notification.metadata.model_id,
+            gcodeUrl: notification.metadata.gcode_url,
+            printerModelId: notification.metadata.printer_model_id, // 프린터 모델 ID 전달
+          }
+        }
+      });
+    }
   };
 
   const markNotificationAsRead = async (notificationId: string) => {
@@ -422,7 +443,7 @@ export const Header = () => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-9 px-3"
+                    className="h-9 px-3 bg-yellow-600 hover:bg-yellow-700 text-white dark:bg-yellow-700 dark:hover:bg-yellow-800"
                   >
                     <span className="text-sm font-medium">Feedback</span>
                   </Button>
@@ -644,11 +665,7 @@ export const Header = () => {
                         <DropdownMenuItem
                           key={notification.id}
                           className="flex flex-col items-start p-3 cursor-pointer hover:bg-accent"
-                          onClick={() => {
-                            if (!notification.read) {
-                              markNotificationAsRead(notification.id);
-                            }
-                          }}
+                          onClick={() => handleNotificationClick(notification)}
                         >
                           <div className="flex items-start gap-2 w-full">
                             <div className="flex-1">

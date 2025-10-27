@@ -274,17 +274,37 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   };
 
   const signInWithGoogle = async () => {
-    const redirectUrl = ((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`;
-    const { error } = await supabase.auth.signInWithOAuth({
+    // 모바일 환경 감지 (Capacitor)
+    const isNativeMobile = typeof (window as any).Capacitor !== 'undefined';
+
+    // 모바일일 경우 커스텀 스킴 사용, 웹일 경우 현재 도메인 사용
+    const redirectUrl = isNativeMobile
+      ? 'com.factor.app://auth/callback'
+      : (((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`);
+
+    // 모바일에서는 skipBrowserRedirect를 true로 설정하여 직접 처리
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: redirectUrl,
+        skipBrowserRedirect: isNativeMobile, // 모바일에서는 직접 브라우저 관리
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
         },
       },
     });
+
+    // 모바일에서 직접 브라우저 열기
+    if (isNativeMobile && data?.url) {
+      try {
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.open({ url: data.url });
+      } catch (err) {
+        console.error('[AuthContext] Failed to open browser:', err);
+      }
+    }
+
     return { error };
   };
 

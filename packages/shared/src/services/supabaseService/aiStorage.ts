@@ -443,11 +443,11 @@ export async function downloadAndUploadGCode(
   try {
     const GCODE_BUCKET = 'gcode-files';
 
-    // 간단한 파일 구조: {userId}/{modelId}/{printerId}.gcode
-    // UUID만 사용하여 짧고 명확한 경로 생성
-    const printerIdForFilename = printerModelId || 'default';
-    const path = `${userId}/${modelId}/${printerIdForFilename}.gcode`;
-    const filename = `${printerIdForFilename}.gcode`;
+    // 파일 구조: {userId}/{modelName}.gcode
+    // 모델 이름을 파일명으로 사용 (같은 모델은 프린터가 달라도 같은 결과)
+    const sanitizedModelName = (modelName || modelId).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${userId}/${sanitizedModelName}.gcode`;
+    const filename = `${sanitizedModelName}.gcode`;
 
     console.log('[aiStorage] Downloading GCode from AI server:', gcodeUrl);
 

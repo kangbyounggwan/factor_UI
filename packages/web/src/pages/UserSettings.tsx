@@ -132,19 +132,8 @@ const UserSettings = () => {
 
         const { data: subscription, error } = await supabase
           .from("user_subscriptions")
-          .select(
-            `
-            *,
-            subscription_plans (
-              name,
-              price,
-              interval,
-              max_printers
-            )
-          `,
-          )
+          .select("*")
           .eq("user_id", user.id)
-          .eq("status", "active")
           .single();
 
         if (error || !subscription) {
@@ -154,18 +143,27 @@ const UserSettings = () => {
             price: 0,
             billingCycle: "free",
             nextBillingDate: null,
-            maxPrinters: 1,
+            maxPrinters: 2,
           });
           return;
         }
 
-        const planData = subscription.subscription_plans as any;
+        // Plan 정보 매핑
+        const planName = subscription.plan_name?.toLowerCase() || 'basic';
+        const planInfo = {
+          basic: { name: "Basic", price: 0, maxPrinters: 2 },
+          pro: { name: "Pro", price: 19900, maxPrinters: 10 },
+          enterprise: { name: "Enterprise", price: 99000, maxPrinters: 100 }
+        };
+
+        const plan = planInfo[planName as keyof typeof planInfo] || planInfo.basic;
+
         setCurrentPlan({
-          name: planData.name,
-          price: planData.price || 0,
-          billingCycle: planData.interval || "month",
+          name: plan.name,
+          price: plan.price,
+          billingCycle: subscription.current_period_end ? "month" : "free",
           nextBillingDate: subscription.current_period_end,
-          maxPrinters: planData.max_printers || 1,
+          maxPrinters: plan.maxPrinters,
         });
       } catch (error) {
         console.error("Error loading subscription:", error);

@@ -6,9 +6,11 @@ import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-ro
 import { ThemeProvider, useTheme } from "next-themes";
 import { useEffect, useState, useRef, lazy, Suspense } from "react";
 import { Capacitor } from "@capacitor/core";
+import { App as CapacitorApp } from "@capacitor/app";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@shared/i18n";
+import { supabase } from "@shared/integrations/supabase/client";
 import { Header } from "@/components/Header";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
@@ -57,6 +59,50 @@ const AppContent = () => {
     };
     applyStatusBar();
   }, [theme]);
+
+  // OAuth 딥링크 처리 (모바일 전용)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    const handleAppUrlOpen = CapacitorApp.addListener('appUrlOpen', async (data) => {
+      console.log('[App] Deep link received:', data.url);
+
+      // OAuth 콜백 URL 처리
+      if (data.url.includes('auth/callback')) {
+        try {
+          // 브라우저 닫기
+          const { Browser } = await import('@capacitor/browser');
+          await Browser.close();
+          console.log('[App] Browser closed');
+
+          // URL에서 fragment 추출 (#access_token=... 형식)
+          const url = new URL(data.url);
+          const fragment = url.hash.substring(1); // # 제거
+
+          if (fragment) {
+            // Supabase가 fragment를 처리하도록 전달
+            const { error } = await supabase.auth.setSession({
+              access_token: new URLSearchParams(fragment).get('access_token') || '',
+              refresh_token: new URLSearchParams(fragment).get('refresh_token') || ''
+            });
+
+            if (error) {
+              console.error('[App] OAuth session error:', error);
+            } else {
+              console.log('[App] OAuth login successful, redirecting to dashboard');
+              navigate('/dashboard', { replace: true });
+            }
+          }
+        } catch (err) {
+          console.error('[App] Deep link processing error:', err);
+        }
+      }
+    });
+
+    return () => {
+      handleAppUrlOpen.remove();
+    };
+  }, [navigate]);
   
   // AI 어시스턴트/작업공간 비활성화: 사이드바 표시 끔
   const showAISidebar = false;

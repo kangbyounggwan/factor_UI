@@ -22,32 +22,32 @@ export default function UploadArchive({ items, selectedId, onSelect }:{ items: U
           <p className="text-sm">업로드된 이미지가 없습니다</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
           {items.map((file) => (
             <button
               key={file.id}
               type="button"
               onClick={() => onSelect(file.id)}
-              className={`border rounded-lg p-2 text-left w-full transition-all ${
+              className={`border rounded-lg p-2 text-left transition-all ${
                 selectedId === file.id ? 'ring-2 ring-primary' : 'hover:border-primary/50'
               }`}
             >
               <div className="relative">
-                <img src={file.url} alt={file.name} className="w-full h-24 object-cover rounded mb-2" />
+                <img src={file.url} alt={file.name} className="w-full aspect-square object-cover rounded mb-2" />
                 {/* 3D 모델 상태 뱃지 */}
                 {file.has3DModel && (
                   <div className="absolute top-1 right-1">
-                    <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white gap-1 text-xs py-0 px-2">
+                    <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white gap-1 text-[10px] py-0 px-1.5">
                       <Box className="w-3 h-3" />
                       <span>{t('ai.has3DModel')}</span>
                     </Badge>
                   </div>
                 )}
               </div>
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-1">
                 <p className="text-xs font-medium truncate flex-1">{file.name}</p>
                 {selectedId === file.id && (
-                  <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
+                  <CheckCircle2 className="w-3 h-3 text-primary flex-shrink-0" />
                 )}
               </div>
             </button>

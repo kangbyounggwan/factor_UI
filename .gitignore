@@ -17,6 +17,10 @@ out/
 .env.test.local
 .env.production.local
 
+# 패키지별 .env 파일도 무시 (루트 .env만 사용)
+packages/*/.env
+packages/*/.env.local
+
 # IDE
 .vscode/
 .idea/

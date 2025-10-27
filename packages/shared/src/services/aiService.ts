@@ -535,7 +535,7 @@ export async function uploadSTLAndSlice(
     const response = await fetchWithTimeout(SLICE_ENDPOINT, {
       method: 'POST',
       body: formData,
-    }, 180000); // 3분 타임아웃 (슬라이싱은 시간이 걸릴 수 있음)
+    }, 300000); // 5분 타임아웃 (슬라이싱은 시간이 걸릴 수 있음)
 
     console.log('[aiService] Response status:', response.status, response.statusText);
     console.log('[aiService] Response headers:', Object.fromEntries(response.headers.entries()));

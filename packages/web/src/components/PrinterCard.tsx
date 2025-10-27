@@ -18,6 +18,7 @@ export interface PrinterCardProps {
   progress?: number;
   onClick?: () => void;
   className?: string;
+  isAvailable?: boolean; // GCode가 준비되어 출력 가능한 프린터 여부
 }
 
 /**
@@ -32,13 +33,16 @@ export function PrinterCard({
   progress,
   onClick,
   className = "",
+  isAvailable = false,
 }: PrinterCardProps) {
   const { t } = useTranslation();
 
   return (
     <Card
       key={id}
-      className={`p-3 cursor-pointer hover:shadow-md transition ${className}`}
+      className={`p-3 cursor-pointer hover:shadow-md transition ${
+        isAvailable ? 'border-2 border-green-400/30' : ''
+      } ${className}`}
       onClick={onClick}
     >
       <div className="space-y-2">
