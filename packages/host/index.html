@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FACTOR Host</title>
     <link rel="icon" href="/favicon.ico" />
+
+    <!-- Content Security Policy for TossPayments -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.tosspayments.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.tosspayments.com https://*.supabase.co wss://* ws://*; frame-src 'self' https://payment-widget.tosspayments.com https://js.tosspayments.com; child-src 'self' blob: https://payment-widget.tosspayments.com https://js.tosspayments.com;">
   </head>
   <body class="min-h-screen bg-background text-foreground font-sans antialiased">
     <div id="root"></div>
