@@ -174,6 +174,7 @@ export const Header = () => {
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
+        .eq('read', false) // 안읽은 알림만 가져오기
         .order('created_at', { ascending: false })
         .limit(20);
 
@@ -184,8 +185,7 @@ export const Header = () => {
 
       if (notificationData) {
         setNotifications(notificationData);
-        const unreadCount = notificationData.filter((n) => !n.read).length;
-        setUnreadNotifications(unreadCount);
+        setUnreadNotifications(notificationData.length);
       }
     } catch (error) {
       console.error('Error loading notifications:', error);
@@ -228,12 +228,8 @@ export const Header = () => {
         return;
       }
 
-      // Update local state
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n.id === notificationId ? { ...n, read: true, read_at: new Date().toISOString() } : n
-        )
-      );
+      // 읽은 알림은 목록에서 제거 (사라지게)
+      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
       setUnreadNotifications((prev) => Math.max(0, prev - 1));
     } catch (error) {
       console.error('Error marking notification as read:', error);
@@ -426,9 +422,9 @@ export const Header = () => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-9 w-9 p-0"
+                    className="h-9 px-3"
                   >
-                    <MessageSquare className="h-5 w-5" />
+                    <span className="text-sm font-medium">Feedback</span>
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[500px]">

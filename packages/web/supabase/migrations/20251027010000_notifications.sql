@@ -60,3 +60,59 @@ COMMENT ON COLUMN public.notifications.related_type IS '관련 항목 타입 (ai
 COMMENT ON COLUMN public.notifications.metadata IS '추가 메타데이터 (JSON)';
 COMMENT ON COLUMN public.notifications.created_at IS '알림 생성 시간';
 COMMENT ON COLUMN public.notifications.read_at IS '알림 읽은 시간';
+
+-- RPC 함수: 알림을 읽음으로 표시
+CREATE OR REPLACE FUNCTION public.mark_notification_as_read(notification_id UUID)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE public.notifications
+  SET read = true, read_at = NOW()
+  WHERE id = notification_id AND user_id = auth.uid();
+END;
+$$;
+
+-- RPC 함수: 모든 알림을 읽음으로 표시
+CREATE OR REPLACE FUNCTION public.mark_all_notifications_as_read()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE public.notifications
+  SET read = true, read_at = NOW()
+  WHERE user_id = auth.uid() AND read = false;
+END;
+$$;
+
+-- RPC 함수: 알림 삭제
+CREATE OR REPLACE FUNCTION public.delete_notification(notification_id UUID)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  DELETE FROM public.notifications
+  WHERE id = notification_id AND user_id = auth.uid();
+END;
+$$;
+
+-- RPC 함수: 모든 알림 삭제
+CREATE OR REPLACE FUNCTION public.delete_all_notifications()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  DELETE FROM public.notifications
+  WHERE user_id = auth.uid();
+END;
+$$;
+
+-- 함수 권한 설정
+GRANT EXECUTE ON FUNCTION public.mark_notification_as_read(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.mark_all_notifications_as_read() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.delete_notification(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.delete_all_notifications() TO authenticated;
