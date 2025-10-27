@@ -145,8 +145,8 @@ const AppContent = () => {
     }
   };
   
-  // 헤더를 숨길 경로들 (Auth 페이지)
-  const hideHeaderPaths = ["/"];
+  // 헤더를 숨길 경로들 (Auth 페이지, Subscription 페이지)
+  const hideHeaderPaths = ["/", "/subscription"];
   const shouldShowHeader = !hideHeaderPaths.includes(location.pathname);
 
   return (

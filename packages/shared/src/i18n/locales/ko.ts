@@ -950,9 +950,26 @@ export default {
       community: "커뮤니티",
       email24h: "이메일 (24시간 이내)",
       dedicatedManager: "24/7 전담 매니저",
+      dedicated247: "24/7 전담 매니저",
       slackChannel: "전용 Slack 채널",
       slaGuarantee: "SLA 보장"
-    }
+    },
+    features: {
+      realtimeMonitoring: "실시간 모니터링",
+      remoteControl: "원격 제어",
+      aiModelGeneration: "AI 모델 생성",
+      limited: "제한적",
+      advancedAnalytics: "고급 분석 및 통계",
+      apiAccess: "API 접근",
+      supportType: "지원 방식",
+      community: "커뮤니티",
+      email24h: "이메일 (24시간 이내)",
+      dedicated247: "24/7 전담 매니저",
+      slackChannel: "전용 Slack 채널",
+      slaGuarantee: "SLA 보장"
+    },
+    startFrom: "부터 시작",
+    mostPopular: "인기 플랜"
   },
   payment: {
     title: "결제하기",
@@ -1119,7 +1136,9 @@ export default {
       widgetNotReady: "결제 위젯이 준비되지 않았습니다.",
       fillAllFields: "이름과 이메일을 입력해주세요.",
       yearlySubscription: "연간 구독",
-      monthlySubscription: "월간 구독"
+      monthlySubscription: "월간 구독",
+      monthlyFee: "월 이용료",
+      months12: "12개월"
     }
   },
   footer: {

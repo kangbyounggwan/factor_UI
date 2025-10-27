@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { useTranslation } from "react-i18next";
 import { supabase } from "@shared/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import {
   Crown,
   Check,
   Zap,
-  ArrowLeft,
+  X,
   CreditCard,
   Calendar,
   Users,
@@ -37,56 +38,56 @@ interface SubscriptionPlan {
 }
 
 // 구독 플랜 상세 정보
-const getSubscriptionPlans = (isYearly: boolean): SubscriptionPlan[] => [
+const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string): SubscriptionPlan[] => [
   {
     id: "basic",
-    name: "Basic",
+    name: t('subscription.plans.basic.name'),
     price: 0,
     interval: isYearly ? "year" : "month",
     max_printers: 2,
-    description: "개인 사용자를 위한 필수 플랜",
+    description: t('subscription.plans.basic.description'),
     color: "bg-muted",
     features: [
-      "최대 2대 프린터 연결",
-      "기본 모니터링 기능",
-      "이메일 알림",
-      "커뮤니티 지원"
+      t('subscription.plans.basic.feature1'),
+      t('subscription.plans.basic.feature2'),
+      t('subscription.plans.basic.feature3'),
+      t('subscription.plans.basic.feature4')
     ],
     current: true
   },
   {
     id: "pro",
-    name: "Pro",
+    name: t('subscription.plans.pro.name'),
     price: isYearly ? 192000 : 19900,
     interval: isYearly ? "year" : "month",
     max_printers: 10,
-    description: "소규모 팀과 전문가를 위한 플랜",
+    description: t('subscription.plans.pro.description'),
     color: "bg-primary",
     features: [
-      "최대 10대 프린터 연결",
-      "고급 모니터링 및 분석",
-      "우선순위 이메일 지원",
-      "맞춤형 알림",
-      "API 접근",
-      "월간 리포트"
+      t('subscription.plans.pro.feature1'),
+      t('subscription.plans.pro.feature2'),
+      t('subscription.plans.pro.feature3'),
+      t('subscription.plans.pro.feature4'),
+      t('subscription.plans.pro.feature5'),
+      t('subscription.plans.pro.feature6')
     ],
     popular: true
   },
   {
     id: "enterprise",
-    name: "Enterprise",
+    name: t('subscription.plans.enterprise.name'),
     price: -1,
     interval: isYearly ? "year" : "month",
     max_printers: -1,
-    description: "대규모 조직을 위한 맞춤형 솔루션",
+    description: t('subscription.plans.enterprise.description'),
     color: "bg-primary",
     features: [
-      "무제한 프린터 연결",
-      "전담 계정 관리자",
-      "24/7 전화 지원",
-      "맞춤형 통합",
-      "SLA 보장",
-      "온사이트 교육"
+      t('subscription.plans.enterprise.feature1'),
+      t('subscription.plans.enterprise.feature2'),
+      t('subscription.plans.enterprise.feature3'),
+      t('subscription.plans.enterprise.feature4'),
+      t('subscription.plans.enterprise.feature5'),
+      t('subscription.plans.enterprise.feature6')
     ]
   }
 ];
@@ -94,6 +95,7 @@ const getSubscriptionPlans = (isYearly: boolean): SubscriptionPlan[] => [
 const Subscription = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [isYearly, setIsYearly] = useState(false);
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: 'center',
@@ -112,7 +114,7 @@ const Subscription = () => {
     }
   }, [user, navigate]);
 
-  const subscriptionPlans = getSubscriptionPlans(isYearly).map(plan => ({
+  const subscriptionPlans = getSubscriptionPlans(isYearly, t).map(plan => ({
     ...plan,
     current: plan.id === userPlanId
   }));
@@ -246,11 +248,22 @@ const Subscription = () => {
   }, [subscriptionPlans]);
 
   return (
-    <div className="bg-background h-[90dvh] overflow-hidden p-6">
-      <div className="max-w-7xl mx-auto h-full w-full flex flex-col gap-4">
+    <div className="bg-background min-h-screen p-6 pb-20">
+      <div className="max-w-7xl mx-auto w-full flex flex-col gap-4">
+        {/* 닫기 버튼 */}
+        <div className="flex items-center justify-end flex-shrink-0 pt-2">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-muted transition-colors"
+            aria-label="Close"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+
         {/* 헤더 영역 */}
         <div className="text-center space-y-4 flex-shrink-0">
-          <h2 className="text-3xl font-bold">모든 플랜 살펴보기</h2>
+          <h2 className="text-3xl font-bold">{t('subscription.title')}</h2>
 
           {/* 월간/연간 탭 */}
           <Tabs
@@ -258,29 +271,35 @@ const Subscription = () => {
             onValueChange={(value) => setIsYearly(value === "yearly")}
             className="w-fit mx-auto"
           >
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="monthly" className="flex items-center gap-2">
-                월간
+            <TabsList className="grid w-full grid-cols-2 bg-muted/50">
+              <TabsTrigger
+                value="monthly"
+                className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                {t('subscription.monthly')}
               </TabsTrigger>
-              <TabsTrigger value="yearly" className="flex items-center gap-2">
-                연간
-                <Badge variant="secondary" className="text-xs">20% 할인</Badge>
+              <TabsTrigger
+                value="yearly"
+                className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                {t('subscription.yearly')}
+                <Badge variant="secondary" className="text-xs">{t('subscription.yearlyDiscount')}</Badge>
               </TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
 
         {/* 모바일 전체 화면 캐러셀 */}
-        <div className="lg:hidden -mx-6 flex-1 overflow-hidden">
-            <div className="overflow-hidden h-full" ref={emblaRef}>
-              <div className="flex h-full">
+        <div className="lg:hidden -mx-6">
+            <div className="overflow-hidden" ref={emblaRef}>
+              <div className="flex">
                 {subscriptionPlans.map((plan, index) => (
                   <div
                     key={plan.id}
-                    className="flex-[0_0_100%] min-w-0 px-6 h-full"
+                    className="flex-[0_0_100%] min-w-0 px-6"
                   >
                     <Card
-                      className={`relative transition-all duration-500 h-full flex flex-col overflow-hidden rounded-2xl ${
+                      className={`relative transition-all duration-500 flex flex-col rounded-2xl min-h-[600px] max-h-[80vh] ${
                         plan.popular
                           ? "border-2 border-blue-500/40 bg-gradient-to-br from-blue-950 via-blue-900/60 to-blue-950"
                           : plan.current
@@ -295,7 +314,7 @@ const Subscription = () => {
                       {plan.popular && (
                         <div className="absolute top-4 right-4 z-20">
                           <Badge className="bg-primary text-primary-foreground px-3 py-1 text-xs font-medium">
-                            인기 플랜
+                            {t('subscription.mostPopular')}
                           </Badge>
                         </div>
                       )}
@@ -303,7 +322,7 @@ const Subscription = () => {
                       {plan.current && !plan.popular && (
                         <div className="absolute top-4 right-4 z-20">
                           <Badge variant="secondary" className="px-3 py-1 text-xs font-medium">
-                            현재 플랜
+                            {t('subscription.currentPlan')}
                           </Badge>
                         </div>
                       )}
@@ -323,26 +342,26 @@ const Subscription = () => {
                         {/* 주요 기능 섹션 */}
                         <div className="space-y-2 flex-1 overflow-y-auto">
                           <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">실시간 모니터링</span>
+                            <span className="text-sm">{t('subscription.features.realtimeMonitoring')}</span>
                             <Check className="h-5 w-5 text-success" />
                           </div>
 
                           <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">원격 제어</span>
+                            <span className="text-sm">{t('subscription.features.remoteControl')}</span>
                             <Check className="h-5 w-5 text-success" />
                           </div>
 
                           <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">AI 모델 생성</span>
+                            <span className="text-sm">{t('subscription.features.aiModelGeneration')}</span>
                             {plan.id === 'basic' ? (
-                              <span className="text-xs text-muted-foreground">제한적</span>
+                              <span className="text-xs text-muted-foreground">{t('subscription.features.limited')}</span>
                             ) : (
                               <Check className="h-5 w-5 text-success" />
                             )}
                           </div>
 
                           <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">고급 분석 및 통계</span>
+                            <span className="text-sm">{t('subscription.features.advancedAnalytics')}</span>
                             {plan.id === 'basic' ? (
                               <span className="text-xs text-muted-foreground">-</span>
                             ) : (
@@ -351,7 +370,7 @@ const Subscription = () => {
                           </div>
 
                           <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">API 접근</span>
+                            <span className="text-sm">{t('subscription.features.apiAccess')}</span>
                             {plan.id === 'basic' ? (
                               <span className="text-xs text-muted-foreground">-</span>
                             ) : (
@@ -360,14 +379,14 @@ const Subscription = () => {
                           </div>
 
                           <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">지원 방식</span>
+                            <span className="text-sm">{t('subscription.features.supportType')}</span>
                             <span className="text-xs text-muted-foreground">
-                              {plan.id === 'basic' ? '커뮤니티' : plan.id === 'pro' ? '이메일 (24시간 이내)' : '24/7 전담 매니저'}
+                              {plan.id === 'basic' ? t('subscription.features.community') : plan.id === 'pro' ? t('subscription.features.email24h') : t('subscription.features.dedicated247')}
                             </span>
                           </div>
 
                           <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">전용 Slack 채널</span>
+                            <span className="text-sm">{t('subscription.features.slackChannel')}</span>
                             {plan.id === 'enterprise' ? (
                               <Check className="h-5 w-5 text-success" />
                             ) : (
@@ -376,7 +395,7 @@ const Subscription = () => {
                           </div>
 
                           <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">SLA 보장</span>
+                            <span className="text-sm">{t('subscription.features.slaGuarantee')}</span>
                             {plan.id === 'enterprise' ? (
                               <Check className="h-5 w-5 text-success" />
                             ) : (
@@ -398,14 +417,14 @@ const Subscription = () => {
                             onClick={() => handleUpgrade(plan.id)}
                           >
                             {plan.current ? (
-                              "나의 현재 플랜"
+                              t('subscription.currentPlanButton')
                             ) : plan.price === 0 ? (
-                              "나의 현재 플랜"
+                              t('subscription.currentPlanButton')
                             ) : plan.price === -1 ? (
-                              "Contact Us"
+                              t('subscription.contactUs')
                             ) : (
                               <>
-                                ₩{plan.price.toLocaleString()}{isYearly ? '/년' : '/월'}부터 시작
+                                ₩{plan.price.toLocaleString()}{isYearly ? t('subscription.perYear') : t('subscription.perMonth')} {t('subscription.startFrom')}
                               </>
                             )}
                           </Button>

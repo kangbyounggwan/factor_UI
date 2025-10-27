@@ -937,9 +937,26 @@ export default {
       community: "Community",
       email24h: "Email (within 24 hours)",
       dedicatedManager: "24/7 Dedicated Manager",
+      dedicated247: "24/7 Dedicated Manager",
       slackChannel: "Dedicated Slack Channel",
       slaGuarantee: "SLA Guarantee"
-    }
+    },
+    features: {
+      realtimeMonitoring: "Real-time Monitoring",
+      remoteControl: "Remote Control",
+      aiModelGeneration: "AI Model Generation",
+      limited: "Limited",
+      advancedAnalytics: "Advanced Analytics & Statistics",
+      apiAccess: "API Access",
+      supportType: "Support Type",
+      community: "Community",
+      email24h: "Email (within 24 hours)",
+      dedicated247: "24/7 Dedicated Manager",
+      slackChannel: "Dedicated Slack Channel",
+      slaGuarantee: "SLA Guarantee"
+    },
+    startFrom: "starting from",
+    mostPopular: "Most Popular"
   },
   payment: {
     title: "Payment",
@@ -1023,7 +1040,9 @@ export default {
       widgetNotReady: "Payment widget is not ready yet.",
       fillAllFields: "Please enter your name and email.",
       yearlySubscription: "Annual Subscription",
-      monthlySubscription: "Monthly Subscription"
+      monthlySubscription: "Monthly Subscription",
+      monthlyFee: "Monthly Fee",
+      months12: "12 months"
     }
   },
   userSettings: {
