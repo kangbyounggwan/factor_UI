@@ -388,7 +388,27 @@ export default {
     noPrinters: "연결된 프린터가 없습니다",
     totalPrinters: "총 프린터",
     activePrinters: "활성 프린터",
-    notConnected: "연결 없음"
+    notConnected: "연결 없음",
+    setup: {
+      title: "프린터 설정",
+      description: "서비스 최적화를 위해 프린터 최소 설정을 진행해주세요",
+      printerName: "프린터 이름",
+      manufacturer: "제조사",
+      series: "시리즈",
+      model: "모델",
+      selectManufacturer: "제조사를 선택하세요",
+      selectSeries: "시리즈를 선택하세요",
+      selectModel: "모델을 선택하세요",
+      selectAllFields: "모든 항목을 선택해주세요",
+      loadError: "데이터를 불러오는데 실패했습니다",
+      saveSuccess: "프린터 설정이 저장되었습니다",
+      saveError: "프린터 설정 저장에 실패했습니다",
+      legend: {
+        fullSupport: "프린터를 모니터링하고 원격 컨트롤이 가능합니다.",
+        slicingSupported: "3D모델 슬라이싱 기능 지원",
+        limitedSlicing: "3D모델 슬라이싱 기능이 제한됩니다."
+      }
+    }
   },
   dashboard: {
     title: "대시보드",
@@ -892,6 +912,12 @@ export default {
     contactUs: "Contact Us",
     upgrade: "업그레이드",
     downgrade: "다운그레이드",
+    downgradeToFree: "무료 플랜으로 전환",
+    cancelConfirmTitle: "구독을 취소하시겠습니까?",
+    cancelConfirmMessage: "구독을 취소하면 무료 플랜으로 전환되며, 유료 기능을 사용할 수 없게 됩니다.",
+    cancelConfirmButton: "구독 취소",
+    cancelSuccessTitle: "구독이 취소되었습니다",
+    cancelSuccessMessage: "무료 플랜으로 전환되었습니다.",
     compareTitle: "플랜별 세부 사항",
     compareSubtitle: "모든 기능을 자세히 비교해보세요",
     faq: "자주 묻는 질문",

@@ -8,6 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Crown,
   Check,
   Zap,
@@ -22,6 +32,7 @@ import {
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useEmblaCarousel from "embla-carousel-react";
+import { useToast } from "@/hooks/use-toast";
 
 // 구독 플랜 타입
 interface SubscriptionPlan {
@@ -96,6 +107,7 @@ const Subscription = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [isYearly, setIsYearly] = useState(false);
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: 'center',
@@ -106,6 +118,7 @@ const Subscription = () => {
   const [selectedIndex, setSelectedIndex] = useState(1); // Pro 플랜이 중앙에 오도록
   const [userPlanId, setUserPlanId] = useState<string>('basic');
   const [loadingPlan, setLoadingPlan] = useState(true);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
 
   // 로그인 체크 - 로그인하지 않은 경우 로그인 페이지로 리다이렉트
   useEffect(() => {
@@ -177,6 +190,37 @@ const Subscription = () => {
     emblaApi.on('reInit', onSelect);
   }, [emblaApi, onSelect]);
 
+  const handleCancelSubscription = async () => {
+    if (!user) return;
+
+    try {
+      // 구독 취소 - user_subscriptions 테이블에서 삭제
+      const { error } = await supabase
+        .from('user_subscriptions')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // 성공 토스트
+      toast({
+        title: t('subscription.cancelSuccessTitle'),
+        description: t('subscription.cancelSuccessMessage'),
+      });
+
+      // 현재 플랜을 basic으로 업데이트
+      setUserPlanId('basic');
+      setShowCancelDialog(false);
+    } catch (error) {
+      console.error('Error canceling subscription:', error);
+      toast({
+        title: t('payment.error'),
+        description: t('payment.requestFailed'),
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleUpgrade = (planId: string) => {
     if (planId === 'enterprise') {
       // Enterprise는 Contact Us로 처리
@@ -184,8 +228,10 @@ const Subscription = () => {
       return;
     }
     if (planId === 'basic') {
-      // Basic 플랜은 무료이므로 바로 전환
-      console.log('Switching to Basic plan');
+      // Basic 플랜으로 다운그레이드 - 구독 취소 확인 다이얼로그 표시
+      if (userPlanId !== 'basic') {
+        setShowCancelDialog(true);
+      }
       return;
     }
     // 유료 플랜은 결제 페이지로 이동
@@ -419,7 +465,7 @@ const Subscription = () => {
                             {plan.current ? (
                               t('subscription.currentPlanButton')
                             ) : plan.price === 0 ? (
-                              t('subscription.currentPlanButton')
+                              userPlanId !== 'basic' ? t('subscription.downgradeToFree') : t('subscription.currentPlanButton')
                             ) : plan.price === -1 ? (
                               t('subscription.contactUs')
                             ) : (
@@ -546,6 +592,24 @@ const Subscription = () => {
           ))}
         </div>
       </div>
+
+      {/* 구독 취소 확인 다이얼로그 */}
+      <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('subscription.cancelConfirmTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('subscription.cancelConfirmMessage')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCancelSubscription}>
+              {t('subscription.cancelConfirmButton')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

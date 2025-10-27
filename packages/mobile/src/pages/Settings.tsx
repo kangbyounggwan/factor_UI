@@ -11,7 +11,10 @@ import {
   Trash2,
   Edit,
   Settings as SettingsIcon,
-  FolderPlus
+  FolderPlus,
+  AlertTriangle,
+  CheckCircle,
+  AlertCircle
 } from "lucide-react";
 import {
   Dialog,
@@ -20,6 +23,12 @@ import {
   DialogTitle,
   DialogTrigger
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -36,6 +45,7 @@ import { useSearchParams } from "react-router-dom";
 import { getPrinterStatusInfo } from "@shared/utils/printerStatus";
 import type { PrinterState, PrinterStateFlags } from "@shared/types/printerType";
 import { onDashStatusMessage } from "@shared/services/mqttService";
+import { cn } from "@/lib/utils";
 import {
   getManufacturers,
   getSeriesByManufacturer,
@@ -111,6 +121,11 @@ const Settings = () => {
   const [modelsList, setModelsList] = useState<ModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string>(""); // manufacturing_printers ID
+
+  // 셀렉트박스 열림 상태 추적
+  const [manufacturerOpen, setManufacturerOpen] = useState(false);
+  const [seriesOpen, setSeriesOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
   
   // 폼 데이터
   const [newGroup, setNewGroup] = useState({
@@ -509,6 +524,10 @@ const Settings = () => {
   const handleEditPrinter = async (printer: PrinterConfig) => {
     setEditingPrinter(printer);
     setShowEditPrinter(true);
+    // 셀렉트박스 열림 상태 초기화
+    setManufacturerOpen(false);
+    setSeriesOpen(false);
+    setModelOpen(false);
     // 초기 프리필 중에는 의도치 않은 reset을 방지
     isPrefillingRef.current = true;
 
@@ -1120,10 +1139,58 @@ const Settings = () => {
                 </div>
 
                 {/* 제조사 섹션 */}
-                <div ref={manufacturerCardRef} className="space-y-4 p-4 bg-secondary/30 rounded-lg border border-border/50">
-                  <h3 className="text-sm font-bold text-foreground uppercase tracking-wide">
-                    {t('settings.manufacturer')}
-                  </h3>
+                <div ref={manufacturerCardRef} className={`space-y-4 p-4 bg-secondary/30 rounded-lg border-2 transition-colors ${(() => {
+                  const isAllSelected = selectedManufacturer && selectedSeries && selectedModel;
+                  const isNoneSelected = !selectedManufacturer && !selectedSeries && !selectedModel;
+                  const selectedModelData = modelsList.find((m) => m.id === selectedModel);
+                  const hasCuraSupport = selectedModelData?.cura_engine_support !== false;
+
+                  if (isAllSelected && !hasCuraSupport) {
+                    return "border-yellow-500/30";
+                  }
+                  if (isAllSelected) {
+                    return "border-green-500/30";
+                  }
+                  if (isNoneSelected) {
+                    return "border-red-500/30";
+                  }
+                  return "border-border/50";
+                })()}`}>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-foreground uppercase tracking-wide">
+                      {t('settings.manufacturer')}
+                    </h3>
+                    {(() => {
+                      const isAllSelected = selectedManufacturer && selectedSeries && selectedModel;
+                      const isNoneSelected = !selectedManufacturer && !selectedSeries && !selectedModel;
+                      const selectedModelData = modelsList.find((m) => m.id === selectedModel);
+                      const hasCuraSupport = selectedModelData?.cura_engine_support !== false;
+
+                      if (isAllSelected && !hasCuraSupport) {
+                        return <AlertCircle className="h-5 w-5 text-yellow-500" />;
+                      }
+                      if (isAllSelected) {
+                        return <CheckCircle className="h-5 w-5 text-green-500" />;
+                      }
+                      if (isNoneSelected) {
+                        return (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertTriangle className="h-5 w-5 text-red-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-red-500">
+                                  슬라이싱, 프린터컨트롤에 최적화하기위해 필수 선택사항입니다
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
 
                   <div className="space-y-3">
                     {/* 제조사 선택 */}
@@ -1133,14 +1200,27 @@ const Settings = () => {
                       </Label>
                       <Select
                         value={selectedManufacturer}
-                        onValueChange={setSelectedManufacturer}
+                        open={manufacturerOpen}
+                        onOpenChange={setManufacturerOpen}
+                        onValueChange={(value) => {
+                          setSelectedManufacturer(value);
+                          setSelectedSeries("");
+                          setSelectedModel("");
+                        }}
                       >
-                        <SelectTrigger id="edit-manufacturer" className="h-10">
+                        <SelectTrigger
+                          id="edit-manufacturer"
+                          className={`h-10 ${manufacturerOpen ? "ring-2 ring-primary ring-offset-2" : ""}`}
+                        >
                           <SelectValue placeholder={t('settings.selectManufacturerPlaceholder')} />
                         </SelectTrigger>
                         <SelectContent>
                           {manufacturers.map((mfg) => (
-                            <SelectItem key={mfg.manufacturer} value={mfg.manufacturer}>
+                            <SelectItem
+                              key={mfg.manufacturer}
+                              value={mfg.manufacturer}
+                              className="pl-3 [&>span:first-child]:!hidden [&_svg.lucide-check]:!hidden"
+                            >
                               {mfg.manufacturer}
                             </SelectItem>
                           ))}
@@ -1155,15 +1235,27 @@ const Settings = () => {
                       </Label>
                       <Select
                         value={selectedSeries}
-                        onValueChange={setSelectedSeries}
+                        open={seriesOpen}
+                        onOpenChange={setSeriesOpen}
+                        onValueChange={(value) => {
+                          setSelectedSeries(value);
+                          setSelectedModel("");
+                        }}
                         disabled={!selectedManufacturer}
                       >
-                        <SelectTrigger id="edit-series" className="h-10">
+                        <SelectTrigger
+                          id="edit-series"
+                          className={`h-10 ${seriesOpen ? "ring-2 ring-primary ring-offset-2" : ""}`}
+                        >
                           <SelectValue placeholder={t('settings.selectSeriesPlaceholder')} />
                         </SelectTrigger>
                         <SelectContent>
                           {seriesList.map((series) => (
-                            <SelectItem key={series.series} value={series.series}>
+                            <SelectItem
+                              key={series.series}
+                              value={series.series}
+                              className="pl-3 [&>span:first-child]:!hidden [&_svg.lucide-check]:!hidden"
+                            >
                               {series.series}
                             </SelectItem>
                           ))}
@@ -1179,22 +1271,83 @@ const Settings = () => {
                       <Select
                         value={selectedModel}
                         onValueChange={setSelectedModel}
+                        open={modelOpen}
+                        onOpenChange={setModelOpen}
                         disabled={!selectedSeries}
                       >
-                        <SelectTrigger id="edit-model-select" className="h-10">
-                          <SelectValue placeholder={t('settings.selectModelPlaceholder')} />
+                        <SelectTrigger
+                          id="edit-model-select"
+                          className={`h-10 ${modelOpen ? "ring-2 ring-primary ring-offset-2" : ""}`}
+                        >
+                          <div className="flex w-full items-center justify-between gap-2">
+                            <SelectValue placeholder={t('settings.selectModelPlaceholder')} />
+                          </div>
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent
+                          side="bottom"
+                          sideOffset={4}
+                          className="w-[--radix-select-trigger-width] p-0"
+                        >
                           {modelsList.map((model) => (
                             <SelectItem key={model.id} value={model.id}>
-                              {model.display_name}
+                              <div className="flex w-full items-center justify-between gap-2">
+                                <span className="truncate">{model.display_name}</span>
+                                <span className="pointer-events-none">
+                                  {model.cura_engine_support !== false ? (
+                                    <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
+                                  ) : (
+                                    <AlertCircle className="h-4 w-4 text-yellow-500 shrink-0" />
+                                  )}
+                                </span>
+                              </div>
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-
                   </div>
+
+                  {/* 범례 (Legend) - 모델 선택 후에만 표시 */}
+                  {selectedModel && (() => {
+                    const selectedModelData = modelsList.find((m) => m.id === selectedModel);
+                    const hasCuraSupport = selectedModelData?.cura_engine_support !== false;
+
+                    return (
+                      <div className="space-y-2 text-sm">
+                        {hasCuraSupport ? (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                              <span className="text-muted-foreground">
+                                {t('printer.setup.legend.fullSupport')}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                              <span className="text-muted-foreground">
+                                {t('printer.setup.legend.slicingSupported')}
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                              <span className="text-muted-foreground">
+                                {t('printer.setup.legend.fullSupport')}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <AlertCircle className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                              <span className="text-muted-foreground">
+                                {t('printer.setup.legend.limitedSlicing')}
+                              </span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* 연결 섹션 */}
@@ -1222,7 +1375,7 @@ const Settings = () => {
                 </div>
 
                 {/* 액션 버튼 */}
-                <div className="flex gap-3 pt-2 sticky bottom-0 bg-background pb-2">
+                <div className="flex gap-3 pt-2">
                   <Button onClick={handleUpdatePrinter} className="flex-1 h-11">
                     {t('settings.apply')}
                   </Button>
@@ -1232,7 +1385,7 @@ const Settings = () => {
                       setShowEditPrinter(false);
                       setEditingPrinter(null);
                     }}
-                    className="flex-1 h-11 bg-background hover:bg-accent"
+                    className="flex-1 h-11"
                   >
                     {t('settings.cancel')}
                   </Button>

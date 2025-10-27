@@ -375,7 +375,27 @@ export default {
     noPrinters: "No connected printers",
     totalPrinters: "Total Printers",
     activePrinters: "Active Printers",
-    notConnected: "Printer Not Connected"
+    notConnected: "Printer Not Connected",
+    setup: {
+      title: "Printer Setup",
+      description: "Please complete the minimum printer configuration for service optimization",
+      printerName: "Printer Name",
+      manufacturer: "Manufacturer",
+      series: "Series",
+      model: "Model",
+      selectManufacturer: "Select a manufacturer",
+      selectSeries: "Select a series",
+      selectModel: "Select a model",
+      selectAllFields: "Please select all fields",
+      loadError: "Failed to load data",
+      saveSuccess: "Printer settings have been saved",
+      saveError: "Failed to save printer settings",
+      legend: {
+        fullSupport: "You can monitor and remotely control the printer.",
+        slicingSupported: "3D model slicing functionality supported",
+        limitedSlicing: "3D model slicing functionality is limited."
+      }
+    }
   },
   dashboard: {
     title: "Dashboard",
@@ -879,6 +899,12 @@ export default {
     contactUs: "Contact Us",
     upgrade: "Upgrade",
     downgrade: "Downgrade",
+    downgradeToFree: "Downgrade to Free",
+    cancelConfirmTitle: "Cancel Subscription?",
+    cancelConfirmMessage: "Canceling your subscription will downgrade you to the free plan, and you will lose access to premium features.",
+    cancelConfirmButton: "Cancel Subscription",
+    cancelSuccessTitle: "Subscription Canceled",
+    cancelSuccessMessage: "You have been downgraded to the free plan.",
     compareTitle: "Plan Details",
     compareSubtitle: "Compare all features in detail",
     faq: "Frequently Asked Questions",

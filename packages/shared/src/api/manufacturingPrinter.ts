@@ -15,6 +15,7 @@ export interface ManufacturingPrinter {
   };
   extruder_count?: number;
   heated_bed?: boolean;
+  cura_engine_support?: boolean;
 }
 
 export interface ManufacturerOption {
@@ -29,6 +30,7 @@ export interface ModelOption {
   model: string;
   display_name: string;
   id: string;
+  cura_engine_support?: boolean;
 }
 
 /**
@@ -81,7 +83,7 @@ export async function getModelsByManufacturerAndSeries(
 ): Promise<ModelOption[]> {
   const { data, error } = await supabase
     .from('manufacturing_printers')
-    .select('id, model, display_name')
+    .select('id, model, display_name, cura_engine_support')
     .eq('manufacturer', manufacturer)
     .eq('series', series)
     .eq('visible', true)

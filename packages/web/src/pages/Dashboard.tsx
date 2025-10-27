@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Monitor, Settings, ArrowRight, Activity, Thermometer, Clock, Lock, LogIn, Filter, Plus, Loader2 } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { supabase } from "@shared/integrations/supabase/client"
 import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { computeDashboardSummary, publishDashboardSummary, useDashboardSummary } from "@shared/component/dashboardSummary";
+import { PrinterSetupModal } from "@/components/PrinterSetupModal";
 
 // 로컬 스냅샷 퍼시스턴스 훅
 function usePersistentState<T>(key: string, fallback: T) {
@@ -87,8 +88,17 @@ interface PrinterOverview {
   device_uuid?: string;
 }
 
-const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; isAuthenticated: boolean }) => {
+const PrinterCard = ({
+  printer,
+  isAuthenticated,
+  onSetupClick
+}: {
+  printer: PrinterOverview;
+  isAuthenticated: boolean;
+  onSetupClick?: (printer: PrinterOverview) => void;
+}) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
@@ -104,13 +114,27 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
   const printerGroup = printer.group as { color?: string; name?: string } | undefined;
   const groupColor = hasGroupObject && printerGroup?.color ? printerGroup.color : '#9CA3AF';
   const groupName = hasGroupObject && printerGroup?.name ? printerGroup.name : t('dashboard.printer.noGroup');
-  
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+
+    if (!isAuthenticated) {
+      navigate("/auth");
+      return;
+    }
+
+    // model이 "Unknown"이거나 비어있으면 설정 모달 표시
+    if (!printer.model || printer.model === "Unknown") {
+      onSetupClick?.(printer);
+      return;
+    }
+
+    // 정상적으로 설정된 프린터는 상세 페이지로 이동
+    navigate(`/printer/${printer.id}`, { state: { printer } });
+  };
+
   return (
-    <Link
-      to={isAuthenticated ? `/printer/${printer.id}` : "/auth"}
-      state={{ printer }}
-      className="block"
-    >
+    <div onClick={handleClick} className="block cursor-pointer">
       <Card className="hover:shadow-lg hover:scale-105 transition-all duration-200 h-[450px] flex flex-col cursor-pointer">
         {/* 1. 프린터 정보 - 고정 높이 */}
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 flex-shrink-0">
@@ -226,7 +250,7 @@ const PrinterCard = ({ printer, isAuthenticated }: { printer: PrinterOverview; i
           </div>
         </CardContent>
       </Card>
-    </Link>
+    </div>
   );
 };
 
@@ -261,6 +285,21 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const summary = useDashboardSummary();
 
+  // 프린터 설정 모달 상태
+  const [showSetupModal, setShowSetupModal] = useState(false);
+  const [selectedPrinterForSetup, setSelectedPrinterForSetup] = useState<PrinterOverview | null>(null);
+
+  // 프린터 설정 클릭 핸들러
+  const handleSetupClick = (printer: PrinterOverview) => {
+    setSelectedPrinterForSetup(printer);
+    setShowSetupModal(true);
+  };
+
+  // 프린터 설정 완료 핸들러
+  const handleSetupSuccess = () => {
+    // 프린터 목록 새로고침
+    loadPrinters(false);
+  };
 
   // 프린터 데이터 로드: DB 조회 + localStorage의 MQTT 상태 복원
   const loadPrinters = useCallback(async (showSpinner?: boolean) => {
@@ -640,13 +679,29 @@ const Home = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredPrinters.map((printer) => {
                 return (
-                  <PrinterCard key={printer.id} printer={printer} isAuthenticated={!!user} />
+                  <PrinterCard
+                    key={printer.id}
+                    printer={printer}
+                    isAuthenticated={!!user}
+                    onSetupClick={handleSetupClick}
+                  />
                 );
               })}
             </div>
           )}
         </div>
       </div>
+
+      {/* 프린터 설정 모달 */}
+      {selectedPrinterForSetup && (
+        <PrinterSetupModal
+          open={showSetupModal}
+          onOpenChange={setShowSetupModal}
+          printerId={selectedPrinterForSetup.id}
+          printerName={selectedPrinterForSetup.name}
+          onSuccess={handleSetupSuccess}
+        />
+      )}
     </div>
   );
 };

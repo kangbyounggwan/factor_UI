@@ -260,11 +260,46 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
   const signUp = async (email: string, password: string, displayName?: string) => {
     const redirectUrl = ((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`;
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { emailRedirectTo: redirectUrl, data: { display_name: displayName || email.split("@")[0] } },
     });
+
+    // 회원가입 성공 시 기본 설정 생성 (트리거 대신 애플리케이션 레벨에서 처리)
+    if (!error && data?.user) {
+      try {
+        // 기본 알림 설정 생성
+        await supabase.from('user_notification_settings').insert({
+          user_id: data.user.id,
+          push_notifications: true,
+          print_complete_notifications: true,
+          error_notifications: true,
+          email_notifications: false,
+          weekly_report: false,
+          notification_sound: true,
+          notification_frequency: 'immediate',
+          quiet_hours_enabled: false,
+        }).select().maybeSingle();
+
+        // 기본 구독 정보 생성 (14일 무료 체험)
+        const trialEndDate = new Date();
+        trialEndDate.setDate(trialEndDate.getDate() + 14);
+
+        await supabase.from('user_subscriptions').insert({
+          user_id: data.user.id,
+          plan_name: 'basic',
+          status: 'trial',
+          current_period_start: new Date().toISOString(),
+          current_period_end: trialEndDate.toISOString(),
+          cancel_at_period_end: false,
+        }).select().maybeSingle();
+      } catch (setupError) {
+        console.warn('회원가입 후 기본 설정 생성 실패 (무시):', setupError);
+        // 설정 생성 실패는 무시 - 나중에 사용자가 직접 생성 가능
+      }
+    }
+
     return { error };
   };
 

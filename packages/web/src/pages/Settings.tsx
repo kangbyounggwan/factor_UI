@@ -14,7 +14,8 @@ import {
   Wifi,
   Settings as SettingsIcon,
   FolderPlus,
-  Palette
+  Palette,
+  AlertTriangle
 } from "lucide-react";
 import {
   Dialog,
@@ -1096,6 +1097,9 @@ const Settings = () => {
                     <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEditPrinter(printer)}>
                       <Edit className="h-3 w-3 mr-1" />
                       {t('settings.edit')}
+                      {!printer.manufacture_id && (
+                        <AlertTriangle className="h-3 w-3 ml-1 text-red-500" />
+                      )}
                     </Button>
                     <Button
                       variant="outline"
