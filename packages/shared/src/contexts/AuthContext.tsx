@@ -61,7 +61,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         .from("user_roles")
         .select("role")
         .eq("user_id", userId)
-        .single();
+        .maybeSingle();
       setUserRole(!error && data ? data.role : "user");
       lastRoleLoadedUserIdRef.current = userId;
     } catch {
