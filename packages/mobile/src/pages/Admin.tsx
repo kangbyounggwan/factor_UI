@@ -152,11 +152,11 @@ const Admin = () => {
 
   if (loading) {
     return (
-      <div className="bg-background p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">관리자 데이터를 불러오는 중...</p>
+      <div className="min-h-screen bg-background safe-area-top safe-area-bottom">
+        <div className="h-full flex items-center justify-center px-6">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-sm text-muted-foreground">관리자 데이터를 불러오는 중...</p>
           </div>
         </div>
       </div>

@@ -151,8 +151,13 @@ const Auth = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-background safe-area-top safe-area-bottom">
+        <div className="h-full flex items-center justify-center px-6">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+            <p className="mt-4 text-sm text-muted-foreground">{t('common.loading', '로딩 중...')}</p>
+          </div>
+        </div>
       </div>
     );
   }

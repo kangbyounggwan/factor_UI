@@ -149,6 +149,18 @@ const PrinterDetail = () => {
 
   // 프린터 연결 상태 (대시보드에서 전달받거나 MQTT로 업데이트됨)
   const printerConnected = data.printerStatus.connected;
+
+  // 디버깅: 연결 상태 로그
+  useEffect(() => {
+    console.log('[PrinterDetail] 연결 상태 디버깅:', {
+      printerConnected,
+      status: data.printerStatus.state,
+      connected: data.printerStatus.connected,
+      printing: data.printerStatus.printing,
+      deviceUuid,
+      timestamp: new Date().toISOString()
+    });
+  }, [printerConnected, data.printerStatus.state, data.printerStatus.connected, data.printerStatus.printing, deviceUuid]);
   const [printerName, setPrinterName] = useState<string>('Printer');
   const [streamUrl, setStreamUrl] = usePersistentState<string | null>(
     `printer:stream:${id ?? 'unknown'}`,
@@ -190,43 +202,73 @@ const PrinterDetail = () => {
   // 대시보드에서 전달받은 프린터 상태로 초기화 (지연 없는 즉시 반영)
   useEffect(() => {
     const routePrinter = (location.state as { printer?: Record<string, unknown> })?.printer;
-    if (!routePrinter) return;
+    console.log('[PrinterDetail] location.state에서 받은 프린터 정보:', routePrinter);
+
+    if (!routePrinter) {
+      console.log('[PrinterDetail] location.state에 프린터 정보 없음');
+      return;
+    }
+
+    console.log('[PrinterDetail] 대시보드에서 받은 연결 상태:', {
+      connected: routePrinter.connected,
+      state: routePrinter.state,
+      printing: routePrinter.printing
+    });
+
+    // 타입 캐스팅을 위한 타입 정의
+    type PrinterData = {
+      state?: string;
+      connected?: boolean;
+      printing?: boolean;
+      temperature?: {
+        tool_actual?: number;
+        tool_target?: number;
+        bed_actual?: number;
+        bed_target?: number;
+      };
+      completion?: number;
+      print_time_left?: number;
+      device_uuid?: string;
+      name?: string;
+      model?: string;
+    };
+    const printer = routePrinter as PrinterData;
 
     // 대시보드에서 받은 상태로 즉시 초기화
     setData((prev) => ({
       ...prev,
       printerStatus: {
         ...prev.printerStatus,
-        state: routePrinter.state || prev.printerStatus.state,
-        connected: routePrinter.connected ?? prev.printerStatus.connected,
-        printing: routePrinter.printing ?? prev.printerStatus.printing,
+        state: (printer.state as MonitoringData['printerStatus']['state']) || prev.printerStatus.state,
+        connected: printer.connected ?? prev.printerStatus.connected,
+        printing: printer.printing ?? prev.printerStatus.printing,
         timestamp: Date.now(),
       },
       temperature: {
         tool: {
-          actual: routePrinter.temperature?.tool_actual ?? prev.temperature.tool.actual,
-          target: routePrinter.temperature?.tool_target ?? prev.temperature.tool.target,
+          actual: printer.temperature?.tool_actual ?? prev.temperature.tool.actual,
+          target: printer.temperature?.tool_target ?? prev.temperature.tool.target,
         },
         bed: {
-          actual: routePrinter.temperature?.bed_actual ?? prev.temperature.bed.actual,
-          target: routePrinter.temperature?.bed_target ?? prev.temperature.bed.target,
+          actual: printer.temperature?.bed_actual ?? prev.temperature.bed.actual,
+          target: printer.temperature?.bed_target ?? prev.temperature.bed.target,
         },
       },
       printProgress: {
         ...prev.printProgress,
-        completion: routePrinter.completion ?? prev.printProgress.completion,
-        print_time_left: routePrinter.print_time_left ?? prev.printProgress.print_time_left,
+        completion: printer.completion ?? prev.printProgress.completion,
+        print_time_left: printer.print_time_left ?? prev.printProgress.print_time_left,
       },
     }));
 
     // device_uuid 설정
-    if (routePrinter.device_uuid) {
-      setDeviceUuid(routePrinter.device_uuid);
+    if (printer.device_uuid && typeof printer.device_uuid === 'string') {
+      setDeviceUuid(printer.device_uuid);
     }
 
     // 프린터 이름 설정
-    if (routePrinter.name || routePrinter.model) {
-      setPrinterName(routePrinter.name || routePrinter.model);
+    if (typeof printer.name === 'string' || typeof printer.model === 'string') {
+      setPrinterName(String(printer.name || printer.model || ''));
     }
   }, [location.state]);
 
@@ -532,15 +574,29 @@ const PrinterDetail = () => {
       // 기존 스냅샷에 병합만 수행(초기화 금지)
       // 스냅샷이 있을 경우, 서버의 상태값으로 덮어쓰지 않음 → 깜빡임 방지
       setData((prev) => {
-        if (hasSnapshot) return prev;
+        console.log('[PrinterDetail] Supabase에서 로드한 프린터 상태:', {
+          hasSnapshot,
+          status: printer?.status,
+          prevConnected: prev.printerStatus.connected,
+          prevState: prev.printerStatus.state
+        });
+
+        if (hasSnapshot) {
+          console.log('[PrinterDetail] localStorage 스냅샷 사용 - 서버 데이터 무시');
+          return prev;
+        }
+
         const printerData = printer as Record<string, unknown>;
+        const newConnected = printerData.status !== 'disconnected' && printerData.status !== 'disconnect';
+        console.log('[PrinterDetail] 새 연결 상태 계산:', { status: printerData.status, connected: newConnected });
+
         return {
           ...prev,
           printerStatus: {
             ...prev.printerStatus,
             state: (printerData.status as MonitoringData['printerStatus']['state']) ?? prev.printerStatus.state,
             timestamp: Date.now(),
-            connected: (printerData.status !== 'disconnected' && printerData.status !== 'disconnect') ?? prev.printerStatus.connected,
+            connected: newConnected,
             printing: (printerData.status === 'printing') || prev.printProgress.active === true,
           },
         };
@@ -1002,7 +1058,7 @@ const PrinterDetail = () => {
   return (
     <div className="bg-background min-h-screen">
       {/* 상단 헤더 - 고정 */}
-      <div className="sticky top-0 z-10 bg-background border-b">
+      <div className="sticky top-0 z-10 bg-background border-b safe-area-top">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
             <Button asChild variant="ghost" size="sm" className="h-9 w-9 p-0">
@@ -1150,14 +1206,17 @@ const PrinterDetail = () => {
         )}
 
         {/* 연결 끊김 시 비활성화 오버레이 */}
-        {!printerConnected && (
-          <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
-            <div className="text-center text-white">
-              <WifiOff className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p className="text-sm font-medium">{t('camera.serverConnectionRequired')}</p>
+        {!printerConnected && (() => {
+          console.log('[PrinterDetail] 카메라 피드 오버레이 표시:', { printerConnected, status: data.printerStatus.state });
+          return (
+            <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
+              <div className="text-center text-white">
+                <WifiOff className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p className="text-sm font-medium">{t('camera.serverConnectionRequired')}</p>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* 메인 콘텐츠 - 스와이프 네비게이션 */}
@@ -1187,13 +1246,16 @@ const PrinterDetail = () => {
                   printerState={data.printerStatus.state}
                   flags={data.printerStatus.flags}
                 />
-                {!printerConnected && (
-                  <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
-                    <div className="text-center">
-                      <div className="text-sm font-medium">{t('printerDetail.noConnection')}</div>
+                {!printerConnected && (() => {
+                  console.log('[PrinterDetail] 프린터 원격 제어 오버레이 표시:', { printerConnected, status: data.printerStatus.state });
+                  return (
+                    <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
+                      <div className="text-center">
+                        <div className="text-sm font-medium">{t('printerDetail.noConnection')}</div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
 

@@ -11,6 +11,9 @@ project(':capacitor-app').projectDir = new File('../../../node_modules/@capacito
 include ':capacitor-browser'
 project(':capacitor-browser').projectDir = new File('../../../node_modules/@capacitor/browser/android')
 
+include ':capacitor-camera'
+project(':capacitor-camera').projectDir = new File('../../../node_modules/@capacitor/camera/android')
+
 include ':capacitor-filesystem'
 project(':capacitor-filesystem').projectDir = new File('../../../node_modules/@capacitor/filesystem/android')
 
@@ -20,5 +23,11 @@ project(':capacitor-keyboard').projectDir = new File('../../../node_modules/@cap
 include ':capacitor-network'
 project(':capacitor-network').projectDir = new File('../../../node_modules/@capacitor/network/android')
 
+include ':capacitor-share'
+project(':capacitor-share').projectDir = new File('../../../node_modules/@capacitor/share/android')
+
 include ':capacitor-status-bar'
 project(':capacitor-status-bar').projectDir = new File('../../../node_modules/@capacitor/status-bar/android')
+
+include ':capawesome-capacitor-file-picker'
+project(':capawesome-capacitor-file-picker').projectDir = new File('../../../node_modules/@capawesome/capacitor-file-picker/android')

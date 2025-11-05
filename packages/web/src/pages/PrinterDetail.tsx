@@ -152,6 +152,18 @@ const PrinterDetail = () => {
 
   // 프린터 연결 상태 (대시보드에서 전달받거나 MQTT로 업데이트됨)
   const printerConnected = data.printerStatus.connected;
+
+  // 연결 상태 디버깅
+  useEffect(() => {
+    console.log('[웹 PrinterDetail] 연결 상태:', {
+      printerConnected,
+      status_state: data.printerStatus.state,
+      status_connected: data.printerStatus.connected,
+      status_printing: data.printerStatus.printing,
+      deviceUuid,
+      timestamp: new Date().toISOString()
+    });
+  }, [printerConnected, data.printerStatus.state, data.printerStatus.connected, data.printerStatus.printing, deviceUuid]);
   const [streamUrl, setStreamUrl] = usePersistentState<string | null>(
     `printer:stream:${id ?? 'unknown'}`,
     null
@@ -184,18 +196,31 @@ const PrinterDetail = () => {
   useEffect(() => {
     try {
       // 1) 라우팅 state 우선 사용(향후 대시보드에서 전달 시 활용)
-      const locationState = location?.state as { id?: string; state?: string; connected?: boolean; printing?: boolean; device_uuid?: string } | null;
-      const fromRoute = locationState || null;
+      // Dashboard에서 전달하는 printer 객체는 PrinterOverview 타입
+      const locationState = location?.state as { printer?: { id?: string; state?: string; connected?: boolean; printing?: boolean; device_uuid?: string } } | null;
+      const fromRoute = locationState?.printer || null;
       const routeMatch = fromRoute && String(fromRoute.id || '') === String(id || '');
       const candidate = routeMatch ? fromRoute : null;
+
+      console.log('[웹 PrinterDetail] 부트스트랩 - location.state:', locationState);
+      console.log('[웹 PrinterDetail] 부트스트랩 - routeMatch:', routeMatch, 'candidate:', candidate);
 
       // 2) 없으면 로컬 스냅샷에서 조회
       const local = candidate ? null : localStorage.getItem('web:dashboard:printers');
       const list: Array<{ id?: string; device_uuid?: string; state?: string; connected?: boolean; printing?: boolean }> = local ? JSON.parse(local) : [];
       const fromLocal = candidate ? null : list.find((p) => String(p?.id || '') === String(id || ''));
 
+      console.log('[웹 PrinterDetail] 부트스트랩 - localStorage 프린터 리스트:', list);
+      console.log('[웹 PrinterDetail] 부트스트랩 - fromLocal:', fromLocal);
+
       const snap = candidate || fromLocal;
       if (snap) {
+        console.log('[웹 PrinterDetail] 부트스트랩 - 스냅샷 사용:', {
+          connected: snap.connected,
+          state: snap.state,
+          printing: snap.printing,
+          device_uuid: snap.device_uuid
+        });
         setData((prev) => ({
           ...prev,
           printerStatus: {
@@ -209,8 +234,10 @@ const PrinterDetail = () => {
         if (!deviceUuid && snap.device_uuid) {
           setDeviceUuid(String(snap.device_uuid));
         }
+      } else {
+        console.log('[웹 PrinterDetail] 부트스트랩 - 스냅샷 없음');
       }
-    } catch (err) { console.warn('Failed to bootstrap from snapshot:', err); }
+    } catch (err) { console.warn('[웹 PrinterDetail] 부트스트랩 실패:', err); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -299,7 +326,7 @@ const PrinterDetail = () => {
   const loadPrinterData = async (showSpinner?: boolean) => {
     try {
       if (showSpinner ?? !hasSnapshot) setLoading(true);
-      
+
       // 프린터 기본 정보 로드
       const { data: printer, error } = await supabase
         .from('printers')
@@ -309,14 +336,27 @@ const PrinterDetail = () => {
         .single();
 
       if (error) {
-        console.error('Error loading printer:', error);
+        console.error('[웹 PrinterDetail] Supabase 로드 에러:', error);
         return;
       }
+
+      console.log('[웹 PrinterDetail] Supabase에서 로드한 프린터 데이터:', {
+        id: printer.id,
+        status: printer.status,
+        hasSnapshot
+      });
 
       // 기존 스냅샷에 병합만 수행(초기화 금지)
       // 스냅샷이 있을 경우, 서버의 상태값으로 덮어쓰지 않음 → 깜빡임 방지
       setData((prev) => {
-        if (hasSnapshot) return prev;
+        if (hasSnapshot) {
+          console.log('[웹 PrinterDetail] localStorage 스냅샷 있음 - Supabase 데이터 무시');
+          return prev;
+        }
+        console.log('[웹 PrinterDetail] localStorage 스냅샷 없음 - Supabase 데이터 사용:', {
+          prevConnected: prev.printerStatus.connected,
+          newState: printer.status
+        });
         return {
           ...prev,
           printerStatus: {
@@ -389,6 +429,14 @@ const PrinterDetail = () => {
     if (!deviceUuid) return;
     const off = onDashStatusMessage((uuid, payload) => {
       if (uuid !== deviceUuid) return;
+
+      console.log('[웹 PrinterDetail] MQTT dash_status 수신:', {
+        uuid,
+        printerStatus: payload?.printer_status,
+        connection: payload?.connection,
+        flags: payload?.printer_status?.flags
+      });
+
       setData((prev) => {
         // connection 배열([state, port, baudrate]) 기반 UI 상태 동기화
         const conn = payload?.connection;
@@ -401,7 +449,7 @@ const PrinterDetail = () => {
               // 요청사항: Printer Profile은 connection[3].name을 사용 (매핑: connection.profile_name)
               printerProfile: (conn as typeof conn & { profile_name?: string }).profile_name || ci.printerProfile,
             }));
-          } catch (err) { console.warn('Failed to update connection info:', err); }
+          } catch (err) { console.warn('[웹 PrinterDetail] 연결 정보 업데이트 실패:', err); }
         }
         const bed = payload?.temperature_info?.bed;
         const toolAny = payload?.temperature_info?.tool;
@@ -410,6 +458,13 @@ const PrinterDetail = () => {
         const nextState = flags?.ready === true
           ? 'operational'
           : (payload?.printer_status?.state ?? prev.printerStatus.state);
+
+        console.log('[웹 PrinterDetail] MQTT 업데이트 후 상태:', {
+          prevConnected: prev.printerStatus.connected,
+          newState: nextState,
+          flags
+        });
+
         return {
           ...prev,
           printerStatus: {
@@ -812,14 +867,21 @@ const PrinterDetail = () => {
                   isConnected={printerConnected}
                   resolution="1280x720"
                 />
-                {!printerConnected && (
-                  <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
-                    <div className="text-center">
-                      <div className="text-lg font-medium">{t('printerDetail.noConnection')}</div>
-                      <div className="text-xs mt-1">{t('printerDetail.noConnectionDesc')}</div>
+                {!printerConnected && (() => {
+                  console.log('[웹 PrinterDetail] 카메라 피드 오버레이 표시:', {
+                    printerConnected,
+                    status: data.printerStatus.state,
+                    connected: data.printerStatus.connected
+                  });
+                  return (
+                    <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
+                      <div className="text-center">
+                        <div className="text-lg font-medium">{t('printerDetail.noConnection')}</div>
+                        <div className="text-xs mt-1">{t('printerDetail.noConnectionDesc')}</div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
             <div className="col-span-3">
@@ -831,14 +893,21 @@ const PrinterDetail = () => {
                   printerState={data.printerStatus.state}
                   flags={data.printerStatus.flags}
                 />
-                {!printerConnected && (
-                  <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
-                    <div className="text-center">
-                      <div className="text-lg font-medium">{t('printerDetail.noConnection')}</div>
-                      <div className="text-xs mt-1">{t('printerDetail.noConnectionDesc')}</div>
+                {!printerConnected && (() => {
+                  console.log('[웹 PrinterDetail] 프린터 원격 제어 오버레이 표시:', {
+                    printerConnected,
+                    status: data.printerStatus.state,
+                    connected: data.printerStatus.connected
+                  });
+                  return (
+                    <div className="absolute inset-0 rounded-lg bg-muted/90 text-muted-foreground flex items-center justify-center pointer-events-none">
+                      <div className="text-center">
+                        <div className="text-lg font-medium">{t('printerDetail.noConnection')}</div>
+                        <div className="text-xs mt-1">{t('printerDetail.noConnectionDesc')}</div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           </div>

@@ -85,7 +85,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
       setUploading(true);
       setUploadProgress(0);
       if (!deviceUuid) {
-        throw new Error('디바이스가 선택되지 않았습니다.');
+        throw new Error(t('errors.deviceNotSelected'));
       }
 
       await mqttConnect();

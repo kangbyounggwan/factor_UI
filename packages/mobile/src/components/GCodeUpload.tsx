@@ -5,17 +5,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Upload, 
-  File, 
-  Play, 
-  Trash2, 
-  Clock, 
-  HardDrive 
+import {
+  Upload,
+  File,
+  Play,
+  Trash2,
+  Clock,
+  HardDrive
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useWebSocket } from "@shared/hooks/useWebSocket";
 import { supabase } from "@shared/integrations/supabase/client";
+import { FilePicker } from '@capawesome/capacitor-file-picker';
+import { Capacitor } from '@capacitor/core';
+import { useTranslation } from 'react-i18next';
 
 interface GCodeFile {
   id: string;
@@ -34,6 +37,7 @@ interface GCodeUploadProps {
 }
 
 export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProps) => {
+  const { t } = useTranslation();
   const { printerStatus } = useWebSocket();
   const [files, setFiles] = useState<GCodeFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -51,27 +55,73 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
   };
 
   const formatTime = (seconds?: number): string => {
-    if (!seconds) return "미정";
+    if (!seconds) return t('gcode.noFiles');
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    return hours > 0 ? `${hours}시간 ${minutes}분` : `${minutes}분`;
+    return hours > 0 ? `${hours}${t('printerDetail.hours')} ${minutes}${t('printerDetail.minutes')}` : `${minutes}${t('printerDetail.minutes')}`;
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleFileSelect = async (event?: React.ChangeEvent<HTMLInputElement>) => {
+    // 네이티브 플랫폼에서는 Capacitor File Picker 사용
+    if (Capacitor.isNativePlatform() && !event) {
+      try {
+        const result = await FilePicker.pickFiles({
+          types: ['*/*'], // GCode는 특정 MIME type이 없으므로 모든 파일 허용
+          multiple: false,
+        });
 
-    // Check file extension
-    if (!file.name.toLowerCase().endsWith('.gcode')) {
-      toast({
-        title: "파일 형식 오류",
-        description: "G-code 파일(.gcode)만 업로드 가능합니다.",
-        variant: "destructive"
-      });
-      return;
+        if (!result.files || result.files.length === 0) return;
+
+        const pickedFile = result.files[0];
+
+        // Check file extension
+        if (!pickedFile.name?.toLowerCase().endsWith('.gcode')) {
+          toast({
+            title: t('errors.unsupportedFormat'),
+            description: t('errors.unsupportedFormat'),
+            variant: "destructive"
+          });
+          return;
+        }
+
+        // Blob 데이터 생성
+        const blob = pickedFile.blob || (pickedFile.data ? new Blob([new Uint8Array(atob(pickedFile.data).split('').map(c => c.charCodeAt(0)))]) : null);
+
+        if (!blob) {
+          throw new Error(t('errors.loadFailed'));
+        }
+
+        // File 객체로 변환
+        const file = new File([blob], pickedFile.name || 'unknown.gcode', {
+          type: pickedFile.mimeType || 'text/plain',
+        });
+
+        handleUpload(file);
+      } catch (error) {
+        console.error('File picker error:', error);
+        toast({
+          title: t('errors.fileNotSelected'),
+          description: t('errors.general'),
+          variant: "destructive"
+        });
+      }
+    } else if (event) {
+      // 웹에서는 기존 파일 업로드 방식
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      // Check file extension
+      if (!file.name.toLowerCase().endsWith('.gcode')) {
+        toast({
+          title: t('errors.unsupportedFormat'),
+          description: t('errors.unsupportedFormat'),
+          variant: "destructive"
+        });
+        return;
+      }
+
+      handleUpload(file);
     }
-
-    handleUpload(file);
   };
 
   const handleUpload = async (file: File) => {
@@ -96,7 +146,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
 
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('인증되지 않은 사용자입니다.');
+      if (!user) throw new Error(t('errors.general'));
 
       // Save metadata to database
       const { error: dbError } = await supabase
@@ -116,18 +166,18 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
       setUploadProgress(100);
 
       toast({
-        title: "업로드 완료",
-        description: `${file.name}이 성공적으로 업로드되었습니다.`,
+        title: t('gcode.uploadSuccess'),
+        description: `${file.name}`,
       });
 
       // Refresh file list
       loadFiles();
-      
+
     } catch (error) {
       console.error('Upload error:', error);
       toast({
-        title: "업로드 실패",
-        description: "파일 업로드 중 오류가 발생했습니다.",
+        title: t('gcode.uploadFailed'),
+        description: t('gcode.uploadFailed'),
         variant: "destructive"
       });
     } finally {
@@ -156,8 +206,8 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
   const handlePrintFile = (file: GCodeFile) => {
     console.log(`Starting print for file: ${file.filename}`);
     toast({
-      title: "프린트 시작",
-      description: `${file.filename} 파일로 프린트를 시작합니다.`,
+      title: t('gcode.printStart'),
+      description: t('gcode.printStartDesc', { file: file.filename }),
     });
   };
 
@@ -179,16 +229,16 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
       if (dbError) throw dbError;
 
       toast({
-        title: "파일 삭제",
-        description: `${file.filename}이 삭제되었습니다.`,
+        title: t('gcode.deleteSuccess'),
+        description: `${file.filename}`,
       });
 
       loadFiles();
     } catch (error) {
       console.error('Delete error:', error);
       toast({
-        title: "삭제 실패",
-        description: "파일 삭제 중 오류가 발생했습니다.",
+        title: t('gcode.deleteFailed'),
+        description: t('gcode.deleteFailed'),
         variant: "destructive"
       });
     }
@@ -204,49 +254,57 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <File className="h-4 w-4" />
-          G-code 파일 관리
+          {t('gcode.title')}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col space-y-4 text-xs overflow-hidden">
         {/* 파일 업로드 */}
         <div className="space-y-2">
-          <Label className="text-xs">파일 업로드</Label>
+          <Label className="text-xs">{t('gcode.uploadGcode')}</Label>
           <div className="flex gap-2">
-            <Input
-              ref={fileInputRef}
-              type="file"
-              accept=".gcode"
-              onChange={handleFileSelect}
-              disabled={uploading || !isConnected}
-              className="h-8 text-xs"
-            />
+            {!Capacitor.isNativePlatform() && (
+              <Input
+                ref={fileInputRef}
+                type="file"
+                accept=".gcode"
+                onChange={handleFileSelect}
+                disabled={uploading || !isConnected}
+                className="h-8 text-xs"
+              />
+            )}
             <Button
               size="sm"
               variant="outline"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                if (Capacitor.isNativePlatform()) {
+                  handleFileSelect();
+                } else {
+                  fileInputRef.current?.click();
+                }
+              }}
               disabled={uploading || !isConnected}
-              className="h-8 px-3"
+              className={Capacitor.isNativePlatform() ? "h-8 px-3 flex-1" : "h-8 px-3"}
             >
               <Upload className="h-3 w-3 mr-1" />
-              선택
+              {t('common.search')}
             </Button>
           </div>
           
           {uploading && (
             <div className="space-y-1">
               <Progress value={uploadProgress} className="h-1" />
-              <p className="text-xs text-muted-foreground">업로드 중... {uploadProgress}%</p>
+              <p className="text-xs text-muted-foreground">{t('common.uploading')} {uploadProgress}%</p>
             </div>
           )}
         </div>
 
         {/* 파일 목록 */}
         <div className="flex-1 flex flex-col space-y-2 min-h-0">
-          <Label className="text-xs">업로드된 파일</Label>
+          <Label className="text-xs">{t('gcode.uploadedFiles')}</Label>
           <div className="flex-1 overflow-y-auto space-y-1 pr-2">
             {files.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-2">
-                업로드된 파일이 없습니다
+                {t('gcode.noFiles')}
               </p>
             ) : (
               files.map((file) => (
@@ -268,7 +326,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
                     </div>
                   </div>
                   <Badge variant="secondary" className="text-xs">
-                    {file.status === 'uploaded' ? '대기' : file.status}
+                    {file.status === 'uploaded' ? t('common.waiting') : file.status}
                   </Badge>
                   <Button
                     size="sm"

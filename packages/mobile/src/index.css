@@ -133,7 +133,7 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
     /* 키보드 처리는 capacitor.config.ts에서 resize: 'none'으로 설정됨 */
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* Safe Area는 각 페이지 헤더에서 개별적으로 처리 */
   }
 }
 
@@ -145,5 +145,28 @@ All colors MUST be HSL.
   }
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
+  }
+
+  /* Safe Area 유틸리티 클래스 */
+  .safe-area-top {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+  }
+
+  .safe-area-bottom {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+  }
+
+  .safe-area-inset {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+  }
+
+  /* Safe Area without extra padding (시스템바 높이만 적용) */
+  .safe-area-top-only {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .safe-area-bottom-only {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }

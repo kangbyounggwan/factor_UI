@@ -1,0 +1,1581 @@
+import { useState, useEffect, useRef } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Plus,
+  Trash2,
+  Edit,
+  Settings as SettingsIcon,
+  FolderPlus,
+  AlertTriangle,
+  CheckCircle,
+  AlertCircle,
+  ChevronRight,
+  ArrowLeft
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { supabase } from "@shared/integrations/supabase/client";
+import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
+import { useAuth } from "@shared/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
+import { getPrinterStatusInfo } from "@shared/utils/printerStatus";
+import type { PrinterState, PrinterStateFlags } from "@shared/types/printerType";
+import { onDashStatusMessage } from "@shared/services/mqttService";
+import { cn } from "@/lib/utils";
+import {
+  getManufacturers,
+  getSeriesByManufacturer,
+  getModelsByManufacturerAndSeries,
+  type ManufacturerOption,
+  type SeriesOption,
+  type ModelOption
+} from "@shared/api/manufacturingPrinter";
+import { FullScreenInput } from "@/components/FullScreenInput";
+
+// 프린터 그룹 타입
+interface PrinterGroup {
+  id: string;
+  name: string;
+  description?: string;
+  color: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// 프린터 설정 타입
+interface PrinterConfig {
+  id: string;
+  name: string;
+  model: string;
+  group_id?: string;
+  group?: PrinterGroup;
+  ip_address: string;
+  port: number;
+  api_key?: string;
+  firmware: "marlin" | "klipper" | "repetier" | "octoprint";
+  status: "connected" | "disconnected" | "error";
+  last_connected?: Date;
+  device_uuid?: string;
+  manufacture_id?: string; // manufacturing_printers ID 저장
+  // MQTT 실시간 상태
+  mqttConnected?: boolean;
+  mqttState?: PrinterState;
+  mqttFlags?: PrinterStateFlags;
+}
+
+// 미리 정의된 색상 팔레트
+const colorPalette = [
+  "#3b82f6", "#ef4444", "#10b981", "#f59e0b",
+  "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16",
+  "#f97316", "#6366f1", "#14b8a6", "#eab308"
+];
+
+// 그룹 추가 페이지 컴포넌트
+interface AddGroupPageProps {
+  onBack: () => void;
+  onUpdate: () => void;
+}
+
+const AddGroupPage = ({ onBack, onUpdate }: AddGroupPageProps) => {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [newGroup, setNewGroup] = useState({
+    name: "",
+    description: "",
+    color: colorPalette[0]
+  });
+  const [editingField, setEditingField] = useState<{
+    key: string;
+    title: string;
+    label: string;
+    value: string;
+    placeholder: string;
+    onChange: (value: string) => void;
+  } | null>(null);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+
+  const handleSave = async () => {
+    if (!user || !newGroup.name.trim()) {
+      toast({
+        title: t('settings.error'),
+        description: t('settings.groupName') + ' ' + t('settings.groupNamePlaceholder'),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('printer_groups')
+        .insert([{
+          user_id: user.id,
+          name: newGroup.name.trim(),
+          description: newGroup.description.trim() || null,
+          color: newGroup.color
+        }]);
+
+      if (error) throw error;
+
+      toast({
+        title: t('settings.success'),
+        description: t('settings.groupAdded'),
+      });
+      onUpdate();
+      onBack();
+    } catch (error) {
+      console.error('Error adding group:', error);
+      toast({
+        title: t('settings.error'),
+        description: t('settings.addGroupError'),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const groupFields = [
+    {
+      key: "name",
+      label: t("settings.groupName"),
+      value: newGroup.name,
+      onChange: (value: string) => setNewGroup({ ...newGroup, name: value }),
+      placeholder: t("settings.groupNamePlaceholder"),
+      readOnly: false,
+    },
+    {
+      key: "description",
+      label: t("settings.groupDescription"),
+      value: newGroup.description,
+      onChange: (value: string) => setNewGroup({ ...newGroup, description: value }),
+      placeholder: t("settings.groupDescriptionPlaceholder"),
+      readOnly: false,
+    },
+  ];
+
+  const handleFieldClick = (field: typeof groupFields[0]) => {
+    if (field.readOnly) return;
+
+    setEditingField({
+      key: field.key,
+      title: field.label,
+      label: field.label,
+      value: field.value,
+      placeholder: field.placeholder,
+      onChange: field.onChange,
+    });
+  };
+
+  return (
+    <>
+      <div className="min-h-screen bg-background pb-24">
+        {/* 헤더 */}
+        <div className="sticky top-0 z-10 bg-background border-b">
+          <div className="flex items-center justify-between px-4 py-3">
+            <button
+              onClick={onBack}
+              className="p-2 hover:bg-accent rounded-full transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <h1 className="text-lg font-semibold">{t('settings.newGroup')}</h1>
+            <div className="w-9" />
+          </div>
+        </div>
+
+        {/* 프로필 필드 */}
+        <div className="px-4 py-4">
+          {groupFields.map((field, index) => (
+            <div key={index}>
+              <button
+                className="w-full flex items-center justify-between py-4 hover:bg-accent transition-colors"
+                onClick={() => handleFieldClick(field)}
+              >
+                <span className="text-sm font-medium text-muted-foreground min-w-[80px]">
+                  {field.label}
+                </span>
+                <div className="flex items-center gap-2 flex-1 justify-end">
+                  <span className={`text-sm text-right ${field.value ? "" : "text-muted-foreground"}`}>
+                    {field.value || t('settings.notSet')}
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </button>
+              {index < groupFields.length - 1 && (
+                <div className="border-b border-border/50" />
+              )}
+            </div>
+          ))}
+
+          {/* 색상 선택 */}
+          <div className="border-b border-border/50" />
+          <button
+            className="w-full flex items-center justify-between py-4 hover:bg-accent transition-colors"
+            onClick={() => setShowColorPicker(true)}
+          >
+            <span className="text-sm font-medium text-muted-foreground min-w-[80px]">
+              {t('settings.groupColor')}
+            </span>
+            <div className="flex items-center gap-2">
+              <div
+                className="w-6 h-6 rounded-full border-2 border-border"
+                style={{ backgroundColor: newGroup.color }}
+              />
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </button>
+        </div>
+
+        {/* 저장 버튼 */}
+        <div className="fixed bottom-4 left-0 right-0 p-4 bg-background border-t">
+          <Button
+            onClick={handleSave}
+            className="w-full h-12"
+            disabled={!newGroup.name.trim()}
+          >
+            {t('settings.add')}
+          </Button>
+        </div>
+      </div>
+
+      {/* 전체 화면 입력 모달 */}
+      {editingField && (
+        <FullScreenInput
+          isOpen={!!editingField}
+          onClose={() => setEditingField(null)}
+          onConfirm={(value) => {
+            editingField.onChange(value);
+          }}
+          title={editingField.title}
+          label={editingField.label}
+          value={editingField.value}
+          placeholder={editingField.placeholder}
+          type="text"
+        />
+      )}
+
+      {/* 색상 선택 전체 화면 모달 */}
+      {showColorPicker && (
+        <div className="fixed inset-0 z-50 bg-background animate-in fade-in duration-200 flex flex-col">
+          {/* Header - back button only */}
+          <div className="px-6 py-4">
+            <button
+              onClick={() => setShowColorPicker(false)}
+              className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
+            >
+              <ArrowLeft className="h-6 w-6" />
+            </button>
+          </div>
+
+          {/* Title and description */}
+          <div className="px-6 py-8">
+            <h1 className="text-3xl font-bold mb-2">
+              {t('settings.selectColor', '색상을 선택해주세요')}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {t('settings.colorDescription', '그룹의 색상을 나타냅니다!')}
+            </p>
+          </div>
+
+          {/* Color grid - flex-1 for expansion */}
+          <div className="flex-1 px-6">
+            <div className="grid grid-cols-4 gap-4">
+              {colorPalette.map((color) => (
+                <button
+                  key={color}
+                  className={`w-full aspect-square rounded-2xl border-4 transition-all ${
+                    newGroup.color === color ? "border-primary scale-95" : "border-transparent hover:scale-105"
+                  }`}
+                  style={{ backgroundColor: color }}
+                  onClick={() => {
+                    setNewGroup({ ...newGroup, color });
+                    setShowColorPicker(false);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+// 그룹 상세 페이지 컴포넌트
+interface GroupDetailPageProps {
+  group: PrinterGroup;
+  onBack: () => void;
+  onUpdate: () => void;
+}
+
+const GroupDetailPage = ({ group, onBack, onUpdate }: GroupDetailPageProps) => {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [editedGroup, setEditedGroup] = useState({
+    name: group.name,
+    description: group.description || "",
+    color: group.color
+  });
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [editingField, setEditingField] = useState<{
+    key: string;
+    title: string;
+    label: string;
+    value: string;
+    placeholder: string;
+    onChange: (value: string) => void;
+  } | null>(null);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+
+  const handleSave = async () => {
+    if (!user || !editedGroup.name.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from('printer_groups')
+        .update({
+          name: editedGroup.name.trim(),
+          description: editedGroup.description.trim() || null,
+          color: editedGroup.color
+        })
+        .eq('id', group.id);
+
+      if (error) throw error;
+
+      toast({
+        title: t('settings.success'),
+        description: t('settings.groupUpdated'),
+      });
+      onUpdate();
+      onBack();
+    } catch (error) {
+      console.error('Error updating group:', error);
+      toast({
+        title: t('settings.error'),
+        description: t('settings.updateGroupError'),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('printer_groups')
+        .delete()
+        .eq('id', group.id);
+
+      if (error) throw error;
+
+      toast({
+        title: t('settings.success'),
+        description: t('settings.groupDeleted'),
+      });
+      onUpdate();
+      onBack();
+    } catch (error) {
+      console.error('Error deleting group:', error);
+      toast({
+        title: t('settings.error'),
+        description: t('settings.deleteGroupError'),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const groupFields = [
+    {
+      key: "name",
+      label: t("settings.groupName"),
+      value: editedGroup.name,
+      onChange: (value: string) => setEditedGroup({ ...editedGroup, name: value }),
+      placeholder: t("settings.groupNamePlaceholder"),
+      readOnly: false,
+    },
+    {
+      key: "description",
+      label: t("settings.groupDescription"),
+      value: editedGroup.description,
+      onChange: (value: string) => setEditedGroup({ ...editedGroup, description: value }),
+      placeholder: t("settings.groupDescriptionPlaceholder"),
+      readOnly: false,
+    },
+  ];
+
+  const handleFieldClick = (field: typeof groupFields[0]) => {
+    if (field.readOnly) return;
+
+    setEditingField({
+      key: field.key,
+      title: field.label,
+      label: field.label,
+      value: field.value,
+      placeholder: field.placeholder,
+      onChange: field.onChange,
+    });
+  };
+
+  return (
+    <>
+      <div className="min-h-screen bg-background pb-24">
+        {/* 헤더 */}
+        <div className="sticky top-0 z-10 bg-background border-b">
+          <div className="flex items-center justify-between px-4 py-3">
+            <button
+              onClick={onBack}
+              className="p-2 hover:bg-accent rounded-full transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <h1 className="text-lg font-semibold">{t('settings.editGroup')}</h1>
+            <div className="w-9" />
+          </div>
+        </div>
+
+        {/* 프로필 필드 */}
+        <div className="px-4 py-4">
+          {groupFields.map((field, index) => (
+            <div key={index}>
+              <button
+                className="w-full flex items-center justify-between py-4 hover:bg-accent transition-colors"
+                onClick={() => handleFieldClick(field)}
+              >
+                <span className="text-sm font-medium text-muted-foreground min-w-[80px]">
+                  {field.label}
+                </span>
+                <div className="flex items-center gap-2 flex-1 justify-end">
+                  <span className={`text-sm text-right ${field.value ? "" : "text-muted-foreground"}`}>
+                    {field.value || t('settings.notSet')}
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </button>
+              {index < groupFields.length - 1 && (
+                <div className="border-b border-border/50" />
+              )}
+            </div>
+          ))}
+
+          {/* 색상 선택 */}
+          <div className="border-b border-border/50" />
+          <button
+            className="w-full flex items-center justify-between py-4 hover:bg-accent transition-colors"
+            onClick={() => setShowColorPicker(true)}
+          >
+            <span className="text-sm font-medium text-muted-foreground min-w-[80px]">
+              {t('settings.groupColor')}
+            </span>
+            <div className="flex items-center gap-2">
+              <div
+                className="w-6 h-6 rounded-full border-2 border-border"
+                style={{ backgroundColor: editedGroup.color }}
+              />
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </button>
+        </div>
+
+        {/* 저장 버튼 */}
+        <div className="fixed bottom-4 left-0 right-0 p-4 bg-background border-t">
+          <Button
+            onClick={handleSave}
+            className="w-full h-12 mb-2"
+          >
+            {t('settings.save')}
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => setShowDeleteDialog(true)}
+            className="w-full h-12"
+          >
+            {t('settings.deleteGroup')}
+          </Button>
+        </div>
+      </div>
+
+      {/* 전체 화면 입력 모달 */}
+      {editingField && (
+        <FullScreenInput
+          isOpen={!!editingField}
+          onClose={() => setEditingField(null)}
+          onConfirm={(value) => {
+            editingField.onChange(value);
+          }}
+          title={editingField.title}
+          label={editingField.label}
+          value={editingField.value}
+          placeholder={editingField.placeholder}
+          type="text"
+        />
+      )}
+
+      {/* 색상 선택 전체 화면 모달 */}
+      {showColorPicker && (
+        <div className="fixed inset-0 z-50 bg-background animate-in fade-in duration-200 flex flex-col">
+          {/* Header - back button only */}
+          <div className="px-6 py-4">
+            <button
+              onClick={() => setShowColorPicker(false)}
+              className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
+            >
+              <ArrowLeft className="h-6 w-6" />
+            </button>
+          </div>
+
+          {/* Title and description */}
+          <div className="px-6 py-8">
+            <h1 className="text-3xl font-bold mb-2">
+              {t('settings.selectColor', '색상을 선택해주세요')}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {t('settings.colorDescription', '그룹의 색상을 나타냅니다!')}
+            </p>
+          </div>
+
+          {/* Color grid - flex-1 for expansion */}
+          <div className="flex-1 px-6">
+            <div className="grid grid-cols-4 gap-4">
+              {colorPalette.map((color) => (
+                <button
+                  key={color}
+                  className={`w-full aspect-square rounded-2xl border-4 transition-all ${
+                    editedGroup.color === color ? "border-primary scale-95" : "border-transparent hover:scale-105"
+                  }`}
+                  style={{ backgroundColor: color }}
+                  onClick={() => {
+                    setEditedGroup({ ...editedGroup, color });
+                    setShowColorPicker(false);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 삭제 확인 Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="sm:max-w-md rounded-2xl" aria-describedby={undefined}>
+          <DialogHeader className="pb-2">
+            <DialogTitle className="text-xl font-semibold">{t('settings.deleteGroup')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">
+              {t('settings.deleteGroupConfirm')}
+            </p>
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteDialog(false)}
+                className="flex-1 h-12 rounded-xl text-base font-medium"
+              >
+                {t('settings.cancel')}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                className="flex-1 h-12 rounded-xl text-base font-medium"
+              >
+                {t('settings.delete')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};
+
+// 프린터 상세 페이지 컴포넌트
+interface PrinterDetailPageProps {
+  printer: PrinterConfig;
+  onBack: () => void;
+  onUpdate: () => void;
+  groups: PrinterGroup[];
+}
+
+const PrinterDetailPage = ({ printer, onBack, onUpdate, groups }: PrinterDetailPageProps) => {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [editedPrinter, setEditedPrinter] = useState(printer);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  // 필드 편집 상태
+  const [editingField, setEditingField] = useState<string | null>(null);
+
+  // 프린터 필드 목록
+  const printerFields = [
+    { key: 'name', label: t('settings.printerName'), value: editedPrinter.name, type: 'text' },
+    { key: 'model', label: t('settings.modelName'), value: editedPrinter.model, type: 'text' },
+    { key: 'ip_address', label: t('settings.ipAddress'), value: editedPrinter.ip_address, type: 'text' },
+    { key: 'port', label: t('settings.port'), value: editedPrinter.port?.toString(), type: 'number' },
+    { key: 'group_id', label: t('settings.group'), value: groups.find(g => g.id === editedPrinter.group_id)?.name || t('settings.notSet'), type: 'select' },
+    { key: 'firmware', label: t('settings.firmware'), value: editedPrinter.firmware, type: 'select' },
+  ];
+
+  const handleSave = async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('printers')
+        .update({
+          name: editedPrinter.name,
+          model: editedPrinter.model,
+          ip_address: editedPrinter.ip_address,
+          port: editedPrinter.port,
+          group_id: editedPrinter.group_id || null,
+          firmware: editedPrinter.firmware,
+        })
+        .eq('id', printer.id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: t('settings.saved'),
+        description: t('settings.printerUpdated'),
+      });
+
+      onUpdate();
+      onBack();
+    } catch (error) {
+      console.error('Error updating printer:', error);
+      toast({
+        title: t('settings.error'),
+        description: t('settings.saveFailed'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('printers')
+        .delete()
+        .eq('id', printer.id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: t('settings.deleted'),
+        description: t('settings.printerDeleted'),
+      });
+
+      onUpdate();
+      onBack();
+    } catch (error) {
+      console.error('Error deleting printer:', error);
+      toast({
+        title: t('settings.error'),
+        description: t('settings.deleteFailed'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleFieldClick = (field: typeof printerFields[0]) => {
+    setEditingField(field.key);
+  };
+
+  return (
+    <>
+      <div className="min-h-screen bg-background pb-24">
+        {/* Header */}
+        <div className="sticky top-0 z-10 bg-background border-b">
+          <div className="flex items-center justify-between px-4 py-3">
+            <button
+              onClick={onBack}
+              className="p-2 hover:bg-accent rounded-full transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <h1 className="text-lg font-semibold">{t('settings.printerDetails')}</h1>
+            <div className="w-9" />
+          </div>
+        </div>
+
+        {/* 필드 리스트 */}
+        <div className="px-4 py-4">
+          {printerFields.map((field, index) => (
+            <button
+              key={field.key}
+              onClick={() => handleFieldClick(field)}
+              className={`w-full flex items-center justify-between py-4 px-4 hover:bg-accent/50 transition-colors ${
+                index !== printerFields.length - 1 ? 'border-b border-border/50' : ''
+              }`}
+            >
+              <div className="flex-1 text-left">
+                <p className="text-sm text-muted-foreground">{field.label}</p>
+                <p className="text-base font-medium mt-1">{field.value || t('settings.notSet')}</p>
+              </div>
+              <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+            </button>
+          ))}
+        </div>
+
+        {/* 삭제 버튼 */}
+        <div className="px-4 mt-8">
+          <Button
+            variant="destructive"
+            className="w-full h-12 rounded-xl"
+            onClick={() => setShowDeleteDialog(true)}
+          >
+            {t('settings.deletePrinter')}
+          </Button>
+        </div>
+
+        {/* Fixed bottom button */}
+        <div className="fixed bottom-4 left-0 right-0 p-4 bg-background border-t">
+          <Button onClick={handleSave} className="w-full h-12 rounded-xl">
+            {t('settings.save')}
+          </Button>
+        </div>
+      </div>
+
+      {/* FullScreenInput for text fields */}
+      {editingField && printerFields.find(f => f.key === editingField)?.type === 'text' && (
+        <FullScreenInput
+          title={printerFields.find(f => f.key === editingField)?.label || ''}
+          value={editedPrinter[editingField as keyof PrinterConfig]?.toString() || ''}
+          onClose={() => setEditingField(null)}
+          onConfirm={(value) => {
+            setEditedPrinter({ ...editedPrinter, [editingField]: value });
+            setEditingField(null);
+          }}
+          type="text"
+        />
+      )}
+
+      {/* FullScreenInput for port */}
+      {editingField === 'port' && (
+        <FullScreenInput
+          title={t('settings.port')}
+          value={editedPrinter.port?.toString() || ''}
+          onClose={() => setEditingField(null)}
+          onConfirm={(value) => {
+            setEditedPrinter({ ...editedPrinter, port: parseInt(value) || 80 });
+            setEditingField(null);
+          }}
+          type="number"
+        />
+      )}
+
+      {/* 삭제 확인 Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="sm:max-w-md rounded-2xl" aria-describedby={undefined}>
+          <DialogHeader className="pb-2">
+            <DialogTitle className="text-xl font-semibold">{t('settings.deletePrinter')}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              {t('settings.deletePrinterConfirm')}
+            </p>
+          </div>
+          <div className="flex gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+              className="flex-1 h-12 rounded-xl text-base font-medium"
+            >
+              {t('settings.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              className="flex-1 h-12 rounded-xl text-base font-medium"
+            >
+              {t('settings.delete')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};
+
+const Settings = () => {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const manufacturerCardRef = useRef<HTMLDivElement>(null);
+  const isPrefillingRef = useRef(false);
+
+  // 상태 관리
+  const [groups, setGroups] = useState<PrinterGroup[]>([]);
+  const [printers, setPrinters] = useState<PrinterConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // URL 쿼리 파라미터로 그룹 추가/수정 페이지 상태 관리
+  const showAddGroup = searchParams.has('addGroup');
+  const editGroupId = searchParams.get('editGroup');
+  const selectedGroup = editGroupId ? groups.find(g => g.id === editGroupId) : null;
+
+  // URL 쿼리 파라미터로 프린터 추가/수정 페이지 상태 관리
+  const showAddPrinter = searchParams.has('addPrinter');
+  const editPrinterId = searchParams.get('editPrinter');
+  const selectedPrinter = editPrinterId ? printers.find(p => p.id === editPrinterId) : null;
+
+  // 제조사 데이터 상태
+  const [manufacturers, setManufacturers] = useState<ManufacturerOption[]>([]);
+  const [selectedManufacturer, setSelectedManufacturer] = useState<string>("");
+  const [seriesList, setSeriesList] = useState<SeriesOption[]>([]);
+  const [selectedSeries, setSelectedSeries] = useState<string>("");
+  const [modelsList, setModelsList] = useState<ModelOption[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [selectedModelId, setSelectedModelId] = useState<string>(""); // manufacturing_printers ID
+
+  // 셀렉트박스 열림 상태 추적
+  const [manufacturerOpen, setManufacturerOpen] = useState(false);
+  const [seriesOpen, setSeriesOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+
+  // 폼 데이터
+  const [newPrinter, setNewPrinter] = useState<Partial<PrinterConfig>>({
+    name: "",
+    model: "",
+    group_id: "",
+    ip_address: "",
+    port: 80,
+    firmware: "marlin"
+  });
+
+  // 데이터 로드
+  const loadData = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+      
+      // 그룹/프린터 데이터 로드 (공용 서비스 재사용)
+      const groupsData = await getUserPrinterGroups(user.id);
+      setGroups(groupsData || []);
+
+      const printersData = await getUserPrintersWithGroup(user.id);
+      
+      // 타입 변환 및 안전한 할당
+      const formattedPrinters: PrinterConfig[] = (printersData || []).map(printer => {
+        const printerData = printer as Record<string, unknown>;
+        return {
+          id: printer.id,
+          name: (printerData.name as string | undefined) ?? printer.model,
+          model: printer.model,
+          group_id: printer.group_id,
+          group: printer.group?.[0] || undefined,
+          ip_address: printer.ip_address,
+          port: printer.port,
+          api_key: printer.api_key,
+          firmware: printer.firmware as "marlin" | "klipper" | "repetier" | "octoprint",
+          status: printer.status as "connected" | "disconnected" | "error",
+          last_connected: printer.last_connected ? new Date(printer.last_connected) : undefined,
+          device_uuid: printer.device_uuid,  // device_uuid 포함
+          manufacture_id: printerData.manufacture_id as string | undefined  // manufacture_id 포함
+        };
+      });
+
+      setPrinters(formattedPrinters);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast({
+        title: t('settings.error'),
+        description: t('settings.loadError'),
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [user]);
+
+  // 페이지 진입 시 스크롤 초기화
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  // 쿼리 파라미터로 프린터 ID가 전달되면 해당 프린터 수정 모달 열기
+  useEffect(() => {
+    const editPrinterId = searchParams.get('editPrinter');
+    if (editPrinterId && printers.length > 0) {
+      const printer = printers.find(p => p.id === editPrinterId);
+      if (printer) {
+        handleEditPrinter(printer);
+        // 쿼리 파라미터 제거
+        setSearchParams({});
+
+        // 제조사 카드로 스크롤 (모달이 열린 후, 모달 내부 스크롤)
+        setTimeout(() => {
+          manufacturerCardRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+            inline: 'nearest'
+          });
+        }, 500);
+      }
+    }
+  }, [searchParams, printers, setSearchParams]);
+
+  // 제조사 목록 로드
+  useEffect(() => {
+    const loadManufacturers = async () => {
+      try {
+        const data = await getManufacturers();
+        setManufacturers(data);
+      } catch (error) {
+        console.error('Error loading manufacturers:', error);
+      }
+    };
+    loadManufacturers();
+  }, []);
+
+  // 제조사 선택 시 시리즈 로드
+  useEffect(() => {
+    if (isPrefillingRef.current) return;
+    if (!selectedManufacturer) {
+      setSeriesList([]);
+      setSelectedSeries("");
+      setModelsList([]);
+      setSelectedModel("");
+      return;
+    }
+
+    const loadSeries = async () => {
+      try {
+        const data = await getSeriesByManufacturer(selectedManufacturer);
+        setSeriesList(data);
+        setSelectedSeries("");
+        setModelsList([]);
+        setSelectedModel("");
+      } catch (error) {
+        console.error('Error loading series:', error);
+      }
+    };
+    loadSeries();
+  }, [selectedManufacturer]);
+
+  // 시리즈 선택 시 모델 로드
+  useEffect(() => {
+    if (isPrefillingRef.current) return;
+    if (!selectedManufacturer || !selectedSeries) {
+      setModelsList([]);
+      setSelectedModel("");
+      return;
+    }
+
+    const loadModels = async () => {
+      try {
+        const data = await getModelsByManufacturerAndSeries(selectedManufacturer, selectedSeries);
+        setModelsList(data);
+        setSelectedModel("");
+      } catch (error) {
+        console.error('Error loading models:', error);
+      }
+    };
+    loadModels();
+  }, [selectedManufacturer, selectedSeries]);
+
+  // 모델 선택 시 editingPrinter.model 및 selectedModelId 업데이트
+  useEffect(() => {
+    if (selectedModel && editingPrinter) {
+      const selectedModelData = modelsList.find(m => m.id === selectedModel);
+      if (selectedModelData) {
+        setEditingPrinter({
+          ...editingPrinter,
+          model: selectedModelData.display_name
+        });
+        setSelectedModelId(selectedModelData.id); // manufacturing_printers ID 저장
+      }
+    }
+  }, [selectedModel]);
+
+  // MQTT dash_status 구독 (이미 AuthContext에서 구독 중)
+  useEffect(() => {
+    const unsubscribe = onDashStatusMessage((deviceUuid, payload) => {
+      if (!deviceUuid || !payload) return;
+
+      // 해당 device_uuid를 가진 프린터 찾아서 MQTT 상태 업데이트
+      setPrinters(prev => prev.map(printer => {
+        if (printer.device_uuid !== deviceUuid) return printer;
+
+        const flags = payload.printer_status?.flags;
+        const connected = Boolean(flags && (flags.operational || flags.printing || flags.paused || flags.ready || flags.error));
+        const state = flags?.ready === true ? 'operational' : (payload.printer_status?.state || 'disconnected');
+
+        return {
+          ...printer,
+          mqttConnected: connected,
+          mqttState: state as PrinterState,
+          mqttFlags: flags as PrinterStateFlags
+        };
+      }));
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // 그룹 관리 함수들
+  const handleAddGroup = async () => {
+    if (!user || !newGroup.name.trim()) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('printer_groups')
+        .insert([{
+          user_id: user.id,
+          name: newGroup.name.trim(),
+          description: newGroup.description.trim() || null,
+          color: newGroup.color
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setGroups([...groups, data]);
+      setNewGroup({ name: "", description: "", color: colorPalette[0] });
+      setShowAddGroup(false);
+      
+      toast({
+        title: t('settings.success'),
+        description: t('settings.groupAdded'),
+      });
+    } catch (error) {
+      console.error('Error adding group:', error);
+      toast({
+        title: t('settings.error'),
+        description: t('settings.addGroupError'),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditGroup = (group: PrinterGroup) => {
+    setSearchParams({ editGroup: group.id });
+  };
+
+  const handleDeleteGroup = async (groupId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('printer_groups')
+        .delete()
+        .eq('id', groupId);
+
+      if (error) throw error;
+
+      setGroups(groups.filter(g => g.id !== groupId));
+
+      toast({
+        title: t('settings.success'),
+        description: t('settings.groupDeleted'),
+      });
+    } catch (error) {
+      console.error('Error deleting group:', error);
+      toast({
+        title: t('settings.error'),
+        description: t('settings.deleteGroupError'),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddPrinter = async () => {
+    if (!user || !newPrinter.name || !newPrinter.ip_address) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('printers')
+        .insert([{
+          user_id: user.id,
+          name: newPrinter.name,
+          model: newPrinter.model || "Unknown",
+          group_id: newPrinter.group_id || null,
+          ip_address: newPrinter.ip_address,
+          port: newPrinter.port || 80,
+          firmware: newPrinter.firmware || "marlin"
+        }])
+        .select(`
+          *,
+          group:printer_groups(*)
+        `)
+        .single();
+
+      if (error) throw error;
+
+      // 타입 변환하여 추가
+      const formattedPrinter: PrinterConfig = {
+        id: data.id,
+        name: data.name,
+        model: data.model,
+        group_id: data.group_id,
+        group: data.group?.[0] || undefined,
+        ip_address: data.ip_address,
+        port: data.port,
+        api_key: data.api_key,
+        firmware: data.firmware as "marlin" | "klipper" | "repetier" | "octoprint",
+        status: data.status as "connected" | "disconnected" | "error",
+        last_connected: data.last_connected ? new Date(data.last_connected) : undefined
+      };
+      
+      setPrinters([...printers, formattedPrinter]);
+      setNewPrinter({
+        name: "",
+        model: "",
+        group_id: "",
+        ip_address: "",
+        port: 80,
+        firmware: "marlin"
+      });
+      setShowAddPrinter(false);
+      
+      toast({
+        title: t('settings.success'),
+        description: t('settings.printerAdded'),
+      });
+    } catch (error) {
+      console.error('Error adding printer:', error);
+      toast({
+        title: t('settings.error'),
+        description: t('settings.addPrinterError'),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeletePrinter = async (printerId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('printers')
+        .delete()
+        .eq('id', printerId);
+
+      if (error) throw error;
+
+      setPrinters(printers.filter(p => p.id !== printerId));
+
+      toast({
+        title: t('settings.success'),
+        description: t('settings.printerDeleted'),
+      });
+    } catch (error) {
+      console.error('Error deleting printer:', error);
+      toast({
+        title: t('settings.error'),
+        description: t('settings.deletePrinterError'),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditPrinter = async (printer: PrinterConfig) => {
+    setEditingPrinter(printer);
+    setShowEditPrinter(true);
+    // 셀렉트박스 열림 상태 초기화
+    setManufacturerOpen(false);
+    setSeriesOpen(false);
+    setModelOpen(false);
+    // 초기 프리필 중에는 의도치 않은 reset을 방지
+    isPrefillingRef.current = true;
+
+    // manufacture_id가 있으면 제조사 정보 로드하여 드롭다운 미리 채우기
+    if (printer.manufacture_id) {
+      try {
+        const { data: manufacturingPrinter, error } = await supabase
+          .from('manufacturing_printers')
+          .select('id, manufacturer, series, model, display_name')
+          .eq('id', printer.manufacture_id)
+          .single();
+
+        if (error) {
+          console.error('Error loading manufacturing printer:', error);
+          // 에러 시 초기화
+          setSelectedManufacturer("");
+          setSelectedSeries("");
+          setSelectedModel("");
+          setSelectedModelId("");
+          isPrefillingRef.current = false;
+          return;
+        }
+
+        if (manufacturingPrinter) {
+          // 1단계: 제조사 설정
+          setSelectedManufacturer(manufacturingPrinter.manufacturer);
+
+          // 2단계: 시리즈 목록 로드 후 시리즈 설정
+          const seriesData = await getSeriesByManufacturer(manufacturingPrinter.manufacturer);
+          setSeriesList(seriesData);
+          setSelectedSeries(manufacturingPrinter.series);
+
+          // 3단계: 모델 목록 로드 후 모델 설정
+          const modelsData = await getModelsByManufacturerAndSeries(
+            manufacturingPrinter.manufacturer,
+            manufacturingPrinter.series
+          );
+          setModelsList(modelsData);
+          setSelectedModel(manufacturingPrinter.id);
+          setSelectedModelId(manufacturingPrinter.id);
+        }
+        // 프리필 완료
+        isPrefillingRef.current = false;
+      } catch (error) {
+        console.error('Error in handleEditPrinter:', error);
+        // 에러 시 초기화
+        setSelectedManufacturer("");
+        setSelectedSeries("");
+        setSelectedModel("");
+        setSelectedModelId("");
+        isPrefillingRef.current = false;
+      }
+    } else {
+      // manufacture_id가 없으면 초기화
+      setSelectedManufacturer("");
+      setSelectedSeries("");
+      setSelectedModel("");
+      setSelectedModelId("");
+      isPrefillingRef.current = false;
+    }
+  };
+
+  const handleUpdatePrinter = async () => {
+    if (!user || !editingPrinter) return;
+
+    try {
+      const updateData: {
+        name: string;
+        model: string;
+        group_id: string | null;
+        manufacture_id?: string;
+      } = {
+        name: editingPrinter.name,
+        model: editingPrinter.model,
+        group_id: editingPrinter.group_id || null,
+      };
+
+      // selectedModelId가 있으면 manufacture_id도 업데이트
+      if (selectedModelId) {
+        updateData.manufacture_id = selectedModelId;
+      }
+
+      const { error } = await supabase
+        .from('printers')
+        .update(updateData)
+        .eq('id', editingPrinter.id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // 로컬 상태 업데이트
+      setPrinters(prev => prev.map(p => {
+        if (p.id !== editingPrinter.id) return p;
+        const nextGroup = editingPrinter.group_id ? groups.find(g => g.id === editingPrinter.group_id) : undefined;
+        return { ...editingPrinter, group: nextGroup };
+      }));
+
+      setShowEditPrinter(false);
+      setEditingPrinter(null);
+
+      // Dashboard의 localStorage 캐시 업데이트 (실시간 반영)
+      try {
+        const dashboardCacheKey = 'dashboard:printers';
+        const cachedData = localStorage.getItem(dashboardCacheKey);
+        if (cachedData) {
+          const printers = JSON.parse(cachedData) as unknown[];
+          const updatedPrinters = printers.map((p) => {
+            const printer = p as { id: string; name?: string; model?: string };
+            if (printer.id === editingPrinter.id) {
+              return { ...printer, name: updateData.name, model: updateData.model };
+            }
+            return printer;
+          });
+          localStorage.setItem(dashboardCacheKey, JSON.stringify(updatedPrinters));
+
+          // StorageEvent 발생 (다른 탭에도 전파)
+          window.dispatchEvent(new StorageEvent('storage', {
+            key: dashboardCacheKey,
+            newValue: JSON.stringify(updatedPrinters),
+            oldValue: cachedData,
+            storageArea: localStorage,
+            url: window.location.href
+          }));
+        }
+      } catch (cacheError) {
+        console.log('Dashboard cache update failed:', cacheError);
+      }
+
+      toast({
+        title: t('settings.success'),
+        description: t('settings.printerUpdated'),
+      });
+    } catch (error) {
+      console.error('Error updating printer:', error);
+      toast({
+        title: t('settings.error'),
+        description: t('settings.updatePrinterError'),
+        variant: "destructive",
+      });
+    }
+  };
+
+  // 프린터 그룹 배정/해제 (카드에서 즉시 반영)
+  const handleAssignPrinterGroup = async (printerId: string, value: string) => {
+    if (!user) return;
+    const groupId = value === "none" ? null : value;
+    try {
+      const q = supabase
+        .from('printers')
+        .update({ group_id: groupId })
+        .eq('id', printerId)
+        .eq('user_id', user.id);
+      const { error } = await q;
+      if (error) throw error;
+
+      // 로컬 상태 업데이트
+      setPrinters(prev => prev.map(p => {
+        if (p.id !== printerId) return p;
+        const nextGroup = groupId ? groups.find(g => g.id === groupId) : undefined;
+        return { ...p, group_id: groupId ?? undefined, group: nextGroup } satisfies PrinterConfig;
+      }));
+
+      toast({ title: t('settings.saved'), description: t('settings.groupUpdated') });
+    } catch (error) {
+      console.error('Error assigning group:', error);
+      toast({ title: t('settings.error'), description: t('settings.assignGroupError'), variant: "destructive" });
+    }
+  };
+
+  // shared 유틸리티를 사용하여 프린터 상태 정보 가져오기
+  const getPrinterStatusForSettings = (printer: PrinterConfig) => {
+    // MQTT 데이터가 있으면 MQTT 데이터 사용, 없으면 disconnected
+    const printerState: PrinterState = printer.mqttConnected && printer.mqttState
+      ? printer.mqttState
+      : 'disconnected';
+
+    const flags: PrinterStateFlags = printer.mqttConnected && printer.mqttFlags
+      ? printer.mqttFlags
+      : {};
+
+    return getPrinterStatusInfo(printerState, flags, {
+      idle: t('settings.statusConnected'),
+      printing: t('printer.statusPrinting'),
+      paused: t('printerDetail.paused'),
+      error: t('settings.statusError'),
+      connecting: t('printerDetail.connecting'),
+      disconnected: t('settings.statusDisconnected')
+    });
+  };
+
+  if (!user) {
+    return (
+      <div className="bg-background p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center py-12">
+            <h1 className="text-2xl font-bold mb-4">{t('settings.loginRequired')}</h1>
+            <p className="text-muted-foreground mb-6">
+              {t('settings.loginRequiredDescription')}
+            </p>
+            <Button asChild>
+              <a href="/auth">{t('auth.login')}</a>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="bg-background p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-muted-foreground">{t('settings.loading')}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 그룹 추가 페이지를 표시하는 경우
+  if (showAddGroup) {
+    return <AddGroupPage onBack={() => setSearchParams({})} onUpdate={loadData} />;
+  }
+
+  // 그룹 상세 페이지를 표시하는 경우
+  if (selectedGroup) {
+    return <GroupDetailPage group={selectedGroup} onBack={() => setSearchParams({})} onUpdate={loadData} />;
+  }
+
+  // 프린터 상세 페이지를 표시하는 경우
+  if (selectedPrinter) {
+    return <PrinterDetailPage printer={selectedPrinter} onBack={() => setSearchParams({})} onUpdate={loadData} groups={groups} />;
+  }
+
+  return (
+    <div className="bg-background">
+      {/* 미니 헤더 */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b px-4 pt-4 pb-3">
+        <div className="max-w-7xl mx-auto flex items-center gap-2">
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <SettingsIcon className="w-5 h-5 text-primary" />
+          </div>
+          <h1 className="text-lg font-semibold">{t('settings.title')}</h1>
+        </div>
+      </div>
+
+      <div className="max-w-screen-sm md:max-w-2xl mx-auto px-4 py-4 space-y-4 pb-24">
+        {/* 프린터 그룹 관리 섹션 */}
+        <section className="space-y-3 mt-4">
+          <h2 className="text-lg font-semibold">{t('settings.groupManagement')}</h2>
+
+          {groups.length === 0 ? (
+            <div className="bg-muted/40 rounded-2xl border border-white/10 dark:border-white/10 p-12 text-center shadow-sm">
+              <FolderPlus className="h-10 w-10 text-muted-foreground mb-3 mx-auto" />
+              <h3 className="text-base font-medium mb-1">{t('settings.noGroups')}</h3>
+              <p className="text-xs text-muted-foreground">
+                {t('settings.noGroupsDescription')}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-card rounded-2xl border border-white/10 dark:border-white/10 shadow-sm divide-y divide-border/50">
+              {groups.map((group) => (
+                <div
+                  key={group.id}
+                  className="px-4 py-4 hover:bg-accent transition-colors min-h-[56px] flex items-center cursor-pointer"
+                  onClick={() => handleEditGroup(group)}
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {/* 색상 표시 */}
+                    <div
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: group.color }}
+                    />
+
+                    {/* 그룹 정보 */}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base font-medium truncate">{group.name}</h3>
+                      {group.description && (
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {group.description}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* 우측: 프린터 수 + chevron */}
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <Badge variant="secondary" className="text-xs px-2 py-0.5">
+                        {printers.filter(p => p.group_id === group.id).length}
+                      </Badge>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add Group 버튼 */}
+          <Button
+            variant="outline"
+            className="w-full h-12 flex items-center justify-center gap-2 rounded-xl"
+            onClick={() => setSearchParams({ addGroup: 'true' })}
+          >
+            <Plus className="h-4 w-4" />
+            {t('settings.addGroup')}
+          </Button>
+        </section>
+
+        {/* 프린터 관리 섹션 */}
+        <section className="space-y-3 mt-4">
+          <h2 className="text-lg font-semibold">{t('settings.printerManagement')}</h2>
+
+          <div className="bg-card rounded-2xl border border-white/10 dark:border-white/10 shadow-sm divide-y divide-border/50">
+            {printers.map((printer) => {
+              const statusInfo = getPrinterStatusForSettings(printer);
+              return (
+              <button
+                key={printer.id}
+                className="w-full px-4 py-4 hover:bg-accent transition-colors text-left"
+                onClick={() => setSearchParams({ editPrinter: printer.id })}
+              >
+                <div className="flex items-center gap-3 min-h-[56px]">
+                  {/* 좌측: 프린터 정보 */}
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base font-medium truncate">{printer.name}</h3>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{printer.model}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-muted-foreground font-mono">{printer.ip_address}:{printer.port}</span>
+                      <span className="text-xs text-muted-foreground">·</span>
+                      <span className="text-xs text-muted-foreground capitalize">{printer.firmware}</span>
+                    </div>
+                  </div>
+
+                  {/* 우측: 상태 + 꺽쇠 */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Badge className={`${statusInfo.badgeClass} text-xs px-2 py-0.5`}>
+                      {statusInfo.label}
+                    </Badge>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                </div>
+              </button>
+              );
+            })}
+          </div>
+
+          {/* Add Printer 버튼 */}
+          <Button
+            variant="outline"
+            className="w-full h-12 flex items-center justify-center gap-2 rounded-xl"
+            onClick={() => setSearchParams({ addPrinter: 'true' })}
+          >
+            <Plus className="h-4 w-4" />
+            {t('settings.addPrinter')}
+          </Button>
+        </section>
+      </div>
+    </div>
+  );
+};
+
+export default Settings;

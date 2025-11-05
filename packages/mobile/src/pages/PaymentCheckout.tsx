@@ -34,7 +34,12 @@ const PaymentCheckout = () => {
 
   const [loading, setLoading] = useState(false);
   const [widgetLoading, setWidgetLoading] = useState(true);
-  const [customerName, setCustomerName] = useState(user?.user_metadata?.full_name || "");
+  const [customerName, setCustomerName] = useState(
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    user?.user_metadata?.display_name ||
+    ""
+  );
   const [customerEmail, setCustomerEmail] = useState(user?.email || "");
   const [paymentWidget, setPaymentWidget] = useState<PaymentWidgetInstance | null>(null);
   const [orderId] = useState(generateOrderId("SUB", planId, billingCycle));
@@ -154,9 +159,9 @@ const PaymentCheckout = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-6">
+    <div className="min-h-screen bg-background safe-area-bottom" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}>
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-background border-b">
+      <div className="sticky top-0 z-10 bg-background border-b safe-area-top">
         <div className="flex items-center gap-3 px-4 py-4">
           <Button
             variant="ghost"
@@ -254,7 +259,7 @@ const PaymentCheckout = () => {
               <Label htmlFor="name">{t('payment.customerName')}</Label>
               <Input
                 id="name"
-                placeholder={t('payment.customerName')}
+                placeholder={t('payment.customerNamePlaceholder')}
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 className="h-12"
@@ -294,10 +299,26 @@ const PaymentCheckout = () => {
           </div>
         </div>
 
-        {/* Payment Button */}
+        {/* Terms */}
+        <div className="text-xs text-muted-foreground text-center space-y-1 pb-20">
+          <p>
+            {t('payment.checkout.termsNotice1')}{" "}
+            <button className="underline">{t('payment.checkout.termsOfService')}</button>
+            {" "}{t('payment.checkout.and')}{" "}
+            <button className="underline">{t('payment.checkout.privacyPolicy')}</button>
+            {t('payment.checkout.termsNotice2')}
+          </p>
+          <p className="text-muted-foreground/60">
+            {t('payment.orderId')}: {orderId}
+          </p>
+        </div>
+      </div>
+
+      {/* Payment Button - Fixed at bottom with safe area */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t safe-area-bottom">
         <Button
           size="lg"
-          className="w-full h-14 text-lg font-semibold sticky bottom-4 shadow-lg"
+          className="w-full h-14 text-lg font-semibold shadow-lg"
           onClick={handlePayment}
           disabled={loading || widgetLoading || !paymentWidget || !customerName || !customerEmail}
         >
@@ -312,20 +333,6 @@ const PaymentCheckout = () => {
             </>
           )}
         </Button>
-
-        {/* Terms */}
-        <div className="text-xs text-muted-foreground text-center space-y-1 pb-4">
-          <p>
-            {t('payment.checkout.termsNotice1')}{" "}
-            <button className="underline">{t('payment.checkout.termsOfService')}</button>
-            {" "}{t('payment.checkout.and')}{" "}
-            <button className="underline">{t('payment.checkout.privacyPolicy')}</button>
-            {t('payment.checkout.termsNotice2')}
-          </p>
-          <p className="text-muted-foreground/60">
-            {t('payment.orderId')}: {orderId}
-          </p>
-        </div>
       </div>
     </div>
   );

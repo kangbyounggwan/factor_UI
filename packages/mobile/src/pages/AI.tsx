@@ -3,9 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 // Lazy load ModelViewer to reduce initial bundle size
 const ModelViewer = lazy(() => import("@/components/ModelViewer"));
+import type { ModelViewerHandle } from "@/components/ModelViewer";
 import { Badge } from "@/components/ui/badge";
 import { PrinterStatusBadge } from "@/components/PrinterStatusBadge";
 import { Progress } from "@/components/ui/progress";
@@ -45,6 +50,7 @@ import {
   History,
   Check,
   ArrowLeft,
+  Share2,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
@@ -102,6 +108,7 @@ const AI = () => {
   const advancedSectionRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
   const touchEndX = useRef<number>(0);
+  const modelViewerRef = useRef<ModelViewerHandle>(null);
 
   // 모델 편집 상태
   const [userRotation, setUserRotation] = useState<[number, number, number]>([0, 0, 0]);
@@ -109,18 +116,38 @@ const AI = () => {
   const [maxTriangles, setMaxTriangles] = useState<number>(100000);
   const [modelDimensions, setModelDimensions] = useState<{ x: number; y: number; z: number } | null>(null);
 
-  // 스와이프 핸들러
+  // 스와이프 핸들러 - 스크롤 방향 감지
+  const touchStartY = useRef(0);
+  const isScrolling = useRef(false);
+
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    touchEndX.current = e.touches[0].clientX;
+    isScrolling.current = false;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     touchEndX.current = e.touches[0].clientX;
+    const touchEndY = e.touches[0].clientY;
+
+    // 수직 스크롤 감지
+    const diffX = Math.abs(touchStartX.current - touchEndX.current);
+    const diffY = Math.abs(touchStartY.current - touchEndY);
+
+    if (diffY > diffX) {
+      isScrolling.current = true;
+    }
   };
 
   const handleTouchEnd = () => {
+    // 수직 스크롤 중이었으면 탭 전환 안함
+    if (isScrolling.current) {
+      return;
+    }
+
     const diff = touchStartX.current - touchEndX.current;
-    const minSwipeDistance = 50;
+    const minSwipeDistance = 80; // 스와이프 거리를 늘려서 의도치 않은 전환 방지
 
     if (Math.abs(diff) > minSwipeDistance) {
       const tabs: Array<'all' | 'text_to_3d' | 'image_to_3d' | 'text_to_image'> = ['all', 'text_to_3d', 'image_to_3d', 'text_to_image'];
@@ -538,18 +565,56 @@ const AI = () => {
   }, [showAdvanced]);
 
   // 파일 업로드 핸들러
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files && files.length > 0) {
-      const file = files[0];
-      setUploadedFiles([...uploadedFiles, {
-        id: Date.now(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        url: URL.createObjectURL(file),
-      }]);
-      toast({ title: t('ai.uploadSuccess'), description: `${file.name}` });
+  const handleFileUpload = async (event?: React.ChangeEvent<HTMLInputElement>) => {
+    // 네이티브 플랫폼에서는 Capacitor Camera 사용
+    if (Capacitor.isNativePlatform() && !event) {
+      try {
+        const image = await CapacitorCamera.getPhoto({
+          quality: 90,
+          allowEditing: true,
+          resultType: CameraResultType.Uri,
+          source: CameraSource.Prompt, // Camera or Gallery 선택
+        });
+
+        if (!image.webPath) {
+          throw new Error('이미지 경로를 가져올 수 없습니다.');
+        }
+
+        // Uri를 Blob으로 변환
+        const response = await fetch(image.webPath);
+        const blob = await response.blob();
+        const fileName = `image-${Date.now()}.${image.format}`;
+
+        setUploadedFiles([...uploadedFiles, {
+          id: Date.now(),
+          name: fileName,
+          size: blob.size,
+          type: `image/${image.format}`,
+          url: image.webPath,
+        }]);
+        toast({ title: t('ai.uploadSuccess'), description: fileName });
+      } catch (error) {
+        console.error('Camera error:', error);
+        toast({
+          title: t('common.error', '오류'),
+          description: t('ai.uploadFailed', '이미지 업로드에 실패했습니다.'),
+          variant: 'destructive',
+        });
+      }
+    } else if (event) {
+      // 웹에서는 기존 파일 업로드 방식
+      const files = event.target.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        setUploadedFiles([...uploadedFiles, {
+          id: Date.now(),
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          url: URL.createObjectURL(file),
+        }]);
+        toast({ title: t('ai.uploadSuccess'), description: `${file.name}` });
+      }
     }
   };
 
@@ -910,7 +975,13 @@ const AI = () => {
           className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
           onDragOver={handleDragOver}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => {
+            if (Capacitor.isNativePlatform()) {
+              handleFileUpload();
+            } else {
+              fileInputRef.current?.click();
+            }
+          }}
         >
           <Upload className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
           <p className="text-sm font-medium">{t('ai.dragAndDrop')}</p>
@@ -918,7 +989,9 @@ const AI = () => {
           <Button variant="outline" size="sm" className="mt-3">
             {t('gcode.selectFile')}
           </Button>
-          <input ref={fileInputRef} type="file" onChange={handleFileUpload} className="hidden" accept="image/*" />
+          {!Capacitor.isNativePlatform() && (
+            <input ref={fileInputRef} type="file" onChange={handleFileUpload} className="hidden" accept="image/*" />
+          )}
         </div>
       )}
 
@@ -1109,6 +1182,8 @@ const AI = () => {
                 console.log('[AI] Render check - glbUrl:', generatedModel?.glbUrl);
                 return generatedModel?.glbUrl ? (
                   <ModelViewer
+                    key={generatedModel.id || generatedModel.glbUrl}
+                    ref={modelViewerRef}
                     className="w-full h-full"
                     modelUrl={generatedModel.glbUrl}
                     modelScale={uniformScale}
@@ -1273,25 +1348,259 @@ const AI = () => {
               </AccordionTrigger>
               <AccordionContent className="pb-3">
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button className="w-full">
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      className="w-full"
+                      onClick={async () => {
+                        if (!generatedModel?.id || !user) {
+                          toast({
+                            title: t('common.error') || '오류',
+                            description: '모델 ID를 찾을 수 없습니다.',
+                            variant: 'destructive',
+                          });
+                          return;
+                        }
+
+                        if (!modelViewerRef.current) {
+                          toast({
+                            title: t('common.error') || '오류',
+                            description: '모델 뷰어가 준비되지 않았습니다.',
+                            variant: 'destructive',
+                          });
+                          return;
+                        }
+
+                        try {
+                          console.log('[SAVE] ========== 모델 저장 시작 ==========');
+                          console.log('[SAVE] 원본 모델 ID:', generatedModel.id);
+                          console.log('[SAVE] 현재 회전값:', userRotation);
+                          console.log('[SAVE] 현재 스케일:', uniformScale);
+
+                          toast({
+                            title: t('common.processing') || '처리 중',
+                            description: '회전된 모델을 저장하는 중입니다...',
+                          });
+
+                          // 1. 회전/스케일이 적용된 GLB 파일 내보내기
+                          console.log('[SAVE] 1. GLB 파일 내보내기 시작...');
+                          const blob = await modelViewerRef.current.exportGLB();
+                          console.log('[SAVE] ✓ GLB 파일 생성 완료 - 크기:', (blob.size / 1024).toFixed(2), 'KB');
+
+                          // 2. Supabase Storage에 업로드
+                          const timestamp = Date.now();
+                          const fileName = `${generatedModel.id}-rotated-${timestamp}.glb`;
+                          const filePath = `${user.id}/${fileName}`; // 버킷 이름 제외한 경로
+                          console.log('[SAVE] ========== 디버그 정보 ==========');
+                          console.log('[SAVE] User ID:', user.id);
+                          console.log('[SAVE] Auth UID:', (await supabase.auth.getUser()).data.user?.id);
+                          console.log('[SAVE] File Name:', fileName);
+                          console.log('[SAVE] Full Path:', filePath);
+                          console.log('[SAVE] Path Parts:', filePath.split('/'));
+                          console.log('[SAVE] First Part:', filePath.split('/')[0]);
+                          console.log('[SAVE] Blob Size:', blob.size, 'bytes');
+                          console.log('[SAVE] Blob Type:', blob.type);
+                          console.log('[SAVE] 2. Storage 업로드 시작...');
+
+                          const { error: uploadError } = await supabase.storage
+                            .from('ai-models')
+                            .upload(filePath, blob, {
+                              contentType: 'model/gltf-binary',
+                              upsert: false,
+                            });
+
+                          if (uploadError) {
+                            console.error('[SAVE] ✗ Storage 업로드 실패:', uploadError);
+                            console.error('[SAVE] Error Details:', JSON.stringify(uploadError, null, 2));
+                            throw uploadError;
+                          }
+                          console.log('[SAVE] ✓ Storage 업로드 완료');
+
+                          // 3. Public URL 가져오기
+                          const { data: { publicUrl } } = supabase.storage
+                            .from('ai-models')
+                            .getPublicUrl(filePath);
+                          console.log('[SAVE] 3. Public URL 생성:', publicUrl);
+
+                          // 4. 기존 모델 업데이트 (새로운 모델 생성 대신)
+                          console.log('[SAVE] 4. 기존 모델 업데이트 중...');
+
+                          // 원본 모델 정보 가져오기
+                          const { data: originalModel, error: fetchError } = await supabase
+                            .from('ai_generated_models')
+                            .select('*')
+                            .eq('id', generatedModel.id)
+                            .single();
+
+                          if (fetchError) {
+                            console.error('[SAVE] ✗ 원본 모델 조회 실패:', fetchError);
+                            throw fetchError;
+                          }
+                          console.log('[SAVE] ✓ 원본 모델 조회 완료:', originalModel.model_name);
+
+                          // 기존 Storage 파일 삭제 (옵션)
+                          if (originalModel.storage_path) {
+                            console.log('[SAVE] 4-1. 기존 Storage 파일 삭제 시도:', originalModel.storage_path);
+                            const { error: deleteError } = await supabase.storage
+                              .from('ai-models')
+                              .remove([originalModel.storage_path]);
+
+                            if (deleteError) {
+                              console.warn('[SAVE] ⚠ 기존 파일 삭제 실패 (무시):', deleteError);
+                            } else {
+                              console.log('[SAVE] ✓ 기존 Storage 파일 삭제 완료');
+                            }
+                          }
+
+                          // 기존 모델 레코드 업데이트 (새 파일로)
+                          const { data: updatedModel, error: updateError } = await supabase
+                            .from('ai_generated_models')
+                            .update({
+                              storage_path: filePath,
+                              download_url: publicUrl,
+                              file_size: blob.size,
+                              updated_at: new Date().toISOString(),
+                            })
+                            .eq('id', generatedModel.id)
+                            .select()
+                            .single();
+
+                          if (updateError) {
+                            console.error('[SAVE] ✗ 모델 업데이트 실패:', updateError);
+                            throw updateError;
+                          }
+                          console.log('[SAVE] ✓ 모델 업데이트 완료 - ID:', updatedModel.id);
+
+                          // newModel을 updatedModel로 변경
+                          const newModel = updatedModel;
+
+                          // 5. 로컬 상태 업데이트 - 새 모델로 전환
+                          console.log('[SAVE] 5. UI 상태 업데이트...');
+                          setGeneratedModel({
+                            id: newModel.id,
+                            name: newModel.model_name,
+                            type: newModel.generation_type === 'text_to_3d' ? 'text' :
+                                  newModel.generation_type === 'image_to_3d' ? 'image' : 'text-to-image',
+                            prompt: newModel.prompt || '',
+                            status: 'completed',
+                            thumbnail: newModel.thumbnail_url || '/placeholder.svg',
+                            glbUrl: publicUrl,
+                            createdAt: newModel.created_at,
+                          });
+
+                          // 회전/스케일 초기화 (새 모델은 이미 회전이 적용되어 있음)
+                          setUserRotation([0, 0, 0]);
+                          setUniformScale(1);
+
+                          console.log('[SAVE] ========== 모델 저장 완료 ==========');
+                          console.log('[SAVE] 새 모델 ID:', newModel.id);
+                          console.log('[SAVE] 새 모델 URL:', publicUrl);
+
+                          toast({
+                            title: t('common.success') || '저장 완료',
+                            description: '회전된 모델이 새로운 버전으로 저장되었습니다.',
+                          });
+                        } catch (error) {
+                          console.error('[SAVE] ========== 저장 실패 ==========');
+                          console.error('[SAVE] 오류:', error);
+                          toast({
+                            title: t('common.error') || '오류',
+                            description: '저장에 실패했습니다.',
+                            variant: 'destructive',
+                          });
+                        }
+                      }}
+                      disabled={!generatedModel?.id}
+                    >
                       {t('modelViewer.saveButton') || 'Save'}
                     </Button>
                     <Button
                       variant="outline"
                       className="w-full"
-                      onClick={() => {
+                      onClick={async () => {
+                        if (generatedModel?.glbUrl && Capacitor.isNativePlatform()) {
+                          try {
+                            await Share.share({
+                              title: generatedModel.name,
+                              text: `3D 모델: ${generatedModel.name}`,
+                              url: generatedModel.glbUrl,
+                              dialogTitle: t('common.share') || '공유',
+                            });
+                          } catch (error) {
+                            console.error('Share error:', error);
+                            toast({
+                              title: t('common.error') || '오류',
+                              description: t('ai.shareFailed') || '공유에 실패했습니다.',
+                              variant: 'destructive',
+                            });
+                          }
+                        }
+                      }}
+                      disabled={!generatedModel?.glbUrl || !Capacitor.isNativePlatform()}
+                    >
+                      <Share2 className="w-4 h-4 mr-2" />
+                      {t('common.share') || '공유'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={async () => {
                         if (generatedModel?.glbUrl) {
-                          const link = document.createElement('a');
-                          link.href = generatedModel.glbUrl;
-                          link.download = `${generatedModel.name}.glb`;
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                          toast({
-                            title: t('ai.downloadStarted') || '다운로드 시작',
-                            description: t('ai.downloadStartedDesc') || 'GLB 파일 다운로드를 시작합니다.',
-                          });
+                          // 네이티브 플랫폼에서는 Capacitor Filesystem 사용
+                          if (Capacitor.isNativePlatform()) {
+                            try {
+                              // GLB 파일 다운로드
+                              const response = await fetch(generatedModel.glbUrl);
+                              const blob = await response.blob();
+
+                              // Blob을 Base64로 변환
+                              const reader = new FileReader();
+                              reader.readAsDataURL(blob);
+                              reader.onloadend = async () => {
+                                const base64Data = reader.result as string;
+                                const base64 = base64Data.split(',')[1];
+
+                                try {
+                                  // Documents 디렉토리에 저장
+                                  await Filesystem.writeFile({
+                                    path: `${generatedModel.name}.glb`,
+                                    data: base64,
+                                    directory: Directory.Documents,
+                                  });
+
+                                  toast({
+                                    title: t('ai.downloadComplete') || '다운로드 완료',
+                                    description: t('ai.downloadCompleteDesc') || 'GLB 파일이 Documents 폴더에 저장되었습니다.',
+                                  });
+                                } catch (fsError) {
+                                  console.error('Filesystem write error:', fsError);
+                                  toast({
+                                    title: t('common.error') || '오류',
+                                    description: t('ai.downloadFailed') || '다운로드에 실패했습니다.',
+                                    variant: 'destructive',
+                                  });
+                                }
+                              };
+                            } catch (error) {
+                              console.error('Download error:', error);
+                              toast({
+                                title: t('common.error') || '오류',
+                                description: t('ai.downloadFailed') || '다운로드에 실패했습니다.',
+                                variant: 'destructive',
+                              });
+                            }
+                          } else {
+                            // 웹에서는 기존 다운로드 방식
+                            const link = document.createElement('a');
+                            link.href = generatedModel.glbUrl;
+                            link.download = `${generatedModel.name}.glb`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            toast({
+                              title: t('ai.downloadStarted') || '다운로드 시작',
+                              description: t('ai.downloadStartedDesc') || 'GLB 파일 다운로드를 시작합니다.',
+                            });
+                          }
                         }
                       }}
                       disabled={!generatedModel?.glbUrl}
@@ -1316,7 +1625,7 @@ const AI = () => {
   return (
     <div className="h-full flex flex-col bg-background overflow-hidden">
       {/* 상단 헤더 - 고정 */}
-      <div className="flex-shrink-0 px-4 pt-4 pb-3 border-b">
+      <div className="flex-shrink-0 px-4 pt-4 pb-3 border-b safe-area-top">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-primary/10 rounded-lg">
@@ -1380,46 +1689,56 @@ const AI = () => {
 
       {/* 히스토리 Sheet */}
       <Sheet open={showHistory} onOpenChange={setShowHistory}>
-        <SheetContent side="bottom" className="h-[85vh] flex flex-col p-0">
+        <SheetContent side="bottom" className="h-[85vh] flex flex-col p-0 border-t-0">
           <SheetHeader className="px-6 pt-6">
             <SheetTitle>{t('ai.modelArchive') || '모델 아카이브'}</SheetTitle>
             <SheetDescription>{t('ai.viewYourModels') || '생성한 3D 모델 목록'}</SheetDescription>
           </SheetHeader>
 
           {/* 탭 네비게이션 */}
-          <div className="flex gap-0 px-6 mt-4 border-b">
-            <Button
-              variant={historyTab === 'all' ? 'default' : 'secondary'}
-              size="sm"
-              className="rounded-b-none flex-1 border-r border-border/50"
-              onClick={() => setHistoryTab('all')}
-            >
-              {t('common.all') || '전체'}
-            </Button>
-            <Button
-              variant={historyTab === 'text_to_3d' ? 'default' : 'secondary'}
-              size="sm"
-              className="rounded-b-none flex-1 border-r border-border/50"
-              onClick={() => setHistoryTab('text_to_3d')}
-            >
-              Text to 3D
-            </Button>
-            <Button
-              variant={historyTab === 'image_to_3d' ? 'default' : 'secondary'}
-              size="sm"
-              className="rounded-b-none flex-1 border-r border-border/50"
-              onClick={() => setHistoryTab('image_to_3d')}
-            >
-              Image to 3D
-            </Button>
-            <Button
-              variant={historyTab === 'text_to_image' ? 'default' : 'secondary'}
-              size="sm"
-              className="rounded-b-none flex-1"
-              onClick={() => setHistoryTab('text_to_image')}
-            >
-              Text to Image
-            </Button>
+          <div className="px-6 mt-4">
+            <div className="flex gap-2 bg-muted/50 rounded-lg p-1">
+              <button
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all ${
+                  historyTab === 'all'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => setHistoryTab('all')}
+              >
+                {t('common.all') || 'All'}
+              </button>
+              <button
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all ${
+                  historyTab === 'text_to_3d'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => setHistoryTab('text_to_3d')}
+              >
+                Text to 3D
+              </button>
+              <button
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all ${
+                  historyTab === 'image_to_3d'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => setHistoryTab('image_to_3d')}
+              >
+                Image to 3D
+              </button>
+              <button
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all ${
+                  historyTab === 'text_to_image'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => setHistoryTab('text_to_image')}
+              >
+                Text to Image
+              </button>
+            </div>
           </div>
 
           <div
@@ -1432,6 +1751,7 @@ const AI = () => {
               key={historyTab}
               className="h-full overflow-y-auto space-y-3"
               style={{
+                paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)',
                 animation: slideDirection
                   ? slideDirection === 'left'
                     ? 'slideInFromRight 0.3s ease-out'
@@ -1462,12 +1782,15 @@ const AI = () => {
                 return (
                   <Card
                     key={model.id}
-                    className={`transition-all duration-150 ${
+                    className={`transition-all duration-200 ${
                       isProcessing
                         ? 'opacity-60 cursor-not-allowed'
-                        : 'cursor-pointer hover:bg-accent hover:border-primary/50'
+                        : 'cursor-pointer hover:shadow-md active:scale-[0.98]'
                     }`}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+
                       if (!isProcessing && model.download_url) {
                         console.log('[AI] Model clicked:', model);
                         // 선택한 모델을 GeneratedModel 형식으로 변환
@@ -1481,6 +1804,11 @@ const AI = () => {
                           glbUrl: model.download_url || undefined,
                           createdAt: model.created_at,
                         });
+
+                        // 회전/스케일 초기화
+                        setUserRotation([0, 0, 0]);
+                        setUniformScale(1);
+
                         // 결과 화면으로 전환
                         setCurrentStep('result');
                         // 히스토리 패널 닫기
@@ -1488,11 +1816,11 @@ const AI = () => {
                       }
                     }}
                   >
-                    <CardContent className="p-3 flex gap-3">
-                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative">
+                    <CardContent className="p-4 flex gap-4">
+                      <div className="w-20 h-20 rounded-xl overflow-hidden bg-muted flex-shrink-0 relative">
                         {isProcessing ? (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
+                            <Loader2 className="w-7 h-7 animate-spin text-primary" />
                           </div>
                         ) : model.thumbnail_url ? (
                           <img
@@ -1501,50 +1829,46 @@ const AI = () => {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Layers className="w-6 h-6 text-muted-foreground" />
+                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/50">
+                            <Layers className="w-7 h-7 text-muted-foreground" />
                           </div>
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 flex flex-col justify-between">
                         {/* 생성 방식 */}
-                        <div className="flex items-center gap-1.5 mb-1">
+                        <div className="flex items-center gap-2 mb-1.5">
                           {model.generation_type === 'text_to_3d' && (
-                            <Badge variant="outline" className="text-xs px-1.5 py-0">
-                              <FileText className="w-3 h-3 mr-1" />
-                              Text to 3D
-                            </Badge>
+                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                              <FileText className="w-3 h-3" />
+                              <span className="text-xs font-medium">Text to 3D</span>
+                            </div>
                           )}
                           {model.generation_type === 'image_to_3d' && (
-                            <Badge variant="outline" className="text-xs px-1.5 py-0">
-                              <ImageIcon className="w-3 h-3 mr-1" />
-                              Image to 3D
-                            </Badge>
+                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                              <ImageIcon className="w-3 h-3" />
+                              <span className="text-xs font-medium">Image to 3D</span>
+                            </div>
                           )}
                           {model.generation_type === 'text_to_image' && (
-                            <Badge variant="outline" className="text-xs px-1.5 py-0">
-                              <Sparkles className="w-3 h-3 mr-1" />
-                              Text to Image
-                            </Badge>
+                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                              <Sparkles className="w-3 h-3" />
+                              <span className="text-xs font-medium">Text to Image</span>
+                            </div>
                           )}
                           {isProcessing && (
-                            <Badge variant="secondary" className="text-xs px-1.5 py-0">
-                              {t('ai.generating') || '생성 중'}
-                            </Badge>
+                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary">
+                              <span className="text-xs font-medium">{t('ai.generating') || '생성 중'}</span>
+                            </div>
                           )}
                         </div>
 
-                        {/* 프롬프트 또는 이미지 정보 */}
-                        <p className="text-sm font-medium truncate">
-                          {model.prompt || model.source_image_url ? (
-                            model.prompt || '이미지 업로드'
-                          ) : (
-                            'Untitled Model'
-                          )}
+                        {/* 모델명/프롬프트 */}
+                        <p className="text-sm font-semibold line-clamp-2 mb-1">
+                          {model.model_name || model.prompt || '이미지 업로드'}
                         </p>
 
                         {/* 날짜 */}
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="text-xs text-muted-foreground">
                           {new Date(model.created_at).toLocaleString('ko-KR', {
                             year: 'numeric',
                             month: '2-digit',
@@ -1560,17 +1884,6 @@ const AI = () => {
               });
             })()}
             </div>
-          </div>
-
-          {/* 하단 닫기 버튼 */}
-          <div className="flex-shrink-0 p-6 border-t bg-background">
-            <Button
-              variant="default"
-              className="w-full"
-              onClick={() => setShowHistory(false)}
-            >
-              {t('common.close') || '닫기'}
-            </Button>
           </div>
         </SheetContent>
       </Sheet>
@@ -1752,7 +2065,7 @@ const AI = () => {
               </div>
 
               {/* 하단 버튼 */}
-              <div className="flex-shrink-0 p-6 border-t bg-background">
+              <div className="flex-shrink-0 p-6 border-t bg-background safe-area-bottom">
                 <Button
                   size="lg"
                   className="w-full"

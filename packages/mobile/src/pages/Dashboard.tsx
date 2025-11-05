@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { PrinterStatusBadge } from "@/components/PrinterStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Monitor, LogIn, Plus, Thermometer, ChevronDown, ChevronUp, Layers, Settings as SettingsIcon } from "lucide-react";
+import { Monitor, LogIn, Plus, Thermometer, ChevronDown, ChevronUp, Layers, Settings as SettingsIcon, Bell } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { onDashStatusMessage, mqttPublish } from "@shared/services/mqttService";
@@ -165,16 +165,38 @@ const PrinterCard = ({ printer, isAuthenticated, onSetupRequired, onStreamStart 
     return `${minutes}${t('dashboard.time.minutes')}`;
   };
 
-  // 카메라 스트림 URL (임시 - 실제로는 device_uuid로 스트림 URL 조회)
+  // 카메라 스트림 URL - Supabase cameras 테이블에서 조회
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (printer.device_uuid && printer.connected) {
-      // TODO: 실제 카메라 스트림 URL 조회
-      setStreamUrl(`/camera/${printer.device_uuid}`);
-    } else {
-      setStreamUrl(null);
-    }
+    const fetchCameraUrl = async () => {
+      if (!printer.device_uuid || !printer.connected) {
+        setStreamUrl(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('cameras')
+          .select('stream_url')
+          .eq('device_uuid', printer.device_uuid)
+          .maybeSingle();
+
+        if (error) {
+          console.warn('[Dashboard] 카메라 URL 조회 실패:', error.message);
+          setStreamUrl(null);
+          return;
+        }
+
+        const cameraData = data as { stream_url?: string } | null;
+        setStreamUrl(cameraData?.stream_url || null);
+      } catch (err) {
+        console.error('[Dashboard] 카메라 URL 조회 예외:', err);
+        setStreamUrl(null);
+      }
+    };
+
+    fetchCameraUrl();
   }, [printer.device_uuid, printer.connected]);
 
   return (
@@ -765,11 +787,11 @@ const Home = () => {
 
   if (loading) {
     return (
-      <div className="bg-background p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">{t('dashboard.loading')}</p>
+      <div className="min-h-screen bg-background safe-area-top safe-area-bottom">
+        <div className="h-full flex items-center justify-center px-6">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-sm text-muted-foreground">{t('dashboard.loading')}</p>
           </div>
         </div>
       </div>
@@ -779,12 +801,32 @@ const Home = () => {
   return (
     <div
       ref={containerRef}
-      className="bg-background p-6"
+      className="bg-background"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
-      <div className="max-w-7xl mx-auto">
+      {/* 미니 헤더 */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b px-4 pt-4 pb-3 safe-area-top">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Monitor className="w-5 h-5 text-primary" />
+            </div>
+            <h1 className="text-lg font-semibold">Printer Dashboard</h1>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative"
+            onClick={() => navigate('/notifications')}
+          >
+            <Bell className="h-5 w-5" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 pt-2">
         <div
           className="h-10 flex items-center justify-center text-xs text-muted-foreground"
           style={{ height: `${Math.max(0, pullY)}px`, transition: pullingRef.current ? 'none' : 'height 150ms ease' }}
@@ -793,7 +835,7 @@ const Home = () => {
         </div>
       </div>
 
-      <div ref={contentRef} className="max-w-7xl mx-auto space-y-2 pb-6" style={{ transform: `translateY(${pullY}px)`, transition: pullingRef.current ? 'none' : 'transform 150ms ease' }}>
+      <div ref={contentRef} className="max-w-7xl mx-auto px-6 space-y-2 pb-24" style={{ transform: `translateY(${pullY}px)`, transition: pullingRef.current ? 'none' : 'transform 150ms ease' }}>
         {/* 로그인 안내 */}
         {!user && (
           <Alert className="bg-primary/10 border-primary">

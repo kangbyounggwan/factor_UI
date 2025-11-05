@@ -93,7 +93,7 @@ const SupportedPrinters = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <section className="py-12 px-6 border-b">
+      <section className="py-12 px-6 border-b safe-area-top">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center mb-6">
             <Button asChild variant="ghost" size="sm" className="mr-4">

@@ -1,10 +1,10 @@
 // 3D 모델 뷰어 담당 컴포넌트
 //
-import React, { Suspense, useMemo, useEffect, useState, useLayoutEffect } from "react";
+import React, { Suspense, useMemo, useEffect, useState, useLayoutEffect, useRef, useImperativeHandle, forwardRef } from "react";
 import { Canvas, useLoader, useThree } from "@react-three/fiber";
 import { OrbitControls, Grid, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { STLLoader } from "three-stdlib";
-import { GLTFLoader } from "three-stdlib";
+import { GLTFLoader, GLTFExporter } from "three-stdlib";
 import * as THREE from "three";
 import { calculateBoundingBox, getBoundingBoxCenter, getBoundingBoxSize, groundModelToZero, fitCameraToModel, logCameraAdjustment } from "@shared/utils/modelViewerUtils";
 import {
@@ -38,7 +38,7 @@ interface ModelViewerProps {
   modelId?: string;
   // 모델 크기 변경 콜백
   onSize?: (size: { x: number; y: number; z: number }) => void;
-  // 저장 콜백 함수
+  // 저장 콜백 함수 (DEPRECATED - 사용하지 않음)
   onSave?: (data: {
     rotation: [number, number, number];
     scale: number;
@@ -46,6 +46,11 @@ interface ModelViewerProps {
     blob: Blob;
     format: 'stl' | 'glb';
   }) => Promise<void>;
+}
+
+// Export 핸들 타입 정의
+export interface ModelViewerHandle {
+  exportGLB: () => Promise<Blob>;
 }
 
 function SpinningObject() {
@@ -108,10 +113,30 @@ function STLModel({ url }: { url: string }) {
   );
 }
 
-function GLBModel({ url, rotation = [0, 0, 0], scale = 1, onSize }: { url: string; rotation?: [number, number, number]; scale?: number; onSize?: (size: { x: number; y: number; z: number }) => void }) {
+function GLBModel({
+  url,
+  rotation = [0, 0, 0],
+  scale = 1,
+  onSize,
+  sceneRef
+}: {
+  url: string;
+  rotation?: [number, number, number];
+  scale?: number;
+  onSize?: (size: { x: number; y: number; z: number }) => void;
+  sceneRef?: React.MutableRefObject<THREE.Group | null>;
+}) {
   const gltf = useLoader(GLTFLoader, url);
   const sceneGroupRef = React.useRef<THREE.Group>(null);
+  const outerGroupRef = React.useRef<THREE.Group>(null); // 회전/스케일이 적용된 외부 그룹
   const { camera, controls } = useThree();
+
+  // outerGroupRef를 부모에게 전달 (회전/스케일 포함)
+  useEffect(() => {
+    if (sceneRef && outerGroupRef.current) {
+      sceneRef.current = outerGroupRef.current;
+    }
+  }, [sceneRef]);
 
   useEffect(() => {
     if (!gltf?.scene || !sceneGroupRef.current) return;
@@ -155,57 +180,93 @@ function GLBModel({ url, rotation = [0, 0, 0], scale = 1, onSize }: { url: strin
   if (!gltf?.scene) return null;
 
   return (
-    <group scale={scale} castShadow receiveShadow>
-      <group ref={sceneGroupRef} rotation={rotation}>
+    <group ref={outerGroupRef} scale={scale} rotation={rotation} castShadow receiveShadow>
+      <group ref={sceneGroupRef}>
         <primitive object={gltf.scene} />
       </group>
     </group>
   );
 }
 
-export default function ModelViewer({ className, height, showDemo = false, placeholderMessage = "모델을 생성하거나 불러오세요", stlUrl, modelUrl, modelScale = 1, rotation = [0, 0, 0], modelId, onSize, onSave }: ModelViewerProps) {
-  const style: React.CSSProperties = { width: '100%' };
-  if (height !== undefined) {
-    style.height = typeof height === 'number' ? `${height}px` : height;
-  }
-  style.position = 'relative';
+const ModelViewer = forwardRef<ModelViewerHandle, ModelViewerProps>(
+  ({ className, height, showDemo = false, placeholderMessage = "모델을 생성하거나 불러오세요", stlUrl, modelUrl, modelScale = 1, rotation = [0, 0, 0], modelId, onSize, onSave }, ref) => {
+    const style: React.CSSProperties = { width: '100%' };
+    if (height !== undefined) {
+      style.height = typeof height === 'number' ? `${height}px` : height;
+    }
+    style.position = 'relative';
 
-  const hasContent = showDemo || stlUrl || modelUrl;
+    const hasContent = showDemo || stlUrl || modelUrl;
+    const sceneRef = useRef<THREE.Group | null>(null);
 
-  return (
-    <div className={className} style={style}>
-      <Canvas
-        shadows
-        camera={{
-          position: CAMERA_CONFIG.position,
-          fov: CAMERA_CONFIG.fov,
-        }}
-        onCreated={({ camera }) => {
-          camera.up.copy(CAMERA_CONFIG.up);
-        }}
-      >
-        <color attach="background" args={[BACKGROUND_COLOR]} />
-        <ambientLight intensity={LIGHTING_CONFIG.ambientIntensity} />
-        <directionalLight
-          position={LIGHTING_CONFIG.mainDirectional.position}
-          intensity={LIGHTING_CONFIG.mainDirectional.intensity}
-          castShadow={LIGHTING_CONFIG.mainDirectional.castShadow}
-        />
-        <directionalLight
-          position={LIGHTING_CONFIG.fillDirectional1.position}
-          intensity={LIGHTING_CONFIG.fillDirectional1.intensity}
-          castShadow={LIGHTING_CONFIG.fillDirectional1.castShadow}
-        />
-        <directionalLight
-          position={LIGHTING_CONFIG.fillDirectional2.position}
-          intensity={LIGHTING_CONFIG.fillDirectional2.intensity}
-          castShadow={LIGHTING_CONFIG.fillDirectional2.castShadow}
-        />
-        <Suspense fallback={null}>
-          {showDemo && <SpinningObject />}
-          {stlUrl && <STLModel url={stlUrl} />}
-          {modelUrl && <GLBModel url={modelUrl} rotation={rotation} scale={modelScale} onSize={onSize} />}
-        </Suspense>
+    // 부모 컴포넌트에 exportGLB 메서드 노출
+    useImperativeHandle(ref, () => ({
+      exportGLB: async (): Promise<Blob> => {
+        if (!sceneRef.current) {
+          throw new Error('No model loaded');
+        }
+
+        // 내보내기 전에 모델을 바닥에 맞춤 (Z=0)
+        console.log('[ModelViewer] Grounding model to Z=0 before export');
+        groundModelToZero(sceneRef.current);
+
+        return new Promise((resolve, reject) => {
+          const exporter = new GLTFExporter();
+          exporter.parse(
+            sceneRef.current!,
+            (result) => {
+              if (result instanceof ArrayBuffer) {
+                resolve(new Blob([result], { type: 'model/gltf-binary' }));
+              } else {
+                // result is a JSON object
+                const jsonString = JSON.stringify(result);
+                resolve(new Blob([jsonString], { type: 'application/json' }));
+              }
+            },
+            (error) => {
+              reject(error);
+            },
+            { binary: true } // Export as .glb (binary format)
+          );
+        });
+      },
+    }));
+
+    return (
+      <div className={className} style={style}>
+        <Canvas
+          shadows
+          frameloop="demand"
+          camera={{
+            position: CAMERA_CONFIG.position,
+            fov: CAMERA_CONFIG.fov,
+          }}
+          onCreated={({ camera }) => {
+            camera.up.copy(CAMERA_CONFIG.up);
+          }}
+        >
+          <color attach="background" args={[BACKGROUND_COLOR]} />
+          <ambientLight intensity={LIGHTING_CONFIG.ambientIntensity} />
+          <directionalLight
+            position={LIGHTING_CONFIG.mainDirectional.position}
+            intensity={LIGHTING_CONFIG.mainDirectional.intensity}
+            castShadow={LIGHTING_CONFIG.mainDirectional.castShadow}
+          />
+          <directionalLight
+            position={LIGHTING_CONFIG.fillDirectional1.position}
+            intensity={LIGHTING_CONFIG.fillDirectional1.intensity}
+            castShadow={LIGHTING_CONFIG.fillDirectional1.castShadow}
+          />
+          <directionalLight
+            position={LIGHTING_CONFIG.fillDirectional2.position}
+            intensity={LIGHTING_CONFIG.fillDirectional2.intensity}
+            castShadow={LIGHTING_CONFIG.fillDirectional2.castShadow}
+          />
+          <Suspense fallback={null}>
+            {showDemo && <SpinningObject />}
+            {stlUrl && <STLModel url={stlUrl} />}
+            {modelUrl && <GLBModel url={modelUrl} rotation={rotation} scale={modelScale} onSize={onSize} sceneRef={sceneRef} />}
+          </Suspense>
         {/* Z-up: 그리드를 XY 평면으로 회전 */}
         <Grid
           rotation={GRID_CONFIG.rotation}
@@ -258,4 +319,8 @@ export default function ModelViewer({ className, height, showDemo = false, place
       )}
     </div>
   );
-}
+});
+
+ModelViewer.displayName = 'ModelViewer';
+
+export default ModelViewer;

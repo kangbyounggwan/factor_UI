@@ -1,615 +1,328 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
-import { useTranslation } from "react-i18next";
-import { supabase } from "@shared/integrations/supabase/client"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { supabase } from "@shared/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Crown,
+  ArrowLeft,
   Check,
-  Zap,
+  Crown,
   X,
-  CreditCard,
-  Calendar,
-  Users,
-  Shield,
-  Headphones,
-  Rocket,
-  Mail
 } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import useEmblaCarousel from "embla-carousel-react";
 import { useToast } from "@/hooks/use-toast";
+import useEmblaCarousel from "embla-carousel-react";
 
-// 구독 플랜 타입
 interface SubscriptionPlan {
   id: string;
   name: string;
   price: number;
   interval: "month" | "year";
-  features: string[];
+  features: Array<{ text: string; included: boolean }>;
   max_printers: number;
   popular?: boolean;
-  current?: boolean;
   description: string;
-  color: string;
 }
 
-// 구독 플랜 상세 정보
-const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string): SubscriptionPlan[] => [
-  {
-    id: "basic",
-    name: t('subscription.plans.basic.name'),
-    price: 0,
-    interval: isYearly ? "year" : "month",
-    max_printers: 2,
-    description: t('subscription.plans.basic.description'),
-    color: "bg-muted",
-    features: [
-      t('subscription.plans.basic.feature1'),
-      t('subscription.plans.basic.feature2'),
-      t('subscription.plans.basic.feature3'),
-      t('subscription.plans.basic.feature4')
-    ],
-    current: true
-  },
-  {
-    id: "pro",
-    name: t('subscription.plans.pro.name'),
-    price: isYearly ? 192000 : 19900,
-    interval: isYearly ? "year" : "month",
-    max_printers: 10,
-    description: t('subscription.plans.pro.description'),
-    color: "bg-primary",
-    features: [
-      t('subscription.plans.pro.feature1'),
-      t('subscription.plans.pro.feature2'),
-      t('subscription.plans.pro.feature3'),
-      t('subscription.plans.pro.feature4'),
-      t('subscription.plans.pro.feature5'),
-      t('subscription.plans.pro.feature6')
-    ],
-    popular: true
-  },
-  {
-    id: "enterprise",
-    name: t('subscription.plans.enterprise.name'),
-    price: -1,
-    interval: isYearly ? "year" : "month",
-    max_printers: -1,
-    description: t('subscription.plans.enterprise.description'),
-    color: "bg-primary",
-    features: [
-      t('subscription.plans.enterprise.feature1'),
-      t('subscription.plans.enterprise.feature2'),
-      t('subscription.plans.enterprise.feature3'),
-      t('subscription.plans.enterprise.feature4'),
-      t('subscription.plans.enterprise.feature5'),
-      t('subscription.plans.enterprise.feature6')
-    ]
-  }
-];
-
 const Subscription = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
-  const { t } = useTranslation();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [isYearly, setIsYearly] = useState(false);
-  const [emblaRef, emblaApi] = useEmblaCarousel({
-    align: 'center',
-    loop: false,
-    skipSnaps: false,
-    dragFree: false
-  });
-  const [selectedIndex, setSelectedIndex] = useState(1); // Pro 플랜이 중앙에 오도록
-  const [userPlanId, setUserPlanId] = useState<string>('basic');
-  const [loadingPlan, setLoadingPlan] = useState(true);
-  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [currentPlan, setCurrentPlan] = useState<string>("basic");
+  const [emblaRef] = useEmblaCarousel({ align: "center", skipSnaps: false });
 
-  // 로그인 체크 - 로그인하지 않은 경우 로그인 페이지로 리다이렉트
   useEffect(() => {
-    if (!user) {
-      navigate('/', { replace: true });
-    }
-  }, [user, navigate]);
-
-  const subscriptionPlans = getSubscriptionPlans(isYearly, t).map(plan => ({
-    ...plan,
-    current: plan.id === userPlanId
-  }));
-
-  // 로그인된 사용자일 때만 현재 플랜 표시
-  const currentPlan = user ? subscriptionPlans.find(plan => plan.current) : null;
-
-  // 사용자의 현재 플랜 로드
-  useEffect(() => {
-    const loadUserPlan = async () => {
-      if (!user) {
-        setLoadingPlan(false);
-        return;
-      }
+    const loadCurrentPlan = async () => {
+      if (!user) return;
 
       try {
-        setLoadingPlan(true);
-        const { data: subscription, error } = await supabase
-          .from('user_subscriptions')
-          .select(`
-            *,
-            subscription_plans (
-              id,
-              name
-            )
-          `)
-          .eq('user_id', user.id)
-          .eq('status', 'active')
+        const { data, error } = await supabase
+          .from("user_subscriptions")
+          .select("plan_name")
+          .eq("user_id", user.id)
           .single();
 
-        if (error || !subscription) {
-          setUserPlanId('basic');
-          return;
+        if (!error && data) {
+          setCurrentPlan(data.plan_name.toLowerCase());
         }
-
-        const planData = subscription.subscription_plans as { name: string } | null;
-        // subscription_plans의 name을 id 형식으로 변환 (예: "Pro" -> "pro")
-        const planId = planData?.name?.toLowerCase() || 'basic';
-        setUserPlanId(planId);
       } catch (error) {
-        console.error('Error loading user plan:', error);
-        setUserPlanId('basic');
-      } finally {
-        setLoadingPlan(false);
+        console.error("Failed to load subscription:", error);
       }
     };
 
-    loadUserPlan();
+    loadCurrentPlan();
   }, [user]);
 
-  const onSelect = useCallback(() => {
-    if (!emblaApi) return;
-    setSelectedIndex(emblaApi.selectedScrollSnap());
-  }, [emblaApi]);
+  const plans: SubscriptionPlan[] = [
+    {
+      id: "basic",
+      name: "Basic",
+      price: 0,
+      interval: isYearly ? "year" : "month",
+      max_printers: 2,
+      description: "개인 사용자를 위한 기본 플랜",
+      features: [
+        { text: "최대 2대 프린터 연결", included: true },
+        { text: "실시간 모니터링", included: true },
+        { text: "원격 제어", included: true },
+        { text: "AI 모델 생성", included: false },
+        { text: "고급 분석 및 통계", included: false },
+        { text: "API 접근", included: false },
+        { text: "전담 지원", included: false },
+        { text: "전용 슬랙 채널", included: false },
+        { text: "SLA 보장", included: false },
+      ],
+    },
+    {
+      id: "pro",
+      name: "Pro",
+      price: isYearly ? 192000 : 19900,
+      interval: isYearly ? "year" : "month",
+      max_printers: 10,
+      description: "소규모 팀을 위한 프로 플랜",
+      popular: true,
+      features: [
+        { text: "최대 10대 프린터 연결", included: true },
+        { text: "실시간 모니터링", included: true },
+        { text: "원격 제어", included: true },
+        { text: "AI 모델 생성", included: true },
+        { text: "고급 분석 및 통계", included: true },
+        { text: "API 접근", included: true },
+        { text: "전담 지원", included: false },
+        { text: "전용 슬랙 채널", included: false },
+        { text: "SLA 보장", included: false },
+      ],
+    },
+    {
+      id: "enterprise",
+      name: "Enterprise",
+      price: -1,
+      interval: isYearly ? "year" : "month",
+      max_printers: -1,
+      description: "대규모 인터넷 스케일 워크로드를 위한 플랜",
+      features: [
+        { text: "무제한 프린터 연결", included: true },
+        { text: "실시간 모니터링", included: true },
+        { text: "원격 제어", included: true },
+        { text: "AI 모델 생성", included: true },
+        { text: "고급 분석 및 통계", included: true },
+        { text: "API 접근", included: true },
+        { text: "24/7 전담 매니저", included: true },
+        { text: "전용 슬랙 채널", included: true },
+        { text: "SLA 보장", included: true },
+      ],
+    },
+  ];
 
-  useEffect(() => {
-    if (!emblaApi) return;
-    onSelect();
-    emblaApi.on('select', onSelect);
-    emblaApi.on('reInit', onSelect);
-  }, [emblaApi, onSelect]);
-
-  const handleCancelSubscription = async () => {
-    if (!user) return;
-
-    try {
-      // 구독 취소 - user_subscriptions 테이블에서 삭제
-      const { error } = await supabase
-        .from('user_subscriptions')
-        .delete()
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      // 성공 토스트
+  const handleSelectPlan = (planId: string) => {
+    if (planId === currentPlan) {
       toast({
-        title: t('subscription.cancelSuccessTitle'),
-        description: t('subscription.cancelSuccessMessage'),
+        title: "현재 플랜",
+        description: "이미 사용 중인 플랜입니다.",
       });
-
-      // 현재 플랜을 basic으로 업데이트
-      setUserPlanId('basic');
-      setShowCancelDialog(false);
-    } catch (error) {
-      console.error('Error canceling subscription:', error);
-      toast({
-        title: t('payment.error'),
-        description: t('payment.requestFailed'),
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleUpgrade = (planId: string) => {
-    if (planId === 'enterprise') {
-      // Enterprise는 Contact Us로 처리
-      window.open('mailto:contact@example.com?subject=Enterprise Plan Inquiry', '_blank');
       return;
     }
-    if (planId === 'basic') {
-      // Basic 플랜으로 다운그레이드 - 구독 취소 확인 다이얼로그 표시
-      if (userPlanId !== 'basic') {
-        setShowCancelDialog(true);
-      }
+
+    if (planId === "enterprise") {
+      toast({
+        title: "문의 필요",
+        description: "Enterprise 플랜은 별도 문의가 필요합니다.",
+      });
       return;
     }
-    // 유료 플랜은 결제 페이지로 이동
-    navigate(`/payment/checkout?plan=${planId}&cycle=${isYearly ? 'yearly' : 'monthly'}`);
-  };
 
-  const formatPrice = (price: number) => {
-    if (price === 0) return "무료";
-    if (price === -1) return "문의";
-    return `$${price}`;
-  };
-
-  useEffect(() => {
-    const title = '구독 플랜 및 가격 | 프린터 관리 플랫폼';
-    const desc = '프린터 팜을 위한 구독 플랜과 가격을 비교하고, 가장 알맞은 요금제로 바로 업그레이드하세요.';
-    document.title = title;
-
-    let meta = document.querySelector('meta[name="description"]');
-    if (!meta) {
-      meta = document.createElement('meta');
-      meta.setAttribute('name', 'description');
-      document.head.appendChild(meta);
+    if (planId === "basic") {
+      toast({
+        title: "다운그레이드",
+        description: "Basic 플랜으로 변경하시겠습니까?",
+      });
+      return;
     }
-    meta.setAttribute('content', desc);
 
-    let canonical = document.querySelector('link[rel="canonical"]');
-    if (!canonical) {
-      canonical = document.createElement('link');
-      canonical.setAttribute('rel', 'canonical');
-      document.head.appendChild(canonical);
-    }
-    canonical.setAttribute('href', `${window.location.origin}/subscription`);
-
-    // JSON-LD 구조화 데이터 (상품/오퍼)
-    const offers = subscriptionPlans
-      .filter((p) => p.price >= 0)
-      .map((p) => ({
-        '@type': 'Offer',
-        name: p.name,
-        price: p.price,
-        priceCurrency: 'USD',
-        availability: 'https://schema.org/InStock',
-      }));
-
-    const jsonLd = {
-      '@context': 'https://schema.org',
-      '@type': 'Product',
-      name: '3D 프린터 관리 구독',
-      description: desc,
-      offers,
-    } as const;
-
-    const prev = document.getElementById('subscription-jsonld');
-    if (prev) prev.remove();
-    const script = document.createElement('script');
-    script.type = 'application/ld+json';
-    script.id = 'subscription-jsonld';
-    script.text = JSON.stringify(jsonLd);
-    document.head.appendChild(script);
-  }, [subscriptionPlans]);
+    // Pro 플랜 결제 페이지로 이동
+    navigate("/payment/checkout", { state: { planId, isYearly } });
+  };
 
   return (
-    <div className="bg-background min-h-screen p-6 pb-20">
-      <div className="max-w-7xl mx-auto w-full flex flex-col gap-4">
-        {/* 닫기 버튼 */}
-        <div className="flex items-center justify-end flex-shrink-0 pt-2">
+    <div className="min-h-screen bg-background pb-20">
+      {/* 헤더 */}
+      <div className="sticky top-0 z-10 bg-background border-b safe-area-top">
+        <div className="flex items-center justify-between px-4 py-3">
           <button
             onClick={() => navigate(-1)}
-            className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-muted transition-colors"
-            aria-label="Close"
+            className="p-2 hover:bg-accent rounded-full transition-colors"
           >
-            <X className="h-6 w-6" />
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <h1 className="text-lg font-semibold">Subscription Plans & Pricing</h1>
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 hover:bg-accent rounded-full transition-colors"
+          >
+            <X className="h-5 w-5" />
           </button>
         </div>
+      </div>
 
-        {/* 헤더 영역 */}
-        <div className="text-center space-y-4 flex-shrink-0">
-          <h2 className="text-3xl font-bold">{t('subscription.title')}</h2>
-
-          {/* 월간/연간 탭 */}
-          <Tabs
-            value={isYearly ? "yearly" : "monthly"}
-            onValueChange={(value) => setIsYearly(value === "yearly")}
-            className="w-fit mx-auto"
+      {/* 월간/연간 토글 */}
+      <div className="px-4 py-6">
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={() => setIsYearly(false)}
+            className={`px-6 py-2 rounded-full font-medium transition-colors ${
+              !isYearly
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground"
+            }`}
           >
-            <TabsList className="grid w-full grid-cols-2 bg-muted/50">
-              <TabsTrigger
-                value="monthly"
-                className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-              >
-                {t('subscription.monthly')}
-              </TabsTrigger>
-              <TabsTrigger
-                value="yearly"
-                className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-              >
-                {t('subscription.yearly')}
-                <Badge variant="secondary" className="text-xs">{t('subscription.yearlyDiscount')}</Badge>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+            Monthly
+          </button>
+          <button
+            onClick={() => setIsYearly(true)}
+            className={`px-6 py-2 rounded-full font-medium transition-colors ${
+              isYearly
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground"
+            }`}
+          >
+            Yearly
+          </button>
+          {isYearly && (
+            <Badge className="ml-2 bg-green-500 text-white">20% off</Badge>
+          )}
         </div>
+      </div>
 
-        {/* 모바일 전체 화면 캐러셀 */}
-        <div className="lg:hidden -mx-6">
-            <div className="overflow-hidden" ref={emblaRef}>
-              <div className="flex">
-                {subscriptionPlans.map((plan, index) => (
-                  <div
-                    key={plan.id}
-                    className="flex-[0_0_100%] min-w-0 px-6"
-                  >
-                    <Card
-                      className={`relative transition-all duration-500 flex flex-col rounded-2xl min-h-[600px] max-h-[80vh] ${
-                        plan.popular
-                          ? "border-2 border-blue-500/40 bg-gradient-to-br from-blue-950 via-blue-900/60 to-blue-950"
-                          : plan.current
-                          ? "border-2 border-primary bg-primary/5"
-                          : "border border-border bg-card"
-                      }`}
-                      style={plan.popular ? {
-                        boxShadow: '0 4px 20px rgba(37, 99, 235, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
-                        backgroundImage: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, transparent 50%, rgba(37, 99, 235, 0.04) 100%)'
-                      } : undefined}
-                    >
-                      {plan.popular && (
-                        <div className="absolute top-4 right-4 z-20">
-                          <Badge className="bg-primary text-primary-foreground px-3 py-1 text-xs font-medium">
-                            {t('subscription.mostPopular')}
-                          </Badge>
-                        </div>
-                      )}
-
-                      {plan.current && !plan.popular && (
-                        <div className="absolute top-4 right-4 z-20">
-                          <Badge variant="secondary" className="px-3 py-1 text-xs font-medium">
-                            {t('subscription.currentPlan')}
-                          </Badge>
-                        </div>
-                      )}
-
-                      <CardHeader className="text-center pb-6 pt-8">
-                        {/* 플랜명 - 상단 중앙 크게 */}
-                        <CardTitle className="text-4xl font-bold mb-2">
-                          {plan.name}
-                        </CardTitle>
-
-                        <p className="text-muted-foreground text-sm mb-4">
-                          {plan.description}
-                        </p>
-                      </CardHeader>
-
-                      <CardContent className="flex-1 flex flex-col justify-between px-6 pb-6 overflow-y-auto">
-                        {/* 주요 기능 섹션 */}
-                        <div className="space-y-2 flex-1 overflow-y-auto">
-                          <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">{t('subscription.features.realtimeMonitoring')}</span>
-                            <Check className="h-5 w-5 text-success" />
-                          </div>
-
-                          <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">{t('subscription.features.remoteControl')}</span>
-                            <Check className="h-5 w-5 text-success" />
-                          </div>
-
-                          <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">{t('subscription.features.aiModelGeneration')}</span>
-                            {plan.id === 'basic' ? (
-                              <span className="text-xs text-muted-foreground">{t('subscription.features.limited')}</span>
-                            ) : (
-                              <Check className="h-5 w-5 text-success" />
-                            )}
-                          </div>
-
-                          <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">{t('subscription.features.advancedAnalytics')}</span>
-                            {plan.id === 'basic' ? (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            ) : (
-                              <Check className="h-5 w-5 text-success" />
-                            )}
-                          </div>
-
-                          <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">{t('subscription.features.apiAccess')}</span>
-                            {plan.id === 'basic' ? (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            ) : (
-                              <Check className="h-5 w-5 text-success" />
-                            )}
-                          </div>
-
-                          <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">{t('subscription.features.supportType')}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {plan.id === 'basic' ? t('subscription.features.community') : plan.id === 'pro' ? t('subscription.features.email24h') : t('subscription.features.dedicated247')}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">{t('subscription.features.slackChannel')}</span>
-                            {plan.id === 'enterprise' ? (
-                              <Check className="h-5 w-5 text-success" />
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center justify-between py-2">
-                            <span className="text-sm">{t('subscription.features.slaGuarantee')}</span>
-                            {plan.id === 'enterprise' ? (
-                              <Check className="h-5 w-5 text-success" />
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* 하단 가격 버튼 */}
-                        <div className="pt-4 mt-4 border-t">
-                          <Button
-                            className={`w-full h-12 text-base font-semibold ${
-                              plan.popular && !plan.current
-                                ? "bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white border-0 shadow-lg shadow-blue-500/30"
-                                : ""
-                            }`}
-                            variant={plan.current ? "outline" : "default"}
-                            disabled={plan.current}
-                            onClick={() => handleUpgrade(plan.id)}
-                          >
-                            {plan.current ? (
-                              t('subscription.currentPlanButton')
-                            ) : plan.price === 0 ? (
-                              userPlanId !== 'basic' ? t('subscription.downgradeToFree') : t('subscription.currentPlanButton')
-                            ) : plan.price === -1 ? (
-                              t('subscription.contactUs')
-                            ) : (
-                              <>
-                                ₩{plan.price.toLocaleString()}{isYearly ? t('subscription.perYear') : t('subscription.perMonth')} {t('subscription.startFrom')}
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
-
-        {/* 캐러셀 인디케이터 */}
-        <div className="lg:hidden flex justify-center gap-2 flex-shrink-0">
-          {subscriptionPlans.map((_, index) => (
-            <button
-              key={index}
-              className={`h-2 rounded-full transition-all ${
-                selectedIndex === index
-                  ? "w-8 bg-primary"
-                  : "w-2 bg-muted-foreground/30"
-              }`}
-              onClick={() => emblaApi?.scrollTo(index)}
-              aria-label={`Go to slide ${index + 1}`}
-            />
-          ))}
-        </div>
-
-        {/* 데스크톱 그리드 */}
-        <div className="hidden lg:grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {subscriptionPlans.map((plan) => (
-            <Card
+      {/* 플랜 캐러셀 */}
+      <div className="overflow-hidden" ref={emblaRef}>
+        <div className="flex gap-4 px-4">
+          {plans.map((plan) => (
+            <div
               key={plan.id}
-              className={`relative transition-all duration-300 hover:shadow-2xl ${
-                plan.popular ? "border-2 border-primary shadow-xl scale-105" : ""
-              } ${plan.current ? "opacity-75" : "hover:scale-105"}`}
+              className="flex-[0_0_85%] min-w-0"
             >
-              {plan.popular && (
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-10">
-                  <Badge className="bg-primary text-primary-foreground px-4 py-1 text-sm font-medium">
-                    인기 플랜
-                  </Badge>
-                </div>
-              )}
+              <div className="bg-card rounded-2xl border-2 border-border shadow-lg overflow-hidden h-full flex flex-col">
+                {/* 플랜 헤더 */}
+                <div className="p-6 text-center relative">
+                  {plan.popular && (
+                    <Badge className="absolute top-4 right-4 bg-primary text-primary-foreground">
+                      인기
+                    </Badge>
+                  )}
+                  {currentPlan === plan.id && (
+                    <Badge className="absolute top-4 left-4 bg-green-500 text-white">
+                      현재 플랜
+                    </Badge>
+                  )}
+                  <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {plan.description}
+                  </p>
 
-              {plan.current && (
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-10">
-                  <Badge variant="secondary" className="px-4 py-1 text-sm font-medium">
-                    현재 플랜
-                  </Badge>
-                </div>
-              )}
-
-              <CardHeader className="text-center pb-4 relative overflow-hidden">
-                <div className={`absolute inset-0 ${plan.color} opacity-5`}></div>
-                <CardTitle className="text-2xl relative z-10">{plan.name}</CardTitle>
-                <p className="text-muted-foreground relative z-10">{plan.description}</p>
-
-                <div className="space-y-2 relative z-10">
-                  <div className="text-4xl font-bold">
-                    {formatPrice(plan.price)}
+                  {/* 가격 */}
+                  <div className="mb-4">
+                    {plan.price === -1 ? (
+                      <p className="text-3xl font-bold">문의</p>
+                    ) : plan.price === 0 ? (
+                      <p className="text-3xl font-bold">무료</p>
+                    ) : (
+                      <div>
+                        <p className="text-4xl font-bold">
+                          ₩{plan.price.toLocaleString()}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          / {plan.interval === "year" ? "년" : "월"}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  {plan.price > 0 && (
-                    <div className="text-sm text-muted-foreground">{isYearly ? '연간 결제' : '월간 결제'}</div>
-                  )}
-                  {isYearly && plan.price > 0 && (
-                    <div className="text-xs text-muted-foreground">월 ${ (plan.price / 12).toFixed(2) } 기준</div>
-                  )}
-                  {plan.price === -1 && (
-                    <div className="text-sm text-muted-foreground">맞춤형 가격</div>
-                  )}
                 </div>
-              </CardHeader>
 
-              <CardContent className="space-y-6">
-                <div className="space-y-3">
-                  <h4 className="font-semibold text-center">주요 기능</h4>
-                  <div className="space-y-2">
+                {/* 기능 목록 */}
+                <div className="flex-1 px-6 pb-6">
+                  <div className="space-y-3">
                     {plan.features.map((feature, index) => (
-                      <div key={index} className="flex items-start gap-2 text-sm">
-                        <Check className="h-4 w-4 text-success flex-shrink-0 mt-0.5" />
-                        <span>{feature}</span>
+                      <div
+                        key={index}
+                        className="flex items-start gap-3"
+                      >
+                        {feature.included ? (
+                          <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                        ) : (
+                          <X className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                        )}
+                        <span
+                          className={`text-sm ${
+                            feature.included
+                              ? "text-foreground"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {feature.text}
+                        </span>
                       </div>
                     ))}
                   </div>
+
+                  {/* 지원 타입 */}
+                  {plan.id === "enterprise" && (
+                    <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Support Type
+                      </p>
+                      <p className="text-sm font-semibold mt-1">
+                        24/7 Dedicated Manager
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                <Button
-                  className="w-full"
-                  variant={plan.current ? "outline" : plan.popular ? "default" : "outline"}
-                  disabled={plan.current}
-                  onClick={() => handleUpgrade(plan.id)}
-                >
-                  {plan.current ? (
-                    <>
-                      <Crown className="h-4 w-4 mr-2" />
-                      현재 플랜
-                    </>
-                  ) : plan.price === 0 ? (
-                    <>
-                      <Rocket className="h-4 w-4 mr-2" />
-                      무료 시작
-                    </>
-                  ) : plan.price === -1 ? (
-                    <>
-                      <Mail className="h-4 w-4 mr-2" />
-                      Contact Us
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="h-4 w-4 mr-2" />
-                      업그레이드 ({formatPrice(plan.price)})
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
+                {/* 버튼 */}
+                <div className="p-6 pt-0">
+                  <Button
+                    onClick={() => handleSelectPlan(plan.id)}
+                    className="w-full h-12"
+                    variant={
+                      currentPlan === plan.id
+                        ? "outline"
+                        : plan.popular
+                        ? "default"
+                        : "outline"
+                    }
+                    disabled={currentPlan === plan.id}
+                  >
+                    {plan.id === "enterprise" ? (
+                      "Contact Us"
+                    ) : currentPlan === plan.id ? (
+                      "현재 플랜"
+                    ) : plan.price === 0 ? (
+                      "다운그레이드"
+                    ) : (
+                      <>
+                        <Crown className="h-4 w-4 mr-2" />
+                        구독하기
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
           ))}
         </div>
       </div>
 
-      {/* 구독 취소 확인 다이얼로그 */}
-      <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('subscription.cancelConfirmTitle')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('subscription.cancelConfirmMessage')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleCancelSubscription}>
-              {t('subscription.cancelConfirmButton')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* 인디케이터 */}
+      <div className="flex justify-center gap-2 mt-6">
+        {plans.map((_, index) => (
+          <div
+            key={index}
+            className={`h-2 rounded-full transition-all ${
+              index === 1 ? "w-8 bg-primary" : "w-2 bg-muted"
+            }`}
+          />
+        ))}
+      </div>
     </div>
   );
 };

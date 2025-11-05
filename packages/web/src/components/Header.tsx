@@ -51,6 +51,15 @@ export const Header = () => {
   const [unreadNotifications, setUnreadNotifications] = useState<number>(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
+
+  // 현재 언어에 따라 메시지 선택
+  const getLocalizedMessage = (notification: Notification) => {
+    const currentLang = i18n.language;
+    if (currentLang === 'en' && notification.message_en) {
+      return notification.message_en;
+    }
+    return notification.message;
+  };
   const [feedbackType, setFeedbackType] = useState<'issue' | 'idea' | null>(null);
   const [feedbackTitle, setFeedbackTitle] = useState('');
   const [feedbackDescription, setFeedbackDescription] = useState('');
@@ -173,13 +182,17 @@ export const Header = () => {
 
   const loadNotifications = async () => {
     try {
+      // 최근 5일간의 알림 가져오기
+      const fiveDaysAgo = new Date();
+      fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+
       const { data: notificationData, error } = await supabase
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
-        .eq('read', false) // 안읽은 알림만 가져오기
+        .gte('created_at', fiveDaysAgo.toISOString())
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(50);
 
       if (error) {
         console.error('Error loading notifications:', error);
@@ -188,7 +201,9 @@ export const Header = () => {
 
       if (notificationData) {
         setNotifications(notificationData);
-        setUnreadNotifications(notificationData.length);
+        // 안읽은 알림 개수만 카운트
+        const unreadCount = notificationData.filter(n => !n.read).length;
+        setUnreadNotifications(unreadCount);
       }
     } catch (error) {
       console.error('Error loading notifications:', error);
@@ -251,8 +266,10 @@ export const Header = () => {
         return;
       }
 
-      // 읽은 알림은 목록에서 제거 (사라지게)
-      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+      // 읽은 알림은 목록에 유지하되 read 상태만 업데이트
+      setNotifications((prev) => prev.map((n) =>
+        n.id === notificationId ? { ...n, read: true } : n
+      ));
       setUnreadNotifications((prev) => Math.max(0, prev - 1));
     } catch (error) {
       console.error('Error marking notification as read:', error);
@@ -663,28 +680,64 @@ export const Header = () => {
                     </div>
                   ) : (
                     <div className="max-h-[400px] overflow-y-auto">
-                      {notifications.map((notification) => (
-                        <DropdownMenuItem
-                          key={notification.id}
-                          className="flex flex-col items-start p-3 cursor-pointer hover:bg-accent"
-                          onClick={() => handleNotificationClick(notification)}
-                        >
-                          <div className="flex items-start gap-2 w-full">
-                            <div className="flex-1">
-                              <p className="text-sm font-medium">{notification.title}</p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {notification.message}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {new Date(notification.created_at).toLocaleString('ko-KR')}
-                              </p>
+                      {(() => {
+                        // 일자별로 그룹화
+                        const groupedByDate: Record<string, Notification[]> = {};
+                        notifications.forEach((notification) => {
+                          const dateKey = new Date(notification.created_at).toLocaleDateString('ko-KR', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          });
+                          if (!groupedByDate[dateKey]) {
+                            groupedByDate[dateKey] = [];
+                          }
+                          groupedByDate[dateKey].push(notification);
+                        });
+
+                        return Object.entries(groupedByDate).map(([date, dateNotifications], dateIndex) => (
+                          <div key={date}>
+                            {/* 날짜 구분선 */}
+                            {dateIndex > 0 && <DropdownMenuSeparator />}
+                            <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/50">
+                              {date}
                             </div>
-                            {!notification.read && (
-                              <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1" />
-                            )}
+                            {dateNotifications.map((notification) => (
+                              <DropdownMenuItem
+                                key={notification.id}
+                                className={`flex flex-col items-start p-3 cursor-pointer hover:bg-accent ${
+                                  notification.read ? 'opacity-60' : ''
+                                }`}
+                                onClick={() => handleNotificationClick(notification)}
+                              >
+                                <div className="flex items-start gap-2 w-full">
+                                  <div className="flex-1">
+                                    <p className={`text-sm font-medium ${
+                                      notification.read
+                                        ? 'text-muted-foreground'
+                                        : 'text-foreground dark:text-foreground'
+                                    }`}>
+                                      {notification.title}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {getLocalizedMessage(notification)}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {new Date(notification.created_at).toLocaleTimeString('ko-KR', {
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </p>
+                                  </div>
+                                  {!notification.read && (
+                                    <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1" />
+                                  )}
+                                </div>
+                              </DropdownMenuItem>
+                            ))}
                           </div>
-                        </DropdownMenuItem>
-                      ))}
+                        ));
+                      })()}
                     </div>
                   )}
                 </DropdownMenuContent>

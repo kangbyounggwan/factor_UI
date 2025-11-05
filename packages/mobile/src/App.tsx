@@ -11,7 +11,7 @@ import { StatusBar, Style } from "@capacitor/status-bar";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@shared/i18n";
 import { supabase } from "@shared/integrations/supabase/client";
-import { Header } from "@/components/Header";
+import { BottomNavigation } from "@/components/BottomNavigation";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 // import { AIAssistantSidebar } from "@/components/AIAssistantSidebar"; // AI 비활성화
@@ -23,6 +23,13 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const PrinterDetail = lazy(() => import("./pages/PrinterDetail"));
 const Settings = lazy(() => import("./pages/Settings"));
 const UserSettings = lazy(() => import("./pages/UserSettings"));
+const UserProfile = lazy(() => import("./pages/UserProfile"));
+const LanguageSettings = lazy(() => import("./pages/LanguageSettings"));
+const NotificationSettings = lazy(() => import("./pages/NotificationSettings"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const SocialAccountLinking = lazy(() => import("./pages/SocialAccountLinking"));
+const ThemeSettings = lazy(() => import("./pages/ThemeSettings"));
+const ChangePassword = lazy(() => import("./pages/ChangePassword"));
 const Subscription = lazy(() => import("./pages/Subscription"));
 const PaymentCheckout = lazy(() => import("./pages/PaymentCheckout"));
 const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
@@ -50,9 +57,10 @@ const AppContent = () => {
       if (Capacitor.getPlatform() !== "android") return;
       const isDark = theme === "dark";
       try {
-        // 사용자의 요청에 따라 다크/라이트 매핑을 반대로 적용
+        // 라이트 모드: 검은색 텍스트 (Style.Light), 다크 모드: 흰색 텍스트 (Style.Dark)
         await StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light });
-        await StatusBar.setBackgroundColor({ color: isDark ? "#FFFFFF" : "#0B0F17" });
+        // 배경색은 앱의 테마 배경과 일치 (다크: 어두운 배경, 라이트: 밝은 배경)
+        await StatusBar.setBackgroundColor({ color: isDark ? "#0B0F17" : "#FFFFFF" });
       } catch (_) {
         // no-op
       }
@@ -145,22 +153,33 @@ const AppContent = () => {
     }
   };
   
-  // 헤더를 숨길 경로들 (Auth 페이지, Subscription 페이지)
-  const hideHeaderPaths = ["/", "/subscription"];
-  const shouldShowHeader = !hideHeaderPaths.includes(location.pathname);
+  // 하단 네비게이션을 숨길 경로들 (Auth, Admin, 상세 페이지)
+  const hideBottomNavPaths = ["/", "/subscription", "/payment/checkout", "/payment/success", "/payment/fail", "/language-settings", "/notification-settings", "/social-account-linking", "/theme-settings", "/change-password"];
+  const hideBottomNavStartsWith = ["/admin", "/user-profile"];
+
+  // Settings 페이지에서 그룹/프린터 추가/수정 중인지 확인
+  const searchParams = new URLSearchParams(location.search);
+  const isSettingsSubPage = location.pathname === "/settings" && (
+    searchParams.has('addGroup') ||
+    searchParams.has('editGroup') ||
+    searchParams.has('addPrinter') ||
+    searchParams.has('editPrinter')
+  );
+
+  const shouldShowBottomNav = !hideBottomNavPaths.includes(location.pathname) &&
+    !hideBottomNavStartsWith.some(path => location.pathname.startsWith(path)) &&
+    !isSettingsSubPage;
 
   return (
     <div className="h-full flex flex-col bg-background transition-colors overflow-hidden">
-      {/* 헤더를 조건부로 표시 - 고정 */}
-      {shouldShowHeader && <Header onBack={handleGlobalBack} />}
-
       {/* 메인 컨텐츠 영역 - 스크롤 가능 */}
       <div
         id="app-scroll"
         ref={scrollRef}
         className="flex-1 overflow-y-auto transition-all duration-300"
         style={{
-          marginRight: showAISidebar && !aiSidebarCollapsed ? `${aiSidebarWidth}px` : '0px'
+          marginRight: showAISidebar && !aiSidebarCollapsed ? `${aiSidebarWidth}px` : '0px',
+          paddingBottom: shouldShowBottomNav ? '64px' : '0px'
         }}
       >
         <Suspense fallback={
@@ -189,6 +208,41 @@ const AppContent = () => {
             <Route path="/user-settings" element={
               <ProtectedRoute>
                 <UserSettings />
+              </ProtectedRoute>
+            } />
+            <Route path="/user-profile/:userId" element={
+              <ProtectedRoute>
+                <UserProfile />
+              </ProtectedRoute>
+            } />
+            <Route path="/language-settings" element={
+              <ProtectedRoute>
+                <LanguageSettings />
+              </ProtectedRoute>
+            } />
+            <Route path="/notification-settings" element={
+              <ProtectedRoute>
+                <NotificationSettings />
+              </ProtectedRoute>
+            } />
+            <Route path="/notifications" element={
+              <ProtectedRoute>
+                <Notifications />
+              </ProtectedRoute>
+            } />
+            <Route path="/social-account-linking" element={
+              <ProtectedRoute>
+                <SocialAccountLinking />
+              </ProtectedRoute>
+            } />
+            <Route path="/theme-settings" element={
+              <ProtectedRoute>
+                <ThemeSettings />
+              </ProtectedRoute>
+            } />
+            <Route path="/change-password" element={
+              <ProtectedRoute>
+                <ChangePassword />
               </ProtectedRoute>
             } />
             <Route path="/subscription" element={<Subscription />} />
@@ -232,6 +286,9 @@ const AppContent = () => {
         />
       )}
       **/}
+
+      {/* 하단 네비게이션 바 */}
+      {shouldShowBottomNav && <BottomNavigation />}
     </div>
   );
 };

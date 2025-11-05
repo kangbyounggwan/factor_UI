@@ -100,7 +100,7 @@ const DeviceRegister = () => {
   };
 
   return (
-    <div className="bg-background p-6">
+    <div className="bg-background p-6 safe-area-top">
       <div className="max-w-2xl mx-auto space-y-6">
         {/* 헤더 */}
         <div className="flex items-center gap-4">

@@ -8,6 +8,7 @@ export interface Notification {
   user_id: string;
   title: string;
   message: string;
+  message_en?: string;
   type: string;
   read: boolean;
   related_id?: string;
@@ -24,6 +25,7 @@ export interface CreateNotificationParams {
   userId: string;
   title: string;
   message: string;
+  message_en?: string;
   type: 'ai_model_complete' | 'print_complete' | 'print_error' | 'payment_success' | 'payment_failed' | 'subscription_expiring' | 'subscription_renewed' | string;
   relatedId?: string;
   relatedType?: 'ai_model' | 'print_job' | 'payment' | 'subscription' | string;
@@ -39,6 +41,7 @@ export async function createNotification(params: CreateNotificationParams): Prom
     userId,
     title,
     message,
+    message_en,
     type,
     relatedId,
     relatedType,
@@ -51,6 +54,7 @@ export async function createNotification(params: CreateNotificationParams): Prom
       user_id: userId,
       title,
       message,
+      message_en,
       type,
       related_id: relatedId,
       related_type: relatedType,
@@ -209,6 +213,7 @@ export async function notifyAIModelComplete(params: {
     userId: params.userId,
     title: 'AI 모델 생성 완료',
     message: `'${params.modelName}' 모델이 성공적으로 생성되었습니다.`,
+    message_en: `'${params.modelName}' model has been successfully created.`,
     type: 'ai_model_complete',
     relatedId: params.modelId,
     relatedType: 'ai_model',
@@ -227,6 +232,7 @@ export async function notifyPrintComplete(params: {
     userId: params.userId,
     title: '프린팅 완료',
     message: `'${params.printJobName}' 프린팅이 완료되었습니다.`,
+    message_en: `'${params.printJobName}' printing has been completed.`,
     type: 'print_complete',
     relatedId: params.printJobId,
     relatedType: 'print_job',
@@ -246,6 +252,7 @@ export async function notifyPrintError(params: {
     userId: params.userId,
     title: '프린팅 오류',
     message: `'${params.printJobName}' 프린팅 중 오류가 발생했습니다: ${params.errorMessage}`,
+    message_en: `An error occurred during '${params.printJobName}' printing: ${params.errorMessage}`,
     type: 'print_error',
     relatedId: params.printJobId,
     relatedType: 'print_job',
@@ -265,6 +272,7 @@ export async function notifyPaymentSuccess(params: {
     userId: params.userId,
     title: '결제 성공',
     message: `${params.planName.toUpperCase()} 플랜 구독이 활성화되었습니다. (${params.amount.toLocaleString()}원)`,
+    message_en: `${params.planName.toUpperCase()} plan subscription has been activated. (${params.amount.toLocaleString()} KRW)`,
     type: 'payment_success',
     relatedId: params.paymentId,
     relatedType: 'payment',
@@ -284,6 +292,7 @@ export async function notifySubscriptionExpiring(params: {
     userId: params.userId,
     title: '구독 만료 예정',
     message: `${params.planName.toUpperCase()} 플랜이 ${params.daysRemaining}일 후 만료됩니다.`,
+    message_en: `${params.planName.toUpperCase()} plan will expire in ${params.daysRemaining} day${params.daysRemaining > 1 ? 's' : ''}.`,
     type: 'subscription_expiring',
     relatedId: params.subscriptionId,
     relatedType: 'subscription',

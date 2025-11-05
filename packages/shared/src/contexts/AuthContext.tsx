@@ -260,17 +260,33 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
   const signUp = async (email: string, password: string, displayName?: string) => {
     const redirectUrl = ((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`;
+
+    console.log('[SignUp] 회원가입 시작:', { email, displayName, redirectUrl });
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { emailRedirectTo: redirectUrl, data: { display_name: displayName || email.split("@")[0] } },
     });
 
+    console.log('[SignUp] Supabase Auth 응답:', {
+      success: !error,
+      error: error ? {
+        message: error.message,
+        status: error.status,
+        name: error.name,
+        details: error
+      } : null,
+      userId: data?.user?.id
+    });
+
     // 회원가입 성공 시 기본 설정 생성 (트리거 대신 애플리케이션 레벨에서 처리)
     if (!error && data?.user) {
       try {
+        console.log('[SignUp] 사용자 생성 완료, 기본 설정 생성 시작:', data.user.id);
+
         // 기본 알림 설정 생성
-        await supabase.from('user_notification_settings').insert({
+        const notificationResult = await supabase.from('user_notification_settings').insert({
           user_id: data.user.id,
           push_notifications: true,
           print_complete_notifications: true,
@@ -282,11 +298,17 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
           quiet_hours_enabled: false,
         }).select().maybeSingle();
 
+        if (notificationResult.error) {
+          console.error('[SignUp] 알림 설정 생성 실패:', notificationResult.error);
+          throw notificationResult.error;
+        }
+        console.log('[SignUp] 알림 설정 생성 성공');
+
         // 기본 구독 정보 생성 (14일 무료 체험)
         const trialEndDate = new Date();
         trialEndDate.setDate(trialEndDate.getDate() + 14);
 
-        await supabase.from('user_subscriptions').insert({
+        const subscriptionResult = await supabase.from('user_subscriptions').insert({
           user_id: data.user.id,
           plan_name: 'basic',
           status: 'trial',
@@ -294,8 +316,14 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
           current_period_end: trialEndDate.toISOString(),
           cancel_at_period_end: false,
         }).select().maybeSingle();
+
+        if (subscriptionResult.error) {
+          console.error('[SignUp] 구독 정보 생성 실패:', subscriptionResult.error);
+          throw subscriptionResult.error;
+        }
+        console.log('[SignUp] 구독 정보 생성 성공');
       } catch (setupError) {
-        console.warn('회원가입 후 기본 설정 생성 실패 (무시):', setupError);
+        console.error('[SignUp] 회원가입 후 기본 설정 생성 실패:', setupError);
         // 설정 생성 실패는 무시 - 나중에 사용자가 직접 생성 가능
       }
     }
