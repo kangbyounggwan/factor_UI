@@ -55,21 +55,8 @@ if (import.meta.env.PROD) {
   }
 })()
 
-// Android 하드웨어/제스처 뒤로가기 처리: 홈 전이면 이전 경로로, 홈이면 무시
-CapApp.addListener('backButton', ({ canGoBack }) => {
-  // canGoBack은 웹뷰 히스토리 기준. 우리 히스토리 스택 사용
-  const stored = sessionStorage.getItem('nav:history')
-  const history = stored ? (JSON.parse(stored) as string[]) : []
-  // 현재 경로 제거
-  history.pop()
-  const prev = history.pop()
-  if (prev) {
-    sessionStorage.setItem('nav:history', JSON.stringify(history))
-    window.location.href = prev
-  } else {
-    // 홈이면 기본 동작(앱 종료) 방지: 아무 것도 하지 않음
-  }
-})
+// Android 하드웨어/제스처 뒤로가기 처리는 App.tsx에서 관리합니다.
+// (중복 방지를 위해 main.tsx의 리스너 제거됨)
 
 createRoot(document.getElementById("root")!).render(
   <AuthProvider variant="mobile">

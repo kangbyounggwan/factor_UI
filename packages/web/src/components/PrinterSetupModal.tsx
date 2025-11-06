@@ -282,7 +282,7 @@ export function PrinterSetupModal({
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="text-red-500">
-                          슬라이싱, 프린터컨트롤에 최적화하기위해 필수 선택사항입니다
+                          {t("printer.setup.setupRequired")}
                         </p>
                       </TooltipContent>
                     </Tooltip>

@@ -8,6 +8,7 @@ import { useEffect, useState, useRef, lazy, Suspense } from "react";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import { StatusBar, Style } from "@capacitor/status-bar";
+import { Toast as CapacitorToast } from "@capacitor/toast";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@shared/i18n";
 import { supabase } from "@shared/integrations/supabase/client";
@@ -16,6 +17,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 // import { AIAssistantSidebar } from "@/components/AIAssistantSidebar"; // AI 비활성화
 import { AISidebarProvider } from "@/contexts/AISidebarContext";
+import { useToast } from "@/hooks/use-toast";
 
 // Lazy load all pages for code splitting
 const Home = lazy(() => import("./pages/Home"));
@@ -50,6 +52,7 @@ const AppContent = () => {
   const [aiSidebarWidth, setAiSidebarWidth] = useState(384);
   const { theme } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   // 테마 변경에 따라 상태바 아이콘/배경 동적 적용 (Android)
   useEffect(() => {
@@ -111,7 +114,73 @@ const AppContent = () => {
       handleAppUrlOpen.remove();
     };
   }, [navigate]);
-  
+
+  // Android 하드웨어 백 버튼 처리
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let lastBackPress = 0;
+    const DOUBLE_PRESS_DELAY = 1500; // 1.5초
+
+    // Bottom Navigation의 메인 페이지들
+    const mainPages = ['/dashboard', '/create', '/settings', '/user-settings'];
+
+    const backButtonListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      const currentPath = location.pathname;
+      const currentSearch = location.search;
+
+      // 현재 페이지가 메인 페이지(Bottom Navigation) 중 하나인지 확인
+      const isMainPage = mainPages.includes(currentPath);
+
+      if (isMainPage) {
+        // Settings 페이지에서 모달(쿼리 파라미터)이 열려있는지 확인
+        if (currentPath === '/settings' && currentSearch) {
+          const params = new URLSearchParams(currentSearch);
+          if (params.has('addGroup') || params.has('editGroup') ||
+              params.has('addPrinter') || params.has('editPrinter')) {
+            // 모달이 열려있으면 뒤로가기로 모달 닫기
+            window.history.back();
+            return;
+          }
+        }
+
+        // 메인 페이지에서는 히스토리 무시하고 무조건 앱 종료 동작만 수행
+        // 2초 내 두 번 누르면 앱 종료
+        const currentTime = new Date().getTime();
+
+        if (currentTime - lastBackPress < DOUBLE_PRESS_DELAY) {
+          // 두 번째 백 버튼 누름 - 앱 종료
+          CapacitorApp.exitApp();
+        } else {
+          // 첫 번째 백 버튼 누름 - 네이티브 토스트 메시지 표시
+          lastBackPress = currentTime;
+
+          // 네이티브 토스트 표시
+          CapacitorToast.show({
+            text: '한 번 더 누르면 앱이 종료됩니다',
+            duration: 'short',
+            position: 'bottom'
+          });
+        }
+        // 메인 페이지에서는 여기서 종료 - 페이지 이동 없음
+        return;
+      }
+
+      // 메인 페이지가 아닌 경우에만 뒤로가기 처리
+      if (canGoBack) {
+        // 히스토리가 있으면 뒤로가기
+        window.history.back();
+      } else {
+        // 히스토리가 없으면 대시보드로 이동
+        navigate('/dashboard', { replace: true });
+      }
+    });
+
+    return () => {
+      backButtonListener.remove();
+    };
+  }, [location.pathname, navigate, toast]);
+
   // AI 어시스턴트/작업공간 비활성화: 사이드바 표시 끔
   const showAISidebar = false;
 

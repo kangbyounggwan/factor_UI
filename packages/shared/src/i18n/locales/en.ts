@@ -469,6 +469,7 @@ export default {
       loadError: "Failed to load data",
       saveSuccess: "Printer settings have been saved",
       saveError: "Failed to save printer settings",
+      setupRequired: "Required for optimized slicing and printer control",
       legend: {
         fullSupport: "You can monitor and remotely control the printer.",
         slicingSupported: "3D model slicing functionality supported",

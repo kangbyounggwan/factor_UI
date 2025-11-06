@@ -967,36 +967,39 @@ const Home = () => {
 
       {/* 프린터 설정 유도 모달 - 친화적 UI */}
       <AlertDialog open={showSetupPrompt} onOpenChange={setShowSetupPrompt}>
-        <AlertDialogContent className="rounded-3xl border-2 max-w-md">
-          <div className="flex flex-col items-center text-center pt-6 pb-2">
+        <AlertDialogContent className="rounded-3xl border-0 max-w-md shadow-2xl">
+          <div className="flex flex-col items-center text-center py-8 px-6">
             {/* 아이콘 */}
-            <div className="mb-6 p-4 bg-primary/10 rounded-full">
-              <SettingsIcon className="h-12 w-12 text-primary" />
+            <div className="mb-8 relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-full blur-xl"></div>
+              <div className="relative p-5 bg-gradient-to-br from-primary/10 to-primary/5 rounded-full">
+                <SettingsIcon className="h-14 w-14 text-primary" />
+              </div>
             </div>
 
             {/* 제목 */}
-            <AlertDialogHeader className="space-y-3">
-              <AlertDialogTitle className="text-2xl font-bold">
+            <AlertDialogHeader className="space-y-4 mb-8">
+              <AlertDialogTitle className="text-2xl font-bold tracking-tight">
                 프린터 설정이 필요해요
               </AlertDialogTitle>
-              <AlertDialogDescription className="text-base leading-relaxed px-2">
+              <AlertDialogDescription className="text-base leading-relaxed text-muted-foreground">
                 더 나은 사용 경험을 위해<br />
                 제조사 정보를 설정해주세요 ✨
               </AlertDialogDescription>
             </AlertDialogHeader>
 
             {/* 버튼 */}
-            <AlertDialogFooter className="flex-col sm:flex-col gap-3 w-full mt-8">
+            <AlertDialogFooter className="flex-col sm:flex-col gap-3 w-full">
               <AlertDialogAction
                 onClick={handleGoToSettings}
-                className="w-full h-12 text-base font-semibold rounded-2xl bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25"
+                className="w-full h-14 text-base font-semibold rounded-xl bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all duration-200"
               >
                 <SettingsIcon className="h-5 w-5 mr-2" />
                 지금 설정하기
               </AlertDialogAction>
               <AlertDialogCancel
                 onClick={handleSkipSetup}
-                className="w-full h-12 text-base font-medium rounded-2xl border-2 hover:bg-muted"
+                className="w-full h-14 text-base font-medium rounded-xl bg-muted/50 hover:bg-muted border-0 transition-all duration-200"
               >
                 다음에 할게요
               </AlertDialogCancel>

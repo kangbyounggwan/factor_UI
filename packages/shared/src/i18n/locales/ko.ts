@@ -482,6 +482,7 @@ export default {
       loadError: "데이터를 불러오는데 실패했습니다",
       saveSuccess: "프린터 설정이 저장되었습니다",
       saveError: "프린터 설정 저장에 실패했습니다",
+      setupRequired: "슬라이싱, 프린터컨트롤에 최적화하기위해 필수 선택사항입니다",
       legend: {
         fullSupport: "프린터를 모니터링하고 원격 컨트롤이 가능합니다.",
         slicingSupported: "3D모델 슬라이싱 기능 지원",
