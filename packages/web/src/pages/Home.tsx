@@ -33,59 +33,59 @@ const Home = () => {
   const features = [
     {
       icon: Monitor,
-      title: t('home.realtimeMonitoring'),
-      description: t('home.realtimeMonitoringDesc')
+      title: t('landing.realtimeMonitoring'),
+      description: t('landing.realtimeMonitoringDesc')
     },
     {
       icon: Play,
-      title: t('home.remoteControl'),
-      description: t('home.remoteControlDesc')
+      title: t('landing.remoteControl'),
+      description: t('landing.remoteControlDesc')
     },
     {
       icon: Bell,
-      title: t('home.errorNotifications'),
-      description: t('home.errorNotificationsDesc')
+      title: t('landing.errorNotifications'),
+      description: t('landing.errorNotificationsDesc')
     }
   ];
 
   const aiFeatures = [
     {
       icon: Wand2,
-      title: t('home.textTo3D'),
-      description: t('home.textTo3DDesc')
+      title: t('landing.textTo3D'),
+      description: t('landing.textTo3DDesc')
     },
     {
       icon: Image,
-      title: t('home.imageTo3D'),
-      description: t('home.imageTo3DDesc')
+      title: t('landing.imageTo3D'),
+      description: t('landing.imageTo3DDesc')
     },
     {
       icon: Layers,
-      title: t('home.textToImage'),
-      description: t('home.textToImageDesc')
+      title: t('landing.textToImage'),
+      description: t('landing.textToImageDesc')
     },
     {
       icon: Box,
-      title: t('home.smartGcode'),
-      description: t('home.smartGcodeDesc')
+      title: t('landing.smartGcode'),
+      description: t('landing.smartGcodeDesc')
     }
   ];
 
   const additionalFeatures = [
     {
       icon: BarChart3,
-      title: t('home.detailedAnalytics'),
-      description: t('home.detailedAnalyticsDesc')
+      title: t('landing.detailedAnalytics'),
+      description: t('landing.detailedAnalyticsDesc')
     },
     {
       icon: Settings,
-      title: t('home.groupManagement'),
-      description: t('home.groupManagementDesc')
+      title: t('landing.groupManagement'),
+      description: t('landing.groupManagementDesc')
     },
     {
       icon: Zap,
-      title: t('home.fastResponse'),
-      description: t('home.fastResponseDesc')
+      title: t('landing.fastResponse'),
+      description: t('landing.fastResponseDesc')
     }
   ];
 
@@ -97,10 +97,10 @@ const Home = () => {
           <div className="space-y-6">
             <div className="space-y-4">
               <h1 className="text-6xl md:text-7xl font-bold tracking-tight">
-                {t('home.heroTitle')} <span className="text-primary">{t('home.heroTitleHighlight')}</span>{t('home.heroTitleEnd')}
+                {t('landing.heroTitle')} <span className="text-primary">{t('landing.heroTitleHighlight')}</span>{t('landing.heroTitleEnd')}
               </h1>
               <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto">
-                {t('home.heroSubtitle')}
+                {t('landing.heroSubtitle')}
               </p>
             </div>
 
@@ -108,13 +108,13 @@ const Home = () => {
               <Button asChild size="lg" className="text-lg px-8 py-6">
                 <Link to={user ? "/dashboard" : "/auth"}>
                   <Monitor className="h-5 w-5 mr-2" />
-                  {user ? t('home.goToDashboard') : t('home.getStarted')}
+                  {user ? t('landing.goToDashboard') : t('landing.getStarted')}
                 </Link>
               </Button>
               <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6">
                 <Link to="/subscription">
                   <Zap className="h-5 w-5 mr-2" />
-                  {t('home.viewPricing')}
+                  {t('landing.viewPricing')}
                 </Link>
               </Button>
             </div>
@@ -133,9 +133,9 @@ const Home = () => {
       <section id="features" className="scroll-mt-16 py-24 px-6 bg-muted/65">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">{t('home.featuresTitle')}</h2>
+            <h2 className="text-4xl font-bold mb-4">{t('landing.featuresTitle')}</h2>
             <p className="text-xl text-muted-foreground">
-              {t('home.featuresSubtitle')}
+              {t('landing.featuresSubtitle')}
             </p>
           </div>
 
@@ -161,9 +161,9 @@ const Home = () => {
       <section id="ai-features" className="scroll-mt-16 py-24 px-6 bg-background">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">{t('home.aiFeaturesTitle')}</h2>
+            <h2 className="text-4xl font-bold mb-4">{t('landing.aiFeaturesTitle')}</h2>
             <p className="text-xl text-muted-foreground">
-              {t('home.aiFeaturesSubtitle')}
+              {t('landing.aiFeaturesSubtitle')}
             </p>
           </div>
 
@@ -187,7 +187,7 @@ const Home = () => {
             <Button asChild size="lg" className="text-lg px-8 py-6">
               <Link to="/create">
                 <Layers className="h-5 w-5 mr-2" />
-                {t('home.tryAIStudio')}
+                {t('landing.tryAIStudio')}
               </Link>
             </Button>
           </div>
@@ -198,9 +198,9 @@ const Home = () => {
       <section id="printers" className="scroll-mt-16 py-24 px-6 bg-muted/65">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">{t('home.supportedPrintersTitle')}</h2>
+            <h2 className="text-4xl font-bold mb-4">{t('landing.supportedPrintersTitle')}</h2>
             <p className="text-xl text-muted-foreground">
-              {t('home.supportedPrintersSubtitle')}
+              {t('landing.supportedPrintersSubtitle')}
             </p>
           </div>
 
@@ -210,9 +210,9 @@ const Home = () => {
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <Settings className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">{t('home.marlin')}</h3>
-                <p className="text-sm text-muted-foreground mb-2">{t('home.marlinDesc')}</p>
-                <Badge variant="secondary" className="text-xs">{t('home.fullySupported')}</Badge>
+                <h3 className="text-lg font-semibold mb-2">{t('landing.marlin')}</h3>
+                <p className="text-sm text-muted-foreground mb-2">{t('landing.marlinDesc')}</p>
+                <Badge variant="secondary" className="text-xs">{t('landing.fullySupported')}</Badge>
               </CardContent>
             </Card>
 
@@ -221,9 +221,9 @@ const Home = () => {
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <Zap className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">{t('home.klipper')}</h3>
-                <p className="text-sm text-muted-foreground mb-2">{t('home.klipperDesc')}</p>
-                <Badge variant="secondary" className="text-xs">{t('home.fullySupported')}</Badge>
+                <h3 className="text-lg font-semibold mb-2">{t('landing.klipper')}</h3>
+                <p className="text-sm text-muted-foreground mb-2">{t('landing.klipperDesc')}</p>
+                <Badge variant="secondary" className="text-xs">{t('landing.fullySupported')}</Badge>
               </CardContent>
             </Card>
 
@@ -232,9 +232,9 @@ const Home = () => {
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <Shield className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">{t('home.reprap')}</h3>
-                <p className="text-sm text-muted-foreground mb-2">{t('home.reprapDesc')}</p>
-                <Badge variant="secondary" className="text-xs">{t('home.fullySupported')}</Badge>
+                <h3 className="text-lg font-semibold mb-2">{t('landing.reprap')}</h3>
+                <p className="text-sm text-muted-foreground mb-2">{t('landing.reprapDesc')}</p>
+                <Badge variant="secondary" className="text-xs">{t('landing.fullySupported')}</Badge>
               </CardContent>
             </Card>
 
@@ -243,9 +243,9 @@ const Home = () => {
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <Smartphone className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">{t('home.sla')}</h3>
-                <p className="text-sm text-muted-foreground mb-2">{t('home.slaDesc')}</p>
-                <Badge variant="outline" className="text-xs">{t('home.partialSupport')}</Badge>
+                <h3 className="text-lg font-semibold mb-2">{t('landing.sla')}</h3>
+                <p className="text-sm text-muted-foreground mb-2">{t('landing.slaDesc')}</p>
+                <Badge variant="outline" className="text-xs">{t('landing.partialSupport')}</Badge>
               </CardContent>
             </Card>
           </div>
@@ -254,7 +254,7 @@ const Home = () => {
             <Button asChild size="lg" variant="outline">
               <Link to="/supported-printers">
                 <Monitor className="h-5 w-5 mr-2" />
-                {t('home.viewFullList')}
+                {t('landing.viewFullList')}
               </Link>
             </Button>
           </div>
@@ -265,9 +265,9 @@ const Home = () => {
       <section id="marketplace" className="scroll-mt-16 py-24 px-6 bg-background">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">{t('home.marketplaceTitle')}</h2>
+            <h2 className="text-4xl font-bold mb-4">{t('landing.marketplaceTitle')}</h2>
             <p className="text-xl text-muted-foreground">
-              {t('home.marketplaceSubtitle')}
+              {t('landing.marketplaceSubtitle')}
             </p>
           </div>
 
@@ -275,9 +275,9 @@ const Home = () => {
             <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
               <ShoppingCart className="h-8 w-8 text-primary" />
             </div>
-            <h3 className="text-xl font-semibold mb-4">{t('home.comingSoon')}</h3>
+            <h3 className="text-xl font-semibold mb-4">{t('landing.comingSoon')}</h3>
             <p className="text-muted-foreground leading-relaxed max-w-2xl mx-auto">
-              {t('home.marketplaceDesc')}
+              {t('landing.marketplaceDesc')}
             </p>
           </div>
         </div>
@@ -287,9 +287,9 @@ const Home = () => {
       <section className="py-24 px-6 bg-muted/65">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">{t('home.stayConnectedTitle')}</h2>
+            <h2 className="text-4xl font-bold mb-4">{t('landing.stayConnectedTitle')}</h2>
             <p className="text-xl text-muted-foreground">
-              {t('home.stayConnectedSubtitle')}
+              {t('landing.stayConnectedSubtitle')}
             </p>
           </div>
 
@@ -315,9 +315,9 @@ const Home = () => {
       <section id="api" className="scroll-mt-16 py-24 px-6 bg-background">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">{t('home.apiTitle')}</h2>
+            <h2 className="text-4xl font-bold mb-4">{t('landing.apiTitle')}</h2>
             <p className="text-xl text-muted-foreground">
-              {t('home.apiSubtitle')}
+              {t('landing.apiSubtitle')}
             </p>
           </div>
 
@@ -327,37 +327,37 @@ const Home = () => {
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
                   <Code2 className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-2xl font-semibold">{t('home.restfulAPI')}</h3>
+                <h3 className="text-2xl font-semibold">{t('landing.restfulAPI')}</h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  {t('home.apiDescription')}
+                  {t('landing.apiDescription')}
                 </p>
               </div>
 
               <div className="space-y-3">
-                <h4 className="text-lg font-medium">{t('home.keyFeatures')}</h4>
+                <h4 className="text-lg font-medium">{t('landing.keyFeatures')}</h4>
                 <ul className="space-y-2 text-muted-foreground">
                   <li className="flex items-center space-x-2">
                     <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
-                    <span>{t('home.apiFeature1')}</span>
+                    <span>{t('landing.apiFeature1')}</span>
                   </li>
                   <li className="flex items-center space-x-2">
                     <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
-                    <span>{t('home.apiFeature2')}</span>
+                    <span>{t('landing.apiFeature2')}</span>
                   </li>
                   <li className="flex items-center space-x-2">
                     <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
-                    <span>{t('home.apiFeature3')}</span>
+                    <span>{t('landing.apiFeature3')}</span>
                   </li>
                   <li className="flex items-center space-x-2">
                     <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
-                    <span>{t('home.apiFeature4')}</span>
+                    <span>{t('landing.apiFeature4')}</span>
                   </li>
                 </ul>
               </div>
             </div>
 
             <div className="bg-muted/30 rounded-lg p-6">
-              <div className="text-sm text-muted-foreground mb-2">{t('home.apiExample')}</div>
+              <div className="text-sm text-muted-foreground mb-2">{t('landing.apiExample')}</div>
               <pre className="text-sm bg-background/50 rounded p-4 overflow-x-auto">
                 <code>{`// 프린터 상태 조회
 GET /api/v1/printers/status

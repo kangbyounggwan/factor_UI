@@ -56,7 +56,7 @@ const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string, cur
     name: t('subscription.plans.basic.name'),
     price: 0,
     interval: isYearly ? "year" : "month",
-    max_printers: 2,
+    max_printers: 1,
     description: t('subscription.plans.basic.description'),
     color: "bg-muted",
     features: [
@@ -70,9 +70,9 @@ const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string, cur
   {
     id: "pro",
     name: t('subscription.plans.pro.name'),
-    price: isYearly ? 192 : 20, // 연간 20% 할인 (월 16달러)
+    price: isYearly ? 238800 : 19900, // 연간: 19,900원 * 12 = 238,800원
     interval: isYearly ? "year" : "month",
-    max_printers: 10,
+    max_printers: 5,
     description: t('subscription.plans.pro.description'),
     color: "bg-primary",
     features: [
@@ -119,12 +119,9 @@ const Subscription = () => {
   const [currentPlanId, setCurrentPlanId] = useState<string>('basic');
   const tableRef = useRef<HTMLDivElement>(null);
 
-  // 로그인 체크 - 로그인하지 않은 경우 로그인 페이지로 리다이렉트
-  useEffect(() => {
-    if (!user) {
-      navigate('/auth', { replace: true });
-    }
-  }, [user, navigate]);
+  // 로그인 체크 제거 - 공개 페이지로 변경
+  // Subscription 페이지는 이제 마케팅/정보 페이지입니다
+  // 실제 구독 관리는 Settings 페이지에서 수행합니다
 
   // DB에서 현재 플랜 가져오기
   useEffect(() => {
@@ -208,28 +205,20 @@ const Subscription = () => {
   const handleUpgrade = (planId: string) => {
     console.log('handleUpgrade called with planId:', planId, 'currentPlanId:', currentPlanId);
 
-    if (planId === 'enterprise') {
-      // Enterprise는 Contact Us로 처리
-      window.open('mailto:contact@example.com?subject=Enterprise Plan Inquiry', '_blank');
+    // 로그인한 사용자는 User Settings 페이지의 구독 탭으로 이동
+    if (user) {
+      navigate('/user-settings?tab=subscription');
       return;
     }
-    if (planId === 'basic') {
-      // Basic 플랜으로 다운그레이드 - 구독 취소 확인 다이얼로그 표시
-      console.log('Basic plan clicked, currentPlanId:', currentPlanId);
-      if (currentPlanId !== 'basic') {
-        console.log('Showing cancel dialog');
-        setShowCancelDialog(true);
-      }
-      return;
-    }
-    // 유료 플랜은 새로운 결제 페이지로 이동
-    navigate(`/payment/checkout?plan=${planId}&cycle=${isYearly ? 'yearly' : 'monthly'}`);
+
+    // 로그인하지 않은 사용자는 로그인 페이지로 이동
+    navigate('/auth');
   };
 
   const formatPrice = (price: number) => {
     if (price === 0) return t('subscription.free');
     if (price === -1) return t('subscription.contact');
-    return `$${price}`;
+    return `₩${price.toLocaleString('ko-KR')}`;
   };
 
   useEffect(() => {
@@ -258,7 +247,7 @@ const Subscription = () => {
         '@type': 'Offer',
         name: p.name,
         price: p.price,
-        priceCurrency: 'USD',
+        priceCurrency: 'KRW',
         availability: 'https://schema.org/InStock',
       }));
 
@@ -349,7 +338,7 @@ const Subscription = () => {
                 {plan.popular && (
                   <div className="absolute top-4 right-4">
                     <Badge className="bg-primary text-primary-foreground px-2.5 py-0.5 text-xs font-medium rounded-md shadow-sm">
-                      인기
+                      {t('subscription.popular')}
                     </Badge>
                   </div>
                 )}
@@ -363,15 +352,15 @@ const Subscription = () => {
                   {/* 가격 */}
                   <div className="flex items-end gap-1.5 min-h-[50px] lg:min-h-[60px]">
                     <div className="flex items-start">
-                      <span className="text-lg lg:text-xl text-muted-foreground mr-0.5">$</span>
+                      <span className="text-lg lg:text-xl text-muted-foreground mr-0.5">₩</span>
                       <span className="text-4xl lg:text-5xl font-normal leading-none tracking-tight">
-                        {plan.price === 0 ? "0" : plan.price === -1 ? "" : plan.price}
+                        {plan.price === 0 ? "0" : plan.price === -1 ? "" : plan.price.toLocaleString('ko-KR')}
                       </span>
                     </div>
                     {plan.price >= 0 && (
                       <div className="mb-0.5 flex flex-col items-start">
                         <span className="text-muted-foreground text-[10px] lg:text-[11px] leading-tight">
-                          USD /<br />{isYearly ? '월' : '월'}
+                          /<br />{isYearly ? '년' : '월'}
                         </span>
                       </div>
                     )}
@@ -418,19 +407,21 @@ const Subscription = () => {
                       disabled={plan.current}
                       onClick={() => handleUpgrade(plan.id)}
                     >
-                      {plan.current
+                      {user && plan.current
                         ? t('subscription.currentPlanButton')
+                        : user
+                        ? t('subscription.manageInSettings') // 로그인한 사용자: "설정에서 관리"
                         : plan.price === -1
-                        ? "Contact Us"
+                        ? t('subscription.contactSales')
                         : (() => {
                             const planOrder = { basic: 0, pro: 1, enterprise: 2 };
                             const currentOrder = planOrder[currentPlanId as keyof typeof planOrder] || 0;
                             const targetOrder = planOrder[plan.id as keyof typeof planOrder] || 0;
 
                             if (targetOrder > currentOrder) {
-                              return t('subscription.upgrade'); // 업그레이드
+                              return t('subscription.getStarted'); // 비로그인: "시작하기"
                             } else if (plan.id === 'basic' && currentPlanId !== 'basic') {
-                              return t('subscription.downgradeToFree'); // 무료 플랜으로 전환
+                              return t('subscription.getStarted');
                             } else {
                               return t('subscription.downgrade'); // 다운그레이드
                             }
@@ -449,7 +440,7 @@ const Subscription = () => {
             onClick={handleScrollToTable}
           >
             <p className="text-xs lg:text-sm text-muted-foreground mb-3 lg:mb-4 group-hover:text-foreground transition-colors">
-              모든 플랜 비교하기
+              {t('subscription.compareAllFeatures')}
             </p>
             <div className="animate-bounce">
               <ChevronDown className="h-6 w-6 lg:h-8 lg:w-8 text-muted-foreground group-hover:text-foreground transition-colors" />
@@ -470,9 +461,9 @@ const Subscription = () => {
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-left py-3 lg:py-4 px-3 lg:px-6 font-semibold text-xs lg:text-sm min-w-[140px] lg:min-w-[200px]"></th>
-                    <th className="text-center py-3 lg:py-4 px-2 lg:px-6 font-semibold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px]">Basic</th>
-                    <th className="text-center py-3 lg:py-4 px-2 lg:px-6 font-semibold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px] bg-primary/5">PRO</th>
-                    <th className="text-center py-3 lg:py-4 px-2 lg:px-6 font-semibold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px]">Enterprise</th>
+                    <th className="text-center py-3 lg:py-4 px-2 lg:px-6 font-semibold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px]">{t('subscription.plans.basic.name')}</th>
+                    <th className="text-center py-3 lg:py-4 px-2 lg:px-6 font-semibold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px] bg-primary/5">{t('subscription.plans.pro.name')}</th>
+                    <th className="text-center py-3 lg:py-4 px-2 lg:px-6 font-semibold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px]">{t('subscription.plans.enterprise.name')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -482,8 +473,8 @@ const Subscription = () => {
                   </tr>
                   <tr className="border-b border-border hover:bg-muted/20">
                     <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.maxPrinters')}</td>
-                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.printersCount', { count: 2 })}</td>
-                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center bg-primary/5 text-xs lg:text-sm">{t('subscription.comparison.printersCount', { count: 10 })}</td>
+                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.printersCount', { count: 1 })}</td>
+                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center bg-primary/5 text-xs lg:text-sm">{t('subscription.comparison.printersCount', { count: 5 })}</td>
                     <td className="py-3 lg:py-4 px-2 lg:px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.unlimited')}</td>
                   </tr>
                   <tr className="border-b border-border hover:bg-muted/20">
@@ -505,9 +496,9 @@ const Subscription = () => {
                   </tr>
                   <tr className="border-b border-border hover:bg-muted/20">
                     <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.aiModelGeneration')}</td>
-                    <td className="py-4 px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.limited')}</td>
-                    <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
-                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                    <td className="py-4 px-6 text-center text-xs lg:text-sm">-</td>
+                    <td className="py-4 px-6 text-center bg-primary/5 text-xs lg:text-sm">{t('subscription.comparison.modelsPerMonth', { count: 50 })}</td>
+                    <td className="py-4 px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.unlimited')}</td>
                   </tr>
                   <tr className="border-b border-border hover:bg-muted/20">
                     <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.advancedAnalytics')}</td>

@@ -13,9 +13,9 @@ i18n
       ko: { translation: ko },
       en: { translation: en },
     },
-    lng: 'en', // 초기 언어 명시
-    fallbackLng: 'en', // 기본 언어
-    debug: false, // 프로덕션: 디버그 모드 비활성화
+    lng: 'ko', // 초기 언어 명시
+    fallbackLng: 'ko', // 기본 언어
+    debug: true, // 디버그 모드 활성화하여 문제 확인
     interpolation: {
       escapeValue: false, // React는 자동으로 XSS 방지
     },

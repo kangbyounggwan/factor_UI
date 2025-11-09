@@ -135,6 +135,31 @@ export const Footer = () => {
 
         <Separator className="my-8" />
 
+        {/* 사업자 정보 */}
+        <div className="mb-6">
+          <h4 className="font-semibold text-sm mb-3">{t('footer.businessInfo')}</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-muted-foreground">
+            <div>
+              <span className="font-medium">{t('footer.ceo')}: </span>
+              <span>{t('footer.ceoName')}</span>
+            </div>
+            <div>
+              <span className="font-medium">{t('footer.businessNumber')}: </span>
+              <span>{t('footer.businessNumberValue')}</span>
+            </div>
+            <div className="md:col-span-2">
+              <span className="font-medium">{t('footer.address')}: </span>
+              <span>{t('footer.addressValue')}</span>
+            </div>
+            <div>
+              <span className="font-medium">{t('footer.phone')}: </span>
+              <span>{t('footer.phoneValue')}</span>
+            </div>
+          </div>
+        </div>
+
+        <Separator className="my-6" />
+
         {/* 하단 저작권 표시 */}
         <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
           <p className="text-sm text-muted-foreground">

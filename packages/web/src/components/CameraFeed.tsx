@@ -6,6 +6,10 @@ import { Camera, Play, RotateCw, Maximize2, X } from "lucide-react";
 import { publishCameraStart, publishCameraStop, subscribeCameraState } from "@shared/services/mqttService";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "@shared/contexts/AuthContext";
+import { getUserPlan } from "@shared/services/supabaseService/subscription";
+import { getWebcamReconnectInterval } from "@shared/utils/subscription";
+import type { SubscriptionPlan } from "@shared/types/subscription";
 
 interface CameraFeedProps {
   cameraId: string; // device uuid와 동일
@@ -15,6 +19,7 @@ interface CameraFeedProps {
 
 export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProps) => {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [isStreaming, setIsStreaming] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -25,6 +30,10 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const autoStopTimerRef = useRef<number | null>(null);
+
+  // 사용자 플랜 및 재연결 간격 상태
+  const [userPlan, setUserPlan] = useState<SubscriptionPlan>('free');
+  const [reconnectInterval, setReconnectInterval] = useState<number | undefined>(5); // 기본값: 5분
 
   const cleanupVideo = useCallback(() => {
     const frame = iframeRef.current;
@@ -56,6 +65,22 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
       return null;
     }
   }
+
+  // 사용자 플랜 로드 및 재연결 간격 설정
+  useEffect(() => {
+    const loadUserPlan = async () => {
+      if (!user) return;
+      try {
+        const plan = await getUserPlan(user.id);
+        setUserPlan(plan);
+        const interval = getWebcamReconnectInterval(plan);
+        setReconnectInterval(interval);
+      } catch (error) {
+        console.error('[CAM] Error loading user plan:', error);
+      }
+    };
+    loadUserPlan();
+  }, [user]);
 
   // ── MQTT 상태 구독 (STATE_TOPIC) ──────────────────────────────────────────────
   useEffect(() => {
@@ -137,9 +162,10 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
     }
   }, [cleanupVideo, cameraId]);
 
-  // 5분 자동 {t("camera.stop")}} 타이머
+  // 플랜별 자동 재연결 타이머 (무료: 5분, 프로/엔터: 무제한)
   useEffect(() => {
-    if (isStreaming) {
+    if (isStreaming && reconnectInterval !== undefined) {
+      // reconnectInterval이 undefined면 무제한 스트리밍 (Pro/Enterprise)
       if (autoStopTimerRef.current) {
         try {
           clearTimeout(autoStopTimerRef.current);
@@ -153,7 +179,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
         } catch (error) {
           console.error('[CAM] Auto-stop failed:', error);
         }
-      }, 5 * 60 * 1000);
+      }, reconnectInterval * 60 * 1000);
     }
     return () => {
       if (autoStopTimerRef.current) {
@@ -165,7 +191,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
         autoStopTimerRef.current = null;
       }
     };
-  }, [isStreaming, stopStreaming]);
+  }, [isStreaming, reconnectInterval, stopStreaming]);
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((v) => !v);

@@ -15,7 +15,9 @@ import {
   Settings as SettingsIcon,
   FolderPlus,
   Palette,
-  AlertTriangle
+  AlertTriangle,
+  CreditCard,
+  Check
 } from "lucide-react";
 import {
   Dialog,
@@ -48,6 +50,10 @@ import {
   type SeriesOption,
   type ModelOption
 } from "@shared/api/manufacturingPrinter";
+import { getUserPlan } from "@shared/services/supabaseService/subscription";
+import { canAddPrinter, getMaxPrinters } from "@shared/utils/subscription";
+import type { SubscriptionPlan } from "@shared/types/subscription";
+import { UpgradePrompt } from "@/components/UpgradePrompt";
 
 // 프린터 그룹 타입
 interface PrinterGroup {
@@ -109,6 +115,10 @@ const Settings = () => {
   const [showEditPrinter, setShowEditPrinter] = useState(false);
   const [editingGroup, setEditingGroup] = useState<PrinterGroup | null>(null);
   const [editingPrinter, setEditingPrinter] = useState<PrinterConfig | null>(null);
+
+  // 구독 플랜 상태
+  const [userPlan, setUserPlan] = useState<SubscriptionPlan>('free');
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
 
   // 제조사 데이터 상태
   const [manufacturers, setManufacturers] = useState<ManufacturerOption[]>([]);
@@ -217,6 +227,20 @@ const Settings = () => {
 
   useEffect(() => {
     loadData();
+  }, [user]);
+
+  // 사용자 플랜 로드
+  useEffect(() => {
+    const loadUserPlan = async () => {
+      if (!user) return;
+      try {
+        const plan = await getUserPlan(user.id);
+        setUserPlan(plan);
+      } catch (error) {
+        console.error('Error loading user plan:', error);
+      }
+    };
+    loadUserPlan();
   }, [user]);
 
   // 페이지 진입 시 스크롤 초기화
@@ -439,6 +463,24 @@ const Settings = () => {
         variant: "destructive",
       });
     }
+  };
+
+  // 프린터 추가 버튼 클릭 핸들러 (플랜 제한 체크)
+  const handleAddPrinterClick = () => {
+    if (!user) return;
+
+    // 현재 프린터 대수 체크
+    const currentPrinterCount = printers.length;
+    const canAdd = canAddPrinter(userPlan, currentPrinterCount);
+
+    if (!canAdd) {
+      // 업그레이드 필요
+      setShowUpgradePrompt(true);
+      return;
+    }
+
+    // 프린터 추가 모달 열기
+    setShowAddPrinter(true);
   };
 
   const handleAddPrinter = async () => {
@@ -775,6 +817,156 @@ const Settings = () => {
           </p>
         </header>
 
+        {/* 구독 관리 섹션 */}
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-semibold flex items-center gap-2">
+              <CreditCard className="h-6 w-6" />
+              {t('settings.subscriptionManagement')}
+            </h2>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('settings.currentPlan')}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* 현재 플랜 정보 */}
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold capitalize">
+                      {userPlan} {t('userSettings.plan')}
+                    </h3>
+                    <Badge variant={userPlan === 'free' ? 'secondary' : 'default'}>
+                      {t('subscription.currentPlanButton')}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {userPlan === 'free' ? t('subscription.plans.basic.description') :
+                     userPlan === 'pro' ? t('subscription.plans.pro.description') :
+                     t('subscription.plans.enterprise.description')}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold">
+                    {userPlan === 'free' ? t('subscription.free') :
+                     userPlan === 'pro' ? '₩19,900' :
+                     t('subscription.contact')}
+                  </p>
+                  {userPlan !== 'free' && userPlan !== 'enterprise' && (
+                    <p className="text-sm text-muted-foreground">{t('subscription.monthly')}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* 플랜 기능 */}
+              <div className="space-y-3">
+                <h4 className="font-medium">{t('subscription.includedFeatures')}</h4>
+                <ul className="space-y-2">
+                  {userPlan === 'free' && (
+                    <>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.basic.feature1')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.basic.feature2')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.basic.feature3')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.basic.feature4')}</span>
+                      </li>
+                    </>
+                  )}
+                  {userPlan === 'pro' && (
+                    <>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.pro.feature1')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.pro.feature2')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.pro.feature3')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.pro.feature4')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.pro.feature5')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.pro.feature6')}</span>
+                      </li>
+                    </>
+                  )}
+                  {userPlan === 'enterprise' && (
+                    <>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.enterprise.feature1')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.enterprise.feature2')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.enterprise.feature3')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.enterprise.feature4')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.enterprise.feature5')}</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{t('subscription.plans.enterprise.feature6')}</span>
+                      </li>
+                    </>
+                  )}
+                </ul>
+              </div>
+
+              {/* 플랜 변경 버튼 */}
+              <div className="flex gap-3 pt-4 border-t">
+                {userPlan === 'free' && (
+                  <Button onClick={() => window.location.href = '/payment/checkout?plan=pro&cycle=monthly'} className="flex-1">
+                    {t('subscription.upgradeToPro')}
+                  </Button>
+                )}
+                {userPlan === 'pro' && (
+                  <Button variant="outline" onClick={() => window.location.href = '/subscription'} className="flex-1">
+                    {t('subscription.viewAllPlans')}
+                  </Button>
+                )}
+                {userPlan !== 'enterprise' && (
+                  <Button variant="outline" onClick={() => window.open('mailto:contact@example.com?subject=Enterprise Plan Inquiry', '_blank')}>
+                    {t('subscription.contactForEnterprise')}
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <Separator />
+
         {/* 프린터 그룹 관리 섹션 */}
         <section className="space-y-6">
           <div className="flex items-center justify-between">
@@ -907,12 +1099,13 @@ const Settings = () => {
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold">{t('settings.printerManagement')}</h2>
             <Dialog open={showAddPrinter} onOpenChange={setShowAddPrinter}>
-              <DialogTrigger asChild>
-                <Button className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  {t('settings.addPrinter')}
-                </Button>
-              </DialogTrigger>
+              <Button
+                className="flex items-center gap-2"
+                onClick={handleAddPrinterClick}
+              >
+                <Plus className="h-4 w-4" />
+                {t('settings.addPrinter')}
+              </Button>
               <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
                 <DialogHeader>
                   <DialogTitle>{t('settings.newPrinter')}</DialogTitle>
@@ -1266,6 +1459,14 @@ const Settings = () => {
 
         <Separator />
 
+        {/* 업그레이드 프롬프트 */}
+        <UpgradePrompt
+          open={showUpgradePrompt}
+          onOpenChange={setShowUpgradePrompt}
+          feature={t('subscription.printerConnection')}
+          requiredPlan={userPlan === 'free' ? 'pro' : 'enterprise'}
+          currentPlan={userPlan}
+        />
       </div>
     </div>
   );

@@ -199,6 +199,84 @@ const PrinterCard = ({ printer, isAuthenticated, onSetupRequired, onStreamStart 
     fetchCameraUrl();
   }, [printer.device_uuid, printer.connected]);
 
+  // 비디오 스트림 연결
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    if (!videoElement || !streamUrl) {
+      return;
+    }
+
+    // HLS 스트림인 경우
+    if (streamUrl.includes('.m3u8')) {
+      // HLS.js를 사용하여 스트림 연결
+      import('hls.js').then((module) => {
+        const Hls = module.default;
+
+        if (Hls.isSupported()) {
+          const hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 90,
+          });
+
+          hls.loadSource(streamUrl);
+          hls.attachMedia(videoElement);
+
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            videoElement.play().catch((error) => {
+              console.warn('Video autoplay failed:', error);
+            });
+          });
+
+          hls.on(Hls.Events.ERROR, (event, data) => {
+            console.error('HLS error:', data);
+            if (data.fatal) {
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  console.error('Network error, trying to recover...');
+                  hls.startLoad();
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  console.error('Media error, trying to recover...');
+                  hls.recoverMediaError();
+                  break;
+                default:
+                  console.error('Fatal error, cannot recover');
+                  hls.destroy();
+                  break;
+              }
+            }
+          });
+
+          return () => {
+            hls.destroy();
+          };
+        } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+          // Safari native HLS support
+          videoElement.src = streamUrl;
+          videoElement.play().catch((error) => {
+            console.warn('Video autoplay failed:', error);
+          });
+        }
+      }).catch((error) => {
+        console.error('Failed to load HLS.js:', error);
+      });
+    } else {
+      // MJPEG 또는 일반 비디오 스트림
+      videoElement.src = streamUrl;
+      videoElement.play().catch((error) => {
+        console.warn('Video autoplay failed:', error);
+      });
+    }
+
+    return () => {
+      if (videoElement) {
+        videoElement.pause();
+        videoElement.src = '';
+      }
+    };
+  }, [streamUrl]);
+
   return (
     <Card
       className="overflow-hidden hover:shadow-lg transition-all duration-200 cursor-pointer"

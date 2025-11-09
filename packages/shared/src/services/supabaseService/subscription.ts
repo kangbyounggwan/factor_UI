@@ -1,267 +1,262 @@
-import { supabase } from "../../integrations/supabase/client";
+import { createClient } from '@supabase/supabase-js';
+import type { SubscriptionPlan, UserSubscription } from '../../types/subscription';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 /**
- * 사용자 구독 정보 타입
- */
-export interface UserSubscription {
-  id: string;
-  user_id: string;
-  plan_name: string;
-  status: 'active' | 'canceled' | 'expired' | 'trial';
-  current_period_start: string;
-  current_period_end: string;
-  cancel_at_period_end: boolean;
-  toss_payment_key?: string;
-  toss_order_id?: string;
-  toss_billing_key?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-/**
- * 결제 내역 타입
- */
-export interface PaymentHistory {
-  id: string;
-  user_id: string;
-  subscription_id?: string;
-  plan_name: string;
-  amount: number;
-  currency: string;
-  status: 'success' | 'failed' | 'refunded' | 'pending' | 'canceled';
-  payment_method?: string;
-  card_company?: string;
-  card_number?: string;
-  payment_key?: string;
-  order_id?: string;
-  transaction_id?: string;
-  receipt_url?: string;
-  refund_reason?: string;
-  refunded_amount?: number;
-  paid_at?: string;
-  refunded_at?: string;
-  canceled_at?: string;
-  created_at: string;
-}
-
-/**
- * 사용자의 현재 구독 정보 조회
+ * Get user's current subscription
  */
 export async function getUserSubscription(userId: string): Promise<UserSubscription | null> {
-  const { data, error } = await supabase
-    .from('user_subscriptions')
-    .select('*')
-    .eq('user_id', userId)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('user_subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .single();
 
-  if (error) {
-    console.error('Error fetching user subscription:', error);
+    if (error) {
+      console.error('[subscription] Error fetching user subscription:', error);
+      return null;
+    }
+
+    return data as UserSubscription;
+  } catch (error) {
+    console.error('[subscription] Error fetching user subscription:', error);
     return null;
   }
-
-  return data;
 }
 
 /**
- * 구독 생성 또는 업데이트
+ * Get user's current plan (defaults to 'free' if no subscription found)
+ */
+export async function getUserPlan(userId: string): Promise<SubscriptionPlan> {
+  try {
+    const subscription = await getUserSubscription(userId);
+
+    if (!subscription || subscription.status !== 'active') {
+      return 'free';
+    }
+
+    return subscription.plan_name;
+  } catch (error) {
+    console.error('[subscription] Error getting user plan:', error);
+    return 'free';
+  }
+}
+
+/**
+ * Create or update user subscription
+ */
+export async function upsertUserSubscription(
+  userId: string,
+  plan: SubscriptionPlan,
+  periodStart: Date,
+  periodEnd: Date
+): Promise<UserSubscription | null> {
+  try {
+    const { data, error } = await supabase
+      .from('user_subscriptions')
+      .upsert({
+        user_id: userId,
+        plan_name: plan,
+        status: 'active',
+        current_period_start: periodStart.toISOString(),
+        current_period_end: periodEnd.toISOString(),
+        cancel_at_period_end: false,
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[subscription] Error upserting user subscription:', error);
+      return null;
+    }
+
+    return data as UserSubscription;
+  } catch (error) {
+    console.error('[subscription] Error upserting user subscription:', error);
+    return null;
+  }
+}
+
+/**
+ * Cancel user subscription (will expire at period end)
+ */
+export async function cancelUserSubscription(userId: string): Promise<boolean> {
+  try {
+    const { error} = await supabase
+      .from('user_subscriptions')
+      .update({
+        cancel_at_period_end: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('status', 'active');
+
+    if (error) {
+      console.error('[subscription] Error cancelling user subscription:', error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('[subscription] Error cancelling user subscription:', error);
+    return false;
+  }
+}
+
+/**
+ * Get user's printer count
+ */
+export async function getUserPrinterCount(userId: string): Promise<number> {
+  try {
+    const { count, error } = await supabase
+      .from('printers')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('[subscription] Error getting printer count:', error);
+      return 0;
+    }
+
+    return count || 0;
+  } catch (error) {
+    console.error('[subscription] Error getting printer count:', error);
+    return 0;
+  }
+}
+
+/**
+ * Create or update subscription (for payment processing)
  */
 export async function upsertSubscription(params: {
   userId: string;
   planName: string;
-  status?: 'active' | 'canceled' | 'expired' | 'trial';
-  periodStart?: Date;
-  periodEnd?: Date;
+  status: 'active' | 'cancelled' | 'expired' | 'trialing';
+  periodStart: Date;
+  periodEnd: Date;
   tossPaymentKey?: string;
   tossOrderId?: string;
-  tossBillingKey?: string;
-}): Promise<{ success: boolean; error?: any; subscription?: UserSubscription }> {
-  const {
-    userId,
-    planName,
-    status = 'active',
-    periodStart = new Date(),
-    periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 기본 1개월
-    tossPaymentKey,
-    tossOrderId,
-    tossBillingKey,
-  } = params;
-
-  // 기존 구독 확인
-  const existing = await getUserSubscription(userId);
-
-  const subscriptionData = {
-    user_id: userId,
-    plan_name: planName,
-    status,
-    current_period_start: periodStart.toISOString(),
-    current_period_end: periodEnd.toISOString(),
-    cancel_at_period_end: false,
-    toss_payment_key: tossPaymentKey,
-    toss_order_id: tossOrderId,
-    toss_billing_key: tossBillingKey,
-  };
-
-  if (existing) {
-    // 업데이트
+}): Promise<{ success: boolean; subscription?: UserSubscription; error?: string }> {
+  try {
     const { data, error } = await supabase
       .from('user_subscriptions')
-      .update(subscriptionData)
-      .eq('user_id', userId)
+      .upsert({
+        user_id: params.userId,
+        plan_name: params.planName as SubscriptionPlan,
+        status: params.status,
+        current_period_start: params.periodStart.toISOString(),
+        current_period_end: params.periodEnd.toISOString(),
+        cancel_at_period_end: false,
+        updated_at: new Date().toISOString(),
+      })
       .select()
       .single();
 
     if (error) {
-      console.error('Error updating subscription:', error);
-      return { success: false, error };
+      console.error('[subscription] Error upserting subscription:', error);
+      return { success: false, error: error.message };
     }
 
-    return { success: true, subscription: data };
-  } else {
-    // 새로 생성
-    const { data, error } = await supabase
-      .from('user_subscriptions')
-      .insert(subscriptionData)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error creating subscription:', error);
-      return { success: false, error };
-    }
-
-    return { success: true, subscription: data };
+    return { success: true, subscription: data as UserSubscription };
+  } catch (error) {
+    console.error('[subscription] Error upserting subscription:', error);
+    return { success: false, error: String(error) };
   }
 }
 
 /**
- * 결제 내역 생성
+ * Create payment history record
  */
 export async function createPaymentHistory(params: {
   userId: string;
   subscriptionId?: string;
   planName: string;
   amount: number;
-  currency?: string;
-  status: 'success' | 'failed' | 'refunded' | 'pending' | 'canceled';
-  paymentMethod?: string;
-  cardCompany?: string;
-  cardNumber?: string;
+  currency: string;
+  status: string;
   paymentKey?: string;
   orderId?: string;
-  transactionId?: string;
-  receiptUrl?: string;
-  paidAt?: Date;
-}): Promise<{ success: boolean; error?: any; payment?: PaymentHistory }> {
-  const {
-    userId,
-    subscriptionId,
-    planName,
-    amount,
-    currency = 'KRW',
-    status,
-    paymentMethod,
-    cardCompany,
-    cardNumber,
-    paymentKey,
-    orderId,
-    transactionId,
-    receiptUrl,
-    paidAt,
-  } = params;
+  paidAt: Date;
+}): Promise<{ success: boolean; payment?: any; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('payment_history')
+      .insert({
+        user_id: params.userId,
+        subscription_id: params.subscriptionId,
+        plan: params.planName,
+        amount: params.amount,
+        currency: params.currency,
+        status: params.status,
+        payment_key: params.paymentKey,
+        order_id: params.orderId,
+        paid_at: params.paidAt.toISOString(),
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
 
-  const paymentData = {
-    user_id: userId,
-    subscription_id: subscriptionId,
-    plan_name: planName,
-    amount,
-    currency,
-    status,
-    payment_method: paymentMethod,
-    card_company: cardCompany,
-    card_number: cardNumber,
-    payment_key: paymentKey,
-    order_id: orderId,
-    transaction_id: transactionId,
-    receipt_url: receiptUrl,
-    paid_at: paidAt?.toISOString(),
-  };
+    if (error) {
+      console.error('[subscription] Error creating payment history:', error);
+      return { success: false, error: error.message };
+    }
 
-  const { data, error } = await supabase
-    .from('payment_history')
-    .insert(paymentData)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error creating payment history:', error);
-    return { success: false, error };
+    return { success: true, payment: data };
+  } catch (error) {
+    console.error('[subscription] Error creating payment history:', error);
+    return { success: false, error: String(error) };
   }
+}
 
-  return { success: true, payment: data };
+export interface PaymentHistory {
+  id: string;
+  user_id: string;
+  subscription_id: string | null;
+  plan_name: string;
+  amount: number;
+  currency: string;
+  status: 'success' | 'failed' | 'refunded' | 'pending' | 'canceled';
+  payment_method: string | null;
+  card_company: string | null;
+  card_number: string | null;
+  payment_key: string | null;
+  order_id: string | null;
+  transaction_id: string | null;
+  receipt_url: string | null;
+  paid_at: string | null;
+  created_at: string;
 }
 
 /**
- * 사용자의 결제 내역 조회
+ * Get user's payment history
  */
 export async function getUserPaymentHistory(
   userId: string,
-  limit: number = 10
-): Promise<PaymentHistory[]> {
-  const { data, error } = await supabase
-    .from('payment_history')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(limit);
+  limit = 10,
+  offset = 0
+): Promise<{ data: PaymentHistory[]; total: number }> {
+  try {
+    const { data, error, count } = await supabase
+      .from('payment_history')
+      .select('*', { count: 'exact' })
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
-  if (error) {
-    console.error('Error fetching payment history:', error);
-    return [];
+    if (error) {
+      console.error('[subscription] Error fetching payment history:', error);
+      return { data: [], total: 0 };
+    }
+
+    return { data: data as PaymentHistory[], total: count || 0 };
+  } catch (error) {
+    console.error('[subscription] Error fetching payment history:', error);
+    return { data: [], total: 0 };
   }
-
-  return data || [];
-}
-
-/**
- * 구독 취소
- */
-export async function cancelSubscription(
-  userId: string,
-  cancelAtPeriodEnd: boolean = true
-): Promise<{ success: boolean; error?: any }> {
-  const updateData = cancelAtPeriodEnd
-    ? { cancel_at_period_end: true }
-    : { status: 'canceled' as const, cancel_at_period_end: false };
-
-  const { error } = await supabase
-    .from('user_subscriptions')
-    .update(updateData)
-    .eq('user_id', userId);
-
-  if (error) {
-    console.error('Error canceling subscription:', error);
-    return { success: false, error };
-  }
-
-  return { success: true };
-}
-
-/**
- * 구독 재개 (취소 예약 해제)
- */
-export async function resumeSubscription(userId: string): Promise<{ success: boolean; error?: any }> {
-  const { error } = await supabase
-    .from('user_subscriptions')
-    .update({
-      cancel_at_period_end: false,
-      status: 'active'
-    })
-    .eq('user_id', userId);
-
-  if (error) {
-    console.error('Error resuming subscription:', error);
-    return { success: false, error };
-  }
-
-  return { success: true };
 }

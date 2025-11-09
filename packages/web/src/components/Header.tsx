@@ -751,9 +751,17 @@ export const Header = () => {
                     size="sm"
                     className="h-8 w-8 p-0 rounded-full hover:bg-accent"
                   >
-                    <div className="flex items-center justify-center w-8 h-8 bg-primary rounded-full">
-                      <User className="w-4 h-4 text-primary-foreground" />
-                    </div>
+                    {user?.user_metadata?.avatar_url ? (
+                      <img
+                        src={user.user_metadata.avatar_url}
+                        alt="Profile"
+                        className="w-8 h-8 rounded-full object-cover border-2 border-primary"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center w-8 h-8 bg-primary rounded-full">
+                        <User className="w-4 h-4 text-primary-foreground" />
+                      </div>
+                    )}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">

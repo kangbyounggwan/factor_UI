@@ -2,10 +2,15 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Bot, Send, User, Mic, MicOff, Loader2, Sparkles, Calendar, FileText, BarChart3, ClipboardList, Box, Image, Archive, ChevronLeft, ChevronRight } from "lucide-react";
+import { Bot, Send, User, Mic, MicOff, Loader2, Sparkles, Calendar, FileText, BarChart3, ClipboardList, Box, Image, Archive, ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { chatService, type ChatMessage } from "@/lib/chatService";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { getUserPlan } from "@shared/services/supabaseService/subscription";
+import { hasAiAssistantAccess } from "@shared/utils/subscription";
+import type { SubscriptionPlan } from "@shared/types/subscription";
+import { UpgradePrompt } from "@/components/UpgradePrompt";
+import { useTranslation } from "react-i18next";
 
 interface AIAssistantSidebarProps {
   isCollapsed: boolean;
@@ -15,6 +20,7 @@ interface AIAssistantSidebarProps {
 }
 
 export const AIAssistantSidebar = ({ isCollapsed, onToggle, width, onWidthChange }: AIAssistantSidebarProps) => {
+  const { t } = useTranslation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -27,6 +33,11 @@ export const AIAssistantSidebar = ({ isCollapsed, onToggle, width, onWidthChange
   const { toast } = useToast();
   const { user } = useAuth();
 
+  // 구독 플랜 및 AI 어시스턴트 접근 권한
+  const [userPlan, setUserPlan] = useState<SubscriptionPlan>('free');
+  const [hasAiAccess, setHasAiAccess] = useState(false);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -35,7 +46,29 @@ export const AIAssistantSidebar = ({ isCollapsed, onToggle, width, onWidthChange
     scrollToBottom();
   }, [messages]);
 
+  // 사용자 플랜 로드 및 AI 어시스턴트 접근 권한 체크
+  useEffect(() => {
+    const loadUserPlan = async () => {
+      if (!user) return;
+      try {
+        const plan = await getUserPlan(user.id);
+        setUserPlan(plan);
+        const hasAccess = hasAiAssistantAccess(plan);
+        setHasAiAccess(hasAccess);
+      } catch (error) {
+        console.error('[AI] Error loading user plan:', error);
+      }
+    };
+    loadUserPlan();
+  }, [user]);
+
   const handleSendMessage = async (messageText?: string) => {
+    // AI 어시스턴트 접근 권한 체크
+    if (!hasAiAccess) {
+      setShowUpgradePrompt(true);
+      return;
+    }
+
     const textToSend = messageText || inputMessage;
     if (!textToSend.trim() || isLoading || !user) return;
 
@@ -464,6 +497,36 @@ export const AIAssistantSidebar = ({ isCollapsed, onToggle, width, onWidthChange
           </div>
         </div>
       </div>
+
+      {/* AI 어시스턴트 접근 제한 오버레이 */}
+      {!hasAiAccess && (
+        <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <div className="text-center space-y-4 max-w-sm">
+            <div className="flex justify-center">
+              <div className="p-4 bg-muted rounded-full">
+                <Lock className="w-12 h-12 text-muted-foreground" />
+              </div>
+            </div>
+            <h3 className="text-lg font-semibold">{t('subscription.aiAssistant')}</h3>
+            <p className="text-sm text-muted-foreground">
+              {t('subscription.featureRequiresPlan', { plan: 'Enterprise' })}
+            </p>
+            <Button onClick={() => setShowUpgradePrompt(true)} className="w-full">
+              <Sparkles className="w-4 h-4 mr-2" />
+              {t('subscription.viewPlans')}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* 업그레이드 프롬프트 */}
+      <UpgradePrompt
+        open={showUpgradePrompt}
+        onOpenChange={setShowUpgradePrompt}
+        feature={t('subscription.aiAssistant')}
+        requiredPlan="enterprise"
+        currentPlan={userPlan}
+      />
     </div>
   );
 };

@@ -46,6 +46,18 @@ const PaymentCheckout = () => {
   const planName = getPlanName(planId);
   const monthlyAmount = getPlanAmount(planId, false);
 
+  // 사용자 정보가 로드되면 폼 필드 업데이트
+  useEffect(() => {
+    if (user) {
+      if (user.user_metadata?.full_name) {
+        setCustomerName(user.user_metadata.full_name);
+      }
+      if (user.email) {
+        setCustomerEmail(user.email);
+      }
+    }
+  }, [user]);
+
   // 결제 위젯 초기화
   useEffect(() => {
     let mounted = true;
