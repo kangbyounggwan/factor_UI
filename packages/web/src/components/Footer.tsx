@@ -28,15 +28,15 @@ export const Footer = () => {
       { name: t('footer.help'), href: "#help" },
     ],
     legal: [
-      { name: t('footer.privacy'), href: "#privacy" },
-      { name: t('footer.terms'), href: "#terms" },
-      { name: t('footer.license'), href: "#license" },
+      { name: t('footer.privacy'), href: "/privacy" },
+      { name: t('footer.terms'), href: "/terms" },
+      { name: t('footer.refund'), href: "/refund" },
     ],
   };
 
   const socialLinks = [
     { name: "GitHub", icon: Github, href: "https://github.com" },
-    { name: "Email", icon: Mail, href: "mailto:support@factor3d.com" },
+    { name: "Email", icon: Mail, href: "mailto:tlvh109@gmail.com" },
     { name: "Discord", icon: MessageCircle, href: "#discord" },
   ];
 

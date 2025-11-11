@@ -19,7 +19,8 @@ export default {
     back: "Back",
     all: "All",
     share: "Share",
-    waiting: "Waiting"
+    waiting: "Waiting",
+    backToHome: "Back to Home"
   },
   nav: {
     home: "Home",
@@ -1413,7 +1414,7 @@ export default {
     legal: "Legal",
     privacy: "Privacy Policy",
     terms: "Terms of Service",
-    license: "License",
+    refund: "Refund Policy",
 
     // Other
     description: "AI-powered 3D printer farm management solution. Monitor and control multiple printers remotely.",
@@ -1432,6 +1433,27 @@ export default {
     addressValue: "1F 101, 46 Daehak-ro 50beon-gil, Dong-gu, Daejeon, South Korea",
     phone: "Phone",
     phoneValue: "010-4100-8579"
+  },
+  legal: {
+    effectiveDate: "Effective Date",
+    privacyPolicy: {
+      title: "Privacy Policy",
+      subtitle: "FACTOR 3D Printer Farm"
+    },
+    termsOfService: {
+      title: "Terms of Service",
+      subtitle: "FACTOR 3D Printer Farm"
+    },
+    refundPolicy: {
+      title: "Monthly Subscription Refund Policy",
+      subtitle: "Applicable to: FACTOR 3D Monthly Subscription Plans"
+    },
+    contact: {
+      title: "Contact",
+      email: "Email",
+      hours: "Business Hours",
+      hoursValue: "Weekdays 10:00 - 18:00 KST"
+    }
   },
   notifications: {
     title: "Notifications",

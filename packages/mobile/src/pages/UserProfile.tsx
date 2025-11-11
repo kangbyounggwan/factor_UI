@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@shared/contexts/AuthContext";
@@ -30,6 +30,16 @@ const UserProfile = () => {
   const [bio, setBio] = useState(user?.user_metadata?.bio || "");
   const [avatarUrl, setAvatarUrl] = useState(user?.user_metadata?.avatar_url || "");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  // 사용자 정보 변경 시 아바타 URL 동기화 (Google 로그인 등)
+  useEffect(() => {
+    if (user?.user_metadata?.avatar_url) {
+      setAvatarUrl(user.user_metadata.avatar_url);
+    }
+    if (user?.user_metadata?.full_name) {
+      setDisplayName(user.user_metadata.full_name);
+    }
+  }, [user?.user_metadata?.avatar_url, user?.user_metadata?.full_name]);
 
   // 전체 화면 입력 모달 상태
   const [editingField, setEditingField] = useState<{
@@ -254,11 +264,13 @@ const UserProfile = () => {
             <img
               src={avatarUrl}
               alt="Profile"
-              className="w-24 h-24 rounded-full object-cover bg-gradient-to-br from-blue-400 to-blue-600 transition-opacity group-hover:opacity-80"
+              className="w-24 h-24 rounded-full object-cover border-2 border-primary/20 transition-opacity group-hover:opacity-80"
             />
           ) : (
-            <div className="flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 transition-opacity group-hover:opacity-80">
-              <span className="text-4xl">😎</span>
+            <div className="flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 transition-opacity group-hover:opacity-80">
+              <span className="text-4xl font-bold text-white">
+                {displayName?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || "U"}
+              </span>
             </div>
           )}
           <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors">

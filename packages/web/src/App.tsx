@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { ScrollToTop } from "@/components/ScrollToTop";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 import { AIAssistantSidebar } from "@/components/AIAssistantSidebar";
@@ -35,6 +36,9 @@ const EmailVerification = lazy(() => import("./pages/EmailVerification"));
 const PaymentCheckout = lazy(() => import("./pages/PaymentCheckout"));
 const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
 const PaymentFail = lazy(() => import("./pages/PaymentFail"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("./pages/TermsOfService"));
+const RefundPolicy = lazy(() => import("./pages/RefundPolicy"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -63,6 +67,9 @@ const AppContent = () => {
 
   return (
     <div className="flex flex-col min-h-screen bg-background transition-colors">
+      {/* 페이지 이동 시 스크롤 최상단으로 */}
+      <ScrollToTop />
+
       {/* 헤더를 모든 페이지에 통합 */}
       <Header />
 
@@ -122,6 +129,9 @@ const AppContent = () => {
             <Route path="/payment/checkout" element={<PaymentCheckout />} />
             <Route path="/payment/success" element={<PaymentSuccess />} />
             <Route path="/payment/fail" element={<PaymentFail />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
+            <Route path="/refund" element={<RefundPolicy />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -4,10 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { PrinterStatusBadge } from "@/components/PrinterStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Monitor, LogIn, Plus, Thermometer, ChevronDown, ChevronUp, Layers, Settings as SettingsIcon, Bell } from "lucide-react";
+import { Monitor, LogIn, Plus, Thermometer, ChevronDown, ChevronUp, Layers, Settings as SettingsIcon, Bell, Loader2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
-import { onDashStatusMessage, mqttPublish } from "@shared/services/mqttService";
+import { onDashStatusMessage, mqttPublish, publishCameraStart, subscribeCameraState } from "@shared/services/mqttService";
 import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
@@ -165,39 +165,81 @@ const PrinterCard = ({ printer, isAuthenticated, onSetupRequired, onStreamStart 
     return `${minutes}${t('dashboard.time.minutes')}`;
   };
 
-  // 카메라 스트림 URL - Supabase cameras 테이블에서 조회
+  // 카메라 스트림 URL - MQTT를 통해 스트리밍 시작
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [webrtcUrl, setWebrtcUrl] = useState<string | null>(null);
+  const [cameraStatus, setCameraStatus] = useState<'offline' | 'starting' | 'online' | 'error'>('offline');
 
+  // MQTT 카메라 상태 구독
   useEffect(() => {
-    const fetchCameraUrl = async () => {
-      if (!printer.device_uuid || !printer.connected) {
-        setStreamUrl(null);
-        return;
-      }
+    if (!printer.device_uuid) {
+      setStreamUrl(null);
+      setWebrtcUrl(null);
+      setCameraStatus('offline');
+      return;
+    }
 
+    let unsub: (() => Promise<void>) | null = null;
+
+    (async () => {
       try {
-        const { data, error } = await supabase
-          .from('cameras')
-          .select('stream_url')
-          .eq('device_uuid', printer.device_uuid)
-          .maybeSingle();
-
-        if (error) {
-          console.warn('[Dashboard] 카메라 URL 조회 실패:', error.message);
-          setStreamUrl(null);
-          return;
-        }
-
-        const cameraData = data as { stream_url?: string } | null;
-        setStreamUrl(cameraData?.stream_url || null);
-      } catch (err) {
-        console.error('[Dashboard] 카메라 URL 조회 예외:', err);
-        setStreamUrl(null);
+        // 카메라 상태 구독만 수행 (자동 시작하지 않음)
+        unsub = await subscribeCameraState(printer.device_uuid!, ({ running, webrtcUrl, status }) => {
+          setCameraStatus(status);
+          if (webrtcUrl) {
+            setWebrtcUrl(webrtcUrl);
+            setStreamUrl(webrtcUrl);
+          }
+        });
+      } catch (error) {
+        console.error('[Dashboard] 카메라 구독 실패:', error);
       }
-    };
+    })();
 
-    fetchCameraUrl();
-  }, [printer.device_uuid, printer.connected]);
+    return () => {
+      if (unsub) unsub().catch(console.error);
+    };
+  }, [printer.device_uuid]);
+
+  // 카메라 스트리밍 시작 핸들러
+  const handleStreamStart = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // 카드 클릭 이벤트 전파 방지
+
+    if (!printer.device_uuid) {
+      toast({
+        title: t('camera.error'),
+        description: t('camera.deviceNotFound'),
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!printer.connected) {
+      toast({
+        title: t('camera.error'),
+        description: t('camera.serverConnectionRequired'),
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setCameraStatus('starting');
+      await publishCameraStart(printer.device_uuid, 'webrtc');
+      toast({
+        title: t('camera.streamStarting'),
+        description: t('camera.streamStartingDesc'),
+      });
+    } catch (error) {
+      console.error('[Dashboard] 카메라 시작 실패:', error);
+      setCameraStatus('error');
+      toast({
+        title: t('camera.error'),
+        description: t('camera.streamStartFailed'),
+        variant: "destructive"
+      });
+    }
+  };
 
   // 비디오 스트림 연결
   useEffect(() => {
@@ -316,7 +358,28 @@ const PrinterCard = ({ printer, isAuthenticated, onSetupRequired, onStreamStart 
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground bg-gradient-to-br from-muted/50 to-muted">
             <div className="text-center">
               <Monitor className="h-16 w-16 mx-auto mb-3 opacity-30" />
-              <p className="text-sm font-medium">{printer.connected ? t('camera.streamPreparation') : t('printerDetail.disconnected')}</p>
+              <p className="text-sm font-medium mb-4">
+                {printer.connected ? t('camera.streamPreparation') : t('printerDetail.disconnected')}
+              </p>
+              {printer.connected && cameraStatus !== 'starting' && (
+                <Button
+                  size="sm"
+                  onClick={handleStreamStart}
+                  disabled={cameraStatus === 'starting'}
+                  className="bg-primary/80 hover:bg-primary"
+                >
+                  {cameraStatus === 'starting' ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {t('camera.starting')}
+                    </>
+                  ) : (
+                    <>
+                      ▶️ {t('camera.startStream')}
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         )}

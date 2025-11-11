@@ -950,7 +950,7 @@ const UserSettings = () => {
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
                                   <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>월 {PLAN_FEATURES.pro.aiModelsPerMonth}회 AI 모델 생성</span>
+                                  <span>월 {PLAN_FEATURES.pro.aiModelGeneration}회 AI 모델 생성</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
                                   <Check className="h-4 w-4 text-primary shrink-0" />
@@ -1696,7 +1696,7 @@ const UserSettings = () => {
                 <h3 className="text-lg font-semibold">9. 환불 절차</h3>
                 <div className="bg-muted p-4 rounded-lg space-y-2">
                   <div className="grid grid-cols-1 gap-2 text-sm">
-                    <p><strong className="text-foreground">요청 경로:</strong> support@factor3d.com</p>
+                    <p><strong className="text-foreground">요청 경로:</strong> tlvh109@gmail.com</p>
                     <p><strong className="text-foreground">필수 정보:</strong> 결제 이메일/아이디, 결제일, 금액, 사유, 영수증</p>
                     <p><strong className="text-foreground">처리 기한:</strong> 요청 수신 후 영업일 5~10일 내 승인/반려 안내</p>
                     <p><strong className="text-foreground">표시 반영:</strong> 카드사 정책에 따라 실 반영까지 최대 14일 소요</p>
@@ -1726,7 +1726,7 @@ const UserSettings = () => {
                 <h3 className="text-lg font-semibold">12. 문의처</h3>
                 <div className="bg-primary/5 border border-primary/20 p-4 rounded-lg space-y-2">
                   <p className="text-sm">
-                    <strong>이메일:</strong> support@factor3d.com
+                    <strong>이메일:</strong> tlvh109@gmail.com
                   </p>
                   <p className="text-sm">
                     <strong>운영 시간:</strong> 평일 10:00 - 18:00 KST
@@ -1742,7 +1742,7 @@ const UserSettings = () => {
                 <h4 className="font-semibold mb-2 text-sm">빠른 요약</h4>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   월 구독은 선결제이며, <strong>7일 이내 미사용 시 전액 환불</strong> / <strong>중도 해지 시 미사용분 일할 환불</strong>을 제공합니다.
-                  환불 문의: support@factor3d.com
+                  환불 문의: tlvh109@gmail.com
                 </p>
               </div>
             </div>
