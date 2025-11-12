@@ -178,7 +178,7 @@ const PrivacyPolicy = () => {
                 <strong>개인정보 보호책임자</strong>
               </p>
               <p>
-                <strong>{t('legal.contact.email')}:</strong> tlvh109@gmail.com
+                <strong>{t('legal.contact.email')}:</strong> factor@factor.io.kr
               </p>
               <p>
                 <strong>{t('legal.contact.hours')}:</strong> {t('legal.contact.hoursValue')}
@@ -373,7 +373,7 @@ const PrivacyPolicy = () => {
                 <strong>Personal Information Protection Officer</strong>
               </p>
               <p>
-                <strong>{t('legal.contact.email')}:</strong> tlvh109@gmail.com
+                <strong>{t('legal.contact.email')}:</strong> factor@factor.io.kr
               </p>
               <p>
                 <strong>{t('legal.contact.hours')}:</strong> Weekdays 10:00 - 18:00 KST

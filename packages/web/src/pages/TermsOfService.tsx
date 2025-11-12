@@ -200,7 +200,7 @@ const TermsOfService = () => {
           <div className="bg-primary/10 border border-primary/20 p-6 rounded-lg space-y-3">
             <h3 className="font-semibold text-lg">{t('legal.contact.title')}</h3>
             <p>
-              <strong>{t('legal.contact.email')}:</strong> tlvh109@gmail.com
+              <strong>{t('legal.contact.email')}:</strong> factor@factor.io.kr
             </p>
             <p>
               <strong>{t('legal.contact.hours')}:</strong> {t('legal.contact.hoursValue')}
@@ -394,7 +394,7 @@ const TermsOfService = () => {
           <div className="bg-primary/10 border border-primary/20 p-6 rounded-lg space-y-3">
             <h3 className="font-semibold text-lg">{t('legal.contact.title')}</h3>
             <p>
-              <strong>{t('legal.contact.email')}:</strong> tlvh109@gmail.com
+              <strong>{t('legal.contact.email')}:</strong> factor@factor.io.kr
             </p>
             <p>
               <strong>{t('legal.contact.hours')}:</strong> Weekdays 10:00 - 18:00 KST

@@ -118,7 +118,7 @@ const RefundPolicy = () => {
             <h2 className="text-2xl font-semibold">9. 환불 절차</h2>
             <div className="bg-muted p-6 rounded-lg space-y-3">
               <div className="grid grid-cols-1 gap-3">
-                <p><strong className="text-foreground">요청 경로:</strong> tlvh109@gmail.com</p>
+                <p><strong className="text-foreground">요청 경로:</strong> factor@factor.io.kr</p>
                 <p><strong className="text-foreground">필수 정보:</strong> 결제 이메일/아이디, 결제일, 금액, 사유, 영수증</p>
                 <p><strong className="text-foreground">처리 기한:</strong> 요청 수신 후 영업일 5~10일 내 승인/반려 안내</p>
                 <p><strong className="text-foreground">표시 반영:</strong> 카드사 정책에 따라 실 반영까지 최대 14일 소요</p>
@@ -148,7 +148,7 @@ const RefundPolicy = () => {
             <h2 className="text-2xl font-semibold">12. {t('legal.contact.title')}</h2>
             <div className="bg-primary/10 border border-primary/20 p-6 rounded-lg space-y-3">
               <p>
-                <strong>{t('legal.contact.email')}:</strong> tlvh109@gmail.com
+                <strong>{t('legal.contact.email')}:</strong> factor@factor.io.kr
               </p>
               <p>
                 <strong>{t('legal.contact.hours')}:</strong> {t('legal.contact.hoursValue')}
@@ -164,7 +164,7 @@ const RefundPolicy = () => {
             <h3 className="font-semibold mb-3 text-lg">빠른 요약</h3>
             <p className="text-muted-foreground leading-relaxed">
               결제 후 7일 이내 미사용 시 전액 환불, 사용 시 일할 계산 환불. 중도 해지 시 미사용 기간 환불(영업일 5~10일).
-              장애 12시간 이상 시 보상 제공. 중복 결제·오류는 전액 환불. 환불 요청은 tlvh109@gmail.com으로 문의 바랍니다.
+              장애 12시간 이상 시 보상 제공. 중복 결제·오류는 전액 환불. 환불 요청은 factor@factor.io.kr로 문의 바랍니다.
             </p>
           </div>
             </>
@@ -260,7 +260,7 @@ const RefundPolicy = () => {
                 <h2 className="text-2xl font-semibold">9. Refund Process</h2>
                 <div className="bg-muted p-6 rounded-lg space-y-3">
                   <div className="grid grid-cols-1 gap-3">
-                    <p><strong className="text-foreground">Contact:</strong> tlvh109@gmail.com</p>
+                    <p><strong className="text-foreground">Contact:</strong> factor@factor.io.kr</p>
                     <p><strong className="text-foreground">Required Info:</strong> Payment email/ID, payment date, amount, reason, receipt</p>
                     <p><strong className="text-foreground">Processing Time:</strong> Approval/rejection within 5-10 business days</p>
                     <p><strong className="text-foreground">Reflection:</strong> Up to 14 days depending on card company policy</p>
@@ -290,7 +290,7 @@ const RefundPolicy = () => {
                 <h2 className="text-2xl font-semibold">12. {t('legal.contact.title')}</h2>
                 <div className="bg-primary/10 border border-primary/20 p-6 rounded-lg space-y-3">
                   <p>
-                    <strong>{t('legal.contact.email')}:</strong> tlvh109@gmail.com
+                    <strong>{t('legal.contact.email')}:</strong> factor@factor.io.kr
                   </p>
                   <p>
                     <strong>{t('legal.contact.hours')}:</strong> {t('legal.contact.hoursValue')}
@@ -306,7 +306,7 @@ const RefundPolicy = () => {
                 <h3 className="font-semibold mb-3 text-lg">Quick Summary</h3>
                 <p className="text-muted-foreground leading-relaxed">
                   Full refund within 7 days if unused, prorated if used. Mid-term cancellation refunds unused period (5-10 business days).
-                  Compensation for 12+ hour outages. Full refund for duplicate charges/errors. Contact tlvh109@gmail.com for refund requests.
+                  Compensation for 12+ hour outages. Full refund for duplicate charges/errors. Contact factor@factor.io.kr for refund requests.
                 </p>
               </div>
             </>
