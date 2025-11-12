@@ -270,6 +270,38 @@ const Subscription = () => {
 
   return (
     <div className="fixed inset-0 z-50 bg-background">
+      {/* NoScript Fallback */}
+      <noscript>
+        <div style={{padding: '2rem', maxWidth: '800px', margin: '0 auto', fontFamily: 'system-ui'}}>
+          <h1>{t('subscription.title')}</h1>
+          <p>{t('subscription.subtitle')}</p>
+          <div style={{marginTop: '2rem'}}>
+            <h2>Basic Plan - Free</h2>
+            <ul>
+              <li>1 printer connection</li>
+              <li>Real-time monitoring</li>
+              <li>Remote control</li>
+            </ul>
+            <h2>Pro Plan - ₩19,900/month</h2>
+            <ul>
+              <li>5 printer connections</li>
+              <li>AI model generation (50/month)</li>
+              <li>Advanced analytics</li>
+              <li>API access</li>
+              <li>Email support (24h response)</li>
+            </ul>
+            <h2>Enterprise Plan - Custom</h2>
+            <ul>
+              <li>Unlimited printers</li>
+              <li>Unlimited AI generation</li>
+              <li>Dedicated account manager</li>
+              <li>Slack channel support</li>
+              <li>SLA guarantee</li>
+            </ul>
+            <p>JavaScript is required to view pricing details and subscribe. Please enable JavaScript in your browser.</p>
+          </div>
+        </div>
+      </noscript>
       {/* 닫기 버튼 */}
       <Button
         variant="ghost"

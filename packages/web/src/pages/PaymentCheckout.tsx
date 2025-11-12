@@ -46,6 +46,37 @@ const PaymentCheckout = () => {
   const planName = getPlanName(planId);
   const monthlyAmount = getPlanAmount(planId, false);
 
+  // 메타 태그 설정
+  useEffect(() => {
+    document.title = t("payment.checkout.title") + ' | FACTOR';
+
+    const desc = t("payment.checkout.subtitle");
+    let meta = document.querySelector('meta[name="description"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'description');
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute('content', desc);
+
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.setAttribute('rel', 'canonical');
+      document.head.appendChild(canonical);
+    }
+    canonical.setAttribute('href', `${window.location.origin}/payment/checkout`);
+
+    // robots meta - 결제 페이지는 인덱싱 방지
+    let robots = document.querySelector('meta[name="robots"]');
+    if (!robots) {
+      robots = document.createElement('meta');
+      robots.setAttribute('name', 'robots');
+      document.head.appendChild(robots);
+    }
+    robots.setAttribute('content', 'noindex, nofollow');
+  }, [t]);
+
   // 사용자 정보가 로드되면 폼 필드 업데이트
   useEffect(() => {
     if (user) {

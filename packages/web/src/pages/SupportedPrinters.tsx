@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,51 @@ import { useTranslation } from "react-i18next";
 
 const SupportedPrinters = () => {
   const { t } = useTranslation();
+
+  useEffect(() => {
+    document.title = t('landing.supportedPrintersTitle') + ' | FACTOR';
+
+    const desc = t('landing.supportedPrintersSubtitle');
+    let meta = document.querySelector('meta[name="description"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'description');
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute('content', desc);
+
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.setAttribute('rel', 'canonical');
+      document.head.appendChild(canonical);
+    }
+    canonical.setAttribute('href', `${window.location.origin}/supported-printers`);
+
+    // JSON-LD 구조화 데이터
+    const jsonLd = {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: 'FACTOR - 3D Printer Management',
+      description: desc,
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web',
+      offers: {
+        '@type': 'Offer',
+        availability: 'https://schema.org/InStock',
+        price: '0',
+        priceCurrency: 'KRW'
+      }
+    };
+
+    const prev = document.getElementById('supported-printers-jsonld');
+    if (prev) prev.remove();
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.id = 'supported-printers-jsonld';
+    script.text = JSON.stringify(jsonLd);
+    document.head.appendChild(script);
+  }, [t]);
 
   const mainFeatures = [
     t('landing.mainFeature1'),
@@ -71,6 +117,30 @@ const SupportedPrinters = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* NoScript Fallback */}
+      <noscript>
+        <div style={{padding: '2rem', maxWidth: '800px', margin: '0 auto', fontFamily: 'system-ui'}}>
+          <h1>Supported Printers</h1>
+          <p>FACTOR supports all major 3D printer firmware</p>
+          <h2>Supported Firmware:</h2>
+          <ul>
+            <li><strong>Marlin</strong> - Fully Supported</li>
+            <li><strong>Klipper</strong> - Fully Supported</li>
+            <li><strong>RepRap</strong> - Fully Supported</li>
+            <li><strong>Prusa</strong> - Fully Supported</li>
+          </ul>
+          <h2>Key Features:</h2>
+          <ul>
+            <li>Real-time temperature monitoring</li>
+            <li>Position tracking</li>
+            <li>Print progress monitoring</li>
+            <li>Fan control</li>
+            <li>Bed leveling</li>
+            <li>Webcam streaming</li>
+          </ul>
+          <p>JavaScript is required for full functionality. Please enable JavaScript in your browser.</p>
+        </div>
+      </noscript>
       {/* Header */}
       <section className="py-12 px-6 border-b">
         <div className="max-w-7xl mx-auto">

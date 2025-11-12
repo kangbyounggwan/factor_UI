@@ -7,12 +7,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const routes = [
+  { path: '/', outputFile: 'index.html' },
   { path: '/privacy', outputFile: 'privacy.html' },
   { path: '/terms', outputFile: 'terms.html' },
   { path: '/refund', outputFile: 'refund.html' },
+  { path: '/subscription', outputFile: 'subscription.html' },
+  { path: '/supported-printers', outputFile: 'supported-printers.html' },
+  { path: '/payment/checkout', outputFile: 'payment-checkout.html' },
+  { path: '/payment/success', outputFile: 'payment-success.html' },
+  { path: '/payment/fail', outputFile: 'payment-fail.html' },
 ];
 
-const baseUrl = 'http://localhost:4173'; // Vite preview server
+// Read port from command line argument or use default
+const port = process.env.PREVIEW_PORT || '4173';
+const baseUrl = `http://localhost:${port}`;
 const distDir = path.join(__dirname, '../dist');
 
 async function prerender() {
@@ -28,21 +36,36 @@ async function prerender() {
       console.log(`Rendering ${route.path}...`);
       const page = await browser.newPage();
 
-      await page.goto(`${baseUrl}${route.path}`, {
-        waitUntil: 'domcontentloaded',
-        timeout: 60000
+      // Block unnecessary requests to speed up rendering
+      await page.setRequestInterception(true);
+      page.on('request', (req) => {
+        const resourceType = req.resourceType();
+        // Block images, fonts, and analytics to speed up
+        if (['image', 'font', 'media'].includes(resourceType)) {
+          req.abort();
+        } else {
+          req.continue();
+        }
       });
 
-      // Wait for React to render
-      await page.waitForTimeout(8000);
+      // Navigate to page
+      await page.goto(`${baseUrl}${route.path}`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000
+      });
 
-      // Wait for specific content
+      // Wait for main content to render
       try {
-        await page.waitForSelector('footer', { timeout: 5000 });
+        // Wait for either h1 (title) or main content area
+        await page.waitForSelector('h1, main, .container', { timeout: 10000 });
       } catch (e) {
-        console.warn('Footer not found, continuing anyway...');
+        console.warn('Main content selector not found, using timeout...');
       }
 
+      // Additional wait for dynamic content
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Get the rendered HTML
       const html = await page.content();
       const outputPath = path.join(distDir, route.outputFile);
 
@@ -51,7 +74,8 @@ async function prerender() {
 
       await page.close();
     } catch (error) {
-      console.error(`Error rendering ${route.path}:`, error.message);
+      console.error(`✗ Error rendering ${route.path}:`, error.message);
+      // Continue with next route even if this one fails
     }
   }
 
