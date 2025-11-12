@@ -32,6 +32,7 @@ const AI = lazy(() => import("./pages/AI"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Admin = lazy(() => import("./pages/Admin"));
 const DeviceRegister = lazy(() => import("./pages/DeviceRegister"));
+const DeviceSetup = lazy(() => import("./pages/DeviceSetup"));
 const EmailVerification = lazy(() => import("./pages/EmailVerification"));
 const PaymentCheckout = lazy(() => import("./pages/PaymentCheckout"));
 const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
@@ -126,6 +127,7 @@ const AppContent = () => {
                 <DeviceRegister />
               </AdminRoute>
             } />
+            <Route path="/setup/:uuid" element={<DeviceSetup />} />
             <Route path="/payment/checkout" element={<PaymentCheckout />} />
             <Route path="/payment/success" element={<PaymentSuccess />} />
             <Route path="/payment/fail" element={<PaymentFail />} />

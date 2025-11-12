@@ -929,9 +929,9 @@ export default {
     fastResponseDesc: "Real-time data synchronization enables instant status checking.",
     // Marketplace Section
     marketplaceTitle: "Marketplace",
-    marketplaceSubtitle: "Discover various 3D models and printing services",
+    marketplaceSubtitle: "Purchase 3D printer equipment and supplies",
     comingSoon: "Coming Soon",
-    marketplaceDesc: "A marketplace offering premium 3D model libraries, custom printing services, and expert-verified printing settings will be launching soon.",
+    marketplaceDesc: "A marketplace where you can purchase various equipment and accessories such as 3D printers, filaments, nozzles, build plates, and more will be launching soon.",
     // Supported Printers Section
     supportedPrintersTitle: "Supported 3D Printers",
     supportedPrintersSubtitle: "Complete monitoring support for various 3D printers",

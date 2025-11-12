@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, Link, useNavigate } from "react-router-dom";
+import { Navigate, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ const Auth = () => {
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string>("");
   const [signInData, setSignInData] = useState({
@@ -33,9 +34,10 @@ const Auth = () => {
     displayName: "",
   });
 
-  // 로그인된 사용자는 메인 페이지로 리다이렉트
+  // 로그인된 사용자는 리다이렉트 경로 또는 메인 페이지로 이동
+  const redirectPath = searchParams.get('redirect') || '/';
   if (user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={redirectPath} replace />;
   }
 
   const handleSignIn = async (e: React.FormEvent) => {

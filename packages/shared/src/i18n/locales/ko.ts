@@ -916,9 +916,9 @@ export default {
     fastResponseDesc: "실시간 데이터 동기화로 즉각적인 상태 확인이 가능합니다.",
     // Marketplace Section
     marketplaceTitle: "마켓플레이스",
-    marketplaceSubtitle: "다양한 3D 모델과 프린팅 서비스를 만나보세요",
+    marketplaceSubtitle: "3D 프린터 설비 및 소모품 구매",
     comingSoon: "곧 출시 예정",
-    marketplaceDesc: "프리미엄 3D 모델 라이브러리, 맞춤형 프린팅 서비스, 그리고 전문가들이 검증한 프린팅 설정을 제공할 마켓플레이스가 곧 출시됩니다.",
+    marketplaceDesc: "3D 프린터, 필라멘트, 노즐, 빌드 플레이트 등 다양한 설비와 부속품을 구매할 수 있는 마켓플레이스가 곧 출시됩니다.",
     // Supported Printers Section
     supportedPrintersTitle: "지원하는 3D 프린터",
     supportedPrintersSubtitle: "다양한 3D 프린터에 대한 완전한 모니터링 지원",
