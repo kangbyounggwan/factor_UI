@@ -34,6 +34,12 @@ export default defineConfig(({ mode }) => {
         "@shared": path.resolve(__dirname, "../shared/src"),
       },
     },
+    preview: {
+      port: 4173,
+      strictPort: true,
+      // Enable SPA fallback for client-side routing
+      proxy: {},
+    },
     build: {
       sourcemap: true,
       rollupOptions: {

@@ -26,6 +26,22 @@ const distDir = path.join(__dirname, '../dist');
 async function prerender() {
   console.log('Starting prerendering...');
 
+  // Create SPA fallback structure for preview server
+  // Copy index.html to route directories so /privacy loads as /privacy/index.html
+  const spaRoutes = ['/privacy', '/terms', '/refund', '/subscription', '/supported-printers'];
+  const indexPath = path.join(distDir, 'index.html');
+
+  if (fs.existsSync(indexPath)) {
+    for (const route of spaRoutes) {
+      const routeDir = path.join(distDir, route.substring(1)); // Remove leading /
+      if (!fs.existsSync(routeDir)) {
+        fs.mkdirSync(routeDir, { recursive: true });
+      }
+      fs.copyFileSync(indexPath, path.join(routeDir, 'index.html'));
+    }
+    console.log('Created SPA fallback structure for preview server');
+  }
+
   const browser = await puppeteer.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -49,9 +65,11 @@ async function prerender() {
       });
 
       // Navigate to page
+      // Use 'load' for legal pages which have very long content and may have ongoing network activity
+      const isLegalPage = ['/privacy', '/terms', '/refund'].includes(route.path);
       await page.goto(`${baseUrl}${route.path}`, {
-        waitUntil: 'domcontentloaded',
-        timeout: 20000
+        waitUntil: isLegalPage ? 'load' : 'networkidle0',
+        timeout: 30000
       });
 
       // Wait for main content to render
@@ -62,8 +80,8 @@ async function prerender() {
         console.warn('Main content selector not found, using timeout...');
       }
 
-      // Additional wait for dynamic content
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Additional wait for dynamic content (especially for i18n)
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Get the rendered HTML
       const html = await page.content();
