@@ -327,7 +327,8 @@ const Home = () => {
       const currentMqttStates = JSON.parse(localStorage.getItem('web:dashboard:mqtt_states') || '{}');
       const formattedPrinters: PrinterOverview[] = (printersData || []).map(printer => {
         const printerWithUuid = printer as typeof printer & { device_uuid?: string; name?: string; manufacture_id?: string };
-        const deviceUuid = printerWithUuid.device_uuid;
+        // device_uuid가 없으면 id를 UUID로 사용 (신규 프린터)
+        const deviceUuid = printerWithUuid.device_uuid || printer.id;
         const cachedState = deviceUuid ? currentMqttStates[deviceUuid] : null;
 
         // localStorage에 캐시된 MQTT 상태가 있으면 사용, 없으면 기본값
@@ -464,10 +465,23 @@ const Home = () => {
     // MQTT 메시지 수신 핸들러
     const off = onDashStatusMessage((uuid, data) => {
       console.log('[MQTT] 메시지 수신:', uuid);
+      console.log('[MQTT] 수신 데이터 상세:', {
+        uuid,
+        connected: data?.connected,
+        temperature_info: data?.temperature_info,
+        printer_status: data?.printer_status,
+        progress: data?.progress,
+        full_data: data
+      });
 
       setPrinters((prev) => {
         const next = [...prev];
         const idx = next.findIndex(p => p.device_uuid === uuid);
+        console.log('[MQTT] 프린터 검색:', {
+          uuid,
+          found: idx >= 0,
+          printers: next.map(p => ({ id: p.id, name: p.name, device_uuid: p.device_uuid }))
+        });
         if (idx >= 0) {
           const bed = data?.temperature_info?.bed;
           const toolAny = data?.temperature_info?.tool;
@@ -484,6 +498,7 @@ const Home = () => {
             (isConnected   ? 'idle'     : 'disconnected');
 
           console.log('[MQTT] 프린터 상태 업데이트:', uuid, nextState, 'connected:', isConnected);
+          console.log('[MQTT] flags:', flags, 'bed:', bed, 'tool:', tool);
 
           // 데이터 수신 시 타임아웃 재설정 (연결 상태 계속 모니터링)
           startTimeoutFor(uuid, nextState);

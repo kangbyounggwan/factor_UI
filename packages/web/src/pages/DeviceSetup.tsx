@@ -162,6 +162,8 @@ const DeviceSetup = () => {
         .from('printers')
         .insert({
           id: uuid,
+          device_uuid: uuid, // MQTT 구독용 UUID
+          printer_uuid: uuid, // 프린터 UUID (OctoPrint 플러그인 호환)
           name: deviceName.trim(),
           user_id: user.id,
           ip_address: 'pending', // OctoPrint 플러그인에서 업데이트
