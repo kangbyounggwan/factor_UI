@@ -1,6 +1,7 @@
 export default {
   common: {
     save: "Save",
+    saving: "Saving...",
     cancel: "Cancel",
     delete: "Delete",
     edit: "Edit",
@@ -800,7 +801,16 @@ export default {
     inputNotFound: "Camera input address (stream_url) not found.",
     startFailed: "Streaming start failed",
     exitFullscreen: "Exit Fullscreen",
-    broadcast: "Broadcast"
+    broadcast: "Broadcast",
+    setupCameraUrl: "Setup Camera URL",
+    setupCameraUrlDesc: "Enter the camera stream URL to start real-time monitoring.",
+    cameraUrl: "Camera URL",
+    urlExample: "Example",
+    urlRequired: "Please enter the camera URL.",
+    urlSaveFailed: "Failed to save camera URL.",
+    urlSaved: "Camera URL saved successfully.",
+    error: "Error",
+    success: "Success"
   },
   control: {
     title: "Printer Remote Control",

@@ -1,6 +1,7 @@
 export default {
   common: {
     save: "저장",
+    saving: "저장 중...",
     cancel: "취소",
     delete: "삭제",
     edit: "편집",
@@ -787,7 +788,16 @@ export default {
     inputNotFound: "카메라 입력 주소(stream_url)를 찾을 수 없습니다.",
     startFailed: "스트리밍 시작 실패",
     exitFullscreen: "전체보기 해제",
-    broadcast: "영상 송출"
+    broadcast: "영상 송출",
+    setupCameraUrl: "카메라 URL 설정",
+    setupCameraUrlDesc: "카메라 스트림 URL을 입력하여 실시간 모니터링을 시작하세요.",
+    cameraUrl: "카메라 URL",
+    urlExample: "예시",
+    urlRequired: "카메라 URL을 입력해주세요.",
+    urlSaveFailed: "카메라 URL 저장에 실패했습니다.",
+    urlSaved: "카메라 URL이 저장되었습니다.",
+    error: "오류",
+    success: "성공"
   },
   control: {
     title: "프린터 원격 제어",

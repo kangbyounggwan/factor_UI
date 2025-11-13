@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Camera, Play, RotateCw, Maximize2, X } from "lucide-react";
 import { publishCameraStart, publishCameraStop, subscribeCameraState } from "@shared/services/mqttService";
 import { supabase } from "@shared/integrations/supabase/client";
@@ -10,6 +12,15 @@ import { useAuth } from "@shared/contexts/AuthContext";
 import { getUserPlan } from "@shared/services/supabaseService/subscription";
 import { getWebcamReconnectInterval } from "@shared/utils/subscription";
 import type { SubscriptionPlan } from "@shared/types/subscription";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 
 interface CameraFeedProps {
   cameraId: string; // device uuid와 동일
@@ -20,6 +31,7 @@ interface CameraFeedProps {
 export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProps) => {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { toast } = useToast();
   const [isStreaming, setIsStreaming] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -27,6 +39,11 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
 
   // ▶︎ WebRTC URL만 유지
   const [webrtcUrl, setWebrtcUrl] = useState<string | null>(null);
+
+  // 카메라 URL 설정 모달 상태
+  const [showUrlModal, setShowUrlModal] = useState(false);
+  const [cameraUrl, setCameraUrl] = useState('');
+  const [savingUrl, setSavingUrl] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const autoStopTimerRef = useRef<number | null>(null);
@@ -65,6 +82,54 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
       return null;
     }
   }
+
+  // 카메라 URL 저장
+  const saveCameraUrl = useCallback(async () => {
+    if (!cameraUrl.trim()) {
+      toast({
+        title: t('camera.error'),
+        description: t('camera.urlRequired'),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSavingUrl(true);
+    try {
+      const { error } = await supabase
+        .from('cameras')
+        .update({ stream_url: cameraUrl.trim() })
+        .eq('device_uuid', cameraId);
+
+      if (error) {
+        console.error('[CAM] Failed to save camera URL:', error);
+        toast({
+          title: t('camera.error'),
+          description: t('camera.urlSaveFailed'),
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: t('camera.success'),
+        description: t('camera.urlSaved'),
+      });
+
+      setShowUrlModal(false);
+      // URL 저장 후 자동으로 스트리밍 시작
+      setTimeout(() => startStreaming(), 500);
+    } catch (error) {
+      console.error('[CAM] Exception saving camera URL:', error);
+      toast({
+        title: t('camera.error'),
+        description: t('camera.urlSaveFailed'),
+        variant: "destructive",
+      });
+    } finally {
+      setSavingUrl(false);
+    }
+  }, [cameraUrl, cameraId, toast, t]);
 
   // 사용자 플랜 로드 및 재연결 간격 설정
   useEffect(() => {
@@ -114,9 +179,10 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
       // 입력(MJPEG/RTSP 등)
       const input = await getCameraStreamInput(cameraId);
       if (!input) {
-        setStreamError(t('camera.inputNotFound'));
+        // URL이 없으면 모달 열기
         setIsStreaming(false);
-        setCameraStatus('error');
+        setCameraStatus('offline');
+        setShowUrlModal(true);
         return;
       }
 
@@ -343,6 +409,49 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
           )}
         </div>
       </CardContent>
+
+      {/* 카메라 URL 설정 모달 */}
+      <Dialog open={showUrlModal} onOpenChange={setShowUrlModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('camera.setupCameraUrl')}</DialogTitle>
+            <DialogDescription>
+              {t('camera.setupCameraUrlDesc')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="camera-url">{t('camera.cameraUrl')}</Label>
+              <Input
+                id="camera-url"
+                type="text"
+                placeholder="http://192.168.1.100:8080/video"
+                value={cameraUrl}
+                onChange={(e) => setCameraUrl(e.target.value)}
+                disabled={savingUrl}
+              />
+              <p className="text-sm text-muted-foreground">
+                {t('camera.urlExample')}: http://192.168.1.100:8080/video, rtsp://192.168.1.100:8554/stream
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowUrlModal(false)}
+              disabled={savingUrl}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={saveCameraUrl}
+              disabled={savingUrl || !cameraUrl.trim()}
+            >
+              {savingUrl ? t('common.saving') : t('common.save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
