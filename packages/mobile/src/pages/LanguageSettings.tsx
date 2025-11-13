@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Preferences } from '@capacitor/preferences';
 
 const LanguageSettings = () => {
   const { i18n, t } = useTranslation();
@@ -14,9 +15,12 @@ const LanguageSettings = () => {
     { code: "en", name: t("profile.english", "English") },
   ];
 
-  const handleSave = () => {
-    i18n.changeLanguage(selectedLanguage);
-    localStorage.setItem("language", selectedLanguage);
+  const handleSave = async () => {
+    await i18n.changeLanguage(selectedLanguage);
+    await Preferences.set({
+      key: 'language',
+      value: selectedLanguage,
+    });
     navigate(-1);
   };
 

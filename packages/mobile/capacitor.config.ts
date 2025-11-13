@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.factor.app',
+  appId: 'com.byeonggwan.factor',
   appName: 'FACTOR',
   webDir: 'dist',
   plugins: {
@@ -23,7 +23,7 @@ const config: CapacitorConfig = {
   },
   server: {
     androidScheme: 'https',
-    iosScheme: 'com.factor.app'
+    iosScheme: 'com.byeonggwan.factor'
   }
 };
 
