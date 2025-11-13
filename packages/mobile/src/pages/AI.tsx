@@ -226,6 +226,30 @@ const AI = () => {
     window.scrollTo(0, 0);
   }, []);
 
+  // 하드웨어 백 버튼 처리
+  useEffect(() => {
+    const handleBackButton = (e: Event) => {
+      // 첫 화면(select-input)이 아니면 내부에서 뒤로가기 처리
+      if (currentStep !== 'select-input') {
+        e.preventDefault(); // App.tsx에서 앱 종료하지 않도록
+
+        // 현재 단계에 따라 이전 단계로 이동
+        if (currentStep === 'create-prompt') {
+          setCurrentStep('select-input');
+        } else if (currentStep === 'generate') {
+          // 생성 중에는 뒤로가기 무시 (취소 버튼 사용)
+          return;
+        } else if (currentStep === 'result') {
+          resetFlow(); // 처음부터 다시 시작
+        }
+      }
+      // select-input 단계에서는 preventDefault하지 않아서 앱 종료 로직 실행
+    };
+
+    window.addEventListener('ai-studio-back', handleBackButton);
+    return () => window.removeEventListener('ai-studio-back', handleBackButton);
+  }, [currentStep]);
+
   useEffect(() => {
     document.title = t('ai.title') || "AI 3D 모델링 스튜디오";
   }, [t]);
