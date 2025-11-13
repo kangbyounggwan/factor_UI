@@ -192,6 +192,27 @@ const DeviceSetup = () => {
         throw new Error(errorMessage);
       }
 
+      // cameras 테이블에 카메라 정보 저장
+      try {
+        const { error: cameraError } = await supabase
+          .from('cameras')
+          .insert({
+            user_id: user.id,
+            device_uuid: uuid,
+            camera_uuid: null, // OctoPrint 플러그인에서 업데이트
+            resolution: null, // OctoPrint 플러그인에서 업데이트
+            stream_url: null, // OctoPrint 플러그인에서 업데이트
+          });
+
+        if (cameraError) {
+          console.error('[DeviceSetup] Failed to insert camera record:', cameraError);
+          // 카메라 등록 실패는 치명적이지 않으므로 계속 진행
+        }
+      } catch (cameraError) {
+        console.error('[DeviceSetup] Camera insert exception:', cameraError);
+        // 카메라 등록 실패는 치명적이지 않으므로 계속 진행
+      }
+
       // 등록 성공 - MQTT로 등록 완료 메시지 전송
       try {
         const mqttClient = createSharedMqttClient();

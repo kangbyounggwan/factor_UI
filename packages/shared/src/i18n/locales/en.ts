@@ -908,6 +908,10 @@ export default {
     remoteControlDesc: "Pause, stop, or adjust settings remotely for peace of mind.",
     errorNotifications: "Error Notifications",
     errorNotificationsDesc: "Get instant alerts when issues occur so you can respond without delay.",
+    quickInstall: "Quick Install",
+    quickInstallDesc: "Install the OctoPrint plugin and connect your printer in under 5 minutes.",
+    installationVideo: "Installation Guide Video",
+    closeVideo: "Close",
     // AI Features Section
     aiFeaturesTitle: "AI 3D Modeling Studio",
     aiFeaturesSubtitle: "From text and images to 3D models - experience a new era of creation with AI",

@@ -895,6 +895,10 @@ export default {
     remoteControlDesc: "원격으로 일시정지, 중지하거나 설정을 조정하여 안심하고 사용하세요.",
     errorNotifications: "오류 알림",
     errorNotificationsDesc: "문제 발생 시 즉시 알림을 받아 놓치지 않고 대응할 수 있습니다.",
+    quickInstall: "빠른 설치",
+    quickInstallDesc: "5분 안에 OctoPrint 플러그인을 설치하고 프린터를 연결하세요.",
+    installationVideo: "설치 가이드 영상",
+    closeVideo: "닫기",
     // AI Features Section
     aiFeaturesTitle: "AI 3D 모델링 스튜디오",
     aiFeaturesSubtitle: "텍스트와 이미지에서 3D 모델까지, AI로 창작의 새로운 경험을 만나보세요",

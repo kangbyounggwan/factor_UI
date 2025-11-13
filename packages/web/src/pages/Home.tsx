@@ -1,17 +1,24 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Monitor, Play, Bell, BarChart3, Settings, Zap, Shield, Smartphone, ShoppingCart, Code2, Wand2, Image, Box, Layers } from "lucide-react";
+import { Monitor, Play, Bell, BarChart3, Settings, Zap, Shield, Smartphone, ShoppingCart, Code2, Wand2, Image, Box, Layers, Download } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 
 const Home = () => {
   const { user } = useAuth();
   const { t } = useTranslation();
   const location = useLocation();
+  const [showVideoModal, setShowVideoModal] = useState(false);
 
   // 해시 변경 시 스크롤 처리
   useEffect(() => {
@@ -34,17 +41,27 @@ const Home = () => {
     {
       icon: Monitor,
       title: t('landing.realtimeMonitoring'),
-      description: t('landing.realtimeMonitoringDesc')
+      description: t('landing.realtimeMonitoringDesc'),
+      clickable: false
     },
     {
       icon: Play,
       title: t('landing.remoteControl'),
-      description: t('landing.remoteControlDesc')
+      description: t('landing.remoteControlDesc'),
+      clickable: false
     },
     {
       icon: Bell,
       title: t('landing.errorNotifications'),
-      description: t('landing.errorNotificationsDesc')
+      description: t('landing.errorNotificationsDesc'),
+      clickable: false
+    },
+    {
+      icon: Download,
+      title: t('landing.quickInstall'),
+      description: t('landing.quickInstallDesc'),
+      clickable: true,
+      onClick: () => setShowVideoModal(true)
     }
   ];
 
@@ -139,9 +156,15 @@ const Home = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             {features.map((feature, index) => (
-              <Card key={index} className="text-center hover:shadow-lg transition-shadow border-2 hover:border-primary/20">
+              <Card
+                key={index}
+                className={`text-center hover:shadow-lg transition-all border-2 hover:border-primary/20 ${
+                  feature.clickable ? 'cursor-pointer hover:scale-105' : ''
+                }`}
+                onClick={feature.clickable ? feature.onClick : undefined}
+              >
                 <CardContent className="p-8">
                   <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
                     <feature.icon className="h-8 w-8 text-primary" />
@@ -376,6 +399,25 @@ POST /api/v1/printers/{id}/print
           </div>
         </div>
       </section>
+
+      {/* Installation Video Modal */}
+      <Dialog open={showVideoModal} onOpenChange={setShowVideoModal}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{t('landing.installationVideo')}</DialogTitle>
+          </DialogHeader>
+          <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+            <iframe
+              className="absolute top-0 left-0 w-full h-full rounded-lg"
+              src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+              title="Installation Guide"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
