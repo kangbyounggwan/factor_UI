@@ -56,8 +56,9 @@ async function prerender() {
       await page.setRequestInterception(true);
       page.on('request', (req) => {
         const resourceType = req.resourceType();
-        // Block images, fonts, and analytics to speed up
-        if (['image', 'font', 'media'].includes(resourceType)) {
+        const url = req.url();
+        // Block images, fonts, Google Fonts, and analytics to speed up
+        if (['image', 'font', 'media'].includes(resourceType) || url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com')) {
           req.abort();
         } else {
           req.continue();
@@ -65,26 +66,47 @@ async function prerender() {
       });
 
       // Navigate to page
-      // Use 'load' for legal pages which have very long content and may have ongoing network activity
       const isLegalPage = ['/privacy', '/terms', '/refund'].includes(route.path);
-      await page.goto(`${baseUrl}${route.path}`, {
-        waitUntil: isLegalPage ? 'load' : 'networkidle0',
-        timeout: 30000
-      });
+      
+      let html;
+      if (isLegalPage) {
+        // For legal pages, navigate and immediately capture
+        await page.goto(`${baseUrl}${route.path}`, {
+          waitUntil: 'networkidle0',
+          timeout: 30000
+        }).catch(async (e) => {
+          console.warn(`Navigation slow for ${route.path}, will capture after delay...`);
+        });
 
-      // Wait for main content to render
-      try {
-        // Wait for either h1 (title) or main content area
-        await page.waitForSelector('h1, main, .container', { timeout: 10000 });
-      } catch (e) {
-        console.warn('Main content selector not found, using timeout...');
+        // Give React time to hydrate regardless of navigation status
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        // Wait for main content
+        try {
+          await page.waitForSelector('main, article, .content, h1', { timeout: 5000 });
+        } catch (e) {
+          console.warn('Content selector not found, using delay...');
+        }
+
+        html = await page.content().catch(() => '<html><body>Failed to capture</body></html>');
+        
+      } else {
+        await page.goto(`${baseUrl}${route.path}`, {
+          waitUntil: 'networkidle0',
+          timeout: 60000
+        });
+        
+        // Wait for main content to render
+        try {
+          await page.waitForSelector('h1, main, .container', { timeout: 10000 });
+        } catch (e) {
+          console.warn('Main content selector not found, using timeout...');
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+        html = await page.content();
       }
 
-      // Additional wait for dynamic content (especially for i18n)
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
       // Get the rendered HTML
-      const html = await page.content();
       const outputPath = path.join(distDir, route.outputFile);
 
       fs.writeFileSync(outputPath, html);
