@@ -577,6 +577,15 @@ const Settings = () => {
   };
 
   const handleEditPrinter = async (printer: PrinterConfig) => {
+    // manufacture_id가 있으면 프린터 상세 페이지로 이동
+    const printerExt = printer as PrinterConfig & { manufacture_id?: string };
+    if (printerExt.manufacture_id) {
+      // 프린터 상세 페이지로 이동
+      window.location.href = `/printer/${printer.id}`;
+      return;
+    }
+
+    // manufacture_id가 없는 경우만 설정 모달 열기
     setEditingPrinter(printer);
     setShowEditPrinter(true);
 
@@ -588,67 +597,8 @@ const Settings = () => {
     setSeriesList([]);
     setModelsList([]);
 
-    // 초기 프리필 중에는 의도치 않은 reset을 방지
-    isPrefillingRef.current = true;
-
-    // manufacture_id가 있으면 제조사 정보 로드하여 드롭다운 미리 채우기
-    const printerExt = printer as PrinterConfig & { manufacture_id?: string };
-    if (printerExt.manufacture_id) {
-      try {
-        const { data: manufacturingPrinter, error } = await supabase
-          .from('manufacturing_printers')
-          .select('id, manufacturer, series, model, display_name')
-          .eq('id', printerExt.manufacture_id)
-          .single();
-
-        if (error) {
-          console.error('Error loading manufacturing printer:', error);
-          // 에러 시 초기화
-          setSelectedManufacturer("");
-          setSelectedSeries("");
-          setSelectedModel("");
-          setSelectedModelId("");
-          isPrefillingRef.current = false;
-          return;
-        }
-
-        if (manufacturingPrinter) {
-          // 1단계: 제조사 설정
-          setSelectedManufacturer(manufacturingPrinter.manufacturer);
-
-          // 2단계: 시리즈 목록 로드 후 시리즈 설정
-          const seriesData = await getSeriesByManufacturer(manufacturingPrinter.manufacturer);
-          setSeriesList(seriesData);
-          setSelectedSeries(manufacturingPrinter.series);
-
-          // 3단계: 모델 목록 로드 후 모델 설정
-          const modelsData = await getModelsByManufacturerAndSeries(
-            manufacturingPrinter.manufacturer,
-            manufacturingPrinter.series
-          );
-          setModelsList(modelsData);
-          setSelectedModel(manufacturingPrinter.id);
-          setSelectedModelId(manufacturingPrinter.id);
-        }
-        // 프리필 완료
-        isPrefillingRef.current = false;
-      } catch (error) {
-        console.error('Error in handleEditPrinter:', error);
-        // 에러 시 초기화
-        setSelectedManufacturer("");
-        setSelectedSeries("");
-        setSelectedModel("");
-        setSelectedModelId("");
-        isPrefillingRef.current = false;
-      }
-    } else {
-      // manufacture_id가 없으면 초기화
-      setSelectedManufacturer("");
-      setSelectedSeries("");
-      setSelectedModel("");
-      setSelectedModelId("");
-      isPrefillingRef.current = false;
-    }
+    // manufacture_id가 없으므로 제조사 선택 초기화
+    isPrefillingRef.current = false;
   };
 
   const handleUpdatePrinter = async () => {
@@ -1358,8 +1308,23 @@ const Settings = () => {
                   </div>
 
                   {/* 제조사 섹션 */}
-                  <div ref={manufacturerCardRef} className="space-y-4 p-4 bg-muted/30 rounded-lg border">
-                    <h3 className="text-sm font-bold uppercase tracking-wide">{t('settings.manufacturer')}</h3>
+                  <div
+                    ref={manufacturerCardRef}
+                    className={`space-y-4 p-4 rounded-lg border ${
+                      editingPrinter.manufacture_id
+                        ? 'bg-muted/30'
+                        : 'bg-red-50 dark:bg-red-950/20 border-red-300 dark:border-red-800'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold uppercase tracking-wide">{t('settings.manufacturer')}</h3>
+                      {!editingPrinter.manufacture_id && (
+                        <div className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+                          <AlertTriangle className="h-3 w-3" />
+                          <span>{t('settings.manufacturerRequired')}</span>
+                        </div>
+                      )}
+                    </div>
                     <div className="grid grid-cols-3 gap-4">
                       {/* 제조사 선택 */}
                       <div className="space-y-2">
