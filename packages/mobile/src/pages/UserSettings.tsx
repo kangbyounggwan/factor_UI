@@ -116,12 +116,12 @@ const UserSettings = () => {
         {
           icon: FileText,
           label: t("profile.termsOfService", "이용 약관"),
-          onClick: () => console.log("Terms of service"),
+          onClick: () => navigate('/terms'),
         },
         {
           icon: FileText,
           label: t("profile.privacyPolicy", "개인정보 처리방침"),
-          onClick: () => console.log("Privacy policy"),
+          onClick: () => navigate('/privacy'),
         },
       ],
     },

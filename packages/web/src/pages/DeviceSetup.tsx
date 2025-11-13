@@ -30,6 +30,14 @@ const DeviceSetup = () => {
         return;
       }
 
+      // UUID 형식 검증 (UUID v4 형식 또는 최소 길이)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(uuid) && uuid.length < 10) {
+        // 유효하지 않은 UUID 형식
+        setLoading(false);
+        return;
+      }
+
       try {
         // 해당 UUID가 이미 등록되어 있는지 확인
         const { data, error } = await supabase
@@ -45,11 +53,13 @@ const DeviceSetup = () => {
           setAlreadyRegistered(true);
           setDeviceName(data.device_name);
         } else {
-          // 등록 가능한 UUID
+          // 등록 가능한 UUID (신규 디바이스)
           setDeviceExists(true);
         }
       } catch (error) {
         console.error('Error checking device:', error);
+        // 에러가 발생해도 등록 가능하도록 설정
+        setDeviceExists(true);
       } finally {
         setLoading(false);
       }

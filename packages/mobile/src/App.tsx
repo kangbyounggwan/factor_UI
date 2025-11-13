@@ -41,6 +41,8 @@ const AI = lazy(() => import("./pages/AI"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Admin = lazy(() => import("./pages/Admin"));
 const DeviceRegister = lazy(() => import("./pages/DeviceRegister"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -223,7 +225,7 @@ const AppContent = () => {
   };
   
   // 하단 네비게이션을 숨길 경로들 (Auth, Admin, 상세 페이지)
-  const hideBottomNavPaths = ["/", "/subscription", "/payment/checkout", "/payment/success", "/payment/fail", "/language-settings", "/notification-settings", "/social-account-linking", "/theme-settings", "/change-password"];
+  const hideBottomNavPaths = ["/", "/subscription", "/payment/checkout", "/payment/success", "/payment/fail", "/language-settings", "/notification-settings", "/social-account-linking", "/theme-settings", "/change-password", "/privacy", "/terms"];
   const hideBottomNavStartsWith = ["/admin", "/user-profile"];
 
   // Settings 페이지에서 그룹/프린터 추가/수정 중인지 확인
@@ -338,6 +340,8 @@ const AppContent = () => {
                 <DeviceRegister />
               </AdminRoute>
             } />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
