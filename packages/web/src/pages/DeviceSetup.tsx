@@ -192,24 +192,29 @@ const DeviceSetup = () => {
         throw new Error(errorMessage);
       }
 
-      // cameras 테이블에 카메라 정보 저장
+      // cameras 테이블에 카메라 정보 저장 (upsert로 변경하여 중복 방지)
       try {
         const { error: cameraError } = await supabase
           .from('cameras')
-          .insert({
-            user_id: user.id,
-            device_uuid: uuid,
-            camera_uuid: null, // OctoPrint 플러그인에서 업데이트
-            resolution: null, // OctoPrint 플러그인에서 업데이트
-            stream_url: null, // OctoPrint 플러그인에서 업데이트
-          });
+          .upsert(
+            [{
+              user_id: user.id,
+              device_uuid: uuid,
+              camera_uuid: null, // OctoPrint 플러그인에서 업데이트
+              resolution: null, // OctoPrint 플러그인에서 업데이트
+              stream_url: null, // OctoPrint 플러그인에서 업데이트
+            }],
+            { onConflict: 'device_uuid' }
+          );
 
         if (cameraError) {
-          console.error('[DeviceSetup] Failed to insert camera record:', cameraError);
+          console.error('[DeviceSetup] Failed to upsert camera record:', cameraError);
           // 카메라 등록 실패는 치명적이지 않으므로 계속 진행
+        } else {
+          console.log('[DeviceSetup] Camera record upserted successfully for device_uuid:', uuid);
         }
       } catch (cameraError) {
-        console.error('[DeviceSetup] Camera insert exception:', cameraError);
+        console.error('[DeviceSetup] Camera upsert exception:', cameraError);
         // 카메라 등록 실패는 치명적이지 않으므로 계속 진행
       }
 

@@ -922,6 +922,10 @@ export default {
     quickInstallDesc: "Install the OctoPrint plugin and connect your printer in under 5 minutes.",
     installationVideo: "Installation Guide Video",
     closeVideo: "Close",
+    pluginInstallation: "Plugin Installation",
+    pluginInstallationDesc: "Learn how to install the FACTOR plugin on OctoPrint.",
+    cameraSetup: "Camera Setup",
+    cameraSetupDesc: "Configure your printer camera to start real-time monitoring.",
     // AI Features Section
     aiFeaturesTitle: "AI 3D Modeling Studio",
     aiFeaturesSubtitle: "From text and images to 3D models - experience a new era of creation with AI",

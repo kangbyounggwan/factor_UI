@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 const Home = () => {
@@ -402,20 +403,49 @@ POST /api/v1/printers/{id}/print
 
       {/* Installation Video Modal */}
       <Dialog open={showVideoModal} onOpenChange={setShowVideoModal}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-5xl">
           <DialogHeader>
             <DialogTitle>{t('landing.installationVideo')}</DialogTitle>
           </DialogHeader>
-          <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
-            <iframe
-              className="absolute top-0 left-0 w-full h-full rounded-lg"
-              src="https://www.youtube.com/embed/dQw4w9WgXcQ"
-              title="Installation Guide"
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
+
+          <Tabs defaultValue="plugin" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger value="plugin">{t('landing.pluginInstallation')}</TabsTrigger>
+              <TabsTrigger value="camera">{t('landing.cameraSetup')}</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="plugin">
+              <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                <iframe
+                  className="absolute top-0 left-0 w-full h-full rounded-lg"
+                  src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+                  title="Plugin Installation Guide"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+              <p className="text-sm text-muted-foreground mt-4">
+                {t('landing.pluginInstallationDesc')}
+              </p>
+            </TabsContent>
+
+            <TabsContent value="camera">
+              <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                <iframe
+                  className="absolute top-0 left-0 w-full h-full rounded-lg"
+                  src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+                  title="Camera Setup Guide"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+              <p className="text-sm text-muted-foreground mt-4">
+                {t('landing.cameraSetupDesc')}
+              </p>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 

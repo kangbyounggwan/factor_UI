@@ -909,6 +909,10 @@ export default {
     quickInstallDesc: "5분 안에 OctoPrint 플러그인을 설치하고 프린터를 연결하세요.",
     installationVideo: "설치 가이드 영상",
     closeVideo: "닫기",
+    pluginInstallation: "플러그인 설치",
+    pluginInstallationDesc: "OctoPrint에 FACTOR 플러그인을 설치하는 방법을 알아보세요.",
+    cameraSetup: "카메라 설정",
+    cameraSetupDesc: "프린터 카메라를 설정하여 실시간 모니터링을 시작하세요.",
     // AI Features Section
     aiFeaturesTitle: "AI 3D 모델링 스튜디오",
     aiFeaturesSubtitle: "텍스트와 이미지에서 3D 모델까지, AI로 창작의 새로운 경험을 만나보세요",
