@@ -87,6 +87,7 @@ interface PrinterOverview {
   current_file?: string;
   device_uuid?: string;
   manufacture_id?: string; // 제조사 정보 ID
+  stream_url?: string | null; // 카메라 스트림 URL
 }
 
 const PrinterCard = ({
@@ -323,12 +324,30 @@ const Home = () => {
       const printersData = await getUserPrintersWithGroup(user.id);
       console.log('[DASH][FETCH] printers from DB', { count: printersData?.length ?? 0 });
 
+      // cameras 테이블에서 stream_url 조회
+      const { data: camerasData } = await supabase
+        .from('cameras')
+        .select('device_uuid, stream_url')
+        .in('device_uuid', printersData.map((p) => (p as { device_uuid?: string }).device_uuid).filter(Boolean));
+
+      console.log('[DASH][FETCH] cameras', { count: camerasData?.length || 0 });
+
+      // device_uuid로 stream_url 매핑
+      const streamUrlMap = new Map<string, string | null>();
+      (camerasData || []).forEach((cam) => {
+        const camera = cam as { device_uuid?: string; stream_url?: string | null };
+        if (camera.device_uuid) {
+          streamUrlMap.set(camera.device_uuid, camera.stream_url ?? null);
+        }
+      });
+
       // DB 데이터 + localStorage의 MQTT 상태 병합 (현재 시점의 mqttStates 읽기)
       const currentMqttStates = JSON.parse(localStorage.getItem('web:dashboard:mqtt_states') || '{}');
       const formattedPrinters: PrinterOverview[] = (printersData || []).map(printer => {
         const printerWithUuid = printer as typeof printer & { device_uuid?: string; name?: string; manufacture_id?: string };
         // device_uuid가 없으면 id를 UUID로 사용 (신규 프린터)
         const deviceUuid = printerWithUuid.device_uuid || printer.id;
+        const streamUrl = deviceUuid ? streamUrlMap.get(deviceUuid) : null;
         const cachedState = deviceUuid ? currentMqttStates[deviceUuid] : null;
 
         // localStorage에 캐시된 MQTT 상태가 있으면 사용, 없으면 기본값
@@ -350,6 +369,7 @@ const Home = () => {
             current_file: cachedState.current_file,
             device_uuid: deviceUuid,
             manufacture_id: printerWithUuid.manufacture_id,
+            stream_url: streamUrl ?? null,
           };
         } else {
           // 캐시 없으면 기본값 (connecting 상태)
@@ -375,6 +395,7 @@ const Home = () => {
             current_file: undefined,
             device_uuid: deviceUuid,
             manufacture_id: printerWithUuid.manufacture_id,
+            stream_url: streamUrl ?? null,
           };
         }
       });
