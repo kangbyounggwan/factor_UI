@@ -45,12 +45,14 @@ const initI18n = async () => {
     });
 };
 
-// 초기화 실행
-initI18n();
+// 초기화 Promise 내보내기
+export const i18nReady = initI18n();
 
 // 개발 환경에서만 로그 출력
-if (import.meta.env.DEV) {
-  console.log('i18n initialized:', i18n.isInitialized, 'language:', i18n.language);
-}
+i18nReady.then(() => {
+  if (import.meta.env.DEV) {
+    console.log('i18n initialized:', i18n.isInitialized, 'language:', i18n.language);
+  }
+});
 
 export default i18n;

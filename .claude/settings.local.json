@@ -18,7 +18,8 @@
       "Bash(npm --workspace @factor/mobile run lint)",
       "Bash(npm run build:web:*)",
       "Bash(npm run build:host:*)",
-      "Bash(npx cap sync:*)"
+      "Bash(npx cap sync:*)",
+      "Bash(npm run build:mobile:*)"
     ],
     "deny": [],
     "ask": []

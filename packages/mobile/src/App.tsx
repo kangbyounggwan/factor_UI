@@ -11,6 +11,7 @@ import { StatusBar, Style } from "@capacitor/status-bar";
 import { Toast as CapacitorToast } from "@capacitor/toast";
 import { I18nextProvider } from "react-i18next";
 import i18n from "@shared/i18n";
+import { i18nReady } from './i18n';
 import { supabase } from "@shared/integrations/supabase/client";
 import { BottomNavigation } from "@/components/BottomNavigation";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -379,27 +380,48 @@ const AppContent = () => {
   );
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <I18nextProvider i18n={i18n}>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="system"
-        enableSystem
-        disableTransitionOnChange
-      >
-        <TooltipProvider>
-          <AISidebarProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <AppContent />
-            </BrowserRouter>
-          </AISidebarProvider>
-        </TooltipProvider>
-      </ThemeProvider>
-    </I18nextProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  const [i18nInitialized, setI18nInitialized] = useState(false);
+
+  useEffect(() => {
+    i18nReady.then(() => {
+      setI18nInitialized(true);
+    });
+  }, []);
+
+  if (!i18nInitialized) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <I18nextProvider i18n={i18n}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <TooltipProvider>
+            <AISidebarProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <AppContent />
+              </BrowserRouter>
+            </AISidebarProvider>
+          </TooltipProvider>
+        </ThemeProvider>
+      </I18nextProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
