@@ -404,9 +404,9 @@ const Home = () => {
 
     console.log('[MQTT] 실시간 모니터링 시작 - 프린터 수:', printers.length);
 
-    // 각 프린터별 타임아웃 추적 (3초 동안 데이터 없으면 disconnected)
+    // 각 프린터별 타임아웃 추적 (5초 동안 데이터 없으면 disconnected)
     const timeouts: Record<string, number> = {};
-    const TIMEOUT_DURATION = 3000; // 3초
+    const TIMEOUT_DURATION = 5000; // 5초
 
     // 타임아웃 설정/재설정 함수
     const startTimeoutFor = (uuid?: string, currentState?: string) => {
