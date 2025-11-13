@@ -103,11 +103,11 @@ const DeviceSetup = () => {
       }
 
       try {
-        // 해당 UUID가 이미 등록되어 있는지 확인 (clients 테이블 사용)
+        // 해당 UUID가 이미 등록되어 있는지 확인 (printers 테이블 사용)
         const { data, error } = await supabase
-          .from('clients')
-          .select('device_uuid, name, user_id')
-          .eq('device_uuid', uuid)
+          .from('printers')
+          .select('id, name, user_id')
+          .eq('id', uuid)
           .maybeSingle();
 
         if (error) throw error;
@@ -156,12 +156,18 @@ const DeviceSetup = () => {
     try {
       setSubmitting(true);
 
+      // printers 테이블에 설비 정보 저장
       const { data, error } = await supabase
-        .from('clients')
+        .from('printers')
         .insert({
-          device_uuid: uuid,
+          id: uuid,
           name: deviceName.trim(),
-          user_id: user.id
+          user_id: user.id,
+          ip_address: 'pending', // OctoPrint 플러그인에서 업데이트
+          model: 'Unknown', // OctoPrint 플러그인에서 업데이트
+          firmware: 'Unknown',
+          port: 5000,
+          status: 'disconnected'
         })
         .select()
         .single();
