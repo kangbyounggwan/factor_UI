@@ -135,7 +135,7 @@ const PrinterCard = ({ printer, isAuthenticated, onSetupRequired, onStreamStart 
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const percent = printer.completion ? Math.round(printer.completion * 100) : 0;
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLIFrameElement>(null);
   const [localStreamUrl, setLocalStreamUrl] = useState<string | null>(null);
   const streamingAttemptedRef = useRef(false);
 
@@ -183,14 +183,23 @@ const PrinterCard = ({ printer, isAuthenticated, onSetupRequired, onStreamStart 
 
     (async () => {
       try {
+        console.log('[Dashboard] Subscribing to camera state for device:', printer.device_uuid);
         // 카메라 상태 구독만 수행 (자동 시작하지 않음)
         unsub = await subscribeCameraState(printer.device_uuid!, ({ running, webrtcUrl, status }) => {
+          console.log('[Dashboard] Camera state update received:', {
+            running,
+            webrtcUrl,
+            status,
+            device_uuid: printer.device_uuid
+          });
           setCameraStatus(status);
           if (webrtcUrl) {
+            console.log('[Dashboard] Setting stream URL:', webrtcUrl);
             setWebrtcUrl(webrtcUrl);
             setStreamUrl(webrtcUrl);
           }
         });
+        console.log('[Dashboard] Camera state subscription successful');
       } catch (error) {
         console.error('[Dashboard] 카메라 구독 실패:', error);
       }
@@ -225,11 +234,74 @@ const PrinterCard = ({ printer, isAuthenticated, onSetupRequired, onStreamStart 
 
     try {
       setCameraStatus('starting');
-      await publishCameraStart(printer.device_uuid, 'webrtc');
+      console.log('[Dashboard] Camera start requested for device:', printer.device_uuid);
+
+      // cameras 테이블에서 stream_url 조회 (PrinterDetail과 동일하게 maybeSingle 사용)
+      const { data: cameraData, error: dbError } = await supabase
+        .from('cameras')
+        .select('stream_url')
+        .eq('device_uuid', printer.device_uuid)
+        .maybeSingle();
+
+      console.log('[Dashboard] Camera DB query result:', { cameraData, dbError });
+
+      const streamUrl = cameraData?.stream_url;
+
+      if (!streamUrl) {
+        console.warn('[Dashboard] No stream_url found for device:', printer.device_uuid);
+        toast({
+          title: t('camera.error'),
+          description: t('camera.inputNotFound'),
+          variant: "destructive"
+        });
+        setCameraStatus('error');
+        return;
+      }
+
+      const RTSP_BASE = import.meta.env?.VITE_MEDIA_RTSP_BASE || 'rtsp://factor.io.kr:8554';
+      const WEBRTC_BASE = import.meta.env?.VITE_MEDIA_WEBRTC_BASE || 'https://factor.io.kr/webrtc';
+
+      console.log('[Dashboard] Publishing camera start with:', {
+        deviceUuid: printer.device_uuid,
+        streamUrl,
+        rtspBase: RTSP_BASE,
+        webrtcBase: WEBRTC_BASE
+      });
+
+      // PrinterDetail과 동일한 방식으로 카메라 시작
+      await publishCameraStart({
+        deviceUuid: printer.device_uuid,
+        streamUrl,
+        fps: 20,
+        width: 1280,
+        height: 720,
+        bitrateKbps: 1800,
+        encoder: 'libx264',
+        forceMjpeg: true,
+        lowLatency: true,
+        rtspBase: RTSP_BASE,
+        webrtcBase: WEBRTC_BASE
+      });
+
+      console.log('[Dashboard] Camera start command sent successfully');
+
       toast({
         title: t('camera.streamStarting'),
         description: t('camera.streamStartingDesc'),
       });
+
+      // 30초 타임아웃 설정
+      setTimeout(() => {
+        if (cameraStatus === 'starting') {
+          console.warn('[Dashboard] Camera start timeout - no response after 30 seconds');
+          setCameraStatus('error');
+          toast({
+            title: t('camera.error'),
+            description: '카메라 시작 시간이 초과되었습니다. 다시 시도해주세요.',
+            variant: "destructive"
+          });
+        }
+      }, 30000);
     } catch (error) {
       console.error('[Dashboard] 카메라 시작 실패:', error);
       setCameraStatus('error');
@@ -241,83 +313,13 @@ const PrinterCard = ({ printer, isAuthenticated, onSetupRequired, onStreamStart 
     }
   };
 
-  // 비디오 스트림 연결
+  // WebRTC URL이 설정되면 상태를 online으로 변경
   useEffect(() => {
-    const videoElement = videoRef.current;
-    if (!videoElement || !streamUrl) {
-      return;
+    if (webrtcUrl) {
+      console.log('[Dashboard] WebRTC URL received, setting status to online:', webrtcUrl);
+      setCameraStatus('online');
     }
-
-    // HLS 스트림인 경우
-    if (streamUrl.includes('.m3u8')) {
-      // HLS.js를 사용하여 스트림 연결
-      import('hls.js').then((module) => {
-        const Hls = module.default;
-
-        if (Hls.isSupported()) {
-          const hls = new Hls({
-            enableWorker: true,
-            lowLatencyMode: true,
-            backBufferLength: 90,
-          });
-
-          hls.loadSource(streamUrl);
-          hls.attachMedia(videoElement);
-
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            videoElement.play().catch((error) => {
-              console.warn('Video autoplay failed:', error);
-            });
-          });
-
-          hls.on(Hls.Events.ERROR, (event, data) => {
-            console.error('HLS error:', data);
-            if (data.fatal) {
-              switch (data.type) {
-                case Hls.ErrorTypes.NETWORK_ERROR:
-                  console.error('Network error, trying to recover...');
-                  hls.startLoad();
-                  break;
-                case Hls.ErrorTypes.MEDIA_ERROR:
-                  console.error('Media error, trying to recover...');
-                  hls.recoverMediaError();
-                  break;
-                default:
-                  console.error('Fatal error, cannot recover');
-                  hls.destroy();
-                  break;
-              }
-            }
-          });
-
-          return () => {
-            hls.destroy();
-          };
-        } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-          // Safari native HLS support
-          videoElement.src = streamUrl;
-          videoElement.play().catch((error) => {
-            console.warn('Video autoplay failed:', error);
-          });
-        }
-      }).catch((error) => {
-        console.error('Failed to load HLS.js:', error);
-      });
-    } else {
-      // MJPEG 또는 일반 비디오 스트림
-      videoElement.src = streamUrl;
-      videoElement.play().catch((error) => {
-        console.warn('Video autoplay failed:', error);
-      });
-    }
-
-    return () => {
-      if (videoElement) {
-        videoElement.pause();
-        videoElement.src = '';
-      }
-    };
-  }, [streamUrl]);
+  }, [webrtcUrl]);
 
   return (
     <Card
@@ -326,14 +328,15 @@ const PrinterCard = ({ printer, isAuthenticated, onSetupRequired, onStreamStart 
     >
       {/* 상단: 카메라 피드 (메인 비주얼) */}
       <div className="relative bg-black aspect-video">
-        {printer.connected && streamUrl ? (
+        {printer.connected && webrtcUrl ? (
           <>
-            <video
+            {/* WebRTC 스트림 (PrinterDetail과 동일) */}
+            <iframe
               ref={videoRef}
-              className="w-full h-full object-cover"
-              autoPlay
-              muted
-              playsInline
+              src={`${webrtcUrl}?autoplay=1&muted=1`}
+              className="w-full h-full"
+              allow="autoplay; fullscreen"
+              title="Camera Stream"
             />
             {/* 상태 오버레이 */}
             <div className="absolute top-3 left-3 flex gap-2">

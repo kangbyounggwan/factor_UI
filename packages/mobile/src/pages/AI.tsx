@@ -95,6 +95,7 @@ const AI = () => {
   const [textPrompt, setTextPrompt] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [progressStatus, setProgressStatus] = useState<string>("");
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [generatedModel, setGeneratedModel] = useState<GeneratedModel | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -713,6 +714,7 @@ const AI = () => {
             asyncResult.data.task_id,
             (progressValue, status) => {
               setProgress(progressValue);
+              setProgressStatus(status);
               console.log(`[AI] Progress: ${progressValue}% - Status: ${status}`);
             }
           );
@@ -802,6 +804,7 @@ const AI = () => {
             asyncResult.data.task_id,
             (progressValue, status) => {
               setProgress(progressValue);
+              setProgressStatus(status);
               console.log(`[AI] Progress: ${progressValue}% - Status: ${status}`);
             }
           );
@@ -1172,6 +1175,11 @@ const AI = () => {
           <span className="font-medium">{progress}%</span>
         </div>
         <Progress value={progress} className="h-2" />
+        {progressStatus && (
+          <p className="text-xs text-center text-muted-foreground">
+            {progressStatus}
+          </p>
+        )}
         <p className="text-xs text-center text-muted-foreground">
           {t('ai.estimatedTime')}: {Math.max(1, Math.ceil((100 - progress) / 25))}s
         </p>

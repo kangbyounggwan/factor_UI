@@ -194,7 +194,7 @@ const AppContent = () => {
     return () => {
       backButtonListener.remove();
     };
-  }, [location.pathname, navigate, toast]);
+  }, [location.pathname, location.search, navigate, toast]);
 
   // AI 어시스턴트/작업공간 비활성화: 사이드바 표시 끔
   const showAISidebar = false;

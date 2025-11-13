@@ -8,7 +8,11 @@ export async function mqttConnect(): Promise<void> {
 }
 
 export async function mqttPublish(topic: string, message: unknown, qos: 0 | 1 | 2 = 1, retain = false): Promise<void> {
+  console.log('[MQTT][PUBLISH] Topic:', topic);
+  console.log('[MQTT][PUBLISH] Message:', typeof message === 'object' ? JSON.stringify(message, null, 2) : message);
+  console.log('[MQTT][PUBLISH] QoS:', qos, 'Retain:', retain);
   await client.publish(topic, message, qos, retain);
+  console.log('[MQTT][PUBLISH] Published successfully');
 }
 
 export async function mqttSubscribe(topic: string, handler: (topic: string, payload: any) => void, qos: 0 | 1 | 2 = 1): Promise<void> {
@@ -306,6 +310,9 @@ export type CameraStartOptions = {
  * @param options - 카메라 스트리밍 옵션
  */
 export async function publishCameraStart(options: CameraStartOptions): Promise<void> {
+  console.log('[CAM][MQTT] ========== publishCameraStart CALLED ==========');
+  console.log('[CAM][MQTT] Input options:', JSON.stringify(options, null, 2));
+
   const {
     deviceUuid,
     streamUrl,
@@ -319,6 +326,20 @@ export async function publishCameraStart(options: CameraStartOptions): Promise<v
     rtspBase = 'rtsp://factor.io.kr:8554',
     webrtcBase = 'https://factor.io.kr/webrtc'
   } = options;
+
+  console.log('[CAM][MQTT] Destructured values:', {
+    deviceUuid,
+    streamUrl,
+    fps,
+    width,
+    height,
+    bitrateKbps,
+    encoder,
+    forceMjpeg,
+    lowLatency,
+    rtspBase,
+    webrtcBase
+  });
 
   const topic = `camera/${deviceUuid}/cmd`;
   const payload = {
@@ -339,8 +360,13 @@ export async function publishCameraStart(options: CameraStartOptions): Promise<v
     }
   };
 
-  console.log('[CAM][MQTT] start payload', payload);
+  console.log('[CAM][MQTT] Topic:', topic);
+  console.log('[CAM][MQTT] Final payload to be published:', JSON.stringify(payload, null, 2));
+  console.log('[CAM][MQTT] ========== PUBLISHING NOW ==========');
+
   await mqttPublish(topic, payload, 1, false);
+
+  console.log('[CAM][MQTT] ========== PUBLISH COMPLETE ==========');
 }
 
 /**
@@ -380,9 +406,13 @@ export async function subscribeCameraState(
   await mqttConnect();
 
   const topic = `camera/${deviceUuid}/state`;
+  console.log('[CAM][STATE] Subscribing to topic:', topic);
+
   const handler = (_t: string, payload: any) => {
     try {
+      console.log('[CAM][STATE] Raw message received on topic', _t, ':', payload);
       const msg = typeof payload === 'string' ? JSON.parse(payload) : payload;
+      console.log('[CAM][STATE] Parsed message:', msg);
 
       // 상태 판단
       const running = !!(msg?.running);
@@ -394,6 +424,7 @@ export async function subscribeCameraState(
         msg?.play_url_webrtc ||
         (typeof msg?.url === 'string' && !msg.url.endsWith('.m3u8') ? msg.url : null);
 
+      console.log('[CAM][STATE] Extracted state:', { running, webrtcUrl, status });
       onStateChange({ running, webrtcUrl, status });
     } catch (e) {
       console.warn('[CAM][STATE] parse error', e);
@@ -401,10 +432,12 @@ export async function subscribeCameraState(
   };
 
   await mqttSubscribe(topic, handler, 1);
+  console.log('[CAM][STATE] Subscription established for topic:', topic);
 
   // 구독 해제 함수 반환
   return async () => {
     try {
+      console.log('[CAM][STATE] Unsubscribing from topic:', topic);
       await mqttUnsubscribe(topic, handler);
     } catch (e) {
       console.warn('[CAM][STATE] unsubscribe error', e);
