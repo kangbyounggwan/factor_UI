@@ -553,12 +553,32 @@ const Settings = () => {
     if (!user) return;
 
     try {
+      // 삭제할 프린터의 device_uuid 조회
+      const printerToDelete = printers.find(p => p.id === printerId);
+
+      // 프린터 삭제
       const { error } = await supabase
         .from('printers')
         .delete()
         .eq('id', printerId);
 
       if (error) throw error;
+
+      // 카메라 레코드도 함께 삭제 (device_uuid가 있는 경우)
+      if (printerToDelete?.device_uuid) {
+        const { error: cameraError } = await supabase
+          .from('cameras')
+          .delete()
+          .eq('device_uuid', printerToDelete.device_uuid)
+          .eq('user_id', user.id);
+
+        if (cameraError) {
+          console.error('[Settings] Failed to delete camera record:', cameraError);
+          // 카메라 삭제 실패는 무시 (프린터 삭제는 성공)
+        } else {
+          console.log('[Settings] Camera record deleted for device_uuid:', printerToDelete.device_uuid);
+        }
+      }
 
       setPrinters(printers.filter(p => p.id !== printerId));
 
