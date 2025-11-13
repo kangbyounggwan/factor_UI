@@ -146,6 +146,19 @@ const AppContent = () => {
           }
         }
 
+        // AI Studio 페이지에서 내부 단계가 있는지 확인
+        if (currentPath === '/create') {
+          // AI Studio의 내부 단계를 확인하기 위해 CustomEvent 발생
+          const hasInternalState = window.dispatchEvent(
+            new CustomEvent('ai-studio-back', { cancelable: true })
+          );
+
+          // 이벤트가 preventDefault()로 취소되었으면 내부 단계가 있다는 의미
+          if (!hasInternalState) {
+            return; // AI Studio 내부에서 뒤로가기 처리됨
+          }
+        }
+
         // 메인 페이지에서는 히스토리 무시하고 무조건 앱 종료 동작만 수행
         // 2초 내 두 번 누르면 앱 종료
         const currentTime = new Date().getTime();
