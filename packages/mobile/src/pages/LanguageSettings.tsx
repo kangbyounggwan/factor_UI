@@ -15,24 +15,23 @@ const LanguageSettings = () => {
     { code: "en", name: t("profile.english", "English") },
   ];
 
-  // 언어 선택
-  const handleLanguageSelect = (languageCode: string) => {
+  // 언어 선택 시 즉시 저장 및 변경
+  const handleLanguageSelect = async (languageCode: string) => {
     setSelectedLanguage(languageCode);
-  };
 
-  // 저장 버튼 클릭 시 적용 및 앱 새로고침
-  const handleSave = async () => {
-    // Preferences에 저장
+    // Preferences에 즉시 저장
     await Preferences.set({
       key: 'language',
-      value: selectedLanguage,
+      value: languageCode,
     });
 
     // i18n 언어 변경
-    await i18n.changeLanguage(selectedLanguage);
+    await i18n.changeLanguage(languageCode);
+  };
 
-    // 앱 전체 새로고침하여 언어 변경 즉시 반영
-    window.location.reload();
+  // 뒤로가기 버튼 클릭 시 이전 페이지로 이동
+  const handleBack = () => {
+    navigate(-1);
   };
 
   return (
@@ -40,7 +39,7 @@ const LanguageSettings = () => {
       {/* 헤더 */}
       <div className="px-6 py-4 safe-area-top">
         <button
-          onClick={() => navigate(-1)}
+          onClick={handleBack}
           className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
         >
           <ArrowLeft className="h-6 w-6" />
@@ -76,13 +75,6 @@ const LanguageSettings = () => {
             </button>
           ))}
         </div>
-      </div>
-
-      {/* 하단 버튼 */}
-      <div className="p-6 safe-area-bottom">
-        <Button onClick={handleSave} className="w-full h-14 text-lg">
-          {t("profile.next", "다음")}
-        </Button>
       </div>
     </div>
   );
