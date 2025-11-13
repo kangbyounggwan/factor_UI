@@ -103,10 +103,10 @@ const DeviceSetup = () => {
       }
 
       try {
-        // 해당 UUID가 이미 등록되어 있는지 확인
+        // 해당 UUID가 이미 등록되어 있는지 확인 (clients 테이블 사용)
         const { data, error } = await supabase
-          .from('edge_devices')
-          .select('device_uuid, device_name, registered_by, status')
+          .from('clients')
+          .select('device_uuid, name, user_id')
           .eq('device_uuid', uuid)
           .maybeSingle();
 
@@ -115,7 +115,7 @@ const DeviceSetup = () => {
         if (data) {
           // 이미 등록된 디바이스
           setAlreadyRegistered(true);
-          setDeviceName(data.device_name);
+          setDeviceName(data.name);
           // 등록 완료되었으므로 타이머 삭제
           localStorage.removeItem(storageKey);
         } else {
@@ -157,13 +157,11 @@ const DeviceSetup = () => {
       setSubmitting(true);
 
       const { data, error } = await supabase
-        .from('edge_devices')
+        .from('clients')
         .insert({
           device_uuid: uuid,
-          device_name: deviceName.trim(),
-          device_type: 'printer',
-          registered_by: user.id,
-          status: 'inactive'
+          name: deviceName.trim(),
+          user_id: user.id
         })
         .select()
         .single();
