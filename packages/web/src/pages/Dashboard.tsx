@@ -123,8 +123,9 @@ const PrinterCard = ({
       return;
     }
 
-    // model이 "Unknown"이거나 비어있으면 설정 모달 표시
-    if (!printer.model || printer.model === "Unknown") {
+    // 제조사 또는 model이 "Unknown"이거나 비어있으면 설정 모달 표시
+    if (!printer.manufacturer || printer.manufacturer === "Unknown" ||
+        !printer.model || printer.model === "Unknown") {
       onSetupClick?.(printer);
       return;
     }
