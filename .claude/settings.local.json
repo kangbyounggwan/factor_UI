@@ -19,7 +19,11 @@
       "Bash(npm run build:web:*)",
       "Bash(npm run build:host:*)",
       "Bash(npx cap sync:*)",
-      "Bash(npm run build:mobile:*)"
+      "Bash(npm run build:mobile:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npm run build:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

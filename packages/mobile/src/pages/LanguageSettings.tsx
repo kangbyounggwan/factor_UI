@@ -15,18 +15,24 @@ const LanguageSettings = () => {
     { code: "en", name: t("profile.english", "English") },
   ];
 
-  // 언어 선택 시 즉시 변경
-  const handleLanguageChange = async (languageCode: string) => {
+  // 언어 선택
+  const handleLanguageSelect = (languageCode: string) => {
     setSelectedLanguage(languageCode);
-    await i18n.changeLanguage(languageCode);
-    await Preferences.set({
-      key: 'language',
-      value: languageCode,
-    });
   };
 
-  const handleSave = () => {
-    navigate(-1);
+  // 저장 버튼 클릭 시 적용 및 앱 새로고침
+  const handleSave = async () => {
+    // Preferences에 저장
+    await Preferences.set({
+      key: 'language',
+      value: selectedLanguage,
+    });
+
+    // i18n 언어 변경
+    await i18n.changeLanguage(selectedLanguage);
+
+    // 앱 전체 새로고침하여 언어 변경 즉시 반영
+    window.location.reload();
   };
 
   return (
@@ -52,7 +58,7 @@ const LanguageSettings = () => {
           {languages.map((language) => (
             <button
               key={language.code}
-              onClick={() => handleLanguageChange(language.code)}
+              onClick={() => handleLanguageSelect(language.code)}
               className="w-full flex items-center justify-between px-6 py-4 rounded-xl hover:bg-accent transition-colors"
             >
               <span className="text-lg font-medium">{language.name}</span>
