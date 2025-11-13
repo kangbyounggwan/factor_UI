@@ -10,6 +10,7 @@ import { useAuth } from "@shared/contexts/AuthContext";
 import { supabase } from "@shared/integrations/supabase/client"
 import { useToast } from '@/hooks/use-toast';
 import { createSharedMqttClient } from '@shared/component/mqtt';
+import { startDashStatusSubscriptionsForUser } from '@shared/component/mqtt';
 
 // 등록 유효 기간: 5분 (밀리초)
 const REGISTRATION_TIMEOUT_MS = 5 * 60 * 1000;
@@ -211,6 +212,16 @@ const DeviceSetup = () => {
 
       // 등록 시작 시간 삭제 (등록 완료됨)
       localStorage.removeItem(`device_registration_start_${uuid}`);
+
+      // 신규 프린터를 위한 MQTT 구독 갱신 (캐시 강제 리프레시)
+      try {
+        console.log('[DeviceSetup] 신규 프린터 MQTT 구독 시작:', uuid);
+        await startDashStatusSubscriptionsForUser(user.id, { forceRefresh: true });
+        console.log('[DeviceSetup] MQTT 구독 갱신 완료');
+      } catch (mqttRefreshError) {
+        console.error('[DeviceSetup] MQTT 구독 갱신 실패:', mqttRefreshError);
+        // 구독 실패해도 등록은 성공한 것으로 처리
+      }
 
       toast({
         title: "설비 등록 완료!",

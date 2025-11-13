@@ -577,15 +577,7 @@ const Settings = () => {
   };
 
   const handleEditPrinter = async (printer: PrinterConfig) => {
-    // manufacture_id가 있으면 프린터 상세 페이지로 이동
-    const printerExt = printer as PrinterConfig & { manufacture_id?: string };
-    if (printerExt.manufacture_id) {
-      // 프린터 상세 페이지로 이동
-      window.location.href = `/printer/${printer.id}`;
-      return;
-    }
-
-    // manufacture_id가 없는 경우만 설정 모달 열기
+    // Settings 페이지에서는 항상 설정 모달 열기 (페이지 이동 안 함)
     setEditingPrinter(printer);
     setShowEditPrinter(true);
 
@@ -597,8 +589,52 @@ const Settings = () => {
     setSeriesList([]);
     setModelsList([]);
 
-    // manufacture_id가 없으므로 제조사 선택 초기화
-    isPrefillingRef.current = false;
+    // 초기 프리필 중에는 의도치 않은 reset을 방지
+    isPrefillingRef.current = true;
+
+    // manufacture_id가 있으면 제조사 정보 로드하여 드롭다운 미리 채우기
+    const printerExt = printer as PrinterConfig & { manufacture_id?: string };
+    if (printerExt.manufacture_id) {
+      try {
+        const { data: manufacturingPrinter, error } = await supabase
+          .from('manufacturing_printers')
+          .select('id, manufacturer, series, model, display_name')
+          .eq('id', printerExt.manufacture_id)
+          .single();
+
+        if (error) {
+          console.error('Error loading manufacturing printer:', error);
+          isPrefillingRef.current = false;
+          return;
+        }
+
+        if (manufacturingPrinter) {
+          // 1단계: 제조사 설정
+          setSelectedManufacturer(manufacturingPrinter.manufacturer);
+
+          // 2단계: 시리즈 목록 로드 후 시리즈 설정
+          const seriesData = await getSeriesByManufacturer(manufacturingPrinter.manufacturer);
+          setSeriesList(seriesData);
+          setSelectedSeries(manufacturingPrinter.series);
+
+          // 3단계: 모델 목록 로드 후 모델 설정
+          const modelsData = await getModelsByManufacturerAndSeries(
+            manufacturingPrinter.manufacturer,
+            manufacturingPrinter.series
+          );
+          setModelsList(modelsData);
+          setSelectedModel(manufacturingPrinter.id);
+          setSelectedModelId(manufacturingPrinter.id);
+        }
+        isPrefillingRef.current = false;
+      } catch (error) {
+        console.error('Error in handleEditPrinter:', error);
+        isPrefillingRef.current = false;
+      }
+    } else {
+      // manufacture_id가 없으면 초기화
+      isPrefillingRef.current = false;
+    }
   };
 
   const handleUpdatePrinter = async () => {

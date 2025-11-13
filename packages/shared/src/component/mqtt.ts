@@ -273,10 +273,11 @@ export function onDashStatusMessage(listener: DashStatusListener) {
   return () => dashStatusListeners.delete(listener);
 }
 
-export async function startDashStatusSubscriptionsForUser(userId: string) {
+export async function startDashStatusSubscriptionsForUser(userId: string, opts?: { forceRefresh?: boolean }) {
   const mqttClient = createSharedMqttClient();
   await mqttClient.connect();
-  const deviceUuids = await getUserDeviceUuidsCached(userId);
+  // 신규 프린터 등록 시 캐시 갱신 옵션
+  const deviceUuids = await getUserDeviceUuidsCached(userId, { forceRefresh: opts?.forceRefresh });
   const subscribedTopics: string[] = [];
   for (const uuid of deviceUuids) {
     const topic = `octoprint/status/${uuid}`;
@@ -492,15 +493,20 @@ async function fetchUserDeviceUuidsRaw(userId: string): Promise<string[]> {
   let uuids = Array.from(new Set((clients || [])
     .map((r: any) => r?.device_uuid)
     .filter((v: any): v is string => Boolean(v))));
-  if (uuids.length === 0) {
-    const { data: printers } = await supabase
-      .from('printers')
-      .select('device_uuid')
-      .eq('user_id', userId);
-    uuids = Array.from(new Set((printers || [])
-      .map((r: any) => r?.device_uuid)
-      .filter((v: any): v is string => Boolean(v))));
-  }
+
+  // printers 테이블도 조회 (device_uuid 또는 id 컬럼 사용)
+  const { data: printers } = await supabase
+    .from('printers')
+    .select('id, device_uuid')
+    .eq('user_id', userId);
+
+  const printerUuids = Array.from(new Set((printers || [])
+    .map((r: any) => r?.device_uuid || r?.id) // device_uuid가 없으면 id 사용
+    .filter((v: any): v is string => Boolean(v))));
+
+  // clients와 printers의 UUID를 합침
+  uuids = Array.from(new Set([...uuids, ...printerUuids]));
+
   return uuids;
 }
 

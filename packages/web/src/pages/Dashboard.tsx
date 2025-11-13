@@ -86,6 +86,7 @@ interface PrinterOverview {
   print_time_left?: number;
   current_file?: string;
   device_uuid?: string;
+  manufacture_id?: string; // 제조사 정보 ID
 }
 
 const PrinterCard = ({
@@ -123,14 +124,13 @@ const PrinterCard = ({
       return;
     }
 
-    // 제조사 또는 model이 "Unknown"이거나 비어있으면 설정 모달 표시
-    if (!printer.manufacturer || printer.manufacturer === "Unknown" ||
-        !printer.model || printer.model === "Unknown") {
+    // manufacture_id가 없으면 제조사 설정 모달 표시
+    if (!printer.manufacture_id) {
       onSetupClick?.(printer);
       return;
     }
 
-    // 정상적으로 설정된 프린터는 상세 페이지로 이동
+    // manufacture_id가 있으면 프린터 상세 페이지로 이동
     navigate(`/printer/${printer.id}`, { state: { printer } });
   };
 
@@ -326,7 +326,7 @@ const Home = () => {
       // DB 데이터 + localStorage의 MQTT 상태 병합 (현재 시점의 mqttStates 읽기)
       const currentMqttStates = JSON.parse(localStorage.getItem('web:dashboard:mqtt_states') || '{}');
       const formattedPrinters: PrinterOverview[] = (printersData || []).map(printer => {
-        const printerWithUuid = printer as typeof printer & { device_uuid?: string; name?: string };
+        const printerWithUuid = printer as typeof printer & { device_uuid?: string; name?: string; manufacture_id?: string };
         const deviceUuid = printerWithUuid.device_uuid;
         const cachedState = deviceUuid ? currentMqttStates[deviceUuid] : null;
 
@@ -348,6 +348,7 @@ const Home = () => {
             print_time_left: cachedState.print_time_left,
             current_file: cachedState.current_file,
             device_uuid: deviceUuid,
+            manufacture_id: printerWithUuid.manufacture_id,
           };
         } else {
           // 캐시 없으면 기본값 (connecting 상태)
@@ -372,6 +373,7 @@ const Home = () => {
             print_time_left: 0,
             current_file: undefined,
             device_uuid: deviceUuid,
+            manufacture_id: printerWithUuid.manufacture_id,
           };
         }
       });
