@@ -551,9 +551,7 @@ const AI = () => {
 
       // Don't wait for slicing to complete - it runs in background
       // The useEffect subscription will update the UI when complete
-      clearTimeout(timeoutId); // 타이머 클리어
     } catch (error) {
-      clearTimeout(timeoutId); // 타이머 클리어
       console.error('[AI Mobile] Slicing failed:', error);
       toast({
         title: t('common.error') || '오류',
