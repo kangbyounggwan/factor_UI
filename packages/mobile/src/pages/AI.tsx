@@ -691,9 +691,10 @@ const AI = () => {
     setProgress(0);
     setCurrentStep("generate");
 
+    let dbModelId: string | null = null; // Declare outside try-catch for proper scope
+
     try {
       let result;
-      let dbModelId: string | null = null;
 
       if (inputType === "text" || inputType === "text-to-image") {
         // 1. DB에 레코드 생성 (status: processing)
