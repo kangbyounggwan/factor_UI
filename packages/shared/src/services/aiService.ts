@@ -252,6 +252,11 @@ export interface AIModelResponse {
     cleaned_glb_path?: string;       // 정리된 GLB 경로
     stl_path?: string;               // STL 경로
     thumbnail_path?: string;         // 썸네일 경로
+    dimensions?: {                   // 모델 크기 정보
+      x?: number;
+      y?: number;
+      z?: number;
+    };
     raw?: {
       image_to_3d?: unknown;
       remesh?: unknown;
@@ -272,6 +277,11 @@ export interface AIModelResponse {
   thumbnail_download_url?: string;
   local_path?: string;
   uploaded_local_path?: string;
+  dimensions?: {
+    x?: number;
+    y?: number;
+    z?: number;
+  };
   raw?: unknown;
   request_payload?: unknown;
 }
@@ -417,6 +427,7 @@ export function extractMetadata(result: AIModelResponse) {
     remesh_task_id: data.remesh_task_id,
     local_path: data.local_path,
     uploaded_local_path: data.uploaded_local_path,
+    dimensions: data.dimensions,
     request_payload: data.request_payload,
     raw: data.raw,
   };
