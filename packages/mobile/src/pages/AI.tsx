@@ -264,7 +264,7 @@ const AI = () => {
 
       if (task.status === 'completed' && task.output_url) {
         // Update UI with completed task
-        setCurrentGCodeUrl(task.output_url);
+        setGcodeUrl(task.output_url);
         setIsSlicing(false);
 
         // Update gcode info if metadata available
@@ -275,7 +275,8 @@ const AI = () => {
             filamentLength: metadata.filament_used_m ? `${metadata.filament_used_m.toFixed(2)}m` : undefined,
             filamentWeight: metadata.filament_weight_g ? `${metadata.filament_weight_g.toFixed(1)}g` : undefined,
             layerCount: metadata.layer_count,
-            layerHeight: metadata.layer_height,
+            nozzleTemp: metadata.nozzle_temp,
+            bedTemp: metadata.bed_temp,
           });
         }
 
