@@ -60,9 +60,20 @@ import { supabase } from "@shared/integrations/supabase/client";
 import { createAIModel, updateAIModel, listAIModels, deleteAIModel } from "@shared/services/supabaseService/aiModel";
 import { downloadAndUploadModel, downloadAndUploadSTL, downloadAndUploadThumbnail, downloadAndUploadGCode, deleteModelFiles } from "@shared/services/supabaseService/aiStorage";
 import { getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
-import { uploadSTLAndSlice, type SlicingSettings, type PrinterDefinition } from "@shared/services/aiService";
+import { uploadSTLAndSlice, type SlicingSettings, type PrinterDefinition as SlicingPrinterDefinition } from "@shared/services/aiService";
 import { createSlicingTask, subscribeToTaskUpdates, processSlicingTask, BackgroundTask } from "@shared/services/backgroundSlicing";
 import type { AIGeneratedModel } from "@shared/types/aiModelType";
+import type { Database } from "@/integrations/supabase/types";
+
+// 프린터 타입 정의 (데이터베이스 타입 사용)
+type PrinterRow = Database['public']['Tables']['printers']['Row'];
+type PrinterWithGroup = PrinterRow & {
+  group: Database['public']['Tables']['printer_groups']['Row'] | null;
+  manufacture_id?: string | null;
+  connected?: boolean;
+  nozzle_temp?: number;
+  bed_temp?: number;
+};
 
 // 단계 정의
 type Step = "select-input" | "create-prompt" | "configure" | "generate" | "result";
@@ -177,11 +188,11 @@ const AI = () => {
   const [artStyle, setArtStyle] = useState<"realistic" | "sculpture">("realistic");
   const [targetPolycount, setTargetPolycount] = useState<number>(30000);
 
-  const [connectedPrinters, setConnectedPrinters] = useState<PrinterDefinition[]>([]);
+  const [connectedPrinters, setConnectedPrinters] = useState<PrinterWithGroup[]>([]);
 
   // 출력 설정 단계 상태
   const [printStep, setPrintStep] = useState<'printer' | 'preview'>('printer');
-  const [selectedPrinter, setSelectedPrinter] = useState<PrinterDefinition | null>(null);
+  const [selectedPrinter, setSelectedPrinter] = useState<PrinterWithGroup | null>(null);
   const [isSlicing, setIsSlicing] = useState(false);
   const [slicingInBackground, setSlicingInBackground] = useState(false); // 백그라운드 처리 상태
   const [gcodeUrl, setGcodeUrl] = useState<string | null>(null);
@@ -316,7 +327,7 @@ const AI = () => {
   }, [user]);
 
   // 프린터 선택 및 슬라이싱 시작
-  const handlePrinterSelect = async (printer: PrinterDefinition) => {
+  const handlePrinterSelect = async (printer: PrinterWithGroup) => {
     console.log('[AI Mobile] Printer selected:', printer.name);
 
     if (!generatedModel?.glbUrl || !user?.id) {
@@ -403,7 +414,7 @@ const AI = () => {
       }
 
       // 4. 프린터 정의
-      const printerDefinition: PrinterDefinition = {
+      const printerDefinition: SlicingPrinterDefinition = {
         version: 2,
         overrides: {
           machine_width: { default_value: 220 },
