@@ -195,9 +195,32 @@ const ModelViewer = forwardRef<ModelViewerHandle, ModelViewerProps>(
       style.height = typeof height === 'number' ? `${height}px` : height;
     }
     style.position = 'relative';
+    style.touchAction = 'none'; // Prevent passive event listener warning
 
     const hasContent = showDemo || stlUrl || modelUrl;
     const sceneRef = useRef<THREE.Group | null>(null);
+    const canvasRef = useRef<HTMLDivElement>(null);
+
+    // Prevent passive event listener warning for touch events
+    useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const preventDefault = (e: Event) => {
+        e.preventDefault();
+      };
+
+      // Add non-passive event listeners for touch events
+      canvas.addEventListener('touchstart', preventDefault, { passive: false });
+      canvas.addEventListener('touchmove', preventDefault, { passive: false });
+      canvas.addEventListener('wheel', preventDefault, { passive: false });
+
+      return () => {
+        canvas.removeEventListener('touchstart', preventDefault);
+        canvas.removeEventListener('touchmove', preventDefault);
+        canvas.removeEventListener('wheel', preventDefault);
+      };
+    }, []);
 
     // 부모 컴포넌트에 exportGLB 메서드 노출
     useImperativeHandle(ref, () => ({
@@ -233,7 +256,7 @@ const ModelViewer = forwardRef<ModelViewerHandle, ModelViewerProps>(
     }));
 
     return (
-      <div className={className} style={style}>
+      <div ref={canvasRef} className={className} style={style}>
         <Canvas
           shadows
           frameloop="demand"
