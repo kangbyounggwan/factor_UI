@@ -705,8 +705,11 @@ const AI = () => {
           ...buildCommon(symmetryMode, artStyle, targetPolycount, user?.id, 'mobile'),
         };
 
+        console.log('[AI Request] Text-to-3D Payload:', JSON.stringify(payload, null, 2));
+
         // 비동기 모드로 요청
         const asyncResult = await postTextTo3D(payload, true);
+        console.log('[AI Response] Text-to-3D Result:', JSON.stringify(asyncResult, null, 2));
 
         if (asyncResult.status === 'ok' && asyncResult.data?.task_id) {
           // 진행률 폴링
@@ -791,12 +794,16 @@ const AI = () => {
 
         const common = buildCommon(symmetryMode, artStyle, targetPolycount, user?.id, 'mobile');
 
+        console.log('[AI Request] Image-to-3D Common params:', JSON.stringify(common, null, 2));
+        console.log('[AI Request] Image file:', uploadedFile.name, 'size:', blob.size, 'bytes');
+
         formData.append('task', 'image_to_3d');
         formData.append('image_file', blob, uploadedFile.name);
         formData.append('json', JSON.stringify(common));
 
         // 비동기 모드로 요청
         const asyncResult = await postImageTo3D(formData, true);
+        console.log('[AI Response] Image-to-3D Result:', JSON.stringify(asyncResult, null, 2));
 
         if (asyncResult.status === 'ok' && asyncResult.data?.task_id) {
           // 진행률 폴링
