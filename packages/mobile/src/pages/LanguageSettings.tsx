@@ -52,7 +52,7 @@ const LanguageSettings = () => {
       </div>
 
       {/* 언어 목록 */}
-      <div className="flex-1 px-6">
+      <div className="flex-1 px-6 pb-6 safe-area-bottom">
         <div className="space-y-2">
           {languages.map((language) => (
             <button

@@ -153,12 +153,12 @@ All colors MUST be HSL.
   }
 
   .safe-area-bottom {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem);
   }
 
   .safe-area-inset {
     padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem);
   }
 
   /* Safe Area without extra padding (시스템바 높이만 적용) */

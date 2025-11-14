@@ -2,7 +2,6 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, Check } from "lucide-react";
 import { useTheme } from "next-themes";
-import { Button } from "@/components/ui/button";
 
 const ThemeSettings = () => {
   const { t } = useTranslation();
@@ -27,10 +26,6 @@ const ThemeSettings = () => {
     },
   ];
 
-  const handleSave = () => {
-    navigate(-1);
-  };
-
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* 헤더 */}
@@ -50,7 +45,7 @@ const ThemeSettings = () => {
       </div>
 
       {/* 테마 목록 */}
-      <div className="flex-1 px-6">
+      <div className="flex-1 px-6 pb-6 safe-area-bottom">
         <div className="space-y-3">
           {themes.map((themeOption) => (
             <button
@@ -123,13 +118,6 @@ const ThemeSettings = () => {
             </button>
           ))}
         </div>
-      </div>
-
-      {/* 하단 버튼 */}
-      <div className="p-6 safe-area-bottom">
-        <Button onClick={handleSave} className="w-full h-14 text-lg">
-          {t("profile.complete", "완료")}
-        </Button>
       </div>
     </div>
   );
