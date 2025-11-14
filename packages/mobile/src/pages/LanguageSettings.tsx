@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Preferences } from '@capacitor/preferences';
+import { Capacitor } from '@capacitor/core';
 
 const LanguageSettings = () => {
   const { i18n, t } = useTranslation();
@@ -19,11 +19,14 @@ const LanguageSettings = () => {
   const handleLanguageSelect = async (languageCode: string) => {
     setSelectedLanguage(languageCode);
 
-    // Preferences에 즉시 저장
-    await Preferences.set({
-      key: 'language',
-      value: languageCode,
-    });
+    // Capacitor Preferences에 즉시 저장
+    if (Capacitor.isNativePlatform()) {
+      const { Preferences } = Capacitor.Plugins;
+      await Preferences.set({
+        key: 'language',
+        value: languageCode,
+      });
+    }
 
     // i18n 언어 변경
     await i18n.changeLanguage(languageCode);

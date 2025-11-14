@@ -8,18 +8,27 @@ const isCapacitor = typeof window !== 'undefined' && (window as any).Capacitor;
 
 // Capacitor Preferences에서 언어 가져오기
 const getStoredLanguage = async () => {
-  if (isCapacitor) {
-    try {
-      const { Preferences } = await import('@capacitor/preferences');
-      const { value } = await Preferences.get({ key: 'language' });
-      return value || 'ko';
-    } catch (error) {
-      console.error('Failed to get stored language:', error);
-      return 'ko';
-    }
-  } else {
+  // 브라우저 환경 (웹)
+  if (typeof window !== 'undefined' && !isCapacitor) {
     return localStorage.getItem('language') || 'ko';
   }
+
+  // Capacitor 환경 (모바일)
+  if (isCapacitor) {
+    try {
+      // Capacitor의 Preferences API 사용
+      const { Preferences } = (window as any).Capacitor.Plugins;
+      if (Preferences) {
+        const { value } = await Preferences.get({ key: 'language' });
+        return value || 'ko';
+      }
+    } catch (error) {
+      console.error('Failed to get stored language from Capacitor:', error);
+    }
+  }
+
+  // 폴백
+  return 'ko';
 };
 
 // i18n 초기화
