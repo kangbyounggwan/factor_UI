@@ -91,6 +91,7 @@ interface UploadedFile {
 interface GeneratedModel {
   id: string | number;
   name: string;
+  model_name?: string;  // DB의 model_name 필드
   type: string;
   prompt: string;
   status: string;
@@ -473,7 +474,7 @@ const AI = () => {
       console.log('[AI Mobile] - Printer ID:', printer.id);
       console.log('[AI Mobile] - Printer Model ID:', printer.manufacture_id);
 
-      const modelName = generatedModel.model_name || generatedModel.prompt || generatedModel.id;
+      const modelName = generatedModel.model_name || generatedModel.prompt || String(generatedModel.id);
 
       // Get printer info for GCode
       let printerInfoForGCode: { manufacturer?: string; series?: string; model?: string; printer_name?: string } = {};

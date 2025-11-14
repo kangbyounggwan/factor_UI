@@ -11,9 +11,9 @@ export type WorkflowStep = 'modelling' | 'optimization' | 'gcode_generation';
 export type WorkflowStepStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export interface ModelDimensions {
-  x: number;
-  y: number;
-  z: number;
+  x?: number;
+  y?: number;
+  z?: number;
 }
 
 export interface GenerationMetadata {
