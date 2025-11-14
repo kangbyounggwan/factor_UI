@@ -23,7 +23,10 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(npm run build:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(open \"macappstore://apps.apple.com/app/transporter/id1450874784\")",
+      "Bash(sips:*)"
     ],
     "deny": [],
     "ask": []
