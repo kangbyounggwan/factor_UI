@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, lazy, Suspense } from "react";
+import { useState, useRef, useEffect, lazy, Suspense, useMemo, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -1157,12 +1157,26 @@ const AI = () => {
   );
 
   // Step 3: 생성 중
+  // Memoize animated loader to prevent re-renders
+  const AnimatedLoader = useMemo(() => (
+    <div className="relative">
+      <Loader2 className="w-16 h-16 animate-spin text-primary" />
+      <Sparkles className="w-6 h-6 text-primary absolute top-0 right-0 animate-pulse" />
+    </div>
+  ), []);
+
+  // Throttle progress display to every 5% to reduce re-renders
+  const displayProgress = useMemo(() => Math.floor(progress / 5) * 5, [Math.floor(progress / 5)]);
+
+  // Memoize estimated time calculation - only recalculate every 10%
+  const estimatedTime = useMemo(() =>
+    Math.max(1, Math.ceil((100 - progress) / 25)),
+    [Math.floor(progress / 10)]
+  );
+
   const renderGenerating = () => (
     <div className="flex flex-col items-center justify-center py-12 space-y-6">
-      <div className="relative">
-        <Loader2 className="w-16 h-16 animate-spin text-primary" />
-        <Sparkles className="w-6 h-6 text-primary absolute top-0 right-0 animate-pulse" />
-      </div>
+      {AnimatedLoader}
 
       <div className="text-center space-y-2">
         <h2 className="text-xl font-bold">{t('ai.generatingAI')}</h2>
@@ -1172,16 +1186,16 @@ const AI = () => {
       <div className="w-full max-w-sm space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">{t('ai.progressLabel')}</span>
-          <span className="font-medium">{progress}%</span>
+          <span className="font-medium">{displayProgress}%</span>
         </div>
-        <Progress value={progress} className="h-2" />
+        <Progress value={displayProgress} className="h-2" />
         {progressStatus && (
           <p className="text-xs text-center text-muted-foreground">
             {progressStatus}
           </p>
         )}
         <p className="text-xs text-center text-muted-foreground">
-          {t('ai.estimatedTime')}: {Math.max(1, Math.ceil((100 - progress) / 25))}s
+          {t('ai.estimatedTime')}: {estimatedTime}s
         </p>
       </div>
     </div>
