@@ -1157,11 +1157,11 @@ const AI = () => {
   );
 
   // Step 3: 생성 중
-  // Memoize animated loader to prevent re-renders
-  const AnimatedLoader = useMemo(() => (
+  // Static loader - no animations to prevent excessive re-renders
+  const StaticLoader = useMemo(() => (
     <div className="relative">
-      <Loader2 className="w-16 h-16 animate-spin text-primary" />
-      <Sparkles className="w-6 h-6 text-primary absolute top-0 right-0 animate-pulse" />
+      <Loader2 className="w-16 h-16 text-primary" />
+      <Sparkles className="w-6 h-6 text-primary absolute top-0 right-0" />
     </div>
   ), []);
 
@@ -1176,7 +1176,7 @@ const AI = () => {
 
   const renderGenerating = () => (
     <div className="flex flex-col items-center justify-center py-12 space-y-6">
-      {AnimatedLoader}
+      {StaticLoader}
 
       <div className="text-center space-y-2">
         <h2 className="text-xl font-bold">{t('ai.generatingAI')}</h2>
