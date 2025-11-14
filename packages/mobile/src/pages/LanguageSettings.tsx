@@ -26,9 +26,12 @@ const LanguageSettings = () => {
         key: 'language',
         value: languageCode,
       });
+    } else {
+      // 웹 환경에서는 localStorage에 저장
+      localStorage.setItem('language', languageCode);
     }
 
-    // i18n 언어 변경
+    // i18n 언어 변경 (reload 없이 즉시 반영)
     await i18n.changeLanguage(languageCode);
   };
 
