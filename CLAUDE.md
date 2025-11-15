@@ -2,95 +2,44 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Documentation Reference
-
-**IMPORTANT**: Before making any changes, always review these documentation files:
-
-- **[README.md](./README.md)** - Quick start and project overview
-- **[PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md)** - Complete project architecture, features, and patterns
-- **[TECH_STACK.md](./TECH_STACK.md)** - Technology stack and dependencies
-- **[API_REFERENCE.md](./API_REFERENCE.md)** - API endpoints and real-time communication protocols
-
-**When making changes**:
-1. Review relevant documentation sections before implementing
-2. Update affected documentation files after changes
-3. Keep version numbers and changelogs current
-4. Document new patterns, APIs, or architectural decisions
-
-## Sub Agent System
-
-FACTOR UI uses a **specialized sub-agent system** for efficient distributed development. Each agent focuses on a specific domain and can work in parallel.
-
-**Available Agents**: See [.claude/agents/README.md](./.claude/agents/README.md) for complete documentation.
-
-### Quick Reference
-
-| Agent | Responsibility | Key Files |
-|-------|----------------|-----------|
-| **docs-manager** | Documentation maintenance | `*.md` files |
-| **api-developer** | API development | `api/`, `queries/`, `server.js` |
-| **mobile-builder** | iOS/Android builds | `ios/`, `android/`, Capacitor |
-| **ui-components** | React components | `components/`, `pages/` |
-| **type-safety** | TypeScript types | `types/`, `tsconfig.json` |
-| **i18n-manager** | Translations | `i18n/`, language files |
-| **quality-checker** | Code quality | ESLint, TypeScript |
-| **realtime-engineer** | MQTT/WebSocket | `mqtt.ts`, `websocket.ts` |
-
-### Usage Examples
-
-**Single Agent**:
-```
-@api-developer: Add new printer pause API endpoint
-```
-
-**Parallel Agents** (independent tasks):
-```
-Run in parallel:
-1. @api-developer: Implement printer pause API
-2. @type-safety: Define pause request/response types
-3. @docs-manager: Update API_REFERENCE.md
-```
-
-**Sequential Agents** (dependent tasks):
-```
-1. @ui-components: Create printer control buttons
-2. Then @i18n-manager: Add button labels
-3. Then @quality-checker: Verify code quality
-```
-
-### Common Workflows
-
-**New Feature Development**:
-```
-1. @type-safety: Define data types
-2. @api-developer: Implement API
-3. @ui-components: Build UI
-4. @i18n-manager: Add translations
-5. @quality-checker: Run checks
-6. @docs-manager: Document feature
-```
-
-**Mobile Release**:
-```
-1. @quality-checker: Full quality check
-2. @mobile-builder: Build iOS/Android
-3. @docs-manager: Update release notes
-```
-
-**Bug Fix**:
-```
-1. @quality-checker: Identify issue
-2. [Appropriate agent]: Fix bug
-3. @quality-checker: Verify fix
-```
-
 ## Project Overview
 
 Factor UI is a **monorepo-based 3D printer management platform** with cross-platform support. The architecture uses a modular package structure where `host` acts as a platform dispatcher, routing to either `web` (desktop browser) or `mobile` (Capacitor-based native apps) packages, both of which share common code from the `shared` package.
 
-**Current Version**: 1.2.0 (Build 3)
-**Bundle ID**: com.byeonggwan.factor
-**Platforms**: Web (Browser), iOS (App Store), Android (planned)
+## Important: Reference Documentation
+
+**Before making ANY changes to the codebase, always consult these reference documents:**
+
+### Core Documentation
+1. **[README.md](README.md)** - Quick start, overview, and basic commands
+2. **[PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATION.md)** - Project overview and architecture
+3. **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** - Detailed component structure and function locations
+4. **[TECH_STACK.md](TECH_STACK.md)** - Technology stack summary
+
+### API Documentation
+5. **[API_REFERENCE.md](API_REFERENCE.md)** - Complete API reference (Supabase, REST, MQTT, WebSocket)
+6. **[API_mqtt-registration-payloads.md](API_mqtt-registration-payloads.md)** - MQTT device registration payload specifications
+
+### Sub-Agents System
+7. **[SUB_AGENTS.md](SUB_AGENTS.md)** - **Specialized sub-agents guide for efficient development**
+8. **[.claude/agents/](./claude/agents/)** - Individual agent specifications (8 specialized agents)
+
+### Feature Guides
+9. **[GUIDE_stl-upload.md](GUIDE_stl-upload.md)** - STL file upload and thumbnail generation workflow
+10. **[GUIDE_notification-setup.md](GUIDE_notification-setup.md)** - Notification system setup and testing
+
+### Technical Documentation
+11. **[TECH_stl-rendering-performance.md](TECH_stl-rendering-performance.md)** - STL rendering performance considerations
+12. **[TECH_bundle-optimization.md](TECH_bundle-optimization.md)** - Bundle size optimization strategies and results
+
+### Roadmaps
+13. **[ROADMAP_native-viewer.md](ROADMAP_native-viewer.md)** - Native 3D viewer implementation plan
+
+**After completing any development work:**
+- Review the changes against these documents
+- Update the relevant documentation files with any modifications
+- Ensure all changes are reflected in PROJECT_STRUCTURE.md if they affect architecture
+- Use the appropriate sub-agent from [SUB_AGENTS.md](SUB_AGENTS.md) for specialized tasks
 
 ## Monorepo Structure
 
@@ -270,10 +219,10 @@ Flags: `--rest` (enable REST API), `--ws` (enable WebSocket), `--host`, `--port`
 
 ### Capacitor Configuration
 
-- **App ID**: `com.byeonggwan.factor`
+- **App ID**: `com.factor.app`
 - **App Name**: FACTOR
 - **Web Directory**: `dist`
-- **Plugins**: Keyboard (ionic resize), StatusBar (dark theme), Safe Area, Preferences
+- **Plugins**: Keyboard (body resize), StatusBar (dark theme)
 
 ### Building for Mobile
 
@@ -295,12 +244,7 @@ npx cap open ios
 - **Status Bar**: Dynamic styling based on theme (light text on dark background)
 - **Network Detection**: `@capacitor/network` for connectivity monitoring
 - **Safe Area**: `@capacitor-community/safe-area` for notch/status bar handling
-  - **CRITICAL**: Always use `viewport-fit=cover` in `index.html` meta viewport tag
-  - Use CSS classes: `.safe-area-top`, `.safe-area-bottom`, `.safe-area-inset`
-  - Bottom padding: `calc(env(safe-area-inset-bottom, 0px) + 1.5rem)` for buttons/content
 - **Navigation History**: SessionStorage tracking for improved back button UX
-- **Hardware Back Button**: Custom handling in `App.tsx` for Android/iOS
-- **Language Preferences**: Stored in Capacitor Preferences, instant language switching
 
 ## Code Conventions
 
@@ -359,6 +303,27 @@ npx cap open ios
 2. Add subscription logic in `AuthContext` or component-level
 3. Handle message parsing and state updates
 4. Always clean up subscriptions in cleanup functions
+5. **Consult [API_mqtt-registration-payloads.md](API_mqtt-registration-payloads.md)** for existing MQTT message formats
+
+### Updating Documentation
+
+When making changes that affect project structure or architecture:
+
+1. **Always update [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** if changes affect:
+   - Package structure or responsibilities
+   - New pages or routes
+   - New components or services
+   - Major function additions/removals
+   - Technology stack changes
+
+2. **Update technical documentation** when modifying:
+   - Bundle optimization → [TECH_bundle-optimization.md](TECH_bundle-optimization.md)
+   - STL rendering → [TECH_stl-rendering-performance.md](TECH_stl-rendering-performance.md)
+   - MQTT payloads → [API_mqtt-registration-payloads.md](API_mqtt-registration-payloads.md)
+
+3. **Update guides** when changing user-facing workflows:
+   - STL upload process → [GUIDE_stl-upload.md](GUIDE_stl-upload.md)
+   - Notification setup → [GUIDE_notification-setup.md](GUIDE_notification-setup.md)
 
 ## Debugging Tips
 
@@ -390,70 +355,200 @@ npx cap open ios
 - Verify path aliases resolve correctly (check `tsconfig.json` and `vite.config.ts`)
 - Clear build cache: remove `dist/` directories
 
-## iOS Development & Deployment
+## Development Workflow: Specialized Sub-Agents
 
-### Version Management
+To optimize development efficiency, use specialized sub-agents for different types of tasks. Each sub-agent has specific expertise and access to relevant documentation.
 
-**Files to update when changing version**:
-1. `packages/mobile/package.json` - `version` field
-2. `packages/mobile/ios/App/App.xcodeproj/project.pbxproj` - `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`
+### Sub-Agent Types and Usage
 
-```bash
-# Update version strings
-MARKETING_VERSION = 1.2.0      # User-facing version
-CURRENT_PROJECT_VERSION = 3     # Build number (increment for each build)
+#### 1. **Architecture Explorer** (Codebase Analysis)
+**Use when:** Understanding existing code structure, finding implementations, or analyzing dependencies
+
+**Triggers:**
+- "Where is the authentication logic implemented?"
+- "How does the MQTT subscription work?"
+- "Find all components that use the printer API"
+- "Explain the data flow for STL file upload"
+
+**Key capabilities:**
+- Deep file structure analysis
+- Cross-reference tracking
+- Dependency mapping
+- Pattern recognition
+
+**Documentation access:** PROJECT_STRUCTURE.md, all TECH_*.md files
+
+#### 2. **Feature Architect** (Design & Planning)
+**Use when:** Designing new features, planning refactors, or architectural decisions
+
+**Triggers:**
+- "Plan implementation for real-time notifications"
+- "Design a new payment flow"
+- "Refactor the MQTT connection logic"
+- "Add multi-language support for new regions"
+
+**Key capabilities:**
+- Feature breakdown
+- Technology stack recommendations
+- Risk assessment
+- Implementation roadmap creation
+
+**Documentation access:** PROJECT_STRUCTURE.md, ROADMAP_*.md files
+
+#### 3. **API Integrator** (Backend & Services)
+**Use when:** Working with APIs, MQTT, WebSocket, or external services
+
+**Triggers:**
+- "Add new MQTT topic for camera control"
+- "Integrate new Supabase table"
+- "Update device registration payload"
+- "Add new REST API endpoint"
+
+**Key capabilities:**
+- API design and implementation
+- Service integration
+- Real-time communication patterns
+- Database schema updates
+
+**Documentation access:** API_*.md, relevant sections of PROJECT_STRUCTURE.md
+
+#### 4. **UI Component Developer** (Frontend Components)
+**Use when:** Creating or modifying UI components, pages, or styling
+
+**Triggers:**
+- "Create new printer status dashboard"
+- "Add 3D model preview to settings page"
+- "Update mobile navigation UI"
+- "Implement responsive design for tablet"
+
+**Key capabilities:**
+- React component creation
+- Tailwind CSS styling
+- Responsive design
+- Radix UI integration
+- Lazy loading optimization
+
+**Documentation access:** PROJECT_STRUCTURE.md (Component Structure section), TECH_bundle-optimization.md
+
+#### 5. **State Management Specialist** (React Query, Context, MQTT)
+**Use when:** Managing application state, caching, or real-time data synchronization
+
+**Triggers:**
+- "Implement caching for printer list"
+- "Add React Query hook for AI models"
+- "Fix MQTT subscription memory leak"
+- "Optimize auth context performance"
+
+**Key capabilities:**
+- React Query hook creation
+- Context API optimization
+- MQTT subscription management
+- State synchronization patterns
+
+**Documentation access:** PROJECT_STRUCTURE.md (Services & Logic section)
+
+#### 6. **Mobile Platform Engineer** (Capacitor & Native)
+**Use when:** Working on mobile-specific features or native integrations
+
+**Triggers:**
+- "Add camera access for mobile"
+- "Implement native file picker"
+- "Fix iOS safe area issues"
+- "Add Android push notifications"
+
+**Key capabilities:**
+- Capacitor plugin integration
+- Platform-specific optimization
+- Native API usage
+- Mobile performance tuning
+
+**Documentation access:** ROADMAP_native-viewer.md, mobile sections of PROJECT_STRUCTURE.md
+
+#### 7. **Performance Optimizer** (Bundle, Rendering, Network)
+**Use when:** Optimizing load times, bundle size, or runtime performance
+
+**Triggers:**
+- "Reduce initial bundle size"
+- "Optimize 3D model rendering"
+- "Implement code splitting for new routes"
+- "Fix slow MQTT connection"
+
+**Key capabilities:**
+- Bundle analysis
+- Lazy loading strategies
+- Rendering optimization
+- Network request optimization
+
+**Documentation access:** TECH_bundle-optimization.md, TECH_stl-rendering-performance.md
+
+#### 8. **Documentation Maintainer** (Docs Update & Validation)
+**Use when:** Updating documentation after code changes
+
+**Triggers:**
+- "Update PROJECT_STRUCTURE.md with new API routes"
+- "Document new MQTT payload format"
+- "Add new feature to user guide"
+- "Sync docs with latest architecture changes"
+
+**Key capabilities:**
+- Document structure maintenance
+- Change tracking
+- Cross-reference validation
+- Markdown formatting
+
+**Documentation access:** All .md files
+
+### How to Use Sub-Agents
+
+**Step 1: Identify the task type**
+- Analyze what you need to accomplish
+- Match it to the most appropriate sub-agent
+
+**Step 2: Invoke the sub-agent**
+Example:
+```
+"I need the API Integrator to add a new MQTT topic for filament sensors"
 ```
 
-### iOS Build Process
+**Step 3: Provide context**
+- Reference existing files or patterns
+- Specify requirements clearly
+- Mention any constraints
 
-```bash
-# 1. Build and sync
-npm run build:mobile
-cd packages/mobile
-npx cap sync ios
+**Step 4: Review and iterate**
+- Sub-agent provides focused solution
+- Review against documentation
+- Request refinements if needed
 
-# 2. Update version in Xcode project (manual or via sed)
-# MARKETING_VERSION and CURRENT_PROJECT_VERSION in project.pbxproj
+**Step 5: Update documentation**
+- Use Documentation Maintainer to update relevant .md files
+- Ensure changes are reflected in PROJECT_STRUCTURE.md
 
-# 3. Open Xcode and create archive
-open ios/App/App.xcworkspace
-# Xcode: Product → Archive
+### Multi-Agent Workflows
 
-# 4. Distribute to App Store
-# Organizer → Distribute App → App Store Connect → Upload
-```
+For complex tasks, chain multiple sub-agents:
 
-### Common iOS Issues
+**Example: Adding a new feature**
+1. **Feature Architect**: Design the feature structure
+2. **Architecture Explorer**: Find relevant existing patterns
+3. **API Integrator**: Implement backend/API changes
+4. **UI Component Developer**: Build frontend components
+5. **State Management Specialist**: Connect state management
+6. **Performance Optimizer**: Optimize bundle and performance
+7. **Documentation Maintainer**: Update all relevant docs
 
-**Provisioning Profile Errors**:
-- Connect physical iPhone via USB
-- Xcode → Settings → Accounts → Download Manual Profiles
-- Enable "Automatically manage signing" in target settings
-- Team: byeonggwan lim (PV97G6HPRA)
+### Agent Selection Guidelines
 
-**Safe Area Issues on iPad**:
-- Ensure `viewport-fit=cover` in `index.html`
-- Use `.safe-area-bottom` class on scrollable containers
-- Test on actual iPad device, not just simulator
-
-**App Icon Transparency**:
-- Remove alpha channel: `sips -s format jpeg icon.png --out /tmp/temp.jpg && sips -s format png /tmp/temp.jpg --out icon.png`
-- Generate all required sizes (20x20 to 1024x1024)
-
-## Recent Changes (v1.2.0 Build 3)
-
-### UX Improvements
-- **Theme Settings**: Removed unnecessary "완료" button - theme applies immediately on selection
-- **Language Settings**: Instant language switching without page reload using Capacitor Preferences
-- **iPad Safe Area**: Fixed bottom content clipping on iPad
-  - Added `viewport-fit=cover` to viewport meta tag
-  - Increased `.safe-area-bottom` padding to 1.5rem
-  - Applied to ThemeSettings and LanguageSettings pages
-
-### Mobile Optimizations
-- Capacitor Preferences for persistent language storage
-- Improved i18n initialization with proper error handling
-- App reload removed from language change - now instant update
+| Task Category | Primary Agent | Secondary Agent |
+|---------------|---------------|-----------------|
+| New feature | Feature Architect | Architecture Explorer |
+| Bug fix | Architecture Explorer | Relevant specialist |
+| API changes | API Integrator | Documentation Maintainer |
+| UI updates | UI Component Developer | Performance Optimizer |
+| Performance issues | Performance Optimizer | Architecture Explorer |
+| Mobile features | Mobile Platform Engineer | UI Component Developer |
+| State/caching | State Management Specialist | Performance Optimizer |
+| Documentation | Documentation Maintainer | Architecture Explorer |
 
 ## Important Notes
 
@@ -465,4 +560,4 @@ open ios/App/App.xcworkspace
 - **Subscription cleanup**: Always unsubscribe from MQTT topics in component cleanup or logout
 - **Role-based features**: Check `isAdmin` before showing admin-only UI elements
 - **i18n support**: Use translation keys for user-facing strings (English and Korean supported)
-- **Documentation maintenance**: Update relevant .md files when making significant changes
+- **Use sub-agents**: Leverage specialized sub-agents for focused, efficient development

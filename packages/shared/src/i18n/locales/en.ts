@@ -326,6 +326,16 @@ export default {
     uploadSuccess: "Upload Complete",
     noModelAvailable: "Model cannot be loaded",
     downloadStartedDesc: "Starting GLB file download",
+    // Model Archive
+    modelArchiveDesc: "View and reload your generated AI models",
+    allModels: "All",
+    textOnly: "Text",
+    imageOnly: "Image",
+    image2D: "2D",
+    noModelsFound: "No models found",
+    failedToLoadHistory: "Failed to load model list",
+    failedToLoadModel: "Failed to load model",
+    failedToDeleteModel: "Failed to delete model",
     viewYourModels: "View your generated 3D models",
     styleCartoon: "Cartoon",
     // Model Save

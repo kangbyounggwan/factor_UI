@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, lazy, Suspense, useMemo, memo } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +12,7 @@ import { Share } from '@capacitor/share';
 // Lazy load ModelViewer to reduce initial bundle size
 const ModelViewer = lazy(() => import("@/components/ModelViewer"));
 import type { ModelViewerHandle } from "@/components/ModelViewer";
+import AIWorkflowAnimation from "@/components/AIWorkflowAnimation";
 import { Badge } from "@/components/ui/badge";
 import { PrinterStatusBadge } from "@/components/PrinterStatusBadge";
 import { Progress } from "@/components/ui/progress";
@@ -102,6 +104,8 @@ interface GeneratedModel {
 
 const AI = () => {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<Step>("select-input");
   const [inputType, setInputType] = useState<"text" | "image" | "text-to-image">("text");
   const [textPrompt, setTextPrompt] = useState("");
@@ -111,78 +115,42 @@ const AI = () => {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [generatedModel, setGeneratedModel] = useState<GeneratedModel | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [showPrinterModal, setShowPrinterModal] = useState(false);
-  const [modelsList, setModelsList] = useState<AIGeneratedModel[]>([]);
-  const [loadingModels, setLoadingModels] = useState(false);
-  const [historyTab, setHistoryTab] = useState<'all' | 'text_to_3d' | 'image_to_3d' | 'text_to_image'>('all');
-  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const advancedSectionRef = useRef<HTMLDivElement>(null);
-  const touchStartX = useRef<number>(0);
-  const touchEndX = useRef<number>(0);
   const modelViewerRef = useRef<ModelViewerHandle>(null);
+
+  // 모델 아카이브 Sheet 상태 (URL 쿼리 파라미터로 제어)
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyModels, setHistoryModels] = useState<AIGeneratedModel[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [activeTab, setActiveTab] = useState<'all' | 'text' | 'image' | '2d'>('all');
+
+  // AI 워크플로우 애니메이션 상태
+  type WorkflowStep = 'modelling' | 'optimization' | 'gcode_generation';
+  type WorkflowStepStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+  const [workflowState, setWorkflowState] = useState<{
+    current_step: WorkflowStep;
+    steps: {
+      modelling: WorkflowStepStatus;
+      optimization: WorkflowStepStatus;
+      gcode_generation: WorkflowStepStatus;
+    };
+  }>({
+    current_step: 'modelling',
+    steps: {
+      modelling: 'pending',
+      optimization: 'pending',
+      gcode_generation: 'pending',
+    },
+  });
 
   // 모델 편집 상태
   const [userRotation, setUserRotation] = useState<[number, number, number]>([0, 0, 0]);
   const [uniformScale, setUniformScale] = useState<number>(1);
   const [maxTriangles, setMaxTriangles] = useState<number>(100000);
   const [modelDimensions, setModelDimensions] = useState<{ x: number; y: number; z: number } | null>(null);
-
-  // 스와이프 핸들러 - 스크롤 방향 감지
-  const touchStartY = useRef(0);
-  const isScrolling = useRef(false);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-    touchEndX.current = e.touches[0].clientX;
-    isScrolling.current = false;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    touchEndX.current = e.touches[0].clientX;
-    const touchEndY = e.touches[0].clientY;
-
-    // 수직 스크롤 감지
-    const diffX = Math.abs(touchStartX.current - touchEndX.current);
-    const diffY = Math.abs(touchStartY.current - touchEndY);
-
-    if (diffY > diffX) {
-      isScrolling.current = true;
-    }
-  };
-
-  const handleTouchEnd = () => {
-    // 수직 스크롤 중이었으면 탭 전환 안함
-    if (isScrolling.current) {
-      return;
-    }
-
-    const diff = touchStartX.current - touchEndX.current;
-    const minSwipeDistance = 80; // 스와이프 거리를 늘려서 의도치 않은 전환 방지
-
-    if (Math.abs(diff) > minSwipeDistance) {
-      const tabs: Array<'all' | 'text_to_3d' | 'image_to_3d' | 'text_to_image'> = ['all', 'text_to_3d', 'image_to_3d', 'text_to_image'];
-      const currentIndex = tabs.indexOf(historyTab);
-
-      if (diff > 0 && currentIndex < tabs.length - 1) {
-        // 왼쪽으로 스와이프 (다음 탭)
-        setSlideDirection('left');
-        setTimeout(() => {
-          setHistoryTab(tabs[currentIndex + 1]);
-          setTimeout(() => setSlideDirection(null), 50);
-        }, 0);
-      } else if (diff < 0 && currentIndex > 0) {
-        // 오른쪽으로 스와이프 (이전 탭)
-        setSlideDirection('right');
-        setTimeout(() => {
-          setHistoryTab(tabs[currentIndex - 1]);
-          setTimeout(() => setSlideDirection(null), 50);
-        }, 0);
-      }
-    }
-  };
 
   // 고급 설정
   const [symmetryMode, setSymmetryMode] = useState<"off" | "auto" | "on">("auto");
@@ -224,7 +192,6 @@ const AI = () => {
 
   const { toast } = useToast();
   const { user } = useAuth();
-  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 예시 프롬프트
@@ -242,6 +209,13 @@ const AI = () => {
   // 하드웨어 백 버튼 처리
   useEffect(() => {
     const handleBackButton = (e: Event) => {
+      // 모델 아카이브 Sheet가 열려있으면 먼저 닫기
+      if (showHistory) {
+        e.preventDefault();
+        handleCloseHistory();
+        return;
+      }
+
       // 첫 화면(select-input)이 아니면 내부에서 뒤로가기 처리
       if (currentStep !== 'select-input') {
         e.preventDefault(); // App.tsx에서 앱 종료하지 않도록
@@ -261,7 +235,7 @@ const AI = () => {
 
     window.addEventListener('ai-studio-back', handleBackButton);
     return () => window.removeEventListener('ai-studio-back', handleBackButton);
-  }, [currentStep]);
+  }, [currentStep, showHistory]);
 
   useEffect(() => {
     document.title = t('ai.title') || "AI 3D 모델링 스튜디오";
@@ -274,7 +248,20 @@ const AI = () => {
     const subscription = subscribeToTaskUpdates(supabase, user.id, (task: BackgroundTask) => {
       console.log('[Mobile AI] Background task updated:', task);
 
-      if (task.status === 'completed' && task.output_url) {
+      if (task.status === 'processing') {
+        // GCode 생성 중
+        setWorkflowState(prev => ({
+          ...prev,
+          current_step: 'gcode_generation',
+          steps: { ...prev.steps, gcode_generation: 'processing' },
+        }));
+      } else if (task.status === 'completed' && task.output_url) {
+        // GCode 생성 완료
+        setWorkflowState(prev => ({
+          ...prev,
+          steps: { ...prev.steps, gcode_generation: 'completed' },
+        }));
+
         // Update UI with completed task
         setGcodeUrl(task.output_url);
         setIsSlicing(false);
@@ -298,6 +285,12 @@ const AI = () => {
           duration: 7000,
         });
       } else if (task.status === 'failed') {
+        // GCode 생성 실패
+        setWorkflowState(prev => ({
+          ...prev,
+          steps: { ...prev.steps, gcode_generation: 'failed' },
+        }));
+
         setIsSlicing(false);
         toast({
           title: t('ai.slicingFailed'),
@@ -312,6 +305,56 @@ const AI = () => {
       subscription.unsubscribe();
     };
   }, [user?.id]);
+
+  // URL 쿼리 파라미터로 모델 아카이브 Sheet 제어
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const shouldShowHistory = searchParams.get('archive') === 'true';
+
+    setShowHistory(shouldShowHistory);
+
+    // Sheet가 열릴 때 모델 목록 로드 (이미 로딩 중이 아니고, 데이터가 없을 때만)
+    if (shouldShowHistory && user?.id && historyModels.length === 0 && !isLoadingHistory) {
+      loadHistoryModels();
+    }
+  }, [location.search, user?.id, historyModels.length, isLoadingHistory]);
+
+  // 모델 아카이브에서 모델 ID가 전달된 경우 모델 로드
+  useEffect(() => {
+    const modelId = (location.state as any)?.modelId;
+    if (modelId && user?.id) {
+      const loadModel = async () => {
+        try {
+          const { getAIModel } = await import("@shared/services/supabaseService/aiModel");
+          const model = await getAIModel(supabase, modelId);
+
+          if (model) {
+            setGeneratedModel({
+              id: model.id,
+              name: model.model_name || 'Untitled Model',
+              type: model.generation_type === 'text_to_3d' ? 'text' : model.generation_type === 'image_to_3d' ? 'image' : 'text-to-image',
+              prompt: model.prompt || '',
+              status: 'completed',
+              thumbnail: model.thumbnail_url || '/placeholder.svg',
+              glbUrl: model.download_url || undefined,
+              createdAt: model.created_at,
+            });
+
+            setUserRotation([0, 0, 0]);
+            setUniformScale(1);
+            setCurrentStep('result');
+
+            // location state 초기화
+            navigate(location.pathname, { replace: true, state: {} });
+          }
+        } catch (error) {
+          console.error('Failed to load model:', error);
+        }
+      };
+
+      loadModel();
+    }
+  }, [location.state, user?.id, navigate]);
 
   // 프린터 목록 로드
   useEffect(() => {
@@ -565,28 +608,6 @@ const AI = () => {
     }
   };
 
-  // 모델 목록 로드
-  const loadModels = async () => {
-    if (!user?.id) return;
-    setLoadingModels(true);
-    try {
-      const result = await listAIModels(supabase, user.id, {
-        page: 1,
-        pageSize: 50,
-      });
-      setModelsList(result.items);
-    } catch (error) {
-      console.error('[AI] Failed to load models:', error);
-    } finally {
-      setLoadingModels(false);
-    }
-  };
-
-  // 모델 목록 초기 로드
-  useEffect(() => {
-    loadModels();
-  }, [user?.id]);
-
   // 고급 설정 열릴 때 해당 섹션으로 스크롤 이동
   useEffect(() => {
     if (showAdvanced && contentScrollRef.current && advancedSectionRef.current) {
@@ -690,6 +711,16 @@ const AI = () => {
     setProgress(0);
     setCurrentStep("generate");
 
+    // 워크플로우 상태 초기화 및 시작
+    setWorkflowState({
+      current_step: 'modelling',
+      steps: {
+        modelling: 'processing',
+        optimization: 'pending',
+        gcode_generation: 'pending',
+      },
+    });
+
     let dbModelId: string | null = null; // Declare outside try-catch for proper scope
 
     try {
@@ -731,8 +762,24 @@ const AI = () => {
               setProgress(progressValue);
               setProgressStatus(status);
               console.log(`[AI] Progress: ${progressValue}% - Status: ${status}`);
+
+              // 워크플로우 애니메이션 업데이트
+              if (progressValue >= 100) {
+                setWorkflowState(prev => ({
+                  ...prev,
+                  steps: { ...prev.steps, modelling: 'completed' },
+                  current_step: 'optimization',
+                }));
+              }
             }
           );
+
+          // Modelling 완료 -> Optimization 시작
+          setWorkflowState(prev => ({
+            ...prev,
+            steps: { ...prev.steps, modelling: 'completed', optimization: 'processing' },
+            current_step: 'optimization',
+          }));
 
           // 3. 파일 다운로드 및 Supabase Storage 업로드
           const glbUrl = extractGLBUrl(result);
@@ -751,6 +798,12 @@ const AI = () => {
           console.log('[AI] stlData:', stlData);
           const thumbnailData = thumbnailUrl ? await downloadAndUploadThumbnail(supabase, user.id, dbModelId, thumbnailUrl) : null;
           console.log('[AI] thumbnailData:', thumbnailData);
+
+          // Optimization 완료
+          setWorkflowState(prev => ({
+            ...prev,
+            steps: { ...prev.steps, optimization: 'completed' },
+          }));
 
           // 4. DB 업데이트
           await updateAIModel(supabase, dbModelId, {
@@ -825,8 +878,24 @@ const AI = () => {
               setProgress(progressValue);
               setProgressStatus(status);
               console.log(`[AI] Progress: ${progressValue}% - Status: ${status}`);
+
+              // 워크플로우 애니메이션 업데이트
+              if (progressValue >= 100) {
+                setWorkflowState(prev => ({
+                  ...prev,
+                  steps: { ...prev.steps, modelling: 'completed' },
+                  current_step: 'optimization',
+                }));
+              }
             }
           );
+
+          // Modelling 완료 -> Optimization 시작
+          setWorkflowState(prev => ({
+            ...prev,
+            steps: { ...prev.steps, modelling: 'completed', optimization: 'processing' },
+            current_step: 'optimization',
+          }));
 
           // 3. 파일 다운로드 및 Supabase Storage 업로드
           const glbUrl = extractGLBUrl(result);
@@ -845,6 +914,12 @@ const AI = () => {
           console.log('[AI] stlData (image):', stlData);
           const thumbnailData = thumbnailUrl ? await downloadAndUploadThumbnail(supabase, user.id, dbModelId, thumbnailUrl) : null;
           console.log('[AI] thumbnailData (image):', thumbnailData);
+
+          // Optimization 완료
+          setWorkflowState(prev => ({
+            ...prev,
+            steps: { ...prev.steps, optimization: 'completed' },
+          }));
 
           // 4. DB 업데이트
           await updateAIModel(supabase, dbModelId, {
@@ -922,6 +997,93 @@ const AI = () => {
     setUploadedFiles([]);
     setGeneratedModel(null);
     setProgress(0);
+  };
+
+  // 모델 아카이브 관련 함수들
+  const loadHistoryModels = async () => {
+    if (!user?.id) {
+      console.log('[AI Mobile] loadHistoryModels - no user ID');
+      return;
+    }
+
+    console.log('[AI Mobile] Loading history models for user:', user.id);
+    setIsLoadingHistory(true);
+    try {
+      const result = await listAIModels(supabase, user.id, { pageSize: 100 });
+      console.log('[AI Mobile] Result:', result);
+      console.log('[AI Mobile] Loaded history models:', result.items?.length || 0);
+      setHistoryModels(result.items || []);
+    } catch (error) {
+      console.error('[AI Mobile] Failed to load history models:', error);
+      toast({
+        title: t('common.error'),
+        description: t('ai.failedToLoadHistory'),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleOpenHistory = () => {
+    navigate('/create?archive=true');
+  };
+
+  const handleCloseHistory = () => {
+    navigate('/create');
+  };
+
+  const handleLoadHistoryModel = async (modelId: string) => {
+    try {
+      const { getAIModel } = await import("@shared/services/supabaseService/aiModel");
+      const model = await getAIModel(supabase, modelId);
+
+      if (model) {
+        setGeneratedModel({
+          id: model.id,
+          name: model.model_name || 'Untitled Model',
+          type: model.generation_type === 'text_to_3d' ? 'text' : model.generation_type === 'image_to_3d' ? 'image' : 'text-to-image',
+          prompt: model.prompt || '',
+          status: 'completed',
+          thumbnail: model.thumbnail_url || '/placeholder.svg',
+          glbUrl: model.download_url || undefined,
+          createdAt: model.created_at,
+        });
+
+        setUserRotation([0, 0, 0]);
+        setUniformScale(1);
+        setCurrentStep('result');
+        handleCloseHistory();
+      }
+    } catch (error) {
+      console.error('Failed to load model:', error);
+      toast({
+        title: t('common.error'),
+        description: t('ai.failedToLoadModel'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteHistoryModel = async (modelId: string) => {
+    try {
+      await deleteAIModel(supabase, modelId);
+      await deleteModelFiles(supabase, modelId);
+
+      setHistoryModels(prev => prev.filter(m => m.id !== modelId));
+
+      toast({
+        title: t('common.success'),
+        description: t('ai.modelDeleted'),
+      });
+    } catch (error) {
+      console.error('Failed to delete model:', error);
+      toast({
+        title: t('common.error'),
+        description: t('ai.failedToDeleteModel'),
+        variant: 'destructive',
+      });
+    }
   };
 
   // Step 1: 입력 방식 선택
@@ -1195,12 +1357,13 @@ const AI = () => {
 
   const renderGenerating = () => (
     <div className="flex flex-col items-center justify-center py-12 space-y-6">
-      {StaticLoader}
-
       <div className="text-center space-y-2">
         <h2 className="text-xl font-bold">{t('ai.generatingAI')}</h2>
         <p className="text-sm text-muted-foreground">{t('ai.generatingDesc')}</p>
       </div>
+
+      {/* AI 워크플로우 애니메이션 */}
+      <AIWorkflowAnimation workflow={workflowState} className="w-full max-w-lg px-4" />
 
       <div className="w-full max-w-sm space-y-2">
         <div className="flex justify-between text-sm">
@@ -1239,7 +1402,7 @@ const AI = () => {
           <div className="rounded-lg overflow-hidden h-[40vh] relative bg-muted">
             <Suspense fallback={
               <div className="flex items-center justify-center h-full">
-                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground will-change-transform" style={{ transform: 'translateZ(0)' }} />
               </div>
             }>
               {(() => {
@@ -1698,7 +1861,7 @@ const AI = () => {
             </div>
             <h1 className="text-lg font-semibold">{t('ai.title')}</h1>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => setShowHistory(!showHistory)}>
+          <Button variant="ghost" size="sm" onClick={handleOpenHistory}>
             <History className="w-4 h-4" />
           </Button>
         </div>
@@ -1751,207 +1914,6 @@ const AI = () => {
           </div>
         </div>
       )}
-
-      {/* 히스토리 Sheet */}
-      <Sheet open={showHistory} onOpenChange={setShowHistory}>
-        <SheetContent side="bottom" className="h-[85vh] flex flex-col p-0 border-t-0">
-          <SheetHeader className="px-6 pt-6">
-            <SheetTitle>{t('ai.modelArchive') || '모델 아카이브'}</SheetTitle>
-            <SheetDescription>{t('ai.viewYourModels') || '생성한 3D 모델 목록'}</SheetDescription>
-          </SheetHeader>
-
-          {/* 탭 네비게이션 */}
-          <div className="px-6 mt-4">
-            <div className="flex gap-2 bg-muted/50 rounded-lg p-1">
-              <button
-                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all ${
-                  historyTab === 'all'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => setHistoryTab('all')}
-              >
-                {t('common.all') || 'All'}
-              </button>
-              <button
-                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all ${
-                  historyTab === 'text_to_3d'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => setHistoryTab('text_to_3d')}
-              >
-                Text to 3D
-              </button>
-              <button
-                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all ${
-                  historyTab === 'image_to_3d'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => setHistoryTab('image_to_3d')}
-              >
-                Image to 3D
-              </button>
-              <button
-                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-all ${
-                  historyTab === 'text_to_image'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                onClick={() => setHistoryTab('text_to_image')}
-              >
-                Text to Image
-              </button>
-            </div>
-          </div>
-
-          <div
-            className="flex-1 overflow-hidden px-6 py-4"
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-          >
-            <div
-              key={historyTab}
-              className="h-full overflow-y-auto space-y-3"
-              style={{
-                paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)',
-                animation: slideDirection
-                  ? slideDirection === 'left'
-                    ? 'slideInFromRight 0.3s ease-out'
-                    : 'slideInFromLeft 0.3s ease-out'
-                  : 'none'
-              }}
-            >
-              {loadingModels ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-                </div>
-              ) : (() => {
-                const filteredModels = historyTab === 'all'
-                  ? modelsList
-                  : modelsList.filter(m => m.generation_type === historyTab);
-
-                if (filteredModels.length === 0) {
-                  return (
-                    <div className="text-center py-12">
-                      <p className="text-muted-foreground">{t('ai.noModels') || '생성된 모델이 없습니다'}</p>
-                    </div>
-                  );
-                }
-
-                return filteredModels.map((model) => {
-                const isProcessing = model.status === 'processing';
-
-                return (
-                  <Card
-                    key={model.id}
-                    className={`transition-all duration-200 ${
-                      isProcessing
-                        ? 'opacity-60 cursor-not-allowed'
-                        : 'cursor-pointer hover:shadow-md active:scale-[0.98]'
-                    }`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-
-                      if (!isProcessing && model.download_url) {
-                        console.log('[AI] Model clicked:', model);
-                        // 선택한 모델을 GeneratedModel 형식으로 변환
-                        setGeneratedModel({
-                          id: model.id,
-                          name: model.model_name || 'Untitled Model',
-                          type: model.generation_type === 'text_to_3d' ? 'text' : model.generation_type === 'image_to_3d' ? 'image' : 'text-to-image',
-                          prompt: model.prompt || '',
-                          status: 'completed',
-                          thumbnail: model.thumbnail_url || '/placeholder.svg',
-                          glbUrl: model.download_url || undefined,
-                          createdAt: model.created_at,
-                        });
-
-                        // 회전/스케일 초기화
-                        setUserRotation([0, 0, 0]);
-                        setUniformScale(1);
-
-                        // 결과 화면으로 전환
-                        setCurrentStep('result');
-                        // 히스토리 패널 닫기
-                        setShowHistory(false);
-                      }
-                    }}
-                  >
-                    <CardContent className="p-4 flex gap-4">
-                      <div className="w-20 h-20 rounded-xl overflow-hidden bg-muted flex-shrink-0 relative">
-                        {isProcessing ? (
-                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
-                            <Loader2 className="w-7 h-7 animate-spin text-primary" />
-                          </div>
-                        ) : model.thumbnail_url ? (
-                          <img
-                            src={model.thumbnail_url}
-                            alt={model.model_name || 'Model'}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/50">
-                            <Layers className="w-7 h-7 text-muted-foreground" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0 flex flex-col justify-between">
-                        {/* 생성 방식 */}
-                        <div className="flex items-center gap-2 mb-1.5">
-                          {model.generation_type === 'text_to_3d' && (
-                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                              <FileText className="w-3 h-3" />
-                              <span className="text-xs font-medium">Text to 3D</span>
-                            </div>
-                          )}
-                          {model.generation_type === 'image_to_3d' && (
-                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                              <ImageIcon className="w-3 h-3" />
-                              <span className="text-xs font-medium">Image to 3D</span>
-                            </div>
-                          )}
-                          {model.generation_type === 'text_to_image' && (
-                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                              <Sparkles className="w-3 h-3" />
-                              <span className="text-xs font-medium">Text to Image</span>
-                            </div>
-                          )}
-                          {isProcessing && (
-                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary">
-                              <span className="text-xs font-medium">{t('ai.generating') || '생성 중'}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* 모델명/프롬프트 */}
-                        <p className="text-sm font-semibold line-clamp-2 mb-1">
-                          {model.model_name || model.prompt || '이미지 업로드'}
-                        </p>
-
-                        {/* 날짜 */}
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(model.created_at).toLocaleString('ko-KR', {
-                            year: 'numeric',
-                            month: '2-digit',
-                            day: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              });
-            })()}
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
 
       {/* 출력 설정 다단계 모달 */}
       <Sheet
@@ -2040,7 +2002,7 @@ const AI = () => {
               <div className="flex-1 overflow-y-auto px-6 py-6">
                 {isSlicing ? (
                   <div className="flex flex-col items-center justify-center h-full">
-                    <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
+                    <Loader2 className="w-12 h-12 animate-spin text-primary mb-4 will-change-transform" style={{ transform: 'translateZ(0)' }} />
                     <p className="text-lg font-medium">{t('ai.slicing') || '슬라이싱 중...'}</p>
                     {slicingInBackground ? (
                       <div className="text-center mt-4 space-y-3">
@@ -2168,6 +2130,180 @@ const AI = () => {
               </div>
             </>
           )}
+        </SheetContent>
+      </Sheet>
+
+      {/* 모델 아카이브 Sheet */}
+      <Sheet open={showHistory} onOpenChange={handleCloseHistory}>
+        <SheetContent side="bottom" className="h-[85vh] flex flex-col p-0">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b">
+            <SheetTitle>{t('ai.modelArchive') || '모델 아카이브'}</SheetTitle>
+            <SheetDescription>
+              {t('ai.modelArchiveDesc') || '생성한 AI 모델을 확인하고 다시 불러올 수 있습니다'}
+            </SheetDescription>
+          </SheetHeader>
+
+          {/* 탭 필터 */}
+          <div className="px-6 pt-3 pb-0">
+            <div className="grid grid-cols-4 gap-0 border-b">
+              <button
+                onClick={() => setActiveTab('all')}
+                className={`relative h-10 px-3 text-xs font-medium transition-colors ${
+                  activeTab === 'all'
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t('ai.allModels') || '전체'}
+                {activeTab === 'all' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('text')}
+                className={`relative h-10 px-3 text-xs font-medium transition-colors ${
+                  activeTab === 'text'
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t('ai.textOnly') || '텍스트'}
+                {activeTab === 'text' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('image')}
+                className={`relative h-10 px-3 text-xs font-medium transition-colors ${
+                  activeTab === 'image'
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t('ai.imageOnly') || '이미지'}
+                {activeTab === 'image' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('2d')}
+                className={`relative h-10 px-3 text-xs font-medium transition-colors ${
+                  activeTab === '2d'
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t('ai.image2D') || '2D'}
+                {activeTab === '2d' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* 모델 목록 */}
+          <div className="flex-1 overflow-y-auto px-6 pt-4">
+            {isLoadingHistory ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary will-change-transform" style={{ transform: 'translateZ(0)' }} />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 pb-6">
+                {historyModels
+                  .filter(model => {
+                    if (activeTab === 'all') return true;
+                    if (activeTab === 'text') return model.generation_type === 'text_to_3d';
+                    if (activeTab === 'image') return model.generation_type === 'image_to_3d';
+                    if (activeTab === '2d') return model.generation_type === 'text_to_image';
+                    return true;
+                  })
+                  .map((model) => (
+                    <Card
+                      key={model.id}
+                      className="cursor-pointer hover:shadow-lg transition-all overflow-hidden"
+                      onClick={() => handleLoadHistoryModel(model.id)}
+                    >
+                      <div className="relative aspect-square">
+                        {model.status === 'processing' ? (
+                          <div className="w-full h-full bg-muted flex items-center justify-center">
+                            <Loader2 className="w-8 h-8 animate-spin text-primary will-change-transform" style={{ transform: 'translateZ(0)' }} />
+                          </div>
+                        ) : (
+                          <img
+                            src={model.thumbnail_url || '/placeholder.svg'}
+                            alt={model.model_name || 'Model'}
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                        <Badge
+                          className={`absolute top-2 left-2 text-xs flex items-center gap-1.5 ${
+                            model.generation_type === 'text_to_3d'
+                              ? 'bg-blue-500/90 hover:bg-blue-500'
+                              : model.generation_type === 'image_to_3d'
+                              ? 'bg-purple-500/90 hover:bg-purple-500'
+                              : 'bg-pink-500/90 hover:bg-pink-500'
+                          }`}
+                        >
+                          {model.generation_type === 'text_to_3d' ? (
+                            <>
+                              <FileText className="w-3 h-3" />
+                              <span>Text</span>
+                            </>
+                          ) : model.generation_type === 'image_to_3d' ? (
+                            <>
+                              <ImageIcon className="w-3 h-3" />
+                              <span>Image</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-3 h-3" />
+                              <span>2D</span>
+                            </>
+                          )}
+                        </Badge>
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2 h-7 w-7 opacity-0 hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteHistoryModel(model.id);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <CardContent className="p-3">
+                        <p className="text-sm font-medium truncate">
+                          {model.model_name || 'Untitled Model'}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate mt-1">
+                          {model.prompt || 'No prompt'}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {new Date(model.created_at).toLocaleDateString()}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))}
+              </div>
+            )}
+
+            {!isLoadingHistory && historyModels.filter(model => {
+              if (activeTab === 'all') return true;
+              if (activeTab === 'text') return model.generation_type === 'text_to_3d';
+              if (activeTab === 'image') return model.generation_type === 'image_to_3d';
+              if (activeTab === '2d') return model.generation_type === 'text_to_image';
+              return true;
+            }).length === 0 && (
+              <div className="text-center py-12">
+                <Layers className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">
+                  {t('ai.noModelsFound') || '생성된 모델이 없습니다'}
+                </p>
+              </div>
+            )}
+          </div>
         </SheetContent>
       </Sheet>
 

@@ -325,6 +325,16 @@ export default {
     uploadSuccess: "업로드 완료",
     noModelAvailable: "모델을 불러올 수 없습니다",
     downloadStartedDesc: "GLB 파일 다운로드를 시작합니다",
+    // 모델 아카이브
+    modelArchiveDesc: "생성한 AI 모델을 확인하고 다시 불러올 수 있습니다",
+    allModels: "전체",
+    textOnly: "텍스트",
+    imageOnly: "이미지",
+    image2D: "2D",
+    noModelsFound: "생성된 모델이 없습니다",
+    failedToLoadHistory: "모델 목록을 불러오지 못했습니다",
+    failedToLoadModel: "모델을 불러오지 못했습니다",
+    failedToDeleteModel: "모델을 삭제하지 못했습니다",
     viewYourModels: "생성한 3D 모델 목록",
     styleCartoon: "카툰",
     // 모델 저장
