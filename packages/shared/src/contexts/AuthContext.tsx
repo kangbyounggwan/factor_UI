@@ -341,17 +341,45 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     // 모바일 환경 감지 (Capacitor)
     const isNativeMobile = typeof (window as any).Capacitor !== 'undefined';
 
-    // 모바일일 경우 커스텀 스킴 사용, 웹일 경우 현재 도메인 사용
-    const redirectUrl = isNativeMobile
-      ? 'com.byeonggwan.factor://auth/callback'
-      : (((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`);
+    if (!isNativeMobile) {
+      // 웹에서는 기본 OAuth
+      const redirectUrl = (((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`);
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+      return { error };
+    }
+
+    // 모바일: 플랫폼별 redirect URL 설정
+    const { Capacitor } = await import('@capacitor/core');
+    const platform = Capacitor.getPlatform();
+
+    let redirectUrl: string;
+    if (platform === 'ios') {
+      redirectUrl = 'com.byeonggwan.factor://auth/callback';
+    } else if (platform === 'android') {
+      // Android는 custom scheme 사용 (AndroidManifest.xml에 설정)
+      redirectUrl = 'com.factor.app://auth/callback';
+    } else {
+      redirectUrl = `${window.location.origin}/`;
+    }
+
+    console.log('[AuthContext] Platform:', platform);
+    console.log('[AuthContext] Redirect URL:', redirectUrl);
 
     // 모바일에서는 skipBrowserRedirect를 true로 설정하여 직접 처리
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: redirectUrl,
-        skipBrowserRedirect: isNativeMobile, // 모바일에서는 직접 브라우저 관리
+        skipBrowserRedirect: true, // 모바일에서는 직접 브라우저 관리
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
@@ -360,16 +388,20 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     });
 
     // 모바일에서 직접 브라우저 열기
-    if (isNativeMobile && data?.url) {
+    if (data?.url) {
       try {
         const { Browser } = await import('@capacitor/browser');
+        console.log('[AuthContext] Opening browser with URL:', data.url);
+
         await Browser.open({
           url: data.url,
-          presentationStyle: 'popover', // iOS에서 앱으로 쉽게 돌아올 수 있도록
-          windowName: '_self'
+          presentationStyle: 'popover', // iOS에서 popover 스타일
         });
+
+        console.log('[AuthContext] Browser opened successfully');
       } catch (err) {
         console.error('[AuthContext] Failed to open browser:', err);
+        return { error: err };
       }
     }
 
