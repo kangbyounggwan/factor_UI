@@ -43,6 +43,9 @@ export default defineConfig(({ mode }) => {
     build: {
       sourcemap: true,
       rollupOptions: {
+        external: [
+          '@capacitor/preferences',
+        ],
         output: {
           manualChunks: {
             // Three.js and 3D rendering libraries in separate chunk
