@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@shared/contexts/AuthContext";
@@ -12,14 +13,17 @@ import {
   ChevronRight,
   Sun,
   Settings,
+  Trash2,
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
 
 const UserSettings = () => {
   const { user, signOut, isAdmin } = useAuth();
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || t("common.user", "사용자");
   const bio = user?.user_metadata?.bio || `${t("profile.myInfo", "내 정보")} · ${t("profile.addressManagement", "주소 관리")}`;
@@ -125,6 +129,16 @@ const UserSettings = () => {
         },
       ],
     },
+    {
+      title: t("profile.dangerZone", "위험 구역"),
+      items: [
+        {
+          icon: Trash2,
+          label: t("profile.deleteAccount", "계정 삭제"),
+          onClick: () => setShowDeleteDialog(true),
+        },
+      ],
+    },
   ];
 
   return (
@@ -220,6 +234,12 @@ const UserSettings = () => {
           </span>
         </button>
       </div>
+
+      {/* 계정 삭제 다이얼로그 */}
+      <DeleteAccountDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+      />
     </div>
   );
 };

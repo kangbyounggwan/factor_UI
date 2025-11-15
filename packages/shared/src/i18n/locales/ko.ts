@@ -87,6 +87,7 @@ export default {
     alreadyHaveAccount: "이미 계정이 있으신가요?",
     orSignInWith: "OR",
     googleSignIn: "Google로 로그인",
+    appleSignIn: "Apple로 로그인",
     signInWithAnother: "다른 계정으로 로그인",
     // 에러 메시지
     invalidCredentials: "이메일 또는 비밀번호가 올바르지 않습니다.",
@@ -101,6 +102,10 @@ export default {
     welcomeMessage: "환영합니다!",
     featureComingSoon: "기능 준비중",
     passwordResetComingSoon: "비밀번호 찾기 기능은 곧 제공됩니다.",
+    // Apple Sign In 에러
+    appleSignInCancelled: "Apple 로그인이 취소되었습니다.",
+    appleSignInFailed: "Apple 로그인에 실패했습니다. 다시 시도해주세요.",
+    appleSignInNotAvailable: "Apple 로그인을 사용할 수 없습니다.",
     displayName: "사용자 이름",
     signInSubtitle: "FACTOR 계정으로 로그인하세요",
     signingIn: "로그인 중...",
@@ -399,6 +404,8 @@ export default {
     termsOfService: "이용 약관",
     privacyPolicy: "개인정보 처리방침",
     signOut: "로그아웃",
+    dangerZone: "위험 구역",
+    deleteAccount: "계정 삭제",
     // UserProfile 페이지
     editProfile: "프로필 수정",
     profilePhoto: "프로필 사진",
@@ -1513,5 +1520,26 @@ export default {
     imageCount: "{{count}}/{{max}}개 이미지",
     cancel: "취소",
     submit: "제출"
+  },
+  account: {
+    deleteTitle: "계정 삭제",
+    deleteWarning: "계정을 삭제하면 모든 데이터가 영구적으로 삭제되며 복구할 수 없습니다.",
+    deleteWillRemove: "다음 데이터가 삭제됩니다",
+    printersCount_one: "프린터 {{count}}개",
+    printersCount_other: "프린터 {{count}}개",
+    clientsCount_one: "클라이언트 {{count}}개",
+    clientsCount_other: "클라이언트 {{count}}개",
+    aiImagesCount_one: "AI 학습 이미지 {{count}}개",
+    aiImagesCount_other: "AI 학습 이미지 {{count}}개",
+    camerasCount_one: "카메라 {{count}}개",
+    camerasCount_other: "카메라 {{count}}개",
+    deleteConfirmLabel: "계속하려면 '삭제'를 입력하세요",
+    deleteConfirmPlaceholder: "삭제",
+    deleteConfirmHint: "'삭제'를 정확히 입력해야 계정이 삭제됩니다",
+    deleteConfirm: "계정 영구 삭제",
+    deleteSuccess: "계정이 삭제되었습니다",
+    deleteSuccessMessage: "계정과 모든 데이터가 삭제되었습니다.",
+    deleteError: "계정 삭제 실패",
+    deleteConfirmError: "확인 텍스트가 일치하지 않습니다"
   }
 };

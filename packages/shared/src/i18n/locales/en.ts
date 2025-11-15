@@ -87,6 +87,7 @@ export default {
     alreadyHaveAccount: "Already have an account?",
     orSignInWith: "OR",
     googleSignIn: "Sign in with Google",
+    appleSignIn: "Sign in with Apple",
     signInWithAnother: "Sign in with another account",
     // Error messages
     invalidCredentials: "Invalid email or password.",
@@ -101,6 +102,10 @@ export default {
     welcomeMessage: "Welcome!",
     featureComingSoon: "Feature Coming Soon",
     passwordResetComingSoon: "Password reset feature will be available soon.",
+    // Apple Sign In errors
+    appleSignInCancelled: "Apple Sign In was cancelled.",
+    appleSignInFailed: "Apple Sign In failed. Please try again.",
+    appleSignInNotAvailable: "Apple Sign In is not available.",
     displayName: "Display Name",
     signInSubtitle: "Sign in to your FACTOR account",
     signingIn: "Signing in...",
@@ -1534,5 +1539,26 @@ export default {
     imageCount: "{{count}}/{{max}} images",
     cancel: "Cancel",
     submit: "Submit"
+  },
+  account: {
+    deleteTitle: "Delete Account",
+    deleteWarning: "Deleting your account will permanently remove all your data and cannot be undone.",
+    deleteWillRemove: "The following will be deleted",
+    printersCount_one: "{{count}} printer",
+    printersCount_other: "{{count}} printers",
+    clientsCount_one: "{{count}} client",
+    clientsCount_other: "{{count}} clients",
+    aiImagesCount_one: "{{count}} AI training image",
+    aiImagesCount_other: "{{count}} AI training images",
+    camerasCount_one: "{{count}} camera",
+    camerasCount_other: "{{count}} cameras",
+    deleteConfirmLabel: "Type 'DELETE' to continue",
+    deleteConfirmPlaceholder: "DELETE",
+    deleteConfirmHint: "You must type 'DELETE' exactly to delete your account",
+    deleteConfirm: "Permanently Delete Account",
+    deleteSuccess: "Account deleted",
+    deleteSuccessMessage: "Your account and all data have been deleted.",
+    deleteError: "Failed to delete account",
+    deleteConfirmError: "Confirmation text does not match"
   }
 };

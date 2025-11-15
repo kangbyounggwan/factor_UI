@@ -7,6 +7,8 @@ PODS:
     - Capacitor
   - CapacitorCamera (7.0.2):
     - Capacitor
+  - CapacitorCommunityAppleSignIn (7.1.0):
+    - Capacitor
   - CapacitorCommunitySafeArea (7.0.0-alpha.1):
     - Capacitor
   - CapacitorCordova (7.4.3)
@@ -34,6 +36,7 @@ DEPENDENCIES:
   - "CapacitorApp (from `../../../../node_modules/@capacitor/app`)"
   - "CapacitorBrowser (from `../../../../node_modules/@capacitor/browser`)"
   - "CapacitorCamera (from `../../../../node_modules/@capacitor/camera`)"
+  - "CapacitorCommunityAppleSignIn (from `../../../../node_modules/@capacitor-community/apple-sign-in`)"
   - "CapacitorCommunitySafeArea (from `../../../../node_modules/@capacitor-community/safe-area`)"
   - "CapacitorCordova (from `../../../../node_modules/@capacitor/ios`)"
   - "CapacitorFilesystem (from `../../../../node_modules/@capacitor/filesystem`)"
@@ -58,6 +61,8 @@ EXTERNAL SOURCES:
     :path: "../../../../node_modules/@capacitor/browser"
   CapacitorCamera:
     :path: "../../../../node_modules/@capacitor/camera"
+  CapacitorCommunityAppleSignIn:
+    :path: "../../../../node_modules/@capacitor-community/apple-sign-in"
   CapacitorCommunitySafeArea:
     :path: "../../../../node_modules/@capacitor-community/safe-area"
   CapacitorCordova:
@@ -84,6 +89,7 @@ SPEC CHECKSUMS:
   CapacitorApp: 26587c2ce485d88ddb39adb21cac64f8e481afe3
   CapacitorBrowser: 22541e48442de44dc629c214388290d6eecc6ae9
   CapacitorCamera: f9e54db0a18bb218a8dc360907d63aaefe9209ff
+  CapacitorCommunityAppleSignIn: 271cb2860576fd2961508bbfa7a82117d93eadca
   CapacitorCommunitySafeArea: 3f049619072ab5d0da2529bcb05b358ff6c13dc1
   CapacitorCordova: 435121e81a2df4d0034f0fb11fcefab5104cfdb5
   CapacitorFilesystem: f9bd850c41e048180e5dc0cbb90f2033ede9d2cc
@@ -96,6 +102,6 @@ SPEC CHECKSUMS:
   CapawesomeCapacitorFilePicker: 0f4a913a00e39dd77213449f0d917e92f35a5ca9
   IONFilesystemLib: 89258b8e3e85465da93127d25d7ce37f977e8a6f
 
-PODFILE CHECKSUM: 555b4aedbfc32645b2b33726b5f971ecddcc80db
+PODFILE CHECKSUM: 83803a8f64a24e10a3e0758612e96a918135a745
 
 COCOAPODS: 1.16.2

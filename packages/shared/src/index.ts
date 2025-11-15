@@ -19,12 +19,14 @@ export * from "./api/config";
 export * from "./api/wifi";
 export * from "./api/data";
 export * from "./api/manufacturingPrinter";
+export * from "./api/account";
 
 // queries
 export * from "./queries/printer";
 export * from "./queries/system";
 export * from "./queries/wifi";
 export * from "./queries/data";
+export * from "./queries/account";
 
 // types
 export * from "./types/printerType";

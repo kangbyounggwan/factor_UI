@@ -28,7 +28,10 @@
       "Bash(open \"macappstore://apps.apple.com/app/transporter/id1450874784\")",
       "Bash(sips:*)",
       "Bash(open:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(npm install:*)",
+      "Bash(pod install)",
+      "Bash(npm --workspace @factor/mobile run build)"
     ],
     "deny": [],
     "ask": []

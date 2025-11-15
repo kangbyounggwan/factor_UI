@@ -22,7 +22,7 @@ Factor UI is a **monorepo-based 3D printer management platform** with cross-plat
 
 ### Sub-Agents System
 7. **[SUB_AGENTS.md](SUB_AGENTS.md)** - **Specialized sub-agents guide for efficient development**
-8. **[.claude/agents/](./claude/agents/)** - Individual agent specifications (8 specialized agents)
+8. **[.claude/agents/](./.claude/agents/)** - Individual agent specifications (8 specialized agents)
 
 ### Feature Guides
 9. **[GUIDE_stl-upload.md](GUIDE_stl-upload.md)** - STL file upload and thumbnail generation workflow
@@ -355,200 +355,56 @@ When making changes that affect project structure or architecture:
 - Verify path aliases resolve correctly (check `tsconfig.json` and `vite.config.ts`)
 - Clear build cache: remove `dist/` directories
 
-## Development Workflow: Specialized Sub-Agents
+## Sub-Agent System for Distributed Development
 
-To optimize development efficiency, use specialized sub-agents for different types of tasks. Each sub-agent has specific expertise and access to relevant documentation.
+Factor UI uses **8 specialized sub-agents** to enable efficient parallel development. Each agent has clear responsibilities and manages specific files/domains.
 
-### Sub-Agent Types and Usage
+### Quick Reference
 
-#### 1. **Architecture Explorer** (Codebase Analysis)
-**Use when:** Understanding existing code structure, finding implementations, or analyzing dependencies
+| Agent | Responsibility | Key Files |
+|-------|----------------|-----------|
+| **docs-manager** | Documentation maintenance | `*.md` files |
+| **api-developer** | API development | `api/`, `queries/`, `server.js` |
+| **mobile-builder** | iOS/Android builds | `ios/`, `android/`, Capacitor |
+| **ui-components** | React components & UI | `components/`, `pages/` |
+| **type-safety** | TypeScript types | `types/*.ts`, Zod schemas |
+| **i18n-manager** | Translations | `i18n/**/*.json` |
+| **quality-checker** | Lint, tests, builds | ESLint, TypeScript |
+| **realtime-engineer** | MQTT/WebSocket | `mqtt.ts`, `websocket.ts` |
 
-**Triggers:**
-- "Where is the authentication logic implemented?"
-- "How does the MQTT subscription work?"
-- "Find all components that use the printer API"
-- "Explain the data flow for STL file upload"
+### Usage Patterns
 
-**Key capabilities:**
-- Deep file structure analysis
-- Cross-reference tracking
-- Dependency mapping
-- Pattern recognition
-
-**Documentation access:** PROJECT_STRUCTURE.md, all TECH_*.md files
-
-#### 2. **Feature Architect** (Design & Planning)
-**Use when:** Designing new features, planning refactors, or architectural decisions
-
-**Triggers:**
-- "Plan implementation for real-time notifications"
-- "Design a new payment flow"
-- "Refactor the MQTT connection logic"
-- "Add multi-language support for new regions"
-
-**Key capabilities:**
-- Feature breakdown
-- Technology stack recommendations
-- Risk assessment
-- Implementation roadmap creation
-
-**Documentation access:** PROJECT_STRUCTURE.md, ROADMAP_*.md files
-
-#### 3. **API Integrator** (Backend & Services)
-**Use when:** Working with APIs, MQTT, WebSocket, or external services
-
-**Triggers:**
-- "Add new MQTT topic for camera control"
-- "Integrate new Supabase table"
-- "Update device registration payload"
-- "Add new REST API endpoint"
-
-**Key capabilities:**
-- API design and implementation
-- Service integration
-- Real-time communication patterns
-- Database schema updates
-
-**Documentation access:** API_*.md, relevant sections of PROJECT_STRUCTURE.md
-
-#### 4. **UI Component Developer** (Frontend Components)
-**Use when:** Creating or modifying UI components, pages, or styling
-
-**Triggers:**
-- "Create new printer status dashboard"
-- "Add 3D model preview to settings page"
-- "Update mobile navigation UI"
-- "Implement responsive design for tablet"
-
-**Key capabilities:**
-- React component creation
-- Tailwind CSS styling
-- Responsive design
-- Radix UI integration
-- Lazy loading optimization
-
-**Documentation access:** PROJECT_STRUCTURE.md (Component Structure section), TECH_bundle-optimization.md
-
-#### 5. **State Management Specialist** (React Query, Context, MQTT)
-**Use when:** Managing application state, caching, or real-time data synchronization
-
-**Triggers:**
-- "Implement caching for printer list"
-- "Add React Query hook for AI models"
-- "Fix MQTT subscription memory leak"
-- "Optimize auth context performance"
-
-**Key capabilities:**
-- React Query hook creation
-- Context API optimization
-- MQTT subscription management
-- State synchronization patterns
-
-**Documentation access:** PROJECT_STRUCTURE.md (Services & Logic section)
-
-#### 6. **Mobile Platform Engineer** (Capacitor & Native)
-**Use when:** Working on mobile-specific features or native integrations
-
-**Triggers:**
-- "Add camera access for mobile"
-- "Implement native file picker"
-- "Fix iOS safe area issues"
-- "Add Android push notifications"
-
-**Key capabilities:**
-- Capacitor plugin integration
-- Platform-specific optimization
-- Native API usage
-- Mobile performance tuning
-
-**Documentation access:** ROADMAP_native-viewer.md, mobile sections of PROJECT_STRUCTURE.md
-
-#### 7. **Performance Optimizer** (Bundle, Rendering, Network)
-**Use when:** Optimizing load times, bundle size, or runtime performance
-
-**Triggers:**
-- "Reduce initial bundle size"
-- "Optimize 3D model rendering"
-- "Implement code splitting for new routes"
-- "Fix slow MQTT connection"
-
-**Key capabilities:**
-- Bundle analysis
-- Lazy loading strategies
-- Rendering optimization
-- Network request optimization
-
-**Documentation access:** TECH_bundle-optimization.md, TECH_stl-rendering-performance.md
-
-#### 8. **Documentation Maintainer** (Docs Update & Validation)
-**Use when:** Updating documentation after code changes
-
-**Triggers:**
-- "Update PROJECT_STRUCTURE.md with new API routes"
-- "Document new MQTT payload format"
-- "Add new feature to user guide"
-- "Sync docs with latest architecture changes"
-
-**Key capabilities:**
-- Document structure maintenance
-- Change tracking
-- Cross-reference validation
-- Markdown formatting
-
-**Documentation access:** All .md files
-
-### How to Use Sub-Agents
-
-**Step 1: Identify the task type**
-- Analyze what you need to accomplish
-- Match it to the most appropriate sub-agent
-
-**Step 2: Invoke the sub-agent**
-Example:
+**Sequential workflow** (dependencies):
 ```
-"I need the API Integrator to add a new MQTT topic for filament sensors"
+type-safety → api-developer → ui-components → i18n-manager → quality-checker → docs-manager
 ```
 
-**Step 3: Provide context**
-- Reference existing files or patterns
-- Specify requirements clearly
-- Mention any constraints
+**Parallel workflow** (independent tasks):
+```
+api-developer + type-safety + docs-manager (simultaneously)
+```
 
-**Step 4: Review and iterate**
-- Sub-agent provides focused solution
-- Review against documentation
-- Request refinements if needed
+**Emergency workflow** (rapid iteration):
+```
+mobile-builder → quality-checker → mobile-builder
+```
 
-**Step 5: Update documentation**
-- Use Documentation Maintainer to update relevant .md files
-- Ensure changes are reflected in PROJECT_STRUCTURE.md
+### Common Examples
 
-### Multi-Agent Workflows
+**Adding new API endpoint:**
+1. `type-safety`: Define types
+2. `api-developer`: Implement API + React Query hooks
+3. `docs-manager`: Update API_REFERENCE.md
 
-For complex tasks, chain multiple sub-agents:
+**Mobile deployment:**
+1. `quality-checker`: Pre-deployment checks
+2. `mobile-builder`: Build and upload to App Store
+3. `docs-manager`: Update release notes
 
-**Example: Adding a new feature**
-1. **Feature Architect**: Design the feature structure
-2. **Architecture Explorer**: Find relevant existing patterns
-3. **API Integrator**: Implement backend/API changes
-4. **UI Component Developer**: Build frontend components
-5. **State Management Specialist**: Connect state management
-6. **Performance Optimizer**: Optimize bundle and performance
-7. **Documentation Maintainer**: Update all relevant docs
-
-### Agent Selection Guidelines
-
-| Task Category | Primary Agent | Secondary Agent |
-|---------------|---------------|-----------------|
-| New feature | Feature Architect | Architecture Explorer |
-| Bug fix | Architecture Explorer | Relevant specialist |
-| API changes | API Integrator | Documentation Maintainer |
-| UI updates | UI Component Developer | Performance Optimizer |
-| Performance issues | Performance Optimizer | Architecture Explorer |
-| Mobile features | Mobile Platform Engineer | UI Component Developer |
-| State/caching | State Management Specialist | Performance Optimizer |
-| Documentation | Documentation Maintainer | Architecture Explorer |
+**For complete guide, workflow patterns, and detailed examples:**
+- **[SUB_AGENTS.md](SUB_AGENTS.md)** - Overview and collaboration patterns
+- **[.claude/agents/README.md](./.claude/agents/README.md)** - Detailed agent specifications
+- **[.claude/agents/EXAMPLES.md](./.claude/agents/EXAMPLES.md)** - 8 real-world scenarios
 
 ## Important Notes
 

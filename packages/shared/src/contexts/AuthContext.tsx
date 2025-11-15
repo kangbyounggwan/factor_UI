@@ -16,6 +16,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, displayName?: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
+  signInWithApple: () => Promise<{ error: any }>;
   linkGoogleAccount: () => Promise<{ error: any }>;
   unlinkProvider: (provider: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -342,7 +343,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
     // 모바일일 경우 커스텀 스킴 사용, 웹일 경우 현재 도메인 사용
     const redirectUrl = isNativeMobile
-      ? 'com.factor.app://auth/callback'
+      ? 'com.byeonggwan.factor://auth/callback'
       : (((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`);
 
     // 모바일에서는 skipBrowserRedirect를 true로 설정하여 직접 처리
@@ -362,13 +363,88 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     if (isNativeMobile && data?.url) {
       try {
         const { Browser } = await import('@capacitor/browser');
-        await Browser.open({ url: data.url });
+        await Browser.open({
+          url: data.url,
+          presentationStyle: 'popover', // iOS에서 앱으로 쉽게 돌아올 수 있도록
+          windowName: '_self'
+        });
       } catch (err) {
         console.error('[AuthContext] Failed to open browser:', err);
       }
     }
 
     return { error };
+  };
+
+  const signInWithApple = async () => {
+    // 모바일 환경 감지 (Capacitor)
+    const isNativeMobile = typeof (window as any).Capacitor !== 'undefined';
+
+    if (isNativeMobile) {
+      // iOS Native Sign in with Apple
+      try {
+        const { SignInWithApple } = await import('@capacitor-community/apple-sign-in');
+
+        const result = await SignInWithApple.authorize({
+          clientId: 'com.byeonggwan.factor',
+          redirectURI: 'https://your-project.supabase.co/auth/v1/callback',
+          scopes: 'email name',
+        });
+
+        // Supabase에 Apple ID 토큰으로 로그인
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: result.response.identityToken,
+        });
+
+        return { error };
+      } catch (err: any) {
+        console.error('[AuthContext] Apple Sign In failed:', err);
+
+        // Apple Sign In 에러 처리
+        let errorMessage = 'appleSignInFailed';
+
+        // 에러 코드가 있는 경우
+        if (err.code !== undefined || err.errorCode !== undefined) {
+          const errorCode = err.code || err.errorCode;
+          if (errorCode === 1000 || errorCode === '1000') {
+            // 사용자가 취소한 경우
+            errorMessage = 'appleSignInCancelled';
+          } else if (errorCode === 1001 || errorCode === '1001') {
+            errorMessage = 'appleSignInFailed';
+          }
+        }
+
+        // 에러 메시지에 "cancel"이 포함된 경우
+        if (err.message && (err.message.toLowerCase().includes('cancel') || err.message.toLowerCase().includes('취소'))) {
+          errorMessage = 'appleSignInCancelled';
+        }
+
+        // 플러그인이 구현되지 않은 경우
+        if (err.message && err.message.includes('not implemented')) {
+          errorMessage = 'appleSignInNotAvailable';
+        }
+
+        return {
+          error: {
+            message: errorMessage,
+            originalError: err
+          }
+        };
+      }
+    } else {
+      // 웹에서는 OAuth 방식 사용
+      const redirectUrl = (((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`);
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: {
+          redirectTo: redirectUrl,
+        },
+      });
+
+      return { error };
+    }
   };
 
   const linkGoogleAccount = async () => {
@@ -431,6 +507,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     signUp,
     signIn,
     signInWithGoogle,
+    signInWithApple,
     linkGoogleAccount,
     unlinkProvider,
     signOut,

@@ -84,31 +84,73 @@ const AppContent = () => {
       // OAuth 콜백 URL 처리
       if (data.url.includes('auth/callback')) {
         try {
-          // 브라우저 닫기
-          const { Browser } = await import('@capacitor/browser');
-          await Browser.close();
-          console.log('[App] Browser closed');
-
-          // URL에서 fragment 추출 (#access_token=... 형식)
+          // URL 전체를 Supabase에 전달하여 세션 교환
           const url = new URL(data.url);
-          const fragment = url.hash.substring(1); // # 제거
 
-          if (fragment) {
-            // Supabase가 fragment를 처리하도록 전달
+          // URL fragment (#access_token=...) 또는 query (?code=...) 처리
+          const fragment = url.hash.substring(1); // # 제거
+          const params = new URLSearchParams(fragment || url.search.substring(1));
+
+          const access_token = params.get('access_token');
+          const refresh_token = params.get('refresh_token');
+
+          console.log('[App] Access token found:', !!access_token);
+          console.log('[App] Refresh token found:', !!refresh_token);
+
+          if (access_token && refresh_token) {
+            // 브라우저 닫기 시도
+            try {
+              const { Browser } = await import('@capacitor/browser');
+              await Browser.close();
+              console.log('[App] Browser closed');
+            } catch (browserErr) {
+              console.log('[App] Browser already closed or not found');
+            }
+
+            // 토큰이 있으면 세션 설정
             const { error } = await supabase.auth.setSession({
-              access_token: new URLSearchParams(fragment).get('access_token') || '',
-              refresh_token: new URLSearchParams(fragment).get('refresh_token') || ''
+              access_token,
+              refresh_token
             });
 
             if (error) {
               console.error('[App] OAuth session error:', error);
+              toast({
+                title: '로그인 실패',
+                description: '인증 처리 중 오류가 발생했습니다.',
+                variant: 'destructive',
+              });
             } else {
               console.log('[App] OAuth login successful, redirecting to dashboard');
-              navigate('/dashboard', { replace: true });
+              toast({
+                title: '로그인 성공',
+                description: '환영합니다!',
+              });
+
+              // 약간의 지연 후 네비게이션 (토스트가 보이도록)
+              setTimeout(() => {
+                navigate('/dashboard', { replace: true });
+              }, 500);
             }
+          } else {
+            console.error('[App] No tokens found in OAuth callback');
+            console.log('[App] URL:', data.url);
+            console.log('[App] Fragment:', fragment);
+            console.log('[App] Search:', url.search);
+
+            toast({
+              title: '로그인 실패',
+              description: '인증 정보를 받지 못했습니다.',
+              variant: 'destructive',
+            });
           }
         } catch (err) {
           console.error('[App] Deep link processing error:', err);
+          toast({
+            title: '로그인 실패',
+            description: '인증 처리 중 오류가 발생했습니다.',
+            variant: 'destructive',
+          });
         }
       }
     });
@@ -116,7 +158,7 @@ const AppContent = () => {
     return () => {
       handleAppUrlOpen.remove();
     };
-  }, [navigate]);
+  }, [navigate, toast]);
 
   // Android 하드웨어 백 버튼 처리
   useEffect(() => {

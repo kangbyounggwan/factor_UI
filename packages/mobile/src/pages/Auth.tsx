@@ -15,7 +15,7 @@ import { supabase } from "@shared/integrations/supabase/client";
 
 const Auth = () => {
   const { t } = useTranslation();
-  const { user, signIn, signUp, signInWithGoogle, loading } = useAuth();
+  const { user, signIn, signUp, signInWithGoogle, signInWithApple, loading } = useAuth();
   const { toast } = useToast();
   const [isSignUp, setIsSignUp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -149,6 +149,44 @@ const Auth = () => {
     }
   };
 
+  const handleAppleSignIn = async () => {
+    setIsSubmitting(true);
+    setError("");
+
+    try {
+      const { error } = await signInWithApple();
+
+      if (error) {
+        // 에러 메시지가 i18n 키인지 확인하고 번역
+        const errorMessage = error.message;
+        const translatedError = t(`auth.${errorMessage}`, errorMessage);
+
+        setError(translatedError);
+        toast({
+          title: t('auth.loginError'),
+          description: translatedError,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: t('auth.loginSuccess'),
+          description: t('auth.welcomeMessage'),
+        });
+        // 로그인 성공 시점: MQTT dash_status 구독 시작
+        try {
+          const uid = await supabase.auth.getUser().then(r => r.data.user?.id);
+          if (uid) startDashStatusSubscriptionsForUser(uid);
+        } catch (error) {
+          console.warn('Failed to start MQTT subscriptions:', error);
+        }
+      }
+    } catch (err) {
+      setError(t('auth.loginError'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background safe-area-top safe-area-bottom">
@@ -163,58 +201,48 @@ const Auth = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-start justify-center p-6 overflow-y-auto relative">
+    <div className="min-h-screen bg-background flex items-start justify-center pt-12 px-4 pb-4 relative safe-area-top">
       {/* 배경 장식 - 미묘한 그라데이션 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5" />
-        <div className="absolute top-0 left-0 w-full h-full">
-          <svg className="absolute bottom-0 w-full opacity-5" viewBox="0 0 1440 320" preserveAspectRatio="none">
-            <path
-              fill="currentColor"
-              fillOpacity="1"
-              className="text-primary"
-              d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,138.7C960,139,1056,117,1152,106.7C1248,96,1344,96,1392,96L1440,96L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"
-            />
-          </svg>
-        </div>
       </div>
 
       {/* 메인 카드 */}
-      <Card className="w-full max-w-md bg-white/95 dark:bg-card/95 backdrop-blur-xl border-0 shadow-2xl relative z-10 my-8">
-        <CardContent className="p-8 pt-6">
+      <Card className="w-full max-w-md bg-white/95 dark:bg-card/95 backdrop-blur-xl border-0 shadow-2xl relative z-10">
+        <CardContent className="p-5 pt-3">
           {/* 언어 전환 버튼 - 오른쪽 상단 */}
           <div className="flex justify-end mb-2">
             <LanguageSwitcher />
           </div>
           {/* 로고 */}
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-20 h-20 mb-4 flex items-center justify-center bg-primary/10 rounded-3xl">
-              <Lock className="w-10 h-10 text-primary" />
+          <div className="flex flex-col items-center mb-4">
+            <div className="w-12 h-12 mb-2 flex items-center justify-center bg-primary/10 rounded-2xl">
+              <Lock className="w-6 h-6 text-primary" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">
+            <h1 className="text-xl font-bold text-foreground">
               {isSignUp ? t('auth.createAccount') : t('auth.welcomeBack')}
             </h1>
-            <p className="text-sm text-muted-foreground mt-2">
+            <p className="text-xs text-muted-foreground mt-0.5">
               {isSignUp ? t('auth.joinPlatform') : t('auth.signInToContinue')}
             </p>
           </div>
 
           {/* 에러 메시지 */}
           {error && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertDescription>{error}</AlertDescription>
+            <Alert variant="destructive" className="mb-4 py-2">
+              <AlertDescription className="text-sm">{error}</AlertDescription>
             </Alert>
           )}
 
           {/* 로그인 폼 */}
           {!isSignUp ? (
-            <form onSubmit={handleSignIn} className="space-y-5">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-foreground font-medium">
+            <form onSubmit={handleSignIn} className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="email" className="text-sm text-foreground font-medium">
                   {t('auth.username')}
                 </Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="email"
                     type="email"
@@ -223,7 +251,7 @@ const Auth = () => {
                     placeholder={t('auth.enterEmail')}
                     value={signInData.email}
                     onChange={(e) => setSignInData({ ...signInData, email: e.target.value })}
-                    className="pl-10 h-12 bg-muted/50 border-muted"
+                    className="pl-9 h-10 bg-muted/50 border-muted text-sm"
                     required
                     disabled={isSubmitting}
                     readOnly={false}
@@ -231,21 +259,21 @@ const Auth = () => {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password" className="text-foreground font-medium">
+                  <Label htmlFor="password" className="text-sm text-foreground font-medium">
                     {t('auth.password')}
                   </Label>
                   <button
                     type="button"
-                    className="text-sm text-primary hover:text-primary/80 font-medium"
+                    className="text-xs text-primary hover:text-primary/80 font-medium"
                     onClick={() => toast({ title: t('auth.featureComingSoon'), description: t('auth.passwordResetComingSoon') })}
                   >
                     {t('auth.forgotPassword')}
                   </button>
                 </div>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
@@ -254,7 +282,7 @@ const Auth = () => {
                     placeholder={t('auth.enterPassword')}
                     value={signInData.password}
                     onChange={(e) => setSignInData({ ...signInData, password: e.target.value })}
-                    className="pl-10 pr-10 h-12 bg-muted/50 border-muted"
+                    className="pl-9 pr-9 h-10 bg-muted/50 border-muted text-sm"
                     required
                     disabled={isSubmitting}
                     readOnly={false}
@@ -264,19 +292,19 @@ const Auth = () => {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
 
               <Button
                 type="submit"
-                className="w-full h-12 text-base font-semibold bg-primary hover:bg-primary/90 shadow-lg"
+                className="w-full h-10 text-sm font-semibold bg-primary hover:bg-primary/90 shadow-lg"
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
                   <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     {t('auth.loggingIn')}
                   </>
                 ) : (
@@ -284,15 +312,15 @@ const Auth = () => {
                 )}
               </Button>
 
-              <div className="text-center pt-4">
-                <span className="text-sm text-muted-foreground">{t('auth.newUser')} </span>
+              <div className="text-center pt-2">
+                <span className="text-xs text-muted-foreground">{t('auth.newUser')} </span>
                 <button
                   type="button"
                   onClick={() => {
                     setIsSignUp(true);
                     setError("");
                   }}
-                  className="text-sm text-primary hover:text-primary/80 font-semibold"
+                  className="text-xs text-primary hover:text-primary/80 font-semibold"
                 >
                   {t('auth.signup')}
                 </button>
@@ -300,31 +328,31 @@ const Auth = () => {
             </form>
           ) : (
             /* 회원가입 폼 */
-            <form onSubmit={handleSignUp} className="space-y-5">
-              <div className="space-y-2">
-                <Label htmlFor="signup-name" className="text-foreground font-medium">
+            <form onSubmit={handleSignUp} className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="signup-name" className="text-sm text-foreground font-medium">
                   {t('auth.username')}
                 </Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="signup-name"
                     type="text"
                     placeholder={t('auth.enterName')}
                     value={signUpData.displayName}
                     onChange={(e) => setSignUpData({ ...signUpData, displayName: e.target.value })}
-                    className="pl-10 h-12 bg-muted/50 border-muted"
+                    className="pl-9 h-10 bg-muted/50 border-muted text-sm"
                     disabled={isSubmitting}
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="signup-email" className="text-foreground font-medium">
+              <div className="space-y-1">
+                <Label htmlFor="signup-email" className="text-sm text-foreground font-medium">
                   {t('auth.email')}
                 </Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="signup-email"
                     type="email"
@@ -333,7 +361,7 @@ const Auth = () => {
                     placeholder={t('auth.enterEmail')}
                     value={signUpData.email}
                     onChange={(e) => setSignUpData({ ...signUpData, email: e.target.value })}
-                    className="pl-10 h-12 bg-muted/50 border-muted"
+                    className="pl-9 h-10 bg-muted/50 border-muted text-sm"
                     required
                     disabled={isSubmitting}
                     readOnly={false}
@@ -341,12 +369,12 @@ const Auth = () => {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="signup-password" className="text-foreground font-medium">
+              <div className="space-y-1">
+                <Label htmlFor="signup-password" className="text-sm text-foreground font-medium">
                   {t('auth.password')}
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="signup-password"
                     type={showPassword ? "text" : "password"}
@@ -355,7 +383,7 @@ const Auth = () => {
                     placeholder={t('auth.createPassword')}
                     value={signUpData.password}
                     onChange={(e) => setSignUpData({ ...signUpData, password: e.target.value })}
-                    className="pl-10 pr-10 h-12 bg-muted/50 border-muted"
+                    className="pl-9 pr-9 h-10 bg-muted/50 border-muted text-sm"
                     required
                     disabled={isSubmitting}
                     readOnly={false}
@@ -365,17 +393,17 @@ const Auth = () => {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="signup-confirm" className="text-foreground font-medium">
+              <div className="space-y-1">
+                <Label htmlFor="signup-confirm" className="text-sm text-foreground font-medium">
                   {t('auth.confirmPassword')}
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="signup-confirm"
                     type={showPassword ? "text" : "password"}
@@ -384,7 +412,7 @@ const Auth = () => {
                     placeholder={t('auth.confirmYourPassword')}
                     value={signUpData.confirmPassword}
                     onChange={(e) => setSignUpData({ ...signUpData, confirmPassword: e.target.value })}
-                    className="pl-10 pr-10 h-12 bg-muted/50 border-muted"
+                    className="pl-9 pr-9 h-10 bg-muted/50 border-muted text-sm"
                     required
                     disabled={isSubmitting}
                     readOnly={false}
@@ -394,12 +422,12 @@ const Auth = () => {
 
               <Button
                 type="submit"
-                className="w-full h-12 text-base font-semibold bg-primary hover:bg-primary/90 shadow-lg"
+                className="w-full h-10 text-sm font-semibold bg-primary hover:bg-primary/90 shadow-lg"
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
                   <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     {t('auth.creatingAccount')}
                   </>
                 ) : (
@@ -407,15 +435,15 @@ const Auth = () => {
                 )}
               </Button>
 
-              <div className="text-center pt-4">
-                <span className="text-sm text-muted-foreground">{t('auth.alreadyHaveAccount')} </span>
+              <div className="text-center pt-2">
+                <span className="text-xs text-muted-foreground">{t('auth.alreadyHaveAccount')} </span>
                 <button
                   type="button"
                   onClick={() => {
                     setIsSignUp(false);
                     setError("");
                   }}
-                  className="text-sm text-primary hover:text-primary/80 font-semibold"
+                  className="text-xs text-primary hover:text-primary/80 font-semibold"
                 >
                   {t('auth.login')}
                 </button>
@@ -425,7 +453,7 @@ const Auth = () => {
 
           {/* 소셜 로그인 */}
           {!isSignUp && (
-            <div className="mt-6">
+            <div className="mt-4">
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-muted"></div>
@@ -435,15 +463,28 @@ const Auth = () => {
                 </div>
               </div>
 
-              <div className="mt-6">
+              <div className="mt-4 space-y-2">
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full h-12 text-base font-medium border-2"
+                  className="w-full h-10 text-sm font-medium border-2"
+                  onClick={handleAppleSignIn}
+                  disabled={isSubmitting}
+                >
+                  <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01M12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+                  </svg>
+                  {t('auth.appleSignIn')}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-10 text-sm font-medium border-2"
                   onClick={handleGoogleSignIn}
                   disabled={isSubmitting}
                 >
-                  <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
+                  <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                     <path
                       fill="currentColor"
                       d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
