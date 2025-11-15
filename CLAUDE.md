@@ -2,9 +2,95 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Documentation Reference
+
+**IMPORTANT**: Before making any changes, always review these documentation files:
+
+- **[README.md](./README.md)** - Quick start and project overview
+- **[PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md)** - Complete project architecture, features, and patterns
+- **[TECH_STACK.md](./TECH_STACK.md)** - Technology stack and dependencies
+- **[API_REFERENCE.md](./API_REFERENCE.md)** - API endpoints and real-time communication protocols
+
+**When making changes**:
+1. Review relevant documentation sections before implementing
+2. Update affected documentation files after changes
+3. Keep version numbers and changelogs current
+4. Document new patterns, APIs, or architectural decisions
+
+## Sub Agent System
+
+FACTOR UI uses a **specialized sub-agent system** for efficient distributed development. Each agent focuses on a specific domain and can work in parallel.
+
+**Available Agents**: See [.claude/agents/README.md](./.claude/agents/README.md) for complete documentation.
+
+### Quick Reference
+
+| Agent | Responsibility | Key Files |
+|-------|----------------|-----------|
+| **docs-manager** | Documentation maintenance | `*.md` files |
+| **api-developer** | API development | `api/`, `queries/`, `server.js` |
+| **mobile-builder** | iOS/Android builds | `ios/`, `android/`, Capacitor |
+| **ui-components** | React components | `components/`, `pages/` |
+| **type-safety** | TypeScript types | `types/`, `tsconfig.json` |
+| **i18n-manager** | Translations | `i18n/`, language files |
+| **quality-checker** | Code quality | ESLint, TypeScript |
+| **realtime-engineer** | MQTT/WebSocket | `mqtt.ts`, `websocket.ts` |
+
+### Usage Examples
+
+**Single Agent**:
+```
+@api-developer: Add new printer pause API endpoint
+```
+
+**Parallel Agents** (independent tasks):
+```
+Run in parallel:
+1. @api-developer: Implement printer pause API
+2. @type-safety: Define pause request/response types
+3. @docs-manager: Update API_REFERENCE.md
+```
+
+**Sequential Agents** (dependent tasks):
+```
+1. @ui-components: Create printer control buttons
+2. Then @i18n-manager: Add button labels
+3. Then @quality-checker: Verify code quality
+```
+
+### Common Workflows
+
+**New Feature Development**:
+```
+1. @type-safety: Define data types
+2. @api-developer: Implement API
+3. @ui-components: Build UI
+4. @i18n-manager: Add translations
+5. @quality-checker: Run checks
+6. @docs-manager: Document feature
+```
+
+**Mobile Release**:
+```
+1. @quality-checker: Full quality check
+2. @mobile-builder: Build iOS/Android
+3. @docs-manager: Update release notes
+```
+
+**Bug Fix**:
+```
+1. @quality-checker: Identify issue
+2. [Appropriate agent]: Fix bug
+3. @quality-checker: Verify fix
+```
+
 ## Project Overview
 
 Factor UI is a **monorepo-based 3D printer management platform** with cross-platform support. The architecture uses a modular package structure where `host` acts as a platform dispatcher, routing to either `web` (desktop browser) or `mobile` (Capacitor-based native apps) packages, both of which share common code from the `shared` package.
+
+**Current Version**: 1.2.0 (Build 3)
+**Bundle ID**: com.byeonggwan.factor
+**Platforms**: Web (Browser), iOS (App Store), Android (planned)
 
 ## Monorepo Structure
 
@@ -184,10 +270,10 @@ Flags: `--rest` (enable REST API), `--ws` (enable WebSocket), `--host`, `--port`
 
 ### Capacitor Configuration
 
-- **App ID**: `com.factor.app`
+- **App ID**: `com.byeonggwan.factor`
 - **App Name**: FACTOR
 - **Web Directory**: `dist`
-- **Plugins**: Keyboard (body resize), StatusBar (dark theme)
+- **Plugins**: Keyboard (ionic resize), StatusBar (dark theme), Safe Area, Preferences
 
 ### Building for Mobile
 
@@ -209,7 +295,12 @@ npx cap open ios
 - **Status Bar**: Dynamic styling based on theme (light text on dark background)
 - **Network Detection**: `@capacitor/network` for connectivity monitoring
 - **Safe Area**: `@capacitor-community/safe-area` for notch/status bar handling
+  - **CRITICAL**: Always use `viewport-fit=cover` in `index.html` meta viewport tag
+  - Use CSS classes: `.safe-area-top`, `.safe-area-bottom`, `.safe-area-inset`
+  - Bottom padding: `calc(env(safe-area-inset-bottom, 0px) + 1.5rem)` for buttons/content
 - **Navigation History**: SessionStorage tracking for improved back button UX
+- **Hardware Back Button**: Custom handling in `App.tsx` for Android/iOS
+- **Language Preferences**: Stored in Capacitor Preferences, instant language switching
 
 ## Code Conventions
 
@@ -299,6 +390,71 @@ npx cap open ios
 - Verify path aliases resolve correctly (check `tsconfig.json` and `vite.config.ts`)
 - Clear build cache: remove `dist/` directories
 
+## iOS Development & Deployment
+
+### Version Management
+
+**Files to update when changing version**:
+1. `packages/mobile/package.json` - `version` field
+2. `packages/mobile/ios/App/App.xcodeproj/project.pbxproj` - `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`
+
+```bash
+# Update version strings
+MARKETING_VERSION = 1.2.0      # User-facing version
+CURRENT_PROJECT_VERSION = 3     # Build number (increment for each build)
+```
+
+### iOS Build Process
+
+```bash
+# 1. Build and sync
+npm run build:mobile
+cd packages/mobile
+npx cap sync ios
+
+# 2. Update version in Xcode project (manual or via sed)
+# MARKETING_VERSION and CURRENT_PROJECT_VERSION in project.pbxproj
+
+# 3. Open Xcode and create archive
+open ios/App/App.xcworkspace
+# Xcode: Product → Archive
+
+# 4. Distribute to App Store
+# Organizer → Distribute App → App Store Connect → Upload
+```
+
+### Common iOS Issues
+
+**Provisioning Profile Errors**:
+- Connect physical iPhone via USB
+- Xcode → Settings → Accounts → Download Manual Profiles
+- Enable "Automatically manage signing" in target settings
+- Team: byeonggwan lim (PV97G6HPRA)
+
+**Safe Area Issues on iPad**:
+- Ensure `viewport-fit=cover` in `index.html`
+- Use `.safe-area-bottom` class on scrollable containers
+- Test on actual iPad device, not just simulator
+
+**App Icon Transparency**:
+- Remove alpha channel: `sips -s format jpeg icon.png --out /tmp/temp.jpg && sips -s format png /tmp/temp.jpg --out icon.png`
+- Generate all required sizes (20x20 to 1024x1024)
+
+## Recent Changes (v1.2.0 Build 3)
+
+### UX Improvements
+- **Theme Settings**: Removed unnecessary "완료" button - theme applies immediately on selection
+- **Language Settings**: Instant language switching without page reload using Capacitor Preferences
+- **iPad Safe Area**: Fixed bottom content clipping on iPad
+  - Added `viewport-fit=cover` to viewport meta tag
+  - Increased `.safe-area-bottom` padding to 1.5rem
+  - Applied to ThemeSettings and LanguageSettings pages
+
+### Mobile Optimizations
+- Capacitor Preferences for persistent language storage
+- Improved i18n initialization with proper error handling
+- App reload removed from language change - now instant update
+
 ## Important Notes
 
 - **Never hardcode secrets**: Always use environment variables for API keys and URLs
@@ -309,3 +465,4 @@ npx cap open ios
 - **Subscription cleanup**: Always unsubscribe from MQTT topics in component cleanup or logout
 - **Role-based features**: Check `isAdmin` before showing admin-only UI elements
 - **i18n support**: Use translation keys for user-facing strings (English and Korean supported)
+- **Documentation maintenance**: Update relevant .md files when making significant changes

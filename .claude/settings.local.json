@@ -27,7 +27,8 @@
       "Bash(xcodebuild:*)",
       "Bash(open \"macappstore://apps.apple.com/app/transporter/id1450874784\")",
       "Bash(sips:*)",
-      "Bash(open:*)"
+      "Bash(open:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []
