@@ -147,21 +147,41 @@ All colors MUST be HSL.
     display: none;
   }
 
-  /* Safe Area 유틸리티 클래스 */
+  /* ========================================
+   * Safe Area 유틸리티 클래스
+   * ========================================
+   * 플랫폼별 SafeArea 처리:
+   * - iOS: env(safe-area-inset-*) 자동 적용 (notch, Dynamic Island)
+   * - Android/Web: 0px (fallback)
+   *
+   * 권장 사항:
+   * - PlatformHeader: 상단 SafeArea 자동 처리 (useSafeAreaStyle 사용)
+   * - BottomNavigation: 하단 SafeArea 자동 처리 (useSafeAreaStyle 사용)
+   * - 페이지 컨텐츠: safe-area 클래스 불필요 (중복 방지)
+   *
+   * 레거시 클래스 (하위 호환성):
+   * - .safe-area-top: 상단 SafeArea + 0.5rem
+   * - .safe-area-bottom: 하단 SafeArea + 1.5rem
+   * - .safe-area-*-only: SafeArea만 적용 (추가 패딩 없음)
+   * ======================================== */
+
+  /* 상단 SafeArea + 추가 패딩 */
   .safe-area-top {
     padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
   }
 
+  /* 하단 SafeArea + 추가 패딩 */
   .safe-area-bottom {
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem);
   }
 
+  /* 상단 + 하단 SafeArea */
   .safe-area-inset {
     padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem);
   }
 
-  /* Safe Area without extra padding (시스템바 높이만 적용) */
+  /* SafeArea만 적용 (추가 패딩 없음) - 시스템바 영역만 확보 */
   .safe-area-top-only {
     padding-top: env(safe-area-inset-top, 0px);
   }

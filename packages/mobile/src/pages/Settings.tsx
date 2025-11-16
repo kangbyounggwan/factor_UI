@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PlatformHeader } from "@/components/PlatformHeader";
+import { useSafeAreaStyle } from "@/hooks/usePlatform";
 import {
   Plus,
   Settings as SettingsIcon,
@@ -2043,6 +2045,12 @@ const Settings = () => {
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // 플랫폼별 하단 SafeArea 패딩
+  const contentBottomStyle = useSafeAreaStyle({
+    bottom: true,
+    bottomPadding: '6rem',
+  });
+
   // 상태 관리
   const [groups, setGroups] = useState<PrinterGroup[]>([]);
   const [printers, setPrinters] = useState<PrinterConfig[]>([]);
@@ -2211,7 +2219,7 @@ const Settings = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background safe-area-top safe-area-bottom">
+      <div className="min-h-screen bg-background">
         <div className="h-full flex items-center justify-center px-6">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
@@ -2245,16 +2253,16 @@ const Settings = () => {
   return (
     <div className="bg-background">
       {/* 미니 헤더 */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b px-4 pt-4 pb-3 safe-area-top">
+      <PlatformHeader>
         <div className="max-w-7xl mx-auto flex items-center gap-2">
           <div className="p-2 bg-primary/10 rounded-lg">
             <SettingsIcon className="w-5 h-5 text-primary" />
           </div>
           <h1 className="text-lg font-semibold">{t('settings.title')}</h1>
         </div>
-      </div>
+      </PlatformHeader>
 
-      <div className="max-w-screen-sm md:max-w-2xl mx-auto px-4 py-4 space-y-4 pb-24 safe-area-bottom">
+      <div className="max-w-screen-sm md:max-w-2xl mx-auto px-4 py-4 space-y-4" style={contentBottomStyle}>
         {/* 프린터 그룹 관리 섹션 */}
         <section className="space-y-3 mt-4">
           <h2 className="text-lg font-semibold">{t('settings.groupManagement')}</h2>

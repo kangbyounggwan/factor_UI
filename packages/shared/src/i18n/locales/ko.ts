@@ -1540,6 +1540,8 @@ export default {
     deleteSuccess: "계정이 삭제되었습니다",
     deleteSuccessMessage: "계정과 모든 데이터가 삭제되었습니다.",
     deleteError: "계정 삭제 실패",
-    deleteConfirmError: "확인 텍스트가 일치하지 않습니다"
+    deleteConfirmError: "확인 텍스트가 일치하지 않습니다",
+    userNotFound: "사용자를 찾을 수 없습니다",
+    deleteGenericError: "계정 삭제 중 오류가 발생했습니다"
   }
 };

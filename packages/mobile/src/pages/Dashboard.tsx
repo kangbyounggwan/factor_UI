@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PrinterStatusBadge } from "@/components/PrinterStatusBadge";
+import { PlatformHeader } from "@/components/PlatformHeader";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Monitor, LogIn, Plus, Thermometer, ChevronDown, ChevronUp, Layers, Settings as SettingsIcon, Bell, Loader2, Play } from "lucide-react";
@@ -12,6 +13,7 @@ import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@shared/integrations/supabase/client";
+import { useSafeAreaStyle } from "@/hooks/usePlatform";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
@@ -506,6 +508,14 @@ const Home = () => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
 
+  // 플랫폼별 하단 SafeArea 패딩
+  // iOS: BottomNavigation(4rem) + 추가여백(2rem) + safe-area-inset-bottom
+  // Android/Web: BottomNavigation(4rem) + 추가여백(2rem)
+  const contentBottomStyle = useSafeAreaStyle({
+    bottom: true,
+    bottomPadding: '6rem', // 64px (nav) + 32px (extra spacing)
+  });
+
   // 설정 유도 모달 상태
   const [showSetupPrompt, setShowSetupPrompt] = useState(false);
   const [printerToSetup, setPrinterToSetup] = useState<string | null>(null);
@@ -932,7 +942,7 @@ const Home = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background safe-area-top safe-area-bottom">
+      <div className="min-h-screen bg-background">
         <div className="h-full flex items-center justify-center px-6">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
@@ -952,7 +962,7 @@ const Home = () => {
       onTouchEnd={onTouchEnd}
     >
       {/* 미니 헤더 */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b px-4 pt-4 pb-3 safe-area-top">
+      <PlatformHeader>
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-primary/10 rounded-lg">
@@ -969,7 +979,7 @@ const Home = () => {
             <Bell className="h-5 w-5" />
           </Button>
         </div>
-      </div>
+      </PlatformHeader>
 
       <div className="max-w-7xl mx-auto px-6 pt-2">
         <div
@@ -980,7 +990,15 @@ const Home = () => {
         </div>
       </div>
 
-      <div ref={contentRef} className="max-w-7xl mx-auto px-6 space-y-2 pb-24" style={{ transform: `translateY(${pullY}px)`, transition: pullingRef.current ? 'none' : 'transform 150ms ease' }}>
+      <div
+        ref={contentRef}
+        className="max-w-7xl mx-auto px-6 space-y-2"
+        style={{
+          transform: `translateY(${pullY}px)`,
+          transition: pullingRef.current ? 'none' : 'transform 150ms ease',
+          ...contentBottomStyle
+        }}
+      >
         {/* 로그인 안내 */}
         {!user && (
           <Alert className="bg-primary/10 border-primary">

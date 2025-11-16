@@ -1,8 +1,7 @@
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  /* 모바일 앱에서는 전역 패딩 제거 - SafeArea는 각 컴포넌트에서 처리 */
+  width: 100%;
+  height: 100%;
 }
 
 .logo {

@@ -48,7 +48,7 @@ export const DeleteAccountDialog = ({ open, onOpenChange }: DeleteAccountDialogP
     if (!user?.id) {
       toast({
         title: t('account.deleteError'),
-        description: 'User not found',
+        description: t('account.userNotFound'),
         variant: 'destructive',
       });
       return;
@@ -76,7 +76,7 @@ export const DeleteAccountDialog = ({ open, onOpenChange }: DeleteAccountDialogP
       console.error('[DeleteAccountDialog] Error:', error);
       toast({
         title: t('account.deleteError'),
-        description: error.message || 'An error occurred while deleting your account',
+        description: error.message || t('account.deleteGenericError'),
         variant: 'destructive',
       });
     }

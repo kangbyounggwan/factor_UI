@@ -2,11 +2,26 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Home, Sparkles, Settings, User } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { useSafeAreaStyle } from "@/hooks/usePlatform";
 
+/**
+ * 플랫폼별 SafeArea를 자동으로 처리하는 하단 네비게이션 바
+ * - iOS: safe-area-inset-bottom만 적용
+ * - Android/Web: 추가 패딩 없음
+ */
 export function BottomNavigation() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
+
+  // 하단 SafeArea만 적용 (추가 패딩 없음)
+  const safeAreaStyle = useSafeAreaStyle({
+    bottom: true,
+    bottomPadding: '0',
+  });
+
+  // 디버깅: 적용된 스타일 확인
+  console.log('[BottomNavigation] SafeArea Style:', safeAreaStyle);
 
   const navItems = [
     {
@@ -36,7 +51,10 @@ export function BottomNavigation() {
   };
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border safe-area-bottom-only">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border"
+      style={safeAreaStyle}
+    >
       <div className="flex items-center justify-around h-16 px-2">
         {navItems.map((item) => {
           const Icon = item.icon;

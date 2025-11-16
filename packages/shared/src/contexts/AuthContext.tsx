@@ -7,6 +7,10 @@ import { createSharedMqttClient } from "../component/mqtt";
 
 type AppVariant = "web" | "mobile";
 
+// Deep link redirect URLs
+const IOS_REDIRECT = "com.byeonggwan.factor://auth/callback";
+const ANDROID_REDIRECT = "com.factor.app://auth/callback";
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -363,10 +367,9 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
     let redirectUrl: string;
     if (platform === 'ios') {
-      redirectUrl = 'com.byeonggwan.factor://auth/callback';
+      redirectUrl = IOS_REDIRECT;
     } else if (platform === 'android') {
-      // Android는 custom scheme 사용 (AndroidManifest.xml에 설정)
-      redirectUrl = 'com.factor.app://auth/callback';
+      redirectUrl = ANDROID_REDIRECT;
     } else {
       redirectUrl = `${window.location.origin}/`;
     }
@@ -480,10 +483,29 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   };
 
   const linkGoogleAccount = async () => {
+    // 모바일 환경 감지
+    const isNativeMobile = typeof (window as any).Capacitor !== 'undefined';
+
+    let redirectUrl: string;
+    if (isNativeMobile) {
+      const { Capacitor } = await import('@capacitor/core');
+      const platform = Capacitor.getPlatform();
+
+      if (platform === 'ios') {
+        redirectUrl = IOS_REDIRECT;
+      } else if (platform === 'android') {
+        redirectUrl = ANDROID_REDIRECT;
+      } else {
+        redirectUrl = `${window.location.origin}/user-settings`;
+      }
+    } else {
+      redirectUrl = `${window.location.origin}/user-settings`;
+    }
+
     const { data, error } = await supabase.auth.linkIdentity({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/user-settings`,
+        redirectTo: redirectUrl,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',

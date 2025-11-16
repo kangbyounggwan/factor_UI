@@ -1559,6 +1559,8 @@ export default {
     deleteSuccess: "Account deleted",
     deleteSuccessMessage: "Your account and all data have been deleted.",
     deleteError: "Failed to delete account",
-    deleteConfirmError: "Confirmation text does not match"
+    deleteConfirmError: "Confirmation text does not match",
+    userNotFound: "User not found",
+    deleteGenericError: "An error occurred while deleting your account"
   }
 };

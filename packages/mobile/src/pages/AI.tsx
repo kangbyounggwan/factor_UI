@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PlatformHeader } from "@/components/PlatformHeader";
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
@@ -1853,7 +1854,7 @@ const AI = () => {
   return (
     <div className="h-full flex flex-col bg-background overflow-hidden">
       {/* 상단 헤더 - 고정 */}
-      <div className="flex-shrink-0 px-4 pt-4 pb-3 border-b safe-area-top">
+      <PlatformHeader sticky={false}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-primary/10 rounded-lg">
@@ -1865,7 +1866,7 @@ const AI = () => {
             <History className="w-4 h-4" />
           </Button>
         </div>
-      </div>
+      </PlatformHeader>
 
       {/* 컨텐츠 영역 - 스크롤 가능 (하단 여백 제거) */}
       <div ref={contentScrollRef} className="flex-1 overflow-y-auto px-4 pt-4 pb-0">
@@ -1875,9 +1876,9 @@ const AI = () => {
         {currentStep === "result" && renderResult()}
       </div>
 
-      {/* 고정된 하단 버튼 */}
+      {/* 고정된 하단 버튼 - BottomNavigation이 safe area 처리 */}
       {currentStep === "create-prompt" && (
-        <div className="flex-shrink-0 p-4 bg-background border-t" style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + 16px)` }}>
+        <div className="flex-shrink-0 p-4 bg-background border-t">
           <Button
             size="lg"
             className="w-full h-14 text-lg font-semibold"
@@ -1891,7 +1892,7 @@ const AI = () => {
       )}
 
       {currentStep === "result" && (
-        <div className="flex-shrink-0 p-4 bg-background border-t" style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + 16px)` }}>
+        <div className="flex-shrink-0 p-4 bg-background border-t">
           <div className="grid grid-cols-2 gap-3">
             <Button
               variant="outline"
