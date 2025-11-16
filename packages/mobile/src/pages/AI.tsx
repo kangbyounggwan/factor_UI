@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PlatformHeader } from "@/components/PlatformHeader";
+import { useSafeAreaStyle } from "@/hooks/usePlatform";
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
@@ -107,6 +108,20 @@ const AI = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Safe Area 패딩 (컨텐츠 영역은 bottom padding 불필요)
+  const safeAreaStyle = useSafeAreaStyle({
+    bottom: false,
+  });
+
+  // 하단 버튼 영역 padding
+  // h-full 사용 시 부모의 paddingBottom(64px) 영역이 하단에 남음
+  // 버튼이 이 영역을 포함하여 BottomNavigation까지 도달하도록 padding 설정
+  // p-4(1rem) + App padding(4rem) + safe-area = BottomNavigation까지의 거리
+  const buttonAreaStyle: React.CSSProperties = {
+    paddingBottom: 'calc(1rem + 4rem + env(safe-area-inset-bottom, 0px))',
+  };
+
   const [currentStep, setCurrentStep] = useState<Step>("select-input");
   const [inputType, setInputType] = useState<"text" | "image" | "text-to-image">("text");
   const [textPrompt, setTextPrompt] = useState("");
@@ -1852,7 +1867,7 @@ const AI = () => {
   );
 
   return (
-    <div className="h-full flex flex-col bg-background overflow-hidden">
+    <div className="h-full flex flex-col bg-background">
       {/* 상단 헤더 - 고정 */}
       <PlatformHeader sticky={false}>
         <div className="flex items-center justify-between">
@@ -1868,17 +1883,17 @@ const AI = () => {
         </div>
       </PlatformHeader>
 
-      {/* 컨텐츠 영역 - 스크롤 가능 (하단 여백 제거) */}
-      <div ref={contentScrollRef} className="flex-1 overflow-y-auto px-4 pt-4 pb-0">
+      {/* 컨텐츠 영역 - 스크롤 가능 (BottomNavigation을 위한 하단 여백) */}
+      <div ref={contentScrollRef} className="flex-1 overflow-y-auto px-4 pt-4" style={safeAreaStyle}>
         {currentStep === "select-input" && renderSelectInput()}
         {currentStep === "create-prompt" && renderCreatePrompt()}
         {currentStep === "generate" && renderGenerating()}
         {currentStep === "result" && renderResult()}
       </div>
 
-      {/* 고정된 하단 버튼 - BottomNavigation이 safe area 처리 */}
+      {/* 고정된 하단 버튼 - BottomNavigation과 safe area 고려 */}
       {currentStep === "create-prompt" && (
-        <div className="flex-shrink-0 p-4 bg-background border-t">
+        <div className="flex-shrink-0 p-4 bg-background border-t" style={buttonAreaStyle}>
           <Button
             size="lg"
             className="w-full h-14 text-lg font-semibold"
@@ -1892,7 +1907,7 @@ const AI = () => {
       )}
 
       {currentStep === "result" && (
-        <div className="flex-shrink-0 p-4 bg-background border-t">
+        <div className="flex-shrink-0 p-4 bg-background border-t" style={buttonAreaStyle}>
           <div className="grid grid-cols-2 gap-3">
             <Button
               variant="outline"

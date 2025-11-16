@@ -13,6 +13,7 @@ import { startDashStatusSubscriptionsForUser } from "@shared/component/mqtt";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { supabase } from "@shared/integrations/supabase/client";
 import { Capacitor } from "@capacitor/core";
+import { useSafeAreaStyle } from "@/hooks/usePlatform";
 
 const Auth = () => {
   const { t } = useTranslation();
@@ -25,6 +26,14 @@ const Auth = () => {
 
   // iOS 플랫폼 체크 (Apple Sign In은 iOS에서만 지원)
   const isIOS = Capacitor.getPlatform() === 'ios';
+
+  // 상하단 Safe Area 패딩 (Android: 상단 2rem, iOS: safe-area-inset + 2rem)
+  const safeAreaStyle = useSafeAreaStyle({
+    top: true,
+    bottom: true,
+    topPadding: '2rem',
+    bottomPadding: '1rem',
+  });
 
   // 페이지 진입 시 스크롤 초기화
   useEffect(() => {
@@ -193,19 +202,20 @@ const Auth = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="h-full flex items-center justify-center px-6">
-          <div className="text-center">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-            <p className="mt-4 text-sm text-muted-foreground">{t('common.loading', '로딩 중...')}</p>
-          </div>
+      <div className="min-h-screen bg-background flex items-center justify-center" style={safeAreaStyle}>
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+          <p className="mt-4 text-sm text-muted-foreground">{t('common.loading', '로딩 중...')}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-start justify-center px-4 pb-4 pt-12 relative">
+    <div
+      className="min-h-screen bg-background flex items-center justify-center px-4 relative"
+      style={safeAreaStyle}
+    >
       {/* 배경 장식 - 미묘한 그라데이션 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5" />

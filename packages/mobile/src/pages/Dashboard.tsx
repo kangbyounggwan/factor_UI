@@ -942,12 +942,10 @@ const Home = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="h-full flex items-center justify-center px-6">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-sm text-muted-foreground">{t('dashboard.loading')}</p>
-          </div>
+      <div className="min-h-screen bg-background flex items-center justify-center px-6" style={contentBottomStyle}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-sm text-muted-foreground">{t('dashboard.loading')}</p>
         </div>
       </div>
     );

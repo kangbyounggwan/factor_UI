@@ -60,12 +60,20 @@ export const getSafeAreaStyle = (
         : `calc(env(safe-area-inset-bottom, 0px) + ${bottomPadding})`;
     }
   } else if (platform === 'android') {
-    // Android: 고정 패딩만 (시스템바는 자동 처리됨)
-    if (top && topPadding !== '0') {
-      style.paddingTop = topPadding;
+    // Android: 상단바(24px) + 추가 패딩
+    // StatusBar overlays: true이므로 수동으로 상단 여백 확보
+    if (top) {
+      const statusBarHeight = '24px'; // Android 상태바 표준 높이
+      style.paddingTop = topPadding === '0'
+        ? statusBarHeight
+        : `calc(${statusBarHeight} + ${topPadding})`;
     }
-    if (bottom && bottomPadding !== '0') {
-      style.paddingBottom = bottomPadding;
+    // Android: 하단 네비게이션바(48px) + 추가 패딩
+    if (bottom) {
+      const navBarHeight = '48px'; // Android 네비게이션바 표준 높이
+      style.paddingBottom = bottomPadding === '0'
+        ? navBarHeight
+        : `calc(${navBarHeight} + ${bottomPadding})`;
     }
   } else {
     // Web: 고정 패딩만

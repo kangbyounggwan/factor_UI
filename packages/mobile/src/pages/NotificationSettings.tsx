@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useSafeAreaStyle } from "@/hooks/usePlatform";
 
 interface NotificationPreferences {
   push_enabled: boolean;
@@ -23,6 +24,12 @@ const NotificationSettings = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Safe Area 패딩
+  const safeAreaStyle = useSafeAreaStyle({
+    bottom: true,
+    bottomPadding: '2rem',
+  });
 
   const [preferences, setPreferences] = useState<NotificationPreferences>({
     push_enabled: true,
@@ -150,14 +157,14 @@ const NotificationSettings = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center" style={safeAreaStyle}>
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col" style={safeAreaStyle}>
       {/* 헤더 */}
       <div className="px-6 py-4 flex items-center justify-between border-b safe-area-top">
         <button

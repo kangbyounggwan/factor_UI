@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
+import { useSafeAreaStyle } from "@/hooks/usePlatform";
 
 const UserSettings = () => {
   const { user, signOut, isAdmin } = useAuth();
@@ -24,6 +25,12 @@ const UserSettings = () => {
   const navigate = useNavigate();
   const { theme } = useTheme();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  // Safe Area 패딩 (BottomNavigation 고려)
+  const safeAreaStyle = useSafeAreaStyle({
+    bottom: true,
+    bottomPadding: '2rem', // Reduced from 6rem to match NotificationSettings
+  });
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || t("common.user");
   const bio = user?.user_metadata?.bio || `${t("profile.myInfo")} · ${t("profile.addressManagement")}`;
@@ -142,7 +149,7 @@ const UserSettings = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" style={safeAreaStyle}>
       {/* 프로필 헤더 */}
       <div className="bg-background border-b px-6 pb-4 safe-area-top">
         <div className="flex items-center gap-4 pt-3">
