@@ -55,7 +55,8 @@ export function BottomNavigation() {
       className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border"
       style={safeAreaStyle}
     >
-      <div className="flex items-center justify-around h-16 px-2">
+      {/* 고정 높이 영역 - SafeArea 패딩은 nav 요소에 적용됨 */}
+      <div className="flex items-center justify-around px-2" style={{ height: '4rem' }}>
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
