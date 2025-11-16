@@ -4,6 +4,7 @@ import { supabase } from "../integrations/supabase/client";
 import { startDashStatusSubscriptionsForUser, stopDashStatusSubscriptions, subscribeControlResultForUser, clearMqttClientId } from "../component/mqtt";
 import { disconnectSharedMqtt } from "../component/mqtt";
 import { createSharedMqttClient } from "../component/mqtt";
+import { sha256 } from 'js-sha256';
 
 type AppVariant = "web" | "mobile";
 
@@ -420,16 +421,36 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       try {
         const { SignInWithApple } = await import('@capacitor-community/apple-sign-in');
 
+        // 1) raw nonce 생성 (원본)
+        const rawNonce = Math.random().toString(36).substring(2, 15);
+        // 2) SHA-256 해시 (Apple에 보낼 값)
+        const hashedNonce = sha256(rawNonce);
+
+        console.log('[AuthContext] Nonce generated:', { rawNonce, hashedNonce });
+
         const result = await SignInWithApple.authorize({
           clientId: 'com.byeonggwan.factor',
           redirectURI: 'https://ecmrkjwsjkthurwljhvp.supabase.co/auth/v1/callback',
           scopes: 'email name',
+          nonce: hashedNonce,  // ✅ 해시된 값을 Apple에 보냄
+        });
+
+        const identityToken = result.response.identityToken;
+        if (!identityToken) {
+          throw new Error('No identity token returned from Apple');
+        }
+
+        console.log('[AuthContext] Apple Sign In result:', {
+          identityToken: 'present',
+          user: result.response.user,
+          email: result.response.email,
         });
 
         // Supabase에 Apple ID 토큰으로 로그인
         const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'apple',
-          token: result.response.identityToken,
+          token: identityToken,
+          nonce: rawNonce,  // ✅ 원본 nonce를 Supabase에 보냄
         });
 
         return { error };
