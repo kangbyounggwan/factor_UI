@@ -66,8 +66,8 @@ const AppContent = () => {
       const platform = Capacitor.getPlatform();
 
       try {
-        // 라이트 모드: 검은색 텍스트 (Style.Light), 다크 모드: 흰색 텍스트 (Style.Dark)
-        await StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light });
+        // 다크 모드: 흰색 텍스트 (Style.Light), 라이트 모드: 검은색 텍스트 (Style.Dark)
+        await StatusBar.setStyle({ style: isDark ? Style.Light : Style.Dark });
 
         // Android만 배경색 설정 (iOS는 투명 오버레이 사용)
         if (platform === "android") {
