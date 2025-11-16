@@ -25,7 +25,6 @@ const UserSettings = () => {
   const navigate = useNavigate();
   const { theme } = useTheme();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [scrollY, setScrollY] = useState(0);
 
   // Safe Area 패딩 (BottomNavigation 고려)
   const safeAreaStyle = useSafeAreaStyle({
@@ -129,38 +128,12 @@ const UserSettings = () => {
     },
   ];
 
-  // 스크롤 진행도 계산 (0 ~ 1)
-  const maxScroll = 100; // 최대 스크롤 거리
-  const scrollProgress = Math.min(scrollY / maxScroll, 1);
-
-  // 축소된 상태에서의 높이
-  const headerHeight = 80 + (48 * (1 - scrollProgress)); // 80px(최소) ~ 128px(최대)
-  const avatarSize = 40 + (24 * (1 - scrollProgress)); // 40px(최소) ~ 64px(최대)
-  const nameSize = scrollProgress > 0.5 ? 'text-lg' : 'text-xl';
-  const bioOpacity = 1 - scrollProgress;
-
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    setScrollY(e.currentTarget.scrollTop);
-  };
-
   return (
     <div className="h-screen bg-background flex flex-col" style={safeAreaStyle}>
       {/* 고정 프로필 헤더 */}
-      <div
-        className="sticky top-0 z-10 bg-background border-b safe-area-top transition-all duration-200"
-        style={{
-          height: `${headerHeight}px`,
-          minHeight: '80px'
-        }}
-      >
-        <div className="flex items-center gap-4 px-6 h-full">
-          <div
-            className="relative flex-shrink-0 transition-all duration-200"
-            style={{
-              width: `${avatarSize}px`,
-              height: `${avatarSize}px`
-            }}
-          >
+      <div className="sticky top-0 z-10 bg-background border-b safe-area-top">
+        <div className="flex items-center gap-4 px-6 py-4">
+          <div className="relative flex-shrink-0 w-16 h-16">
             {avatarUrl ? (
               <img
                 src={avatarUrl}
@@ -168,22 +141,17 @@ const UserSettings = () => {
                 className="w-full h-full rounded-full object-cover bg-gradient-to-br from-blue-400 to-blue-600"
               />
             ) : (
-              <div
-                className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600"
-              >
-                <span className={scrollProgress > 0.5 ? 'text-xl' : 'text-2xl'}>😎</span>
+              <div className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600">
+                <span className="text-2xl">😎</span>
               </div>
             )}
           </div>
 
           <div className="flex-1 min-w-0">
-            <h2 className={`font-semibold truncate transition-all duration-200 ${nameSize}`}>
+            <h2 className="text-xl font-semibold truncate">
               {displayName}
             </h2>
-            <p
-              className="text-sm text-muted-foreground truncate transition-opacity duration-200"
-              style={{ opacity: bioOpacity }}
-            >
+            <p className="text-sm text-muted-foreground truncate">
               {bio}
             </p>
           </div>
@@ -198,10 +166,7 @@ const UserSettings = () => {
       </div>
 
       {/* 스크롤 가능한 메뉴 섹션 */}
-      <div
-        className="flex-1 overflow-y-auto px-4 py-2"
-        onScroll={handleScroll}
-      >
+      <div className="flex-1 overflow-y-auto px-4 py-2">
         {menuSections.map((section, sectionIndex) => (
           <div key={sectionIndex} className="mb-6">
             {section.title && (
