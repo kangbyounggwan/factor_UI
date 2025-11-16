@@ -11,18 +11,18 @@ const ThemeSettings = () => {
   const themes = [
     {
       value: "dark",
-      label: t("profile.themeDark", "Dark"),
-      description: t("profile.themeDarkDesc", "어두운 테마")
+      label: t("profile.themeDark"),
+      description: t("profile.themeDarkDesc")
     },
     {
       value: "light",
-      label: t("profile.themeLight", "Light"),
-      description: t("profile.themeLightDesc", "밝은 테마")
+      label: t("profile.themeLight"),
+      description: t("profile.themeLightDesc")
     },
     {
       value: "system",
-      label: t("profile.themeSystem", "System"),
-      description: t("profile.themeSystemDesc", "시스템 설정 사용")
+      label: t("profile.themeSystem"),
+      description: t("profile.themeSystemDesc")
     },
   ];
 
@@ -34,14 +34,14 @@ const ThemeSettings = () => {
           onClick={() => navigate(-1)}
           className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
         >
-          <ArrowLeft className="h-6 w-6" />
+          <ArrowLeft className="h-6 w-6 text-foreground" />
         </button>
       </div>
 
       {/* 제목 */}
       <div className="px-6 py-8">
-        <h1 className="text-3xl font-bold">{t("profile.themeSettings", "화면 테마")}</h1>
-        <p className="text-muted-foreground mt-2">{t("profile.selectTheme", "원하는 테마를 선택해주세요")}</p>
+        <h1 className="text-3xl font-bold">{t("profile.themeSettings")}</h1>
+        <p className="text-muted-foreground mt-2">{t("profile.selectTheme")}</p>
       </div>
 
       {/* 테마 목록 */}

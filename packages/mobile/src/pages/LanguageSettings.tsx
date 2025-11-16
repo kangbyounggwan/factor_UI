@@ -7,8 +7,8 @@ const LanguageSettings = () => {
   const navigate = useNavigate();
 
   const languages = [
-    { code: "ko", name: t("profile.korean", "한국어") },
-    { code: "en", name: t("profile.english", "English") },
+    { code: "ko", name: t("profile.korean") },
+    { code: "en", name: t("profile.english") },
   ];
 
   // 뒤로가기 버튼 클릭 시 이전 페이지로 이동
@@ -24,13 +24,13 @@ const LanguageSettings = () => {
           onClick={handleBack}
           className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
         >
-          <ArrowLeft className="h-6 w-6" />
+          <ArrowLeft className="h-6 w-6 text-foreground" />
         </button>
       </div>
 
       {/* 제목 */}
       <div className="px-6 py-8">
-        <h1 className="text-3xl font-bold">{t("profile.selectLanguage", "어떤 언어를 쓸까요?")}</h1>
+        <h1 className="text-3xl font-bold">{t("profile.selectLanguage")}</h1>
       </div>
 
       {/* 언어 목록 */}

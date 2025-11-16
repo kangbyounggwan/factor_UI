@@ -34,7 +34,7 @@ const SocialAccountLinking = () => {
       id: "google",
       name: "Google",
       icon: "https://www.google.com/favicon.ico",
-      description: t("userSettings.linkGoogleDescription", "구글 계정으로 간편하게 로그인하세요"),
+      description: t("userSettings.linkGoogleDescription"),
     },
   ];
 
@@ -69,16 +69,16 @@ const SocialAccountLinking = () => {
       if (error) throw error;
 
       toast({
-        title: t("common.success", "성공"),
-        description: t("userSettings.linkSuccess", "소셜 계정이 연동되었습니다."),
+        title: t("common.success"),
+        description: t("userSettings.linkSuccess"),
       });
 
       await loadLinkedProviders();
     } catch (error: any) {
       console.error('Error linking account:', error);
       toast({
-        title: t("userSettings.linkFailed", "연동 실패"),
-        description: error.message || t("userSettings.linkFailedDescription", "소셜 계정 연동에 실패했습니다."),
+        title: t("userSettings.linkFailed"),
+        description: error.message || t("userSettings.linkFailedDescription"),
         variant: "destructive",
       });
     }
@@ -105,16 +105,16 @@ const SocialAccountLinking = () => {
       if (error) throw error;
 
       toast({
-        title: t("userSettings.unlinkSuccess", "연동 해제 완료"),
-        description: t("userSettings.unlinkSuccessDescription", "소셜 계정 연동이 해제되었습니다."),
+        title: t("userSettings.unlinkSuccess"),
+        description: t("userSettings.unlinkSuccessDescription"),
       });
 
       await loadLinkedProviders();
     } catch (error: any) {
       console.error('Error unlinking account:', error);
       toast({
-        title: t("userSettings.unlinkFailed", "연동 해제 실패"),
-        description: error.message || t("userSettings.unlinkFailedDescription", "소셜 계정 연동 해제에 실패했습니다."),
+        title: t("userSettings.unlinkFailed"),
+        description: error.message || t("userSettings.unlinkFailedDescription"),
         variant: "destructive",
       });
     } finally {
@@ -140,17 +140,17 @@ const SocialAccountLinking = () => {
           onClick={() => navigate(-1)}
           className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
         >
-          <ArrowLeft className="h-6 w-6" />
+          <ArrowLeft className="h-6 w-6 text-foreground" />
         </button>
       </div>
 
       {/* 제목 */}
       <div className="px-6 py-8">
         <h1 className="text-3xl font-bold">
-          {t("userSettings.socialAccounts", "소셜 계정 연동")}
+          {t("userSettings.socialAccounts")}
         </h1>
         <p className="text-muted-foreground mt-2">
-          {t("userSettings.socialAccountsDescription", "소셜 계정을 연동하여 간편하게 로그인하세요")}
+          {t("userSettings.socialAccountsDescription")}
         </p>
       </div>
 
@@ -184,7 +184,7 @@ const SocialAccountLinking = () => {
                       {isLinked && (
                         <div className="flex items-center gap-2 text-sm text-primary">
                           <Check className="h-4 w-4" />
-                          <span>{t("userSettings.linkedAccount", "연동됨")}</span>
+                          <span>{t("userSettings.linkedAccount")}</span>
                         </div>
                       )}
                     </div>
@@ -203,12 +203,12 @@ const SocialAccountLinking = () => {
                         {isUnlinking ? (
                           <>
                             <div className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-                            {t("common.loading", "처리중")}
+                            {t("common.loading")}
                           </>
                         ) : (
                           <>
                             <X className="h-4 w-4 mr-1" />
-                            {t("userSettings.unlinkAccount", "연동 해제")}
+                            {t("userSettings.unlinkAccount")}
                           </>
                         )}
                       </Button>
@@ -218,7 +218,7 @@ const SocialAccountLinking = () => {
                         onClick={() => handleLinkAccount(provider.id)}
                         className="min-w-[80px]"
                       >
-                        {t("userSettings.linkAccount", "연동")}
+                        {t("userSettings.linkAccount")}
                       </Button>
                     )}
                   </div>
@@ -231,7 +231,7 @@ const SocialAccountLinking = () => {
         {/* 안내 문구 */}
         <div className="mt-6 p-4 bg-muted/50 rounded-xl border">
           <p className="text-sm text-muted-foreground">
-            💡 {t("userSettings.socialAccountNote", "소셜 계정을 연동하면 이메일과 비밀번호 없이도 간편하게 로그인할 수 있습니다.")}
+            💡 {t("userSettings.socialAccountNote")}
           </p>
         </div>
       </div>
@@ -241,16 +241,16 @@ const SocialAccountLinking = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {t("userSettings.unlinkConfirmTitle", "소셜 계정 연동을 해제하시겠습니까?")}
+              {t("userSettings.unlinkConfirmTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("userSettings.unlinkConfirmDescription", "연동을 해제하면 이메일과 비밀번호로 로그인해야 합니다.")}
+              {t("userSettings.unlinkConfirmDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t("common.cancel", "취소")}</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmUnlink}>
-              {t("userSettings.unlinkAccount", "연동 해제")}
+              {t("userSettings.unlinkAccount")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

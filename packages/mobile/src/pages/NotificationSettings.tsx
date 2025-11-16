@@ -98,16 +98,16 @@ const NotificationSettings = () => {
       if (error) throw error;
 
       toast({
-        title: t("userSettings.profileUpdated", "설정 업데이트"),
-        description: t("userSettings.profileUpdatedDesc", "알림 설정이 저장되었습니다."),
+        title: t("userSettings.profileUpdated"),
+        description: t("userSettings.profileUpdatedDesc"),
       });
     } catch (error) {
       console.error('Error saving preferences:', error);
       // Revert on error
       setPreferences(preferences);
       toast({
-        title: t("settings.error", "오류"),
-        description: t("settings.updatePrinterError", "설정 저장에 실패했습니다."),
+        title: t("settings.error"),
+        description: t("settings.updatePrinterError"),
         variant: "destructive",
       });
     } finally {
@@ -118,32 +118,32 @@ const NotificationSettings = () => {
   const notificationItems = [
     {
       key: 'push_enabled' as keyof NotificationPreferences,
-      title: t("userSettings.pushNotifications", "푸시 알림"),
-      description: t("userSettings.pushNotificationsDesc", "브라우저 알림을 받습니다"),
+      title: t("userSettings.pushNotifications"),
+      description: t("userSettings.pushNotificationsDesc"),
       isPro: false,
     },
     {
       key: 'print_complete' as keyof NotificationPreferences,
-      title: t("userSettings.printComplete", "출력 완료 알림"),
-      description: t("userSettings.printCompleteDesc", "3D 프린팅이 완료되면 알림을 받습니다"),
+      title: t("userSettings.printComplete"),
+      description: t("userSettings.printCompleteDesc"),
       isPro: false,
     },
     {
       key: 'error_alerts' as keyof NotificationPreferences,
-      title: t("userSettings.errorNotifications", "오류 알림"),
-      description: t("userSettings.errorNotificationsDesc", "프린터 오류 발생 시 즉시 알림을 받습니다"),
+      title: t("userSettings.errorNotifications"),
+      description: t("userSettings.errorNotificationsDesc"),
       isPro: false,
     },
     {
       key: 'email_enabled' as keyof NotificationPreferences,
-      title: t("userSettings.emailNotifications", "이메일 알림"),
-      description: t("userSettings.emailNotificationsDesc", "중요한 업데이트를 이메일로 받습니다"),
+      title: t("userSettings.emailNotifications"),
+      description: t("userSettings.emailNotificationsDesc"),
       isPro: true,
     },
     {
       key: 'weekly_report' as keyof NotificationPreferences,
-      title: t("userSettings.weeklyReport", "주간 리포트"),
-      description: t("userSettings.weeklyReportDesc", "매주 프린터 사용 통계를 이메일로 받습니다"),
+      title: t("userSettings.weeklyReport"),
+      description: t("userSettings.weeklyReportDesc"),
       isPro: true,
     },
   ];
@@ -164,12 +164,12 @@ const NotificationSettings = () => {
           onClick={() => navigate(-1)}
           className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
         >
-          <ArrowLeft className="h-6 w-6" />
+          <ArrowLeft className="h-6 w-6 text-foreground" />
         </button>
         {saving && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <RefreshCw className="h-4 w-4 animate-spin" />
-            <span>저장 중...</span>
+            <span>{t("common.saving")}</span>
           </div>
         )}
       </div>
@@ -177,10 +177,10 @@ const NotificationSettings = () => {
       {/* 제목 */}
       <div className="px-6 py-8">
         <h1 className="text-3xl font-bold">
-          {t("userSettings.notificationSettings", "알림 설정")}
+          {t("userSettings.notificationSettings")}
         </h1>
         <p className="text-sm text-muted-foreground mt-2">
-          {t("userSettings.notificationDescription", "알림 수신 방법 및 종류를 설정합니다")}
+          {t("userSettings.notificationDescription")}
         </p>
       </div>
 

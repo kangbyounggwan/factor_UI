@@ -173,7 +173,7 @@ const AddGroupPage = ({ onBack, onUpdate }: AddGroupPageProps) => {
               onClick={onBack}
               className="p-2 hover:bg-accent rounded-full transition-colors"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-5 w-5 text-foreground" />
             </button>
             <h1 className="text-lg font-semibold">{t('settings.newGroup')}</h1>
             <div className="w-9" />
@@ -260,7 +260,7 @@ const AddGroupPage = ({ onBack, onUpdate }: AddGroupPageProps) => {
               onClick={() => setShowColorPicker(false)}
               className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
             >
-              <ArrowLeft className="h-6 w-6" />
+              <ArrowLeft className="h-6 w-6 text-foreground" />
             </button>
           </div>
 
@@ -464,7 +464,7 @@ const GroupDetailPage = ({ group, onBack, onUpdate }: GroupDetailPageProps) => {
               onClick={onBack}
               className="p-2 hover:bg-accent rounded-full transition-colors"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-5 w-5 text-foreground" />
             </button>
             <h1 className="text-lg font-semibold">{t('settings.editGroup')}</h1>
             <div className="w-9" />
@@ -553,7 +553,7 @@ const GroupDetailPage = ({ group, onBack, onUpdate }: GroupDetailPageProps) => {
               onClick={() => setShowColorPicker(false)}
               className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
             >
-              <ArrowLeft className="h-6 w-6" />
+              <ArrowLeft className="h-6 w-6 text-foreground" />
             </button>
           </div>
 
@@ -899,7 +899,7 @@ const AddPrinterPage = ({ onBack, onUpdate, groups }: AddPrinterPageProps) => {
               onClick={onBack}
               className="p-2 hover:bg-accent rounded-full transition-colors"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-5 w-5 text-foreground" />
             </button>
             <h1 className="text-lg font-semibold">{t('settings.newPrinter', '새 프린터')}</h1>
             <div className="w-9" />
@@ -1001,7 +1001,7 @@ const AddPrinterPage = ({ onBack, onUpdate, groups }: AddPrinterPageProps) => {
               onClick={() => setShowGroupSelector(false)}
               className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
             >
-              <ArrowLeft className="h-6 w-6" />
+              <ArrowLeft className="h-6 w-6 text-foreground" />
             </button>
           </div>
 
@@ -1048,7 +1048,7 @@ const AddPrinterPage = ({ onBack, onUpdate, groups }: AddPrinterPageProps) => {
               onClick={() => setShowFirmwareSelector(false)}
               className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
             >
-              <ArrowLeft className="h-6 w-6" />
+              <ArrowLeft className="h-6 w-6 text-foreground" />
             </button>
           </div>
 
@@ -1090,7 +1090,7 @@ const AddPrinterPage = ({ onBack, onUpdate, groups }: AddPrinterPageProps) => {
                   onClick={() => setShowManufacturerSelector(false)}
                   className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
                 >
-                  <ArrowLeft className="h-6 w-6" />
+                  <ArrowLeft className="h-6 w-6 text-foreground" />
                 </button>
               </div>
 
@@ -1127,7 +1127,7 @@ const AddPrinterPage = ({ onBack, onUpdate, groups }: AddPrinterPageProps) => {
                   onClick={() => setManufacturerStep('manufacturer')}
                   className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
                 >
-                  <ArrowLeft className="h-6 w-6" />
+                  <ArrowLeft className="h-6 w-6 text-foreground" />
                 </button>
               </div>
 
@@ -1165,7 +1165,7 @@ const AddPrinterPage = ({ onBack, onUpdate, groups }: AddPrinterPageProps) => {
                   onClick={() => setManufacturerStep('series')}
                   className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
                 >
-                  <ArrowLeft className="h-6 w-6" />
+                  <ArrowLeft className="h-6 w-6 text-foreground" />
                 </button>
               </div>
 
@@ -1584,7 +1584,7 @@ const PrinterDetailPage = ({ printer, onBack, onUpdate, groups }: PrinterDetailP
               onClick={onBack}
               className="p-2 hover:bg-accent rounded-full transition-colors"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-5 w-5 text-foreground" />
             </button>
             <h1 className="text-lg font-semibold">{t('settings.printerDetails')}</h1>
             <div className="w-9" />
@@ -1681,7 +1681,7 @@ const PrinterDetailPage = ({ printer, onBack, onUpdate, groups }: PrinterDetailP
               onClick={() => setShowGroupSelector(false)}
               className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
             >
-              <ArrowLeft className="h-6 w-6" />
+              <ArrowLeft className="h-6 w-6 text-foreground" />
             </button>
           </div>
 
@@ -1757,7 +1757,7 @@ const PrinterDetailPage = ({ printer, onBack, onUpdate, groups }: PrinterDetailP
               onClick={() => setShowFirmwareSelector(false)}
               className="p-2 -ml-2 hover:bg-accent rounded-full transition-colors"
             >
-              <ArrowLeft className="h-6 w-6" />
+              <ArrowLeft className="h-6 w-6 text-foreground" />
             </button>
           </div>
 
@@ -1813,7 +1813,7 @@ const PrinterDetailPage = ({ printer, onBack, onUpdate, groups }: PrinterDetailP
                 }
               }}
             >
-              <ArrowLeft className="h-6 w-6" />
+              <ArrowLeft className="h-6 w-6 text-foreground" />
             </button>
           </div>
 
