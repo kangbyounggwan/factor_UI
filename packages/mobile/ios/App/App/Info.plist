@@ -28,6 +28,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>com.byeonggwan.factor</string>
+				<string>factor</string>
 			</array>
 		</dict>
 	</array>

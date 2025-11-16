@@ -419,7 +419,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
         const result = await SignInWithApple.authorize({
           clientId: 'com.byeonggwan.factor',
-          redirectURI: 'https://your-project.supabase.co/auth/v1/callback',
+          redirectURI: 'https://ecmrkjwsjkthurwljhvp.supabase.co/auth/v1/callback',
           scopes: 'email name',
         });
 
