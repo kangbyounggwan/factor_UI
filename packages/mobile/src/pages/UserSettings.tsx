@@ -230,7 +230,7 @@ const UserSettings = () => {
       )}
 
       {/* 로그아웃 버튼 */}
-      <div className="px-4 pb-20">
+      <div className="px-4 pb-6">
         <button
           onClick={handleSignOut}
           className="w-full flex items-center justify-center gap-2 px-4 py-3.5 bg-card rounded-lg border hover:bg-accent transition-colors"
