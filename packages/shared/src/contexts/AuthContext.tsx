@@ -455,7 +455,16 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
         return { error };
       } catch (err: any) {
-        console.error('[AuthContext] Apple Sign In failed:', err);
+        // 더 자세한 에러 로깅
+        console.error('[AuthContext] Apple Sign In failed:', {
+          error: err,
+          errorType: typeof err,
+          errorKeys: err ? Object.keys(err) : [],
+          errorMessage: err?.message,
+          errorCode: err?.code || err?.errorCode,
+          errorStack: err?.stack,
+          errorString: JSON.stringify(err)
+        });
 
         // Apple Sign In 에러 처리
         let errorMessage = 'appleSignInFailed';
