@@ -21,7 +21,8 @@ export default {
     all: "All",
     share: "Share",
     waiting: "Waiting",
-    backToHome: "Back to Home"
+    backToHome: "Back to Home",
+    user: "User"
   },
   nav: {
     home: "Home",

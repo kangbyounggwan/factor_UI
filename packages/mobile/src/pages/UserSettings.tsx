@@ -25,8 +25,8 @@ const UserSettings = () => {
   const { theme } = useTheme();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || t("common.user", "사용자");
-  const bio = user?.user_metadata?.bio || `${t("profile.myInfo", "내 정보")} · ${t("profile.addressManagement", "주소 관리")}`;
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || t("common.user");
+  const bio = user?.user_metadata?.bio || `${t("profile.myInfo")} · ${t("profile.addressManagement")}`;
   const avatarUrl = user?.user_metadata?.avatar_url || "";
 
   // 현재 선택된 언어 표시
@@ -54,7 +54,7 @@ const UserSettings = () => {
       items: [
         {
           icon: Globe,
-          label: t("profile.language", "언어"),
+          label: t("profile.language"),
           value: currentLanguage,
           onClick: () => navigate("/language-settings"),
         },
@@ -64,77 +64,77 @@ const UserSettings = () => {
       items: [
         {
           icon: Bell,
-          label: t("profile.notificationSettings", "알림 설정"),
+          label: t("profile.notificationSettings"),
           onClick: () => navigate("/notification-settings"),
         },
         {
           icon: theme === "dark" ? Moon : Sun,
-          label: t("profile.theme", "화면 테마"),
+          label: t("profile.theme"),
           onClick: () => navigate("/theme-settings"),
         },
       ],
     },
     {
-      title: t("profile.account", "계정"),
+      title: t("profile.account"),
       items: [
         {
           icon: Shield,
-          label: t("profile.socialAccountLink", "소셜 계정 연동"),
+          label: t("profile.socialAccountLink"),
           onClick: () => navigate("/social-account-linking"),
         },
         {
           icon: Shield,
-          label: t("profile.changePassword", "비밀번호 변경"),
+          label: t("profile.changePassword"),
           onClick: () => navigate("/change-password"),
         },
       ],
     },
     {
-      title: t("profile.subscriptionPayment", "구독 및 결제"),
+      title: t("profile.subscriptionPayment"),
       items: [
         {
           icon: FileText,
-          label: t("profile.subscriptionPlan", "구독 플랜 관리"),
+          label: t("profile.subscriptionPlan"),
           onClick: () => navigate("/subscription"),
         },
         {
           icon: FileText,
-          label: t("profile.paymentHistory", "결제 내역"),
+          label: t("profile.paymentHistory"),
           onClick: () => console.log("Payment history"),
         },
         {
           icon: FileText,
-          label: t("profile.paymentMethod", "결제 수단"),
+          label: t("profile.paymentMethod"),
           onClick: () => console.log("Payment method"),
         },
       ],
     },
     {
-      title: t("profile.support", "고객 지원"),
+      title: t("profile.support"),
       items: [
         {
           icon: HelpCircle,
-          label: t("profile.helpCenter", "도움말 센터"),
+          label: t("profile.helpCenter"),
           onClick: () => console.log("Help center"),
         },
         {
           icon: FileText,
-          label: t("profile.termsOfService", "이용 약관"),
+          label: t("profile.termsOfService"),
           onClick: () => navigate('/terms'),
         },
         {
           icon: FileText,
-          label: t("profile.privacyPolicy", "개인정보 처리방침"),
+          label: t("profile.privacyPolicy"),
           onClick: () => navigate('/privacy'),
         },
       ],
     },
     {
-      title: t("profile.dangerZone", "위험 구역"),
+      title: t("profile.dangerZone"),
       items: [
         {
           icon: Trash2,
-          label: t("profile.deleteAccount", "계정 삭제"),
+          label: t("profile.deleteAccount"),
           onClick: () => setShowDeleteDialog(true),
         },
       ],
@@ -216,7 +216,7 @@ const UserSettings = () => {
           >
             <Settings className="h-5 w-5 text-primary" />
             <span className="text-sm font-medium text-primary">
-              {t("nav.admin", "관리자")}
+              {t("nav.admin")}
             </span>
           </button>
         </div>
@@ -230,7 +230,7 @@ const UserSettings = () => {
         >
           <LogOut className="h-5 w-5 text-destructive" />
           <span className="text-sm font-medium text-destructive">
-            {t("profile.signOut", "로그아웃")}
+            {t("profile.signOut")}
           </span>
         </button>
       </div>

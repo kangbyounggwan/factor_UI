@@ -21,7 +21,8 @@ export default {
     all: "전체",
     share: "공유",
     waiting: "대기",
-    backToHome: "홈으로 돌아가기"
+    backToHome: "홈으로 돌아가기",
+    user: "사용자"
   },
   nav: {
     home: "홈",
