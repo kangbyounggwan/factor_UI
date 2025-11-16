@@ -5,6 +5,7 @@ import { startDashStatusSubscriptionsForUser, stopDashStatusSubscriptions, subsc
 import { disconnectSharedMqtt } from "../component/mqtt";
 import { createSharedMqttClient } from "../component/mqtt";
 import { sha256 } from 'js-sha256';
+import { SignInWithApple } from '@capacitor-community/apple-sign-in';
 
 type AppVariant = "web" | "mobile";
 
@@ -419,8 +420,6 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     if (isNativeMobile) {
       // iOS Native Sign in with Apple
       try {
-        const { SignInWithApple } = await import('@capacitor-community/apple-sign-in');
-
         // 1) raw nonce 생성 (원본)
         const rawNonce = Math.random().toString(36).substring(2, 15);
         // 2) SHA-256 해시 (Apple에 보낼 값)
