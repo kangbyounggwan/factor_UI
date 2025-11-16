@@ -66,8 +66,8 @@ const AppContent = () => {
       const platform = Capacitor.getPlatform();
 
       try {
-        // 다크 모드: 흰색 텍스트 (Style.Light), 라이트 모드: 검은색 텍스트 (Style.Dark)
-        await StatusBar.setStyle({ style: isDark ? Style.Light : Style.Dark });
+        // 다크 모드: 흰색 텍스트 (Style.Dark), 라이트 모드: 검은색 텍스트 (Style.Light)
+        await StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light });
 
         // Android만 배경색 설정 (iOS는 투명 오버레이 사용)
         if (platform === "android") {
@@ -303,6 +303,11 @@ const AppContent = () => {
     !hideBottomNavStartsWith.some(path => location.pathname.startsWith(path)) &&
     !isSettingsSubPage;
 
+  // 고정 레이아웃 페이지들 (h-full 사용): 자체적으로 스크롤 관리, padding 불필요
+  const fixedLayoutPaths = ["/create"];
+
+  const shouldApplyPadding = shouldShowBottomNav && !fixedLayoutPaths.includes(location.pathname);
+
   return (
     <div className="h-full flex flex-col bg-background transition-colors overflow-hidden">
       {/* 메인 컨텐츠 영역 - 스크롤 가능 */}
@@ -312,7 +317,7 @@ const AppContent = () => {
         className="flex-1 overflow-y-auto transition-all duration-300"
         style={{
           marginRight: showAISidebar && !aiSidebarCollapsed ? `${aiSidebarWidth}px` : '0px',
-          paddingBottom: shouldShowBottomNav ? '64px' : '0px'
+          paddingBottom: shouldApplyPadding ? '64px' : '0px'
         }}
       >
         <Suspense fallback={

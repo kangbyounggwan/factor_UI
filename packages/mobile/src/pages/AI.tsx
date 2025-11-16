@@ -114,10 +114,10 @@ const AI = () => {
     bottom: false,
   });
 
-  // 하단 버튼 영역 padding
-  // h-full 사용 시 부모의 paddingBottom(64px) 영역이 하단에 남음
-  // 버튼이 이 영역을 포함하여 BottomNavigation까지 도달하도록 padding 설정
-  // p-4(1rem) + App padding(4rem) + safe-area = BottomNavigation까지의 거리
+  // 하단 버튼 영역: BottomNavigation 높이 + safe area
+  // App.tsx가 /create 경로에서는 paddingBottom을 적용하지 않으므로
+  // 버튼이 BottomNavigation(64px)과 겹치지 않도록 padding 필요
+  // p-4 클래스의 padding(1rem)을 inline style로 덮어쓰므로 1rem도 포함
   const buttonAreaStyle: React.CSSProperties = {
     paddingBottom: 'calc(1rem + 4rem + env(safe-area-inset-bottom, 0px))',
   };
