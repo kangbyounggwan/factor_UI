@@ -9,9 +9,13 @@ import {
   Check,
   Crown,
   X,
+  ExternalLink,
+  Monitor,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "react-i18next";
 import useEmblaCarousel from "embla-carousel-react";
+import { Capacitor } from "@capacitor/core";
 
 interface SubscriptionPlan {
   id: string;
@@ -28,9 +32,12 @@ const Subscription = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [isYearly, setIsYearly] = useState(false);
   const [currentPlan, setCurrentPlan] = useState<string>("basic");
   const [emblaRef] = useEmblaCarousel({ align: "center", skipSnaps: false });
+
+  const isMobile = Capacitor.isNativePlatform();
 
   useEffect(() => {
     const loadCurrentPlan = async () => {
@@ -57,60 +64,60 @@ const Subscription = () => {
   const plans: SubscriptionPlan[] = [
     {
       id: "basic",
-      name: "Basic",
+      name: t("subscription.basic"),
       price: 0,
       interval: isYearly ? "year" : "month",
       max_printers: 2,
-      description: "개인 사용자를 위한 기본 플랜",
+      description: t("subscription.basicDesc"),
       features: [
-        { text: "최대 2대 프린터 연결", included: true },
-        { text: "실시간 모니터링", included: true },
-        { text: "원격 제어", included: true },
-        { text: "AI 모델 생성", included: false },
-        { text: "고급 분석 및 통계", included: false },
-        { text: "API 접근", included: false },
-        { text: "전담 지원", included: false },
-        { text: "전용 슬랙 채널", included: false },
-        { text: "SLA 보장", included: false },
+        { text: t("subscription.feature.maxPrinters", { count: 2 }), included: true },
+        { text: t("subscription.feature.monitoring"), included: true },
+        { text: t("subscription.feature.remoteControl"), included: true },
+        { text: t("subscription.feature.aiModel"), included: false },
+        { text: t("subscription.feature.analytics"), included: false },
+        { text: t("subscription.feature.apiAccess"), included: false },
+        { text: t("subscription.feature.support"), included: false },
+        { text: t("subscription.feature.slack"), included: false },
+        { text: t("subscription.feature.sla"), included: false },
       ],
     },
     {
       id: "pro",
-      name: "Pro",
+      name: t("subscription.pro"),
       price: isYearly ? 192000 : 19900,
       interval: isYearly ? "year" : "month",
       max_printers: 10,
-      description: "소규모 팀을 위한 프로 플랜",
+      description: t("subscription.proDesc"),
       popular: true,
       features: [
-        { text: "최대 10대 프린터 연결", included: true },
-        { text: "실시간 모니터링", included: true },
-        { text: "원격 제어", included: true },
-        { text: "AI 모델 생성", included: true },
-        { text: "고급 분석 및 통계", included: true },
-        { text: "API 접근", included: true },
-        { text: "전담 지원", included: false },
-        { text: "전용 슬랙 채널", included: false },
-        { text: "SLA 보장", included: false },
+        { text: t("subscription.feature.maxPrinters", { count: 10 }), included: true },
+        { text: t("subscription.feature.monitoring"), included: true },
+        { text: t("subscription.feature.remoteControl"), included: true },
+        { text: t("subscription.feature.aiModel"), included: true },
+        { text: t("subscription.feature.analytics"), included: true },
+        { text: t("subscription.feature.apiAccess"), included: true },
+        { text: t("subscription.feature.support"), included: false },
+        { text: t("subscription.feature.slack"), included: false },
+        { text: t("subscription.feature.sla"), included: false },
       ],
     },
     {
       id: "enterprise",
-      name: "Enterprise",
+      name: t("subscription.enterprise"),
       price: -1,
       interval: isYearly ? "year" : "month",
       max_printers: -1,
-      description: "대규모 인터넷 스케일 워크로드를 위한 플랜",
+      description: t("subscription.enterpriseDesc"),
       features: [
-        { text: "무제한 프린터 연결", included: true },
-        { text: "실시간 모니터링", included: true },
-        { text: "원격 제어", included: true },
-        { text: "AI 모델 생성", included: true },
-        { text: "고급 분석 및 통계", included: true },
-        { text: "API 접근", included: true },
-        { text: "24/7 전담 매니저", included: true },
-        { text: "전용 슬랙 채널", included: true },
-        { text: "SLA 보장", included: true },
+        { text: t("subscription.feature.unlimitedPrinters"), included: true },
+        { text: t("subscription.feature.monitoring"), included: true },
+        { text: t("subscription.feature.remoteControl"), included: true },
+        { text: t("subscription.feature.aiModel"), included: true },
+        { text: t("subscription.feature.analytics"), included: true },
+        { text: t("subscription.feature.apiAccess"), included: true },
+        { text: t("subscription.feature.support"), included: true },
+        { text: t("subscription.feature.slack"), included: true },
+        { text: t("subscription.feature.sla"), included: true },
       ],
     },
   ];
@@ -118,30 +125,38 @@ const Subscription = () => {
   const handleSelectPlan = (planId: string) => {
     if (planId === currentPlan) {
       toast({
-        title: "현재 플랜",
-        description: "이미 사용 중인 플랜입니다.",
+        title: t("subscription.currentPlan"),
+        description: t("subscription.alreadySubscribed"),
       });
       return;
     }
 
     if (planId === "enterprise") {
       toast({
-        title: "문의 필요",
-        description: "Enterprise 플랜은 별도 문의가 필요합니다.",
+        title: t("subscription.contactRequired"),
+        description: t("subscription.enterpriseContact"),
       });
       return;
     }
 
     if (planId === "basic") {
       toast({
-        title: "다운그레이드",
-        description: "Basic 플랜으로 변경하시겠습니까?",
+        title: t("subscription.downgrade"),
+        description: t("subscription.downgradeConfirm"),
       });
       return;
     }
 
-    // Pro 플랜 결제 페이지로 이동
-    navigate("/payment/checkout", { state: { planId, isYearly } });
+    // 모바일에서는 PC 웹 안내, PC에서는 결제 페이지 이동
+    if (isMobile) {
+      toast({
+        title: t("subscription.webOnly"),
+        description: t("subscription.webOnlyDesc"),
+        duration: 5000,
+      });
+    } else {
+      navigate("/payment/checkout", { state: { planId, isYearly } });
+    }
   };
 
   return (
@@ -155,7 +170,7 @@ const Subscription = () => {
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-lg font-semibold">Subscription Plans & Pricing</h1>
+          <h1 className="text-lg font-semibold">{t("subscription.title")}</h1>
           <button
             onClick={() => navigate(-1)}
             className="p-2 hover:bg-accent rounded-full transition-colors"
@@ -164,6 +179,21 @@ const Subscription = () => {
           </button>
         </div>
       </div>
+
+      {/* 모바일 전용 안내 메시지 */}
+      {isMobile && (
+        <div className="mx-4 mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+          <div className="flex items-start gap-3">
+            <Monitor className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-blue-500">{t("subscription.webOnly")}</h3>
+              <p className="text-sm text-blue-500/80 mt-1">
+                {t("subscription.webOnlyDesc")}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 월간/연간 토글 */}
       <div className="px-4 py-6">
@@ -176,7 +206,7 @@ const Subscription = () => {
                 : "bg-muted text-muted-foreground"
             }`}
           >
-            Monthly
+            {t("subscription.monthly")}
           </button>
           <button
             onClick={() => setIsYearly(true)}
@@ -186,10 +216,10 @@ const Subscription = () => {
                 : "bg-muted text-muted-foreground"
             }`}
           >
-            Yearly
+            {t("subscription.yearly")}
           </button>
           {isYearly && (
-            <Badge className="ml-2 bg-green-500 text-white">20% off</Badge>
+            <Badge className="ml-2 bg-green-500 text-white">{t("subscription.yearlyDiscount")}</Badge>
           )}
         </div>
       </div>
@@ -207,12 +237,12 @@ const Subscription = () => {
                 <div className="p-6 text-center relative">
                   {plan.popular && (
                     <Badge className="absolute top-4 right-4 bg-primary text-primary-foreground">
-                      인기
+                      {t("subscription.popular")}
                     </Badge>
                   )}
                   {currentPlan === plan.id && (
                     <Badge className="absolute top-4 left-4 bg-green-500 text-white">
-                      현재 플랜
+                      {t("subscription.currentPlan")}
                     </Badge>
                   )}
                   <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
@@ -223,16 +253,16 @@ const Subscription = () => {
                   {/* 가격 */}
                   <div className="mb-4">
                     {plan.price === -1 ? (
-                      <p className="text-3xl font-bold">문의</p>
+                      <p className="text-3xl font-bold">{t("subscription.contactUs")}</p>
                     ) : plan.price === 0 ? (
-                      <p className="text-3xl font-bold">무료</p>
+                      <p className="text-3xl font-bold">{t("subscription.free")}</p>
                     ) : (
                       <div>
                         <p className="text-4xl font-bold">
                           ₩{plan.price.toLocaleString()}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          / {plan.interval === "year" ? "년" : "월"}
+                          / {plan.interval === "year" ? t("subscription.year") : t("subscription.month")}
                         </p>
                       </div>
                     )}
@@ -269,10 +299,10 @@ const Subscription = () => {
                   {plan.id === "enterprise" && (
                     <div className="mt-4 p-3 bg-muted/50 rounded-lg">
                       <p className="text-xs font-medium text-muted-foreground">
-                        Support Type
+                        {t("subscription.supportType")}
                       </p>
                       <p className="text-sm font-semibold mt-1">
-                        24/7 Dedicated Manager
+                        {t("subscription.dedicatedManager")}
                       </p>
                     </div>
                   )}
@@ -293,15 +323,20 @@ const Subscription = () => {
                     disabled={currentPlan === plan.id}
                   >
                     {plan.id === "enterprise" ? (
-                      "Contact Us"
+                      t("subscription.contactUs")
                     ) : currentPlan === plan.id ? (
-                      "현재 플랜"
+                      t("subscription.currentPlan")
                     ) : plan.price === 0 ? (
-                      "다운그레이드"
+                      t("subscription.downgrade")
+                    ) : isMobile ? (
+                      <>
+                        <Monitor className="h-4 w-4 mr-2" />
+                        {t("subscription.subscribeOnWeb")}
+                      </>
                     ) : (
                       <>
                         <Crown className="h-4 w-4 mr-2" />
-                        구독하기
+                        {t("subscription.subscribe")}
                       </>
                     )}
                   </Button>

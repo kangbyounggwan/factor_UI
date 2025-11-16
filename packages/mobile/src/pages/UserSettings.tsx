@@ -97,26 +97,6 @@ const UserSettings = () => {
       ],
     },
     {
-      title: t("profile.subscriptionPayment"),
-      items: [
-        {
-          icon: FileText,
-          label: t("profile.subscriptionPlan"),
-          onClick: () => navigate("/subscription"),
-        },
-        {
-          icon: FileText,
-          label: t("profile.paymentHistory"),
-          onClick: () => console.log("Payment history"),
-        },
-        {
-          icon: FileText,
-          label: t("profile.paymentMethod"),
-          onClick: () => console.log("Payment method"),
-        },
-      ],
-    },
-    {
       title: t("profile.support"),
       items: [
         {
