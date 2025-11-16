@@ -5,7 +5,26 @@ import { startDashStatusSubscriptionsForUser, stopDashStatusSubscriptions, subsc
 import { disconnectSharedMqtt } from "../component/mqtt";
 import { createSharedMqttClient } from "../component/mqtt";
 import { sha256 } from 'js-sha256';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+// SignInWithApple 플러그인 인터페이스 정의
+interface SignInWithApplePlugin {
+  authorize(options: {
+    clientId: string;
+    redirectURI: string;
+    scopes: string;
+    nonce: string;
+  }): Promise<{
+    response: {
+      identityToken?: string;
+      user?: string;
+      email?: string;
+    };
+  }>;
+}
+
+// 플러그인 등록
+const SignInWithApple = registerPlugin<SignInWithApplePlugin>('SignInWithApple');
 
 type AppVariant = "web" | "mobile";
 
@@ -420,9 +439,6 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     if (isNativeMobile) {
       // iOS Native Sign in with Apple
       try {
-        // Capacitor Plugins에서 SignInWithApple 가져오기
-        const { SignInWithApple } = await import('@capacitor-community/apple-sign-in');
-
         // 1) raw nonce 생성 (원본)
         const rawNonce = Math.random().toString(36).substring(2, 15);
         // 2) SHA-256 해시 (Apple에 보낼 값)
@@ -430,6 +446,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
         console.log('[AuthContext] Nonce generated:', { rawNonce, hashedNonce });
 
+        // registerPlugin으로 등록된 플러그인 사용
         const result = await SignInWithApple.authorize({
           clientId: 'com.byeonggwan.factor',
           redirectURI: 'https://ecmrkjwsjkthurwljhvp.supabase.co/auth/v1/callback',
