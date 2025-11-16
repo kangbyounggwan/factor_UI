@@ -160,25 +160,27 @@ All colors MUST be HSL.
    * - 페이지 컨텐츠: safe-area 클래스 불필요 (중복 방지)
    *
    * 레거시 클래스 (하위 호환성):
-   * - .safe-area-top: 상단 SafeArea + 0.5rem
-   * - .safe-area-bottom: 하단 SafeArea + 1.5rem
+   * - .safe-area-top: 상단 SafeArea (추가 패딩 없음)
+   * - .safe-area-bottom: 하단 SafeArea + 0.5rem
    * - .safe-area-*-only: SafeArea만 적용 (추가 패딩 없음)
+   *
+   * ⚠️ 주의: 이제 PlatformHeader와 BottomNavigation은 useSafeAreaStyle을 사용합니다.
    * ======================================== */
 
-  /* 상단 SafeArea + 추가 패딩 */
+  /* 상단 SafeArea (추가 패딩 제거) */
   .safe-area-top {
-    padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+    padding-top: env(safe-area-inset-top, 0px);
   }
 
-  /* 하단 SafeArea + 추가 패딩 */
+  /* 하단 SafeArea (과도한 패딩 감소: 1.5rem → 0.5rem) */
   .safe-area-bottom {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
   }
 
   /* 상단 + 하단 SafeArea */
   .safe-area-inset {
-    padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem);
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
   }
 
   /* SafeArea만 적용 (추가 패딩 없음) - 시스템바 영역만 확보 */

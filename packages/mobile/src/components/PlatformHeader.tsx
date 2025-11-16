@@ -19,9 +19,6 @@ export const PlatformHeader = ({ children, className, sticky = true }: PlatformH
     topPadding: '1rem',
   });
 
-  // 디버깅: 적용된 스타일 확인
-  console.log('[PlatformHeader] SafeArea Style:', safeAreaStyle);
-
   return (
     <div
       className={cn(

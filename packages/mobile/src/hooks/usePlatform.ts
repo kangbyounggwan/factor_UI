@@ -85,10 +85,5 @@ export const getSafeAreaStyle = (
  */
 export const useSafeAreaStyle = (config: SafeAreaConfig = {}): CSSProperties => {
   const platform = usePlatform();
-  const style = getSafeAreaStyle(platform, config);
-
-  // 디버깅: 플랫폼과 생성된 스타일 확인
-  console.log('[useSafeAreaStyle] Platform:', platform, 'Config:', config, 'Style:', style);
-
-  return style;
+  return getSafeAreaStyle(platform, config);
 };

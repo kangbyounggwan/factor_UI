@@ -20,9 +20,6 @@ export function BottomNavigation() {
     bottomPadding: '0',
   });
 
-  // 디버깅: 적용된 스타일 확인
-  console.log('[BottomNavigation] SafeArea Style:', safeAreaStyle);
-
   const navItems = [
     {
       path: "/dashboard",

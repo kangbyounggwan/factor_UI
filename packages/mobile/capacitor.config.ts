@@ -10,7 +10,7 @@ const config: CapacitorConfig = {
       resizeOnFullScreen: false
     },
     StatusBar: {
-      overlays: false,
+      overlays: true,  // StatusBar가 콘텐츠 위에 오버레이됨 (SafeArea와 중복 방지)
       backgroundColor: '#0B0F17',
       style: 'LIGHT'
     }
@@ -19,11 +19,16 @@ const config: CapacitorConfig = {
     backgroundColor: '#0B0F17'
   },
   ios: {
-    contentInset: 'automatic'
+    // SafeArea를 CSS에서 직접 제어하기 위해 'never'로 설정
+    contentInset: 'never',
+    // 개발 중 웹뷰 캐시 비활성화
+    webContentsDebuggingEnabled: true
   },
   server: {
     androidScheme: 'https',
-    iosScheme: 'com.byeonggwan.factor'
+    iosScheme: 'com.byeonggwan.factor',
+    // 개발 중 캐시 비활성화
+    cleartext: true
   }
 };
 
