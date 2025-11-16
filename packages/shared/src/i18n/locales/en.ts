@@ -410,6 +410,8 @@ export default {
     termsOfService: "Terms of Service",
     privacyPolicy: "Privacy Policy",
     signOut: "Sign Out",
+    dangerZone: "Danger Zone",
+    deleteAccount: "Delete Account",
     // UserProfile page
     editProfile: "Edit Profile",
     profilePhoto: "Profile Photo",
