@@ -154,24 +154,22 @@ const UserSettings = () => {
         }}
       >
         <div className="flex items-center gap-4 px-6 h-full">
-          <div className="relative flex-shrink-0">
+          <div
+            className="relative flex-shrink-0 transition-all duration-200"
+            style={{
+              width: `${avatarSize}px`,
+              height: `${avatarSize}px`
+            }}
+          >
             {avatarUrl ? (
               <img
                 src={avatarUrl}
                 alt="Profile"
-                className="rounded-full object-cover bg-gradient-to-br from-blue-400 to-blue-600 transition-all duration-200"
-                style={{
-                  width: `${avatarSize}px`,
-                  height: `${avatarSize}px`
-                }}
+                className="w-full h-full rounded-full object-cover bg-gradient-to-br from-blue-400 to-blue-600"
               />
             ) : (
               <div
-                className="flex items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600 transition-all duration-200"
-                style={{
-                  width: `${avatarSize}px`,
-                  height: `${avatarSize}px`
-                }}
+                className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-blue-600"
               >
                 <span className={scrollProgress > 0.5 ? 'text-xl' : 'text-2xl'}>😎</span>
               </div>
