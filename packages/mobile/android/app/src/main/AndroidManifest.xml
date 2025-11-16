@@ -28,8 +28,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <!-- Custom scheme -->
-                <data android:scheme="com.factor.app" />
-                <data android:scheme="factor" />
+                <data android:scheme="com.factor.app" android:host="auth" android:pathPrefix="/callback" />
+                <data android:scheme="factor" android:host="auth" android:pathPrefix="/callback" />
             </intent-filter>
         </activity>
 

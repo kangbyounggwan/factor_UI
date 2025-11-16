@@ -81,10 +81,19 @@ const AppContent = () => {
     const handleAppUrlOpen = CapacitorApp.addListener('appUrlOpen', async (data) => {
       console.log('[App] Deep link received:', data.url);
 
-      // OAuth 콜백 URL 처리
+      // OAuth 콜백 URL 처리 (iOS: com.byeonggwan.factor://, Android: com.factor.app://)
       if (data.url.includes('auth/callback')) {
         try {
-          // URL 전체를 Supabase에 전달하여 세션 교환
+          // 브라우저 닫기 시도 (즉시 닫기)
+          try {
+            const { Browser } = await import('@capacitor/browser');
+            await Browser.close();
+            console.log('[App] Browser closed');
+          } catch (browserErr) {
+            console.log('[App] Browser already closed or not found');
+          }
+
+          // URL 파싱
           const url = new URL(data.url);
 
           // URL fragment (#access_token=...) 또는 query (?code=...) 처리
@@ -94,19 +103,14 @@ const AppContent = () => {
           const access_token = params.get('access_token');
           const refresh_token = params.get('refresh_token');
 
+          console.log('[App] Platform:', Capacitor.getPlatform());
+          console.log('[App] Full URL:', data.url);
+          console.log('[App] Fragment:', fragment);
+          console.log('[App] Search:', url.search);
           console.log('[App] Access token found:', !!access_token);
           console.log('[App] Refresh token found:', !!refresh_token);
 
           if (access_token && refresh_token) {
-            // 브라우저 닫기 시도
-            try {
-              const { Browser } = await import('@capacitor/browser');
-              await Browser.close();
-              console.log('[App] Browser closed');
-            } catch (browserErr) {
-              console.log('[App] Browser already closed or not found');
-            }
-
             // 토큰이 있으면 세션 설정
             const { error } = await supabase.auth.setSession({
               access_token,
@@ -127,17 +131,13 @@ const AppContent = () => {
                 description: '환영합니다!',
               });
 
-              // 약간의 지연 후 네비게이션 (토스트가 보이도록)
+              // 대시보드로 이동
               setTimeout(() => {
                 navigate('/dashboard', { replace: true });
-              }, 500);
+              }, 300);
             }
           } else {
             console.error('[App] No tokens found in OAuth callback');
-            console.log('[App] URL:', data.url);
-            console.log('[App] Fragment:', fragment);
-            console.log('[App] Search:', url.search);
-
             toast({
               title: '로그인 실패',
               description: '인증 정보를 받지 못했습니다.',
