@@ -27,9 +27,11 @@ const UserSettings = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Safe Area 패딩 (BottomNavigation 고려)
+  // App.tsx가 /user-settings에서는 paddingBottom을 적용하지 않으므로
+  // BottomNavigation 높이(64px)만큼 padding 필요
   const safeAreaStyle = useSafeAreaStyle({
     bottom: true,
-    bottomPadding: '2rem',
+    bottomPadding: '4rem', // BottomNavigation 높이
   });
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || t("common.user");

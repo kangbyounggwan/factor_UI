@@ -303,8 +303,8 @@ const AppContent = () => {
     !hideBottomNavStartsWith.some(path => location.pathname.startsWith(path)) &&
     !isSettingsSubPage;
 
-  // 고정 레이아웃 페이지들 (h-full 사용): 자체적으로 스크롤 관리, padding 불필요
-  const fixedLayoutPaths = ["/create"];
+  // 고정 레이아웃 페이지들 (h-full/h-screen 사용): 자체적으로 스크롤 관리, padding 불필요
+  const fixedLayoutPaths = ["/create", "/user-settings"];
 
   const shouldApplyPadding = shouldShowBottomNav && !fixedLayoutPaths.includes(location.pathname);
 

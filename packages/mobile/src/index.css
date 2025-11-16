@@ -135,6 +135,19 @@ All colors MUST be HSL.
     /* 키보드 처리는 capacitor.config.ts에서 resize: 'none'으로 설정됨 */
     /* Safe Area는 각 페이지 헤더에서 개별적으로 처리 */
   }
+
+  /* 부드러운 스크롤링 (iOS momentum scrolling) */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 스크롤 가능한 요소에 부드러운 스크롤 적용 */
+  .overflow-y-auto,
+  .overflow-x-auto,
+  .overflow-auto {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
 }
 
 @layer utilities {
