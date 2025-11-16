@@ -57,16 +57,22 @@ const AppContent = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // 테마 변경에 따라 상태바 아이콘/배경 동적 적용 (Android)
+  // 테마 변경에 따라 상태바 스타일 동적 적용 (iOS & Android)
   useEffect(() => {
     const applyStatusBar = async () => {
-      if (Capacitor.getPlatform() !== "android") return;
+      if (!Capacitor.isNativePlatform()) return;
+
       const isDark = theme === "dark";
+      const platform = Capacitor.getPlatform();
+
       try {
         // 라이트 모드: 검은색 텍스트 (Style.Light), 다크 모드: 흰색 텍스트 (Style.Dark)
         await StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light });
-        // 배경색은 앱의 테마 배경과 일치 (다크: 어두운 배경, 라이트: 밝은 배경)
-        await StatusBar.setBackgroundColor({ color: isDark ? "#0B0F17" : "#FFFFFF" });
+
+        // Android만 배경색 설정 (iOS는 투명 오버레이 사용)
+        if (platform === "android") {
+          await StatusBar.setBackgroundColor({ color: isDark ? "#0B0F17" : "#FFFFFF" });
+        }
       } catch (_) {
         // no-op
       }
