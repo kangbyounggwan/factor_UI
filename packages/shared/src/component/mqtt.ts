@@ -37,12 +37,12 @@ export function createMqttClientId(uid?: string): string {
     // localStorage에 저장
     try {
       localStorage.setItem(storageKey, clientId);
-      console.log(`MQTT Client ID 생성 및 저장: ${clientId}`);
+      console.log("%c[MQTT]%c Client ID 생성 및 저장:", "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "color: #4CAF50; font-weight: bold;", clientId);
     } catch (error) {
       console.warn('MQTT Client ID 저장 실패:', error);
     }
   } else {
-    console.log(`MQTT Client ID 복원: ${clientId}`);
+    console.log("%c[MQTT]%c Client ID 복원:", "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "color: #4CAF50; font-weight: bold;", clientId);
   }
   
   return clientId;
@@ -101,7 +101,7 @@ export class MqttBridge {
   }
 
   private log(...args: any[]) {
-    if (this.options.debug) console.log("[MQTT]", ...args);
+    if (this.options.debug) console.log("%c[MQTT]%c", "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", ...args);
   }
 
   private getDefaultPortForProtocol(protocol: string): number | undefined {
@@ -171,7 +171,7 @@ export class MqttBridge {
 
         this.client.on("packetreceive", (packet: any) => {
           if (packet?.cmd === "puback") {
-            try { console.log("[MQTT][PUBACK]", { messageId: packet.messageId }); } catch {}
+            try { console.log("%c[MQTT]%c%c[PUBACK]%c", "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #2196F3; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", { messageId: packet.messageId }); } catch {}
           }
         });
         this.client.on("message", (topic, payload) => {
@@ -255,7 +255,7 @@ export class MqttBridge {
     const payload = typeof message === "string" ? message : JSON.stringify(message);
     await new Promise<void>((res) => {
       this.client!.publish(topic, payload, { qos, retain }, (_err) => {
-        if (qos > 0) { try { console.log("[MQTT][PUBLISH-ACKED]", { topic, qos }); } catch {} }
+        if (qos > 0) { try { console.log("%c[MQTT]%c%c[PUBLISH-ACKED]%c", "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #FF9800; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", { topic, qos }); } catch {} }
         res();
       });
     });
@@ -403,7 +403,7 @@ export async function startDashStatusSubscriptionsForUser(userId: string, opts?:
     subscribedTopics.push(topic);
   }
   if (subscribedTopics.length > 0) {
-    console.log('[MQTT][SUB] started for octoprint/status topics:', subscribedTopics);
+    console.log('%c[MQTT]%c%c[SUB]%c started for octoprint/status topics:', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #9C27B0; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #9C27B0; font-weight: bold;", subscribedTopics);
   }
 
 
@@ -422,7 +422,7 @@ export async function stopDashStatusSubscriptions() {
     dashStatusTopicHandlers.delete(topic);
     dashStatusSubscribed.delete(topic);
   }
-  console.log('[MQTT][SUB] stopped for topics:', topics);
+  console.log('%c[MQTT]%c%c[SUB]%c stopped for topics:', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #9C27B0; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #9C27B0; font-weight: bold;", topics);
 }
 
 // 간단한 MQTT 토픽 패턴 매칭: '+'는 1레벨, '#'는 나머지 전부
@@ -557,7 +557,7 @@ export async function subscribeTopicsForUser(
   try {
     const info = mqttClient.getBrokerInfo?.() ?? { host: '', port: undefined };
     if (topics.length > 0) {
-      console.log('[MQTT][SUB][USER] started for topics:', topics, { broker_host: info.host, broker_port: info.port });
+      console.log('%c[MQTT]%c%c[SUB]%c%c[USER]%c started for topics:', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #9C27B0; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", "background: #607D8B; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #4CAF50; font-weight: bold;", topics, { broker_host: info.host, broker_port: info.port });
     } else {
       console.log('[MQTT][SUB][USER] no devices to subscribe', { userId, broker_host: info.host, broker_port: info.port });
     }
@@ -601,12 +601,12 @@ export async function subscribeControlResult(
       else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
     } catch {}
     const result = parsed as ControlResult;
-    try { console.log('[MQTT][CTRL][RX]', { topic: t, deviceSerial, result }); } catch {}
+    try { console.log('%c[MQTT]%c%c[CTRL]%c%c[RX]%c', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #F44336; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", "background: #2196F3; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #F44336; font-weight: bold;", { topic: t, deviceSerial, result }); } catch {}
     try { window.dispatchEvent(new CustomEvent('control_result', { detail: { deviceSerial, result } })); } catch {}
     onMessage(result);
   };
   await mqttClient.subscribe(topic, handler, qos);
-  try { console.log('[MQTT][CTRL][SUB] started', { topic, qos }); } catch {}
+  try { console.log('%c[MQTT]%c%c[CTRL]%c%c[SUB]%c started', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #F44336; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", "background: #9C27B0; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #F44336; font-weight: bold;", { topic, qos }); } catch {}
   return async () => { await mqttClient.unsubscribe(topic, handler); };
 }
 
@@ -620,7 +620,7 @@ export async function subscribeControlResultForUser(userId: string, qos: 0 | 1 |
         if (typeof payload === 'string') parsed = JSON.parse(payload);
         else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
       } catch {}
-      try { console.log('[MQTT][CTRL][RX]', { topic: `control_result/${deviceSerial}`, deviceSerial, result: parsed }); } catch {}
+      try { console.log('%c[MQTT]%c%c[CTRL]%c%c[RX]%c', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #F44336; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", "background: #2196F3; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #F44336; font-weight: bold;", { topic: `control_result/${deviceSerial}`, deviceSerial, result: parsed }); } catch {}
       try { window.dispatchEvent(new CustomEvent('control_result', { detail: { deviceSerial, result: parsed } })); } catch {}
     },
     qos

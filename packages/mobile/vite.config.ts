@@ -67,6 +67,10 @@ export default defineConfig(({ mode }) => {
       sourcemap: true,
       commonjsOptions: { transformMixedEsModules: true },
       rollupOptions: {
+        external: [
+          // iOS 전용 플러그인 - 빌드 시 번들링 제외
+          '@capacitor-community/apple-sign-in',
+        ],
         output: {
           manualChunks: {
             // Three.js and 3D rendering libraries in separate chunk

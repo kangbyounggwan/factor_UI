@@ -199,7 +199,6 @@ const DeviceSetup = () => {
         const cameraData = {
           user_id: user.id,
           device_uuid: uuid,
-          camera_uuid: null,
           resolution: null,
           stream_url: null,
         };
