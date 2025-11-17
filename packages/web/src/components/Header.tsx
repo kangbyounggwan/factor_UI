@@ -38,6 +38,8 @@ import { supabase } from "@shared/integrations/supabase/client";
 import type { Notification } from "@shared/services/supabaseService/notifications";
 import type { PrinterStatusInfo } from "@shared/types/printerType";
 import LanguageSwitcher from "./LanguageSwitcher";
+import { submitFeedback } from "@shared/services/supabaseService/feedback";
+import { useToast } from "@/hooks/use-toast";
 
 export const Header = () => {
   const { t, i18n } = useTranslation();
@@ -71,6 +73,7 @@ export const Header = () => {
   const { user, signOut, isAdmin } = useAuth();
   const { theme, setTheme } = useTheme();
   const summary = useDashboardSummary();
+  const { toast } = useToast();
 
   const currentLanguage = i18n.language || 'ko';
 
@@ -622,21 +625,52 @@ export const Header = () => {
                             {t('feedback.cancel')}
                           </Button>
                           <Button
-                            onClick={() => {
-                              // TODO: Submit feedback
-                              console.log('Feedback:', {
-                                type: feedbackType,
+                            onClick={async () => {
+                              // Validate input
+                              if (!feedbackTitle.trim() || !feedbackDescription.trim()) {
+                                toast({
+                                  title: t('feedback.error'),
+                                  description: t('feedback.fillRequired'),
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+
+                              // Show loading toast
+                              toast({
+                                title: t('feedback.submitting'),
+                                description: t('feedback.pleaseWait'),
+                              });
+
+                              // Submit feedback
+                              const result = await submitFeedback({
+                                type: feedbackType!,
                                 title: feedbackTitle,
                                 description: feedbackDescription,
-                                printerId: selectedPrinter,
-                                images: attachedImages,
+                                printerId: selectedPrinter || undefined,
+                                imageFiles: attachedImages.length > 0 ? attachedImages : undefined,
                               });
-                              setFeedbackType(null);
-                              setFeedbackTitle('');
-                              setFeedbackDescription('');
-                              setSelectedPrinter('');
-                              setAttachedImages([]);
-                              setFeedbackDialogOpen(false);
+
+                              if (result.success) {
+                                toast({
+                                  title: t('feedback.success'),
+                                  description: t('feedback.thankYou'),
+                                });
+
+                                // Reset form
+                                setFeedbackType(null);
+                                setFeedbackTitle('');
+                                setFeedbackDescription('');
+                                setSelectedPrinter('');
+                                setAttachedImages([]);
+                                setFeedbackDialogOpen(false);
+                              } else {
+                                toast({
+                                  title: t('feedback.error'),
+                                  description: result.error || t('feedback.submitFailed'),
+                                  variant: "destructive",
+                                });
+                              }
                             }}
                           >
                             {t('feedback.submit')}

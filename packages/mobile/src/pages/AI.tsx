@@ -59,7 +59,6 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 import { supabase } from "@shared/integrations/supabase/client";
 import { createAIModel, updateAIModel, listAIModels, deleteAIModel } from "@shared/services/supabaseService/aiModel";
 import { downloadAndUploadModel, downloadAndUploadSTL, downloadAndUploadThumbnail, downloadAndUploadGCode, deleteModelFiles } from "@shared/services/supabaseService/aiStorage";
@@ -321,6 +320,21 @@ const AI = () => {
       subscription.unsubscribe();
     };
   }, [user?.id]);
+
+  // Progress 95% 도달 시 모델링 완료 → 최적화 단계로 전환
+  useEffect(() => {
+    if (progress >= 95 && workflowState.steps.modelling === 'processing') {
+      setWorkflowState(prev => ({
+        ...prev,
+        current_step: 'optimization',
+        steps: {
+          ...prev.steps,
+          modelling: 'completed',
+          optimization: 'processing',
+        },
+      }));
+    }
+  }, [progress, workflowState.steps.modelling]);
 
   // URL 쿼리 파라미터로 모델 아카이브 Sheet 제어
   useEffect(() => {

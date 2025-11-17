@@ -19,6 +19,7 @@ import { AdminRoute } from "@/components/AdminRoute";
 // import { AIAssistantSidebar } from "@/components/AIAssistantSidebar"; // AI 비활성화
 import { AISidebarProvider } from "@/contexts/AISidebarContext";
 import { useToast } from "@/hooks/use-toast";
+import { pushNotificationService } from "@/services/pushNotificationService";
 
 // Lazy load all pages for code splitting
 const Home = lazy(() => import("./pages/Home"));
@@ -56,6 +57,49 @@ const AppContent = () => {
   const { theme } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  // 푸시 알림 초기화 (로그인 상태일 때만)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let currentUserId: string | null = null;
+
+    const initPushNotifications = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (user) {
+          currentUserId = user.id;
+          await pushNotificationService.initialize(user.id);
+          console.log('[App] Push notifications initialized for user:', user.id);
+        }
+      } catch (error) {
+        console.error('[App] Failed to initialize push notifications:', error);
+      }
+    };
+
+    initPushNotifications();
+
+    // 인증 상태 변경 시 푸시 알림 재초기화
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        currentUserId = session.user.id;
+        await pushNotificationService.initialize(session.user.id);
+        console.log('[App] Push notifications re-initialized after sign in');
+      } else if (event === 'SIGNED_OUT') {
+        console.log('[App] User signed out, deactivating FCM token');
+        // 로그아웃 시 FCM 토큰 비활성화
+        if (currentUserId) {
+          await pushNotificationService.deactivateCurrentToken(currentUserId);
+          currentUserId = null;
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // 테마 변경에 따라 상태바 스타일 동적 적용 (iOS & Android)
   useEffect(() => {

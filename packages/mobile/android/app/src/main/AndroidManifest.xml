@@ -10,6 +10,18 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+
+        <!-- Firebase Cloud Messaging -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@android:color/white" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="factor_default" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
             android:name=".MainActivity"
@@ -65,4 +77,7 @@
 
     <!-- Android 13+ Wi‑Fi 스캔 전용 권한 (필요 시) -->
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+
+    <!-- Android 13+ 푸시 알림 권한 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 </manifest>

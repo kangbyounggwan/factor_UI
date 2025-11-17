@@ -1540,7 +1540,14 @@ export default {
     uploadImages: "이미지 업로드 (최대 5개, 각 5MB)",
     imageCount: "{{count}}/{{max}}개 이미지",
     cancel: "취소",
-    submit: "제출"
+    submit: "제출",
+    error: "오류",
+    fillRequired: "제목과 내용을 모두 입력해주세요",
+    submitting: "제출 중...",
+    pleaseWait: "잠시만 기다려주세요",
+    success: "성공",
+    thankYou: "피드백을 보내주셔서 감사합니다!",
+    submitFailed: "피드백 제출에 실패했습니다"
   },
   account: {
     deleteTitle: "계정 삭제",
@@ -1564,5 +1571,61 @@ export default {
     deleteConfirmError: "확인 텍스트가 일치하지 않습니다",
     userNotFound: "사용자를 찾을 수 없습니다",
     deleteGenericError: "계정 삭제 중 오류가 발생했습니다"
+  },
+  deviceSetup: {
+    // Page title & description
+    title: "3D 프린터 설정",
+    description: "플러그인이 설치된 프린터를 FACTOR에 연결하세요",
+
+    // Form labels
+    deviceUuidLabel: "디바이스 UUID",
+    deviceUuidHelper: "플러그인에서 자동으로 생성된 고유 식별자입니다",
+    printerNameLabel: "프린터 이름",
+    printerNamePlaceholder: "예: 메인 프린터",
+    printerNameHelper: "대시보드에서 표시될 이름입니다",
+    printerNameRequired: "프린터 이름을 입력해주세요.",
+
+    // Buttons
+    registerButton: "설비 등록하기",
+    loginAndRegisterButton: "로그인하고 등록하기",
+    registeringButton: "등록 중...",
+    cancelButton: "취소",
+    retryButton: "재등록 시도하기",
+    backToHomeButton: "홈으로 돌아가기",
+    goToDashboardButton: "대시보드로 이동",
+
+    // States
+    checkingDevice: "디바이스 정보 확인 중...",
+
+    // Alerts
+    loginRequiredAlert: "설비를 등록하려면 먼저 로그인이 필요합니다.",
+
+    // Success messages
+    registrationComplete: "설비 등록 완료!",
+    registrationCompleteMessage: "{{deviceName}}이(가) 성공적으로 등록되었습니다.",
+
+    // Error messages
+    registrationFailed: "등록 실패",
+    inputError: "입력 오류",
+    deviceAlreadyRegistered: "이 디바이스는 이미 등록되었습니다.",
+    databaseError: "데이터베이스 등록 중 오류가 발생했습니다.",
+    registrationError: "디바이스 등록 중 오류가 발생했습니다.",
+
+    // Expiration screen
+    registrationExpiredTitle: "등록 기간 만료",
+    registrationExpiredDescription: "설정 링크의 유효 기간이 만료되었습니다.",
+    registrationExpiredMessage: "디바이스 등록은 링크 생성 후 5분 이내에 완료해야 합니다. 유효 기간이 경과하여 등록을 진행할 수 없습니다.",
+    registrationExpiredHelper: "OctoPrint 플러그인에서 새로운 설정 링크를 생성해주세요.",
+    confirmButton: "확인",
+
+    // Invalid UUID screen
+    invalidLinkTitle: "잘못된 설정 링크",
+    invalidLinkDescription: "유효하지 않은 디바이스 UUID입니다.",
+    invalidLinkMessage: "플러그인에서 생성된 올바른 설정 링크를 사용해주세요.",
+
+    // Already registered screen
+    alreadyRegisteredTitle: "이미 등록된 설비",
+    alreadyRegisteredDescription: "이 설비는 이미 등록되었습니다.",
+    alreadyRegisteredMessage: "{{deviceName}} 설비는 이미 FACTOR에 등록되어 있습니다. 대시보드에서 확인하실 수 있습니다."
   }
 };

@@ -298,3 +298,75 @@ export async function notifySubscriptionExpiring(params: {
     relatedType: 'subscription',
   });
 }
+
+/**
+ * 푸시 알림 전송 (Supabase Edge Function 호출)
+ * ⚠️ 주의: Edge Function 내부에서 DB에 저장하고 FCM 전송함
+ *
+ * 플로우:
+ * 1. DB에 알림 저장 (notifications 테이블)
+ * 2. 활성 FCM 토큰 조회 (user_device_tokens 테이블)
+ * 3. FCM을 통해 푸시 전송
+ */
+export async function sendPushNotification(params: {
+  userId: string;
+  title: string;
+  body: string;
+  type: string; // 알림 타입 (필수)
+  relatedId?: string;
+  relatedType?: string;
+  imageUrl?: string;
+  priority?: 'high' | 'normal';
+  messageEn?: string;
+}): Promise<{ success: boolean; error?: any; notificationId?: string }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('send-push-notification', {
+      body: {
+        userId: params.userId,
+        title: params.title,
+        body: params.body,
+        type: params.type,
+        relatedId: params.relatedId,
+        relatedType: params.relatedType,
+        data: {
+          type: params.type,
+          ...(params.relatedId && { related_id: params.relatedId }),
+          ...(params.relatedType && { related_type: params.relatedType }),
+        },
+        imageUrl: params.imageUrl,
+        priority: params.priority || 'high',
+        messageEn: params.messageEn,
+      },
+    });
+
+    if (error) {
+      console.error('Error sending push notification:', error);
+      return { success: false, error };
+    }
+
+    console.log('Push notification sent:', data);
+    return { success: true, notificationId: data?.notificationId };
+  } catch (error) {
+    console.error('Error in sendPushNotification:', error);
+    return { success: false, error };
+  }
+}
+
+/**
+ * @deprecated 사용하지 마세요! sendPushNotification()을 직접 사용하세요.
+ * sendPushNotification()이 이미 DB 저장 + 푸시 전송을 모두 수행합니다.
+ */
+export async function createNotificationWithPush(params: CreateNotificationParams): Promise<{ success: boolean; error?: any; notification?: Notification }> {
+  console.warn('[DEPRECATED] createNotificationWithPush() is deprecated. Use sendPushNotification() instead.');
+
+  // sendPushNotification()을 직접 호출 (DB 저장 + 푸시 전송)
+  return sendPushNotification({
+    userId: params.userId,
+    title: params.title,
+    body: params.message,
+    type: params.type,
+    relatedId: params.relatedId,
+    relatedType: params.relatedType,
+    messageEn: params.message_en,
+  });
+}

@@ -11,6 +11,7 @@ import { supabase } from "@shared/integrations/supabase/client"
 import { useToast } from '@/hooks/use-toast';
 import { createSharedMqttClient } from '@shared/component/mqtt';
 import { startDashStatusSubscriptionsForUser } from '@shared/component/mqtt';
+import { useTranslation } from 'react-i18next';
 
 // 등록 유효 기간: 5분 (밀리초)
 const REGISTRATION_TIMEOUT_MS = 5 * 60 * 1000;
@@ -20,6 +21,7 @@ const DeviceSetup = () => {
   const { uuid } = useParams<{ uuid: string }>();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -147,8 +149,8 @@ const DeviceSetup = () => {
 
     if (!deviceName.trim()) {
       toast({
-        title: "입력 오류",
-        description: "프린터 이름을 입력해주세요.",
+        title: t('deviceSetup.inputError'),
+        description: t('deviceSetup.printerNameRequired'),
         variant: "destructive",
       });
       return;
@@ -178,8 +180,8 @@ const DeviceSetup = () => {
       if (error) {
         const errorCode = (error as any)?.code;
         const errorMessage = errorCode === '23505'
-          ? '이 디바이스는 이미 등록되었습니다.'
-          : '데이터베이스 등록 중 오류가 발생했습니다.';
+          ? t('deviceSetup.deviceAlreadyRegistered')
+          : t('deviceSetup.databaseError');
 
         // MQTT로 실패 메시지 전송
         await sendFailureMqttMessage(
@@ -261,8 +263,8 @@ const DeviceSetup = () => {
       }
 
       toast({
-        title: "설비 등록 완료!",
-        description: `${deviceName}이(가) 성공적으로 등록되었습니다.`,
+        title: t('deviceSetup.registrationComplete'),
+        description: t('deviceSetup.registrationCompleteMessage', { deviceName }),
       });
 
       // 대시보드로 이동
@@ -280,8 +282,8 @@ const DeviceSetup = () => {
       }
 
       toast({
-        title: "등록 실패",
-        description: error instanceof Error ? error.message : "디바이스 등록 중 오류가 발생했습니다.",
+        title: t('deviceSetup.registrationFailed'),
+        description: error instanceof Error ? error.message : t('deviceSetup.registrationError'),
         variant: "destructive",
       });
     } finally {
@@ -297,7 +299,7 @@ const DeviceSetup = () => {
           <CardContent className="pt-6">
             <div className="flex flex-col items-center justify-center py-8">
               <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
-              <p className="text-muted-foreground">디바이스 정보 확인 중...</p>
+              <p className="text-muted-foreground">{t('deviceSetup.checkingDevice')}</p>
             </div>
           </CardContent>
         </Card>
@@ -307,42 +309,31 @@ const DeviceSetup = () => {
 
   // 등록 기간 만료
   if (registrationExpired) {
-    const handleRetry = () => {
-      // 타이머 리셋하여 재등록 허용
-      localStorage.setItem(`device_registration_start_${uuid}`, Date.now().toString());
-      setRegistrationExpired(false);
-      setDeviceExists(true);
-    };
-
     return (
       <div className="min-h-screen bg-gradient-to-br from-background to-muted/20 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader>
             <div className="flex items-center gap-2">
               <AlertCircle className="w-6 h-6 text-destructive" />
-              <CardTitle>등록 기간 만료</CardTitle>
+              <CardTitle>{t('deviceSetup.registrationExpiredTitle')}</CardTitle>
             </div>
             <CardDescription>
-              설정 링크의 유효 기간이 만료되었습니다.
+              {t('deviceSetup.registrationExpiredDescription')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Alert variant="destructive">
               <AlertDescription>
-                디바이스 등록은 링크 생성 후 5분 이내에 완료해야 합니다.
-                유효 기간이 경과하여 등록을 진행할 수 없습니다.
+                {t('deviceSetup.registrationExpiredMessage')}
               </AlertDescription>
             </Alert>
-            <div className="mt-6 space-y-2">
-              <Button onClick={handleRetry} className="w-full">
-                재등록 시도하기
-              </Button>
-              <Link to="/">
-                <Button variant="outline" className="w-full">홈으로 돌아가기</Button>
-              </Link>
-            </div>
             <div className="mt-4 text-sm text-muted-foreground">
-              <p>새로운 설정 링크가 필요한 경우, 플러그인에서 다시 생성해주세요.</p>
+              <p>{t('deviceSetup.registrationExpiredHelper')}</p>
+            </div>
+            <div className="mt-6">
+              <Link to="/">
+                <Button className="w-full">{t('deviceSetup.confirmButton')}</Button>
+              </Link>
             </div>
           </CardContent>
         </Card>
@@ -358,21 +349,21 @@ const DeviceSetup = () => {
           <CardHeader>
             <div className="flex items-center gap-2">
               <AlertCircle className="w-6 h-6 text-destructive" />
-              <CardTitle>잘못된 설정 링크</CardTitle>
+              <CardTitle>{t('deviceSetup.invalidLinkTitle')}</CardTitle>
             </div>
             <CardDescription>
-              유효하지 않은 디바이스 UUID입니다.
+              {t('deviceSetup.invalidLinkDescription')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Alert>
               <AlertDescription>
-                플러그인에서 생성된 올바른 설정 링크를 사용해주세요.
+                {t('deviceSetup.invalidLinkMessage')}
               </AlertDescription>
             </Alert>
             <div className="mt-6">
               <Link to="/">
-                <Button className="w-full">홈으로 돌아가기</Button>
+                <Button className="w-full">{t('deviceSetup.backToHomeButton')}</Button>
               </Link>
             </div>
           </CardContent>
@@ -389,25 +380,24 @@ const DeviceSetup = () => {
           <CardHeader>
             <div className="flex items-center gap-2">
               <CheckCircle className="w-6 h-6 text-green-500" />
-              <CardTitle>이미 등록된 설비</CardTitle>
+              <CardTitle>{t('deviceSetup.alreadyRegisteredTitle')}</CardTitle>
             </div>
             <CardDescription>
-              이 설비는 이미 등록되었습니다.
+              {t('deviceSetup.alreadyRegisteredDescription')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Alert>
               <AlertDescription>
-                <strong>{deviceName}</strong> 설비는 이미 FACTOR에 등록되어 있습니다.
-                대시보드에서 확인하실 수 있습니다.
+                {t('deviceSetup.alreadyRegisteredMessage', { deviceName })}
               </AlertDescription>
             </Alert>
             <div className="mt-6 space-y-2">
               <Link to="/dashboard">
-                <Button className="w-full">대시보드로 이동</Button>
+                <Button className="w-full">{t('deviceSetup.goToDashboardButton')}</Button>
               </Link>
               <Link to="/">
-                <Button variant="outline" className="w-full">홈으로 돌아가기</Button>
+                <Button variant="outline" className="w-full">{t('deviceSetup.backToHomeButton')}</Button>
               </Link>
             </div>
           </CardContent>
@@ -423,24 +413,24 @@ const DeviceSetup = () => {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Printer className="w-6 h-6 text-primary" />
-            <CardTitle>3D 프린터 설정</CardTitle>
+            <CardTitle>{t('deviceSetup.title')}</CardTitle>
           </div>
           <CardDescription>
-            플러그인이 설치된 프린터를 FACTOR에 연결하세요
+            {t('deviceSetup.description')}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {!user && (
             <Alert className="mb-6">
               <AlertDescription>
-                설비를 등록하려면 먼저 로그인이 필요합니다.
+                {t('deviceSetup.loginRequiredAlert')}
               </AlertDescription>
             </Alert>
           )}
 
           <form onSubmit={handleSetup} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="uuid">디바이스 UUID</Label>
+              <Label htmlFor="uuid">{t('deviceSetup.deviceUuidLabel')}</Label>
               <Input
                 id="uuid"
                 value={uuid}
@@ -448,22 +438,22 @@ const DeviceSetup = () => {
                 className="font-mono text-sm bg-muted"
               />
               <p className="text-xs text-muted-foreground">
-                플러그인에서 자동으로 생성된 고유 식별자입니다
+                {t('deviceSetup.deviceUuidHelper')}
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="name">프린터 이름 *</Label>
+              <Label htmlFor="name">{t('deviceSetup.printerNameLabel')} *</Label>
               <Input
                 id="name"
-                placeholder="예: 메인 프린터"
+                placeholder={t('deviceSetup.printerNamePlaceholder')}
                 value={deviceName}
                 onChange={(e) => setDeviceName(e.target.value)}
                 disabled={submitting}
                 required
               />
               <p className="text-xs text-muted-foreground">
-                대시보드에서 표시될 이름입니다
+                {t('deviceSetup.printerNameHelper')}
               </p>
             </div>
 
@@ -471,23 +461,23 @@ const DeviceSetup = () => {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={submitting || !deviceName.trim()}
+                disabled={submitting || (user && !deviceName.trim())}
               >
                 {submitting ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    등록 중...
+                    {t('deviceSetup.registeringButton')}
                   </>
                 ) : user ? (
-                  '설비 등록하기'
+                  t('deviceSetup.registerButton')
                 ) : (
-                  '로그인하고 등록하기'
+                  t('deviceSetup.loginAndRegisterButton')
                 )}
               </Button>
 
               <Link to="/">
                 <Button type="button" variant="outline" className="w-full">
-                  취소
+                  {t('deviceSetup.cancelButton')}
                 </Button>
               </Link>
             </div>
