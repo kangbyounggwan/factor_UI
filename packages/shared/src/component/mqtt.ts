@@ -628,6 +628,135 @@ export async function subscribeControlResultForUser(userId: string, qos: 0 | 1 |
 }
 
 
+// === AI 모델 생성 완료/실패 알림 구독 ===
+export type AIModelCompletedPayload = {
+  model_id: string;
+  status: 'completed';
+  download_url: string;
+  thumbnail_url?: string;
+  stl_download_url?: string;
+  model_name: string;
+  generation_type: 'text_to_3d' | 'image_to_3d';
+};
+
+export type AIModelFailedPayload = {
+  model_id: string;
+  status: 'failed';
+  error_message: string;
+  generation_type: 'text_to_3d' | 'image_to_3d';
+};
+
+export type AIModelProgressPayload = {
+  model_id: string;
+  status: 'processing';
+  progress: number; // 0-100
+  message: string;
+  generation_type: 'text_to_3d' | 'image_to_3d';
+};
+
+/**
+ * AI 모델 생성 완료 알림 구독
+ */
+export async function subscribeAIModelCompleted(
+  userId: string,
+  onCompleted: (payload: AIModelCompletedPayload) => void,
+  qos: 0 | 1 | 2 = 1
+) {
+  const mqttClient = createSharedMqttClient();
+  await mqttClient.connect();
+  const topic = `ai/model/completed/${userId}`;
+
+  const handler: MqttMessageHandler = (t, payload) => {
+    let parsed: any = payload;
+    try {
+      if (typeof payload === 'string') parsed = JSON.parse(payload);
+      else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
+    } catch {}
+
+    console.log('%c[MQTT]%c%c[AI-MODEL]%c%c[COMPLETED]%c',
+      "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "",
+      "background: #FF9800; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "",
+      "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;",
+      "color: #4CAF50; font-weight: bold;", parsed);
+
+    onCompleted(parsed as AIModelCompletedPayload);
+  };
+
+  await mqttClient.subscribe(topic, handler, qos);
+  console.log('%c[MQTT]%c%c[AI-MODEL]%c%c[SUB]%c started',
+    "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "",
+    "background: #FF9800; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "",
+    "background: #9C27B0; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;",
+    "color: #FF9800; font-weight: bold;", { topic, qos });
+
+  return async () => { await mqttClient.unsubscribe(topic, handler); };
+}
+
+/**
+ * AI 모델 생성 실패 알림 구독
+ */
+export async function subscribeAIModelFailed(
+  userId: string,
+  onFailed: (payload: AIModelFailedPayload) => void,
+  qos: 0 | 1 | 2 = 1
+) {
+  const mqttClient = createSharedMqttClient();
+  await mqttClient.connect();
+  const topic = `ai/model/failed/${userId}`;
+
+  const handler: MqttMessageHandler = (t, payload) => {
+    let parsed: any = payload;
+    try {
+      if (typeof payload === 'string') parsed = JSON.parse(payload);
+      else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
+    } catch {}
+
+    console.log('%c[MQTT]%c%c[AI-MODEL]%c%c[FAILED]%c',
+      "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "",
+      "background: #FF9800; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "",
+      "background: #F44336; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;",
+      "color: #F44336; font-weight: bold;", parsed);
+
+    onFailed(parsed as AIModelFailedPayload);
+  };
+
+  await mqttClient.subscribe(topic, handler, qos);
+  console.log('%c[MQTT]%c%c[AI-MODEL]%c%c[SUB]%c started',
+    "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "",
+    "background: #FF9800; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "",
+    "background: #9C27B0; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;",
+    "color: #FF9800; font-weight: bold;", { topic, qos });
+
+  return async () => { await mqttClient.unsubscribe(topic, handler); };
+}
+
+/**
+ * AI 모델 생성 진행률 알림 구독 (선택사항)
+ */
+export async function subscribeAIModelProgress(
+  userId: string,
+  onProgress: (payload: AIModelProgressPayload) => void,
+  qos: 0 | 1 | 2 = 0
+) {
+  const mqttClient = createSharedMqttClient();
+  await mqttClient.connect();
+  const topic = `ai/model/progress/${userId}`;
+
+  const handler: MqttMessageHandler = (t, payload) => {
+    let parsed: any = payload;
+    try {
+      if (typeof payload === 'string') parsed = JSON.parse(payload);
+      else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
+    } catch {}
+
+    onProgress(parsed as AIModelProgressPayload);
+  };
+
+  await mqttClient.subscribe(topic, handler, qos);
+
+  return async () => { await mqttClient.unsubscribe(topic, handler); };
+}
+
 // 공용: 한 번의 UUID 조회 후 상태/제어 구독을 모두 붙임
 export async function subscribeAllForUser(userId: string, qos: 0 | 1 | 2 = 1) {
   // forceRefresh로 최초 한 번만 REST 호출하고, 이후 호출들은 캐시 사용

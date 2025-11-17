@@ -281,13 +281,16 @@ export function useGenerateGcode() {
 }
 
 /**
- * 전체 워크플로우 실행 (3단계 통합)
- * 각 단계별 상태를 추적하는 커스텀 훅
+ * AI 모델 생성 워크플로우 (비동기 처리)
+ *
+ * 변경 사항:
+ * - DB 저장은 AI 서버에서 자동으로 처리
+ * - 프론트엔드는 AI 서버에 비동기 요청만 전송
+ * - MQTT 알림으로 완료 확인 (ai/model/completed/{user_id} 토픽 구독)
+ * - 완료되면 DB에서 조회
  */
 export function useAIWorkflow(supabase: SupabaseClient) {
   const queryClient = useQueryClient();
-  const createModel = useCreateAIModel(supabase);
-  const updateModel = useUpdateAIModel(supabase);
 
   return useMutation({
     mutationFn: async ({
@@ -299,72 +302,62 @@ export function useAIWorkflow(supabase: SupabaseClient) {
       userId: string;
       modelName: string;
     }) => {
-      // 1. DB에 모델 레코드 생성 (status: processing)
-      const model = await createModel.mutateAsync({
-        data: {
-          generation_type: request.generation_type,
-          prompt: request.prompt,
-          source_image_url: typeof request.image === 'string' ? request.image : undefined,
-          model_name: modelName,
+      // AI 서버에 비동기 모델 생성 요청
+      // AI 서버가 자동으로 DB에 저장하고 MQTT로 알림
+      const session = await supabase.auth.getSession();
+      const accessToken = session.data.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('인증이 필요합니다');
+      }
+
+      const formData = new FormData();
+
+      if (request.generation_type === 'text_to_3d' && request.prompt) {
+        formData.append('task', 'text_to_3d');
+        formData.append('prompt', request.prompt);
+      } else if (request.generation_type === 'image_to_3d' && request.image) {
+        formData.append('task', 'image_to_3d');
+        if (request.image instanceof File) {
+          formData.append('image_file', request.image);
+        }
+      }
+
+      // 메타데이터 추가
+      const metadata = {
+        model_name: modelName,
+      };
+      formData.append('json', JSON.stringify(metadata));
+
+      const AI_API_BASE_URL = import.meta.env?.VITE_AI_PYTHON_URL || 'http://127.0.0.1:7000';
+
+      const response = await fetch(`${AI_API_BASE_URL}/v1/process/modelling?async_mode=true`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
         },
-        userId,
+        body: formData,
       });
 
-      // 2. 워크플로우 실행
-      const result = await aiWorkflowApi.runCompleteWorkflow(request, {
-        // Step 1 완료: 모델 URL 업데이트
-        onModellingComplete: async (modellingResult) => {
-          await updateModel.mutateAsync({
-            modelId: model.id,
-            updates: {
-              storage_path: modellingResult.model_url,
-              download_url: modellingResult.model_url,
-              model_dimensions: modellingResult.dimensions,
-              generation_metadata: modellingResult.metadata,
-            },
-          });
-        },
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(`AI 모델 생성 요청 실패: ${error.message || response.statusText}`);
+      }
 
-        // Step 2 완료: 최적화된 모델 URL 업데이트
-        onOptimizationComplete: async (optimizationResult) => {
-          await updateModel.mutateAsync({
-            modelId: model.id,
-            updates: {
-              storage_path: optimizationResult.optimized_url,
-              download_url: optimizationResult.optimized_url,
-              file_size: optimizationResult.file_size,
-              file_format: optimizationResult.format,
-            },
-          });
-        },
+      const result = await response.json();
+      const taskId = result.data?.task_id;
 
-        // Step 3 완료: 상태를 completed로 변경
-        onGcodeGenerationComplete: async () => {
-          await updateModel.mutateAsync({
-            modelId: model.id,
-            updates: {
-              status: 'completed',
-            },
-          });
-        },
+      if (!taskId) {
+        throw new Error('task_id를 받지 못했습니다');
+      }
 
-        // 에러 발생 시: 상태를 failed로 변경
-        onError: async (error) => {
-          await updateModel.mutateAsync({
-            modelId: model.id,
-            updates: {
-              status: 'failed',
-              generation_metadata: {
-                error: error.message,
-              },
-            },
-          });
-        },
-      });
+      // AI 모델 목록 캐시 무효화 (백그라운드에서 새로운 모델이 추가될 예정)
+      queryClient.invalidateQueries({ queryKey: aiModelKeys.list(userId) });
+      queryClient.invalidateQueries({ queryKey: aiModelKeys.stats(userId) });
 
       return {
-        model,
-        workflow: result,
+        task_id: taskId,
+        message: '모델 생성이 시작되었습니다. MQTT 알림으로 완료를 확인하세요.',
       };
     },
   });
