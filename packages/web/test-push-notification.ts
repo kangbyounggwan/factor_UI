@@ -2,17 +2,41 @@
  * FCM 푸시 알림 테스트 스크립트
  *
  * 사용법:
- * 1. Supabase 환경 변수 설정 (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY)
- * 2. npx tsx test-push-notification.ts <user-id>
+ * 1. 환경 변수 설정:
+ *    export SUPABASE_URL=<your-supabase-url>
+ *    export SUPABASE_ANON_KEY=<your-anon-key>
+ *
+ * 2. 스크립트 실행:
+ *    npx tsx test-push-notification.ts <user-id>
  *
  * 예시:
+ * export SUPABASE_URL=https://ecmrkjwsjkthurwljhvp.supabase.co
+ * export SUPABASE_ANON_KEY=eyJhbGc...
  * npx tsx test-push-notification.ts 12345678-1234-1234-1234-123456789abc
  */
 
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ecmrkjwsjkthurwljhvp.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjbXJrandzamt0aHVyd2xqaHZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzA3MjE5MjgsImV4cCI6MjA0NjI5NzkyOH0.nYQxN0Swo0bpvgJvLuUf9TqaJXHd9zFzrAnIZFPxEEY';
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error(`
+❌ Error: Missing required environment variables
+
+Please set the following environment variables:
+  SUPABASE_URL - Your Supabase project URL
+  SUPABASE_ANON_KEY - Your Supabase anon/public key
+
+Example:
+  export SUPABASE_URL=https://your-project.supabase.co
+  export SUPABASE_ANON_KEY=eyJhbGc...
+
+You can find these values in:
+  Supabase Dashboard → Settings → API
+  `);
+  process.exit(1);
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

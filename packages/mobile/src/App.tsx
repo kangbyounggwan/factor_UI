@@ -60,18 +60,24 @@ const AppContent = () => {
 
   // 푸시 알림 초기화 (로그인 상태일 때만)
   useEffect(() => {
+    console.log('[App] FCM useEffect running, isNative:', Capacitor.isNativePlatform());
     if (!Capacitor.isNativePlatform()) return;
 
     let currentUserId: string | null = null;
 
     const initPushNotifications = async () => {
       try {
+        console.log('[App] Getting user from Supabase...');
         const { data: { user } } = await supabase.auth.getUser();
+        console.log('[App] User:', user ? user.id : 'No user');
 
         if (user) {
           currentUserId = user.id;
+          console.log('[App] Initializing push notifications for user:', user.id);
           await pushNotificationService.initialize(user.id);
           console.log('[App] Push notifications initialized for user:', user.id);
+        } else {
+          console.log('[App] No user logged in, skipping FCM initialization');
         }
       } catch (error) {
         console.error('[App] Failed to initialize push notifications:', error);

@@ -13,30 +13,36 @@ class PushNotificationService {
    * 푸시 알림 서비스 초기화
    */
   async initialize(userId: string): Promise<void> {
+    console.log('[PushService] initialize() called for user:', userId);
     if (this.isInitialized) {
-      console.log('Push notification service already initialized');
+      console.log('[PushService] Already initialized, skipping');
       return;
     }
 
     try {
+      console.log('[PushService] Requesting permissions...');
       // 푸시 알림 권한 요청
       const permission = await PushNotifications.requestPermissions();
+      console.log('[PushService] Permission result:', permission);
 
       if (permission.receive === 'granted') {
-        console.log('Push notification permission granted');
+        console.log('[PushService] Permission granted, registering with FCM...');
 
         // FCM 등록
         await PushNotifications.register();
+        console.log('[PushService] FCM register() called');
 
         // 이벤트 리스너 등록
         this.setupListeners(userId);
+        console.log('[PushService] Event listeners setup complete');
 
         this.isInitialized = true;
+        console.log('[PushService] Initialization complete');
       } else {
-        console.warn('Push notification permission denied');
+        console.warn('[PushService] Permission denied:', permission);
       }
     } catch (error) {
-      console.error('Error initializing push notifications:', error);
+      console.error('[PushService] Error during initialization:', error);
       throw error;
     }
   }
@@ -79,7 +85,10 @@ class PushNotificationService {
    */
   private async saveFCMToken(userId: string, fcmToken: string): Promise<void> {
     try {
-      const { error } = await supabase
+      console.log('Saving FCM token for user:', userId);
+      console.log('FCM token length:', fcmToken.length);
+
+      const { data, error } = await supabase
         .from('user_device_tokens')
         .upsert({
           user_id: userId,
@@ -88,15 +97,21 @@ class PushNotificationService {
           updated_at: new Date().toISOString(),
         }, {
           onConflict: 'user_id,device_token',
-        });
+        })
+        .select();
 
       if (error) {
-        console.error('Error saving FCM token:', error);
+        console.error('Error saving FCM token - Code:', error.code);
+        console.error('Error saving FCM token - Message:', error.message);
+        console.error('Error saving FCM token - Details:', error.details);
+        console.error('Error saving FCM token - Hint:', error.hint);
+        console.error('Full error object:', JSON.stringify(error, null, 2));
       } else {
-        console.log('FCM token saved successfully');
+        console.log('FCM token saved successfully:', data);
       }
     } catch (error) {
-      console.error('Error in saveFCMToken:', error);
+      console.error('Exception in saveFCMToken:', error);
+      console.error('Exception details:', JSON.stringify(error, null, 2));
     }
   }
 

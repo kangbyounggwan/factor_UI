@@ -19,6 +19,14 @@ FACTOR 프로젝트에 Firebase Admin SDK를 사용하여 푸시 알림을 전�
 - Android FCM 토큰 자동 등록
 - `user_device_tokens` 테이블에 저장
 
+## ⚠️ 보안 주의사항
+
+**중요**: Firebase Service Account 비공개 키는 절대 Git에 커밋하지 마세요!
+
+- ✅ `.gitignore`에 이미 추가됨: `**/*firebase-adminsdk*.json`
+- ✅ 다운로드한 원본 JSON 파일은 삭제 권장 (이미 Supabase에 설정 후)
+- ✅ 비공개 키는 Supabase 환경 변수로만 관리
+
 ## 🚀 설정 방법
 
 ### Step 1: Supabase에 Firebase 환경 변수 설정
@@ -47,39 +55,9 @@ Firebase Service Account 키에서 다음 정보를 추출하여 Supabase에 등
    ```
    FIREBASE_PRIVATE_KEY
    ```
-   값: (아래 전체 문자열을 복사하여 붙여넣기)
-   ```
-   -----BEGIN PRIVATE KEY-----
-MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCtAp+B5DFm04vD
-hx+4kVV09ndEydMiovYCQN042wAWHAHPryaI6b+bSpuPmv+Y6qHWHAKrUcRAj4/3
-u6GDMmK7ZLEqGUEPm4ingNGNxkth3k4UtNDzaivG/x7B5clODjFogxRMHkZ/Sj7O
-/E9ZsuR1T9C4nEihsu2gz7hh0ZQbFQR6rdKj3ZcW5/sV2lbuMqvvFQcO7VtHXVyD
-CQGCKrkZTqBo09Iqh43sAkEwRdJ0j8W0qStkWHcKzguwX3ibXEajfNHGIYbA6AyX
-zeyXnpX8qLhUYEJzd+h0oRbmad/PoX+AbZ+zR97HxIVYfR2TmNus+51H1/4aXEUL
-i87H+TKNAgMBAAECggEAEUlHG684dAAxOw7H6UtbVDQa1AL590BJP6djrL5Nwpr3
-LJBhBsjOjefev1kqyAh/HAmXbXurFd8VcOV/7HMyPZ8z1M0W9l+OQCih7dfBIpzk
-hOaEgojgqXtGUCd/8HsaWuMB7USqVL/CPJcluVFWla9GxczjtIUdGUMeUDO+NK6/
-9Ql8jneSvwB4U5xZry5YJt1JS6jGQsqZ99NXP638gErgEM1QXedJTRUV5xOk5piO
-i6QGtgKRjwmADWKslL6I89ZmWZUyc3rK8OD9J1UX7xuNlKJdIpEVM60Kz84jGmR2
-lG3BD8efGck8NbARzSVQfbOc/sKOPKYxdZA+yv5ExwKBgQDUEbQS3pL26n+O09ZV
-yHFbSeJyqOxngyJ4SZzc38Vm2Bw/PNVP09V5W0V0c0rYK4Qyg4hbEunT2qsq+tFd
-WemSpmO2gBgLK7rx3fHRNPaj5uYoYilzpFcqgDXJvLU/cwDUPZS+G9lLZMVGcjCS
-CwnrfvfvYatoG8vz5Ma4U4lRZzwKBgQDQ2ZOA3j2wQx0jzKQEky2JkVbum+3WdUZO
-FOU05q+kag9lEw9bRSDGTTxuTxHlbyowWusTQXNohnnWf4E60wvS6wSzA8/I2QI9
-T5L5WSFthUSmAxT82bbWhBu7MN6tUB1RUZq2VMxtvtWd/4Aqu5u/kGg2nZPVYhGb
-E1IGUa1w4wKBgE18cnl6jeReZmE/kc8iQBkE9BLFGivwREYDT6d8s9oSGLAagC58
-zkFbUhNslOpLbDAw0z/Dt2BLQ8OehaVAVxHYbhKe1yotvk7ls5enbH8SvQIAa/jv
-EVJcKkseAnO+h40FOzYDYvAjT9mfm5OhKOy9JfsYhbWIT1qWBm9nCz8NAoGAREQ6
-cM80Pt9RMRh9LHmnUuZNEiWp8oXW+0LdQRN+qjF44sL+LAlGk0s/y5bQ9LwHgFLX
-sC2eubXrMW/wH/hITyM/H/zI+I/mqX/PPO4jfRcov1MWkyffGfOI1QE+aExdqO0R
-szO4ts7AKKsRi+ZTHKTpS6DqZ79sndIM57/e/50CgYBQ/5GC7z6+rQb4o3ll5i/y
-2JfBSxUo3pakH9sN8WvU0o8FWHZ2js9D+Kb6atq9MjubT6vFLdjnl0F7Tfu3iRPA
-f7Mvgl+p689F4X9UBZduX53O+zwctMoeVb+DX3J4amTl3bvP+witDcCxcYb5io84
-msBphTPqtRlu8vxvmxCjwg==
------END PRIVATE KEY-----
-   ```
+   값: `C:\Users\USER\Downloads\bypunggwan-firebase-adminsdk-fbsvc-a77f021a55.json` 파일의 `private_key` 값을 복사하여 붙여넣기
 
-   **중요**: 위 Private Key는 줄바꿈을 포함한 정확한 형식입니다. 복사 시 전체 내용을 그대로 붙여넣어야 합니다.
+   **중요**: Private Key는 `-----BEGIN PRIVATE KEY-----`로 시작하고 `-----END PRIVATE KEY-----`로 끝나는 전체 문자열입니다. 줄바꿈 문자(`\n`)를 포함하여 정확히 복사해야 합니다.
 
 4. **Save** 클릭
 
@@ -95,34 +73,8 @@ npx supabase secrets set FIREBASE_PROJECT_ID=bypunggwan
 
 npx supabase secrets set FIREBASE_CLIENT_EMAIL=firebase-adminsdk-fbsvc@bypunggwan.iam.gserviceaccount.com
 
-npx supabase secrets set FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
-MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCtAp+B5DFm04vD
-hx+4kVV09ndEydMiovYCQN042wAWHAHPryaI6b+bSpuPmv+Y6qHWHAKrUcRAj4/3
-u6GDMmK7ZLEqGUEPm4ingNGNxkth3k4UtNDzaivG/x7B5clODjFogxRMHkZ/Sj7O
-/E9ZsuR1T9C4nEihsu2gz7hh0ZQbFQR6rdKj3ZcW5/sV2lbuMqvvFQcO7VtHXVyD
-CQGCKrkZTqBo09Iqh43sAkEwRdJ0j8W0qStkWHcKzguwX3ibXEajfNHGIYbA6AyX
-zeyXnpX8qLhUYEJzd+h0oRbmad/PoX+AbZ+zR97HxIVYfR2TmNus+51H1/4aXEUL
-i87H+TKNAgMBAAECggEAEUlHG684dAAxOw7H6UtbVDQa1AL590BJP6djrL5Nwpr3
-LJBhBsjOjefev1kqyAh/HAmXbXurFd8VcOV/7HMyPZ8z1M0W9l+OQCih7dfBIpzk
-hOaEgojgqXtGUCd/8HsaWuMB7USqVL/CPJcluVFWla9GxczjtIUdGUMeUDO+NK6/
-9Ql8jneSvwB4U5xZry5YJt1JS6jGQsqZ99NXP638gErgEM1QXedJTRUV5xOk5piO
-i6QGtgKRjwmADWKslL6I89ZmWZUyc3rK8OD9J1UX7xuNlKJdIpEVM60Kz84jGmR2
-lG3BD8efGck8NbARzSVQfbOc/sKOPKYxdZA+yv5ExwKBgQDUEbQS3pL26n+O09ZV
-yHFbSeJyqOxngyJ4SZzc38Vm2Bw/PNVP09V5W0V0c0rYK4Qyg4hbEunT2qsq+tFd
-WemSpmO2gBgLK7rx3fHRNPaj5uYoYilzpFcqgDXJvLU/cwDUPZS+G9lLZMVGcjCS
-CwnrfvfvYatoG8vz5Ma4U4lRZzwKBgQDQ2ZOA3j2wQx0jzKQEky2JkVbum+3WdUZO
-FOU05q+kag9lEw9bRSDGTTxuTxHlbyowWusTQXNohnnWf4E60wvS6wSzA8/I2QI9
-T5L5WSFthUSmAxT82bbWhBu7MN6tUB1RUZq2VMxtvtWd/4Aqu5u/kGg2nZPVYhGb
-E1IGUa1w4wKBgE18cnl6jeReZmE/kc8iQBkE9BLFGivwREYDT6d8s9oSGLAagC58
-zkFbUhNslOpLbDAw0z/Dt2BLQ8OehaVAVxHYbhKe1yotvk7ls5enbH8SvQIAa/jv
-EVJcKkseAnO+h40FOzYDYvAjT9mfm5OhKOy9JfsYhbWIT1qWBm9nCz8NAoGAREQ6
-cM80Pt9RMRh9LHmnUuZNEiWp8oXW+0LdQRN+qjF44sL+LAlGk0s/y5bQ9LwHgFLX
-sC2eubXrMW/wH/hITyM/H/zI+I/mqX/PPO4jfRcov1MWkyffGfOI1QE+aExdqO0R
-szO4ts7AKKsRi+ZTHKTpS6DqZ79sndIM57/e/50CgYBQ/5GC7z6+rQb4o3ll5i/y
-2JfBSxUo3pakH9sN8WvU0o8FWHZ2js9D+Kb6atq9MjubT6vFLdjnl0F7Tfu3iRPA
-f7Mvgl+p689F4X9UBZduX53O+zwctMoeVb+DX3J4amTl3bvP+witDcCxcYb5io84
-msBphTPqtRlu8vxvmxCjwg==
------END PRIVATE KEY-----"
+# Private Key는 bypunggwan-firebase-adminsdk-fbsvc-a77f021a55.json 파일에서 복사
+npx supabase secrets set FIREBASE_PRIVATE_KEY="<JSON 파일의 private_key 값>"
 ```
 
 **주의**: Windows CMD에서는 여러 줄 문자열 입력이 어려울 수 있습니다. PowerShell이나 Git Bash 사용을 권장합니다.
