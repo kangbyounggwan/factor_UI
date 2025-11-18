@@ -50,6 +50,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const queryClient = new QueryClient();
 
 const AppContent = () => {
+  console.log('[App] AppContent component mounted');
   const location = useLocation();
   const navigate = useNavigate();
   const [aiSidebarCollapsed, setAiSidebarCollapsed] = useState(true);

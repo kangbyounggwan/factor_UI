@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.byeonggwan.factor',
+  appId: 'com.byeonggwan.factor', // iOS용 기본 ID
   appName: 'FACTOR',
   webDir: 'dist',
   plugins: {
@@ -16,6 +16,8 @@ const config: CapacitorConfig = {
     }
   },
   android: {
+    // Android는 Google Play에 등록된 패키지명 사용
+    // AndroidManifest.xml의 package="com.factor.app"과 일치
     backgroundColor: '#0B0F17'
   },
   ios: {

@@ -1,11 +1,63 @@
 // Supabase Edge Function to send push notifications via Firebase Cloud Messaging
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
+import { importPKCS8 } from "https://deno.land/x/jose@v5.9.6/key/import.ts";
+import { SignJWT } from "https://deno.land/x/jose@v5.9.6/jwt/sign.ts";
 
 // Firebase Admin SDK credentials (from Service Account)
 const FIREBASE_PROJECT_ID = Deno.env.get("FIREBASE_PROJECT_ID") || "factor-f38b9";
 const FIREBASE_PRIVATE_KEY = Deno.env.get("FIREBASE_PRIVATE_KEY");
 const FIREBASE_CLIENT_EMAIL = Deno.env.get("FIREBASE_CLIENT_EMAIL");
+
+/**
+ * Get OAuth2 access token for Firebase Cloud Messaging v1 API
+ */
+async function getAccessToken(): Promise<string> {
+  let privateKey = FIREBASE_PRIVATE_KEY || "";
+
+  // JSON에서 온 경우 \\n을 실제 개행으로 변환
+  privateKey = privateKey.replace(/\\n/g, "\n");
+
+  // Ensure proper PKCS#8 format with newlines
+  privateKey = privateKey.trim();
+
+  console.log("Private key format check:", {
+    startsWithBegin: privateKey.startsWith("-----BEGIN PRIVATE KEY-----"),
+    endsWithEnd: privateKey.endsWith("-----END PRIVATE KEY-----"),
+    hasNewlines: privateKey.includes("\n"),
+    length: privateKey.length,
+    firstChars: privateKey.substring(0, 50)
+  });
+
+  // Import private key
+  const key = await importPKCS8(privateKey, "RS256");
+
+  // Create JWT
+  const now = Math.floor(Date.now() / 1000);
+  const jwt = await new SignJWT({
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+  })
+    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+    .setIssuer(FIREBASE_CLIENT_EMAIL!)
+    .setSubject(FIREBASE_CLIENT_EMAIL!)
+    .setAudience("https://oauth2.googleapis.com/token")
+    .setIssuedAt(now)
+    .setExpirationTime(now + 3600)
+    .sign(key);
+
+  // Exchange JWT for access token
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt,
+    }),
+  });
+
+  const data = await response.json();
+  return data.access_token;
+}
 
 // Supabase configuration
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -15,88 +67,19 @@ interface PushNotificationPayload {
   userId: string;
   title: string;
   body: string;
-  type: string; // 알림 타입 (필수)
+  type: string;
   relatedId?: string;
   relatedType?: string;
   data?: Record<string, string>;
   imageUrl?: string;
   priority?: "high" | "normal";
-  messageEn?: string; // 영어 메시지 (선택)
+  messageEn?: string;
 }
 
 /**
- * Get Firebase access token using Service Account credentials
- */
-async function getAccessToken(): Promise<string> {
-  if (!FIREBASE_PRIVATE_KEY || !FIREBASE_CLIENT_EMAIL) {
-    throw new Error("Firebase credentials not configured");
-  }
-
-  const jwtHeader = btoa(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-
-  const now = Math.floor(Date.now() / 1000);
-  const jwtClaimSet = {
-    iss: FIREBASE_CLIENT_EMAIL,
-    scope: "https://www.googleapis.com/auth/firebase.messaging",
-    aud: "https://oauth2.googleapis.com/token",
-    exp: now + 3600,
-    iat: now,
-  };
-  const jwtClaimSetEncoded = btoa(JSON.stringify(jwtClaimSet));
-
-  // Import private key
-  const privateKeyPem = FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n");
-  const pemHeader = "-----BEGIN PRIVATE KEY-----";
-  const pemFooter = "-----END PRIVATE KEY-----";
-  const pemContents = privateKeyPem.substring(
-    pemHeader.length,
-    privateKeyPem.length - pemFooter.length
-  );
-  const binaryDerString = atob(pemContents.trim());
-  const binaryDer = new Uint8Array(binaryDerString.length);
-  for (let i = 0; i < binaryDerString.length; i++) {
-    binaryDer[i] = binaryDerString.charCodeAt(i);
-  }
-
-  const key = await crypto.subtle.importKey(
-    "pkcs8",
-    binaryDer,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-
-  // Sign JWT
-  const dataToSign = `${jwtHeader}.${jwtClaimSetEncoded}`;
-  const signature = await crypto.subtle.sign(
-    "RSASSA-PKCS1-v1_5",
-    key,
-    new TextEncoder().encode(dataToSign)
-  );
-  const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
-  const jwt = `${dataToSign}.${signatureBase64}`;
-
-  // Exchange JWT for access token
-  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
-  });
-
-  if (!tokenResponse.ok) {
-    const error = await tokenResponse.text();
-    throw new Error(`Failed to get access token: ${error}`);
-  }
-
-  const tokenData = await tokenResponse.json();
-  return tokenData.access_token;
-}
-
-/**
- * Send FCM notification to a single device token
+ * Send FCM notification to a single device token using FCM v1 REST API
  */
 async function sendFCMNotification(
-  accessToken: string,
   deviceToken: string,
   title: string,
   body: string,
@@ -104,57 +87,65 @@ async function sendFCMNotification(
   imageUrl?: string,
   priority: "high" | "normal" = "high"
 ): Promise<{ success: boolean; error?: string }> {
-  const message: any = {
-    message: {
-      token: deviceToken,
-      notification: {
-        title,
-        body,
-      },
-      android: {
-        priority,
+  try {
+    const accessToken = await getAccessToken();
+
+    const message = {
+      message: {
+        token: deviceToken,
         notification: {
-          channel_id: "factor_default",
-          sound: "default",
+          title,
+          body,
           ...(imageUrl && { image: imageUrl }),
         },
-      },
-      apns: {
-        payload: {
-          aps: {
-            alert: {
-              title,
-              body,
-            },
+        android: {
+          priority: priority === "high" ? "high" : "normal",
+          notification: {
+            channel_id: "factor_default",
             sound: "default",
-            ...(imageUrl && { "mutable-content": 1 }),
+            ...(imageUrl && { image: imageUrl }),
           },
         },
-        ...(imageUrl && { fcm_options: { image: imageUrl } }),
+        apns: {
+          payload: {
+            aps: {
+              alert: {
+                title,
+                body,
+              },
+              sound: "default",
+              ...(imageUrl && { "mutable-content": 1 }),
+            },
+          },
+          ...(imageUrl && { fcm_options: { image: imageUrl } }),
+        },
+        ...(data && { data }),
       },
-      ...(data && { data }),
-    },
-  };
+    };
 
-  const response = await fetch(
-    `https://fcm.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/messages:send`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(message),
+    const response = await fetch(
+      `https://fcm.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/messages:send`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(message),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error("FCM API error:", error);
+      return { success: false, error: JSON.stringify(error) };
     }
-  );
 
-  if (!response.ok) {
-    const error = await response.text();
+    return { success: true };
+  } catch (error) {
     console.error("FCM API error:", error);
-    return { success: false, error };
+    return { success: false, error: error.message };
   }
-
-  return { success: true };
 }
 
 serve(async (req) => {
@@ -206,7 +197,7 @@ serve(async (req) => {
         user_id: userId,
         title,
         message: body,
-        message_en: messageEn,
+        message_en: messageEn || null,
         type,
         related_id: relatedId,
         related_type: relatedType,
@@ -265,14 +256,11 @@ serve(async (req) => {
       );
     }
 
-    // 4. Firebase access token 가져오기
-    const accessToken = await getAccessToken();
-
-    // 5. 모든 활성 디바이스에 FCM 푸시 전송
+    // 4. 모든 활성 디바이스에 FCM 푸시 전송
     console.log(`[Push] Sending FCM to ${deviceTokens.length} device(s)`);
     const results = await Promise.all(
       deviceTokens.map(({ device_token }) =>
-        sendFCMNotification(accessToken, device_token, title, body, data, imageUrl, priority)
+        sendFCMNotification(device_token, title, body, data, imageUrl, priority)
       )
     );
 
