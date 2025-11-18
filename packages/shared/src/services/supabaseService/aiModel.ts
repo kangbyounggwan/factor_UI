@@ -8,11 +8,76 @@ import {
   PrintStatus,
 } from '../../types/aiModelType';
 import { Paginated } from '../../types/commonType';
+import { createSignedUrlFromPath, extractPathFromUrl } from './aiStorage';
 
 /**
  * AI 생성 모델 관련 Supabase 서비스
  * Web과 Mobile에서 공통으로 사용
  */
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * AI 모델의 storage URL을 새로운 Signed URL로 갱신
+ * @param supabase - Supabase 클라이언트
+ * @param model - AI 모델 객체
+ * @returns URL이 갱신된 모델 객체
+ */
+async function refreshModelUrls(
+  supabase: SupabaseClient,
+  model: AIGeneratedModel
+): Promise<AIGeneratedModel> {
+  const updatedModel = { ...model };
+
+  // GLB 파일 URL 갱신
+  if (model.storage_path) {
+    const path = extractPathFromUrl(model.storage_path) || model.storage_path;
+    const signedUrl = await createSignedUrlFromPath(supabase, 'ai-models', path);
+    if (signedUrl) {
+      updatedModel.storage_path = signedUrl;
+    }
+  }
+
+  // STL 파일 URL 갱신
+  if (model.stl_url) {
+    const path = extractPathFromUrl(model.stl_url) || model.stl_url;
+    const signedUrl = await createSignedUrlFromPath(supabase, 'ai-models', path);
+    if (signedUrl) {
+      updatedModel.stl_url = signedUrl;
+    }
+  }
+
+  // 썸네일 URL 갱신
+  if (model.thumbnail_url) {
+    const path = extractPathFromUrl(model.thumbnail_url) || model.thumbnail_url;
+    const signedUrl = await createSignedUrlFromPath(supabase, 'ai-models', path);
+    if (signedUrl) {
+      updatedModel.thumbnail_url = signedUrl;
+    }
+  }
+
+  // GCode URL 갱신
+  if (model.gcode_url) {
+    const path = extractPathFromUrl(model.gcode_url) || model.gcode_url;
+    const signedUrl = await createSignedUrlFromPath(supabase, 'gcode-files', path);
+    if (signedUrl) {
+      updatedModel.gcode_url = signedUrl;
+    }
+  }
+
+  // Download URL 갱신 (storage_path와 동일한 파일)
+  if (model.download_url) {
+    const path = extractPathFromUrl(model.download_url) || model.download_url;
+    const signedUrl = await createSignedUrlFromPath(supabase, 'ai-models', path);
+    if (signedUrl) {
+      updatedModel.download_url = signedUrl;
+    }
+  }
+
+  return updatedModel;
+}
 
 // ============================================================================
 // AI Generated Models CRUD
@@ -66,7 +131,8 @@ export async function getAIModel(
     throw error;
   }
 
-  return data;
+  // Signed URL 갱신
+  return await refreshModelUrls(supabase, data);
 }
 
 /**
@@ -110,8 +176,13 @@ export async function listAIModels(
 
   if (error) throw error;
 
+  // 모든 모델의 Signed URL 갱신
+  const itemsWithUrls = await Promise.all(
+    (data || []).map(model => refreshModelUrls(supabase, model))
+  );
+
   return {
-    items: data || [],
+    items: itemsWithUrls,
     total: count || 0,
     page,
     pageSize,
@@ -149,8 +220,13 @@ export async function listPublicAIModels(
 
   if (error) throw error;
 
+  // 모든 모델의 Signed URL 갱신
+  const itemsWithUrls = await Promise.all(
+    (data || []).map(model => refreshModelUrls(supabase, model))
+  );
+
   return {
-    items: data || [],
+    items: itemsWithUrls,
     total: count || 0,
     page,
     pageSize,
@@ -380,7 +456,11 @@ export async function searchModelsByTag(
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+
+  // 모든 모델의 Signed URL 갱신
+  return await Promise.all(
+    (data || []).map(model => refreshModelUrls(supabase, model))
+  );
 }
 
 /**
@@ -399,5 +479,9 @@ export async function searchModelsByName(
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+
+  // 모든 모델의 Signed URL 갱신
+  return await Promise.all(
+    (data || []).map(model => refreshModelUrls(supabase, model))
+  );
 }

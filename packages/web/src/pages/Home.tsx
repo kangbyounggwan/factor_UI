@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Monitor, Play, Bell, BarChart3, Settings, Zap, Shield, Smartphone, ShoppingCart, Code2, Wand2, Image, Box, Layers, Download } from "lucide-react";
+import { Monitor, Play, Bell, BarChart3, Settings, Zap, Shield, Smartphone, ShoppingCart, Code2, Wand2, Image, Box, Layers, Download, Video } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TypingEffect } from "@/components/TypingEffect";
 
 
 const Home = () => {
@@ -40,6 +41,14 @@ const Home = () => {
 
   const features = [
     {
+      icon: Download,
+      title: t('landing.quickInstall'),
+      description: t('landing.quickInstallDesc'),
+      clickable: true,
+      onClick: () => setShowVideoModal(true),
+      hasVideo: true
+    },
+    {
       icon: Monitor,
       title: t('landing.realtimeMonitoring'),
       description: t('landing.realtimeMonitoringDesc'),
@@ -56,13 +65,6 @@ const Home = () => {
       title: t('landing.errorNotifications'),
       description: t('landing.errorNotificationsDesc'),
       clickable: false
-    },
-    {
-      icon: Download,
-      title: t('landing.quickInstall'),
-      description: t('landing.quickInstallDesc'),
-      clickable: true,
-      onClick: () => setShowVideoModal(true)
     }
   ];
 
@@ -114,8 +116,14 @@ const Home = () => {
         <div className="max-w-7xl mx-auto text-center">
           <div className="space-y-6">
             <div className="space-y-4">
-              <h1 className="text-6xl md:text-7xl font-bold tracking-tight">
-                {t('landing.heroTitle')} <span className="text-primary">{t('landing.heroTitleHighlight')}</span>{t('landing.heroTitleEnd')}
+              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight min-h-[180px] md:min-h-[220px] flex flex-col items-center justify-center">
+                <span className="block mb-2">{t('landing.heroTitle')}</span>
+                <TypingEffect
+                  text={t('landing.heroTitleHighlight')}
+                  speed={80}
+                  delay={500}
+                  className="text-primary block"
+                />
               </h1>
               <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto">
                 {t('landing.heroSubtitle')}
@@ -161,11 +169,18 @@ const Home = () => {
             {features.map((feature, index) => (
               <Card
                 key={index}
-                className={`text-center hover:shadow-lg transition-all border-2 hover:border-primary/20 ${
+                className={`text-center hover:shadow-lg transition-all border-2 hover:border-primary/20 relative ${
                   feature.clickable ? 'cursor-pointer hover:scale-105' : ''
                 }`}
                 onClick={feature.clickable ? feature.onClick : undefined}
               >
+                {feature.hasVideo && (
+                  <div className="absolute top-4 right-4">
+                    <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center shadow-lg">
+                      <Video className="w-4 h-4 text-primary-foreground" />
+                    </div>
+                  </div>
+                )}
                 <CardContent className="p-8">
                   <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
                     <feature.icon className="h-8 w-8 text-primary" />

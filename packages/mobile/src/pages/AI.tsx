@@ -10,6 +10,7 @@ import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capa
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import type { PermissionStatus } from '@capacitor/filesystem';
 
 // Lazy load ModelViewer to reduce initial bundle size
 const ModelViewer = lazy(() => import("@/components/ModelViewer"));
@@ -255,6 +256,66 @@ const AI = () => {
   useEffect(() => {
     document.title = t('ai.title') || "AI 3D 모델링 스튜디오";
   }, [t]);
+
+  // 모델 목록 로드 함수
+  const loadModels = async () => {
+    if (!user?.id) return;
+    try {
+      setIsLoadingHistory(true);
+      const models = await listAIModels(supabase, user.id, {
+        page: 1,
+        pageSize: 100,
+      });
+      setHistoryModels(models);
+    } catch (error) {
+      console.error('[AI] Failed to load models:', error);
+      toast({
+        title: t('ai.failedToLoadHistory'),
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // MQTT AI 모델 완료/실패 알림 처리
+  useEffect(() => {
+    const handleAIModelCompleted = async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const payload = customEvent.detail;
+      console.log('[AI] Model generation completed:', payload);
+
+      // 모델 목록 새로고침
+      await loadModels();
+
+      // 토스트 알림
+      toast({
+        title: t('ai.modelGenerationComplete'),
+        description: t('ai.modelGenerationCompleteDesc', { modelName: payload.model_name || '모델' }),
+      });
+    };
+
+    const handleAIModelFailed = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const payload = customEvent.detail;
+      console.log('[AI] Model generation failed:', payload);
+
+      // 토스트 알림
+      toast({
+        title: t('ai.modelGenerationFailed'),
+        description: t('ai.modelGenerationFailedDesc', { error: payload.error_message || '알 수 없는 오류' }),
+        variant: "destructive",
+      });
+    };
+
+    window.addEventListener('ai-model-completed', handleAIModelCompleted as EventListener);
+    window.addEventListener('ai-model-failed', handleAIModelFailed as EventListener);
+
+    return () => {
+      window.removeEventListener('ai-model-completed', handleAIModelCompleted as EventListener);
+      window.removeEventListener('ai-model-failed', handleAIModelFailed as EventListener);
+    };
+  }, [user?.id, t, toast]);
 
   // Subscribe to background task updates
   useEffect(() => {
@@ -1673,11 +1734,18 @@ const AI = () => {
                           }
                           console.log('[SAVE] ✓ Storage 업로드 완료');
 
-                          // 3. Public URL 가져오기
-                          const { data: { publicUrl } } = supabase.storage
+                          // 3. Signed URL 가져오기 (24시간 유효)
+                          const { data: urlData, error: urlError } = await supabase.storage
                             .from('ai-models')
-                            .getPublicUrl(filePath);
-                          console.log('[SAVE] 3. Public URL 생성:', publicUrl);
+                            .createSignedUrl(filePath, 86400);
+
+                          if (urlError) {
+                            console.error('[SAVE] ✗ Signed URL 생성 실패:', urlError);
+                            throw urlError;
+                          }
+
+                          const signedUrl = urlData.signedUrl;
+                          console.log('[SAVE] 3. Signed URL 생성:', signedUrl);
 
                           // 4. 기존 모델 업데이트 (새로운 모델 생성 대신)
                           console.log('[SAVE] 4. 기존 모델 업데이트 중...');
@@ -1714,7 +1782,7 @@ const AI = () => {
                             .from('ai_generated_models')
                             .update({
                               storage_path: filePath,
-                              download_url: publicUrl,
+                              download_url: signedUrl,
                               file_size: blob.size,
                               updated_at: new Date().toISOString(),
                             })
@@ -1741,7 +1809,7 @@ const AI = () => {
                             prompt: newModel.prompt || '',
                             status: 'completed',
                             thumbnail: newModel.thumbnail_url || '/placeholder.svg',
-                            glbUrl: publicUrl,
+                            glbUrl: signedUrl,
                             createdAt: newModel.created_at,
                           });
 
@@ -1751,7 +1819,7 @@ const AI = () => {
 
                           console.log('[SAVE] ========== 모델 저장 완료 ==========');
                           console.log('[SAVE] 새 모델 ID:', newModel.id);
-                          console.log('[SAVE] 새 모델 URL:', publicUrl);
+                          console.log('[SAVE] 새 모델 URL:', signedUrl);
 
                           toast({
                             title: t('common.success') || '저장 완료',
@@ -1798,74 +1866,113 @@ const AI = () => {
                       <Share2 className="w-4 h-4 mr-2" />
                       {t('common.share') || '공유'}
                     </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={async () => {
-                        if (generatedModel?.glbUrl) {
-                          // 네이티브 플랫폼에서는 Capacitor Filesystem 사용
-                          if (Capacitor.isNativePlatform()) {
+                    {/* 다운로드 버튼 - Android만 표시 */}
+                    {Capacitor.getPlatform() === 'android' && (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={async () => {
+                          if (!generatedModel?.glbUrl) return;
+
+                          try {
+                            // URL에서 파일 경로 추출
+                            const urlObj = new URL(generatedModel.glbUrl);
+                            const pathMatch = urlObj.pathname.match(/\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/(.+)/);
+
+                            if (!pathMatch) {
+                              throw new Error('Invalid storage URL format');
+                            }
+
+                            const bucketName = pathMatch[1];
+                            const filePath = decodeURIComponent(pathMatch[2].split('?')[0]);
+
+                            console.log('[Download] Downloading from bucket:', bucketName, 'path:', filePath);
+
+                            // Supabase Storage에서 직접 다운로드 (인증 포함)
+                            const { data: blob, error } = await supabase.storage
+                              .from(bucketName)
+                              .download(filePath);
+
+                            if (error) {
+                              console.error('[Download] Supabase download error:', error);
+                              throw error;
+                            }
+
+                            if (!blob) {
+                              throw new Error('No file data received');
+                            }
+
+                            console.log('[Download] File downloaded:', blob.size, 'bytes');
+
+                            // 권한 확인 (Android 10 미만)
                             try {
-                              // GLB 파일 다운로드
-                              const response = await fetch(generatedModel.glbUrl);
-                              const blob = await response.blob();
+                              const permission = await Filesystem.checkPermissions();
+                              console.log('[Download] Filesystem permission status:', permission);
 
-                              // Blob을 Base64로 변환
-                              const reader = new FileReader();
-                              reader.readAsDataURL(blob);
-                              reader.onloadend = async () => {
-                                const base64Data = reader.result as string;
-                                const base64 = base64Data.split(',')[1];
+                              if (permission.publicStorage !== 'granted') {
+                                const requestResult = await Filesystem.requestPermissions();
+                                console.log('[Download] Permission request result:', requestResult);
 
-                                try {
-                                  // Documents 디렉토리에 저장
-                                  await Filesystem.writeFile({
-                                    path: `${generatedModel.name}.glb`,
-                                    data: base64,
-                                    directory: Directory.Documents,
-                                  });
-
-                                  toast({
-                                    title: t('ai.downloadComplete') || '다운로드 완료',
-                                    description: t('ai.downloadCompleteDesc') || 'GLB 파일이 Documents 폴더에 저장되었습니다.',
-                                  });
-                                } catch (fsError) {
-                                  console.error('Filesystem write error:', fsError);
+                                if (requestResult.publicStorage !== 'granted') {
                                   toast({
                                     title: t('common.error') || '오류',
-                                    description: t('ai.downloadFailed') || '다운로드에 실패했습니다.',
+                                    description: '저장소 권한이 필요합니다.',
                                     variant: 'destructive',
                                   });
+                                  return;
                                 }
-                              };
-                            } catch (error) {
-                              console.error('Download error:', error);
-                              toast({
-                                title: t('common.error') || '오류',
-                                description: t('ai.downloadFailed') || '다운로드에 실패했습니다.',
-                                variant: 'destructive',
-                              });
+                              }
+                            } catch (permError) {
+                              // Android 10+ (API 29+)에서는 publicStorage 권한이 없을 수 있음
+                              console.log('[Download] Permission check skipped (likely Android 10+):', permError);
                             }
-                          } else {
-                            // 웹에서는 기존 다운로드 방식
-                            const link = document.createElement('a');
-                            link.href = generatedModel.glbUrl;
-                            link.download = `${generatedModel.name}.glb`;
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
+
+                            // Blob을 Base64로 변환
+                            const reader = new FileReader();
+                            reader.readAsDataURL(blob);
+                            reader.onloadend = async () => {
+                              const base64Data = reader.result as string;
+                              const base64 = base64Data.split(',')[1];
+
+                              try {
+                                // Android Downloads 폴더에 저장
+                                const result = await Filesystem.writeFile({
+                                  path: `Download/${generatedModel.name}.glb`,
+                                  data: base64,
+                                  directory: Directory.ExternalStorage,
+                                  recursive: true, // Download 폴더 자동 생성
+                                });
+
+                                console.log('[Download] File saved successfully:', result.uri);
+
+                                toast({
+                                  title: t('ai.downloadComplete') || '다운로드 완료',
+                                  description: `GLB 파일이 저장되었습니다.\n위치: ${result.uri}`,
+                                });
+                              } catch (fsError) {
+                                console.error('[Download] Filesystem write error:', fsError);
+                                toast({
+                                  title: t('common.error') || '오류',
+                                  description: t('ai.downloadFailed') || '다운로드에 실패했습니다.',
+                                  variant: 'destructive',
+                                });
+                              }
+                            };
+                          } catch (error) {
+                            console.error('Download error:', error);
                             toast({
-                              title: t('ai.downloadStarted') || '다운로드 시작',
-                              description: t('ai.downloadStartedDesc') || 'GLB 파일 다운로드를 시작합니다.',
+                              title: t('common.error') || '오류',
+                              description: t('ai.downloadFailed') || '다운로드에 실패했습니다.',
+                              variant: 'destructive',
                             });
                           }
-                        }
-                      }}
-                      disabled={!generatedModel?.glbUrl}
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      {t('common.download')}
-                    </Button>
+                        }}
+                        disabled={!generatedModel?.glbUrl}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        {t('common.download')}
+                      </Button>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {t('modelViewer.saveInfo') || 'Saves the model with current rotation, scale, and mesh optimizations applied.'}

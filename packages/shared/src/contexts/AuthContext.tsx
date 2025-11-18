@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../integrations/supabase/client";
-import { startDashStatusSubscriptionsForUser, stopDashStatusSubscriptions, subscribeControlResultForUser, clearMqttClientId } from "../component/mqtt";
+import { startDashStatusSubscriptionsForUser, stopDashStatusSubscriptions, subscribeControlResultForUser, clearMqttClientId, subscribeAIModelCompleted, subscribeAIModelFailed } from "../component/mqtt";
 import { disconnectSharedMqtt } from "../component/mqtt";
 import { createSharedMqttClient } from "../component/mqtt";
 import { sha256 } from 'js-sha256';
@@ -65,6 +65,8 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   const currentUserIdRef = useRef<string | null>(null);
   const subscribedUserIdRef = useRef<string | null>(null);
   const ctrlUnsubRef = useRef<null | (() => Promise<void>)>(null);
+  const aiCompletedUnsubRef = useRef<null | (() => Promise<void>)>(null);
+  const aiFailedUnsubRef = useRef<null | (() => Promise<void>)>(null);
   const lastRoleLoadedUserIdRef = useRef<string | null>(null);
   const signOutInProgressRef = useRef(false);
   const authEventReceivedRef = useRef(false);
@@ -98,7 +100,11 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   async function teardownSubscriptions() {
     try { await stopDashStatusSubscriptions(); } catch {}
     try { if (ctrlUnsubRef.current) await ctrlUnsubRef.current(); } catch {}
+    try { if (aiCompletedUnsubRef.current) await aiCompletedUnsubRef.current(); } catch {}
+    try { if (aiFailedUnsubRef.current) await aiFailedUnsubRef.current(); } catch {}
     ctrlUnsubRef.current = null;
+    aiCompletedUnsubRef.current = null;
+    aiFailedUnsubRef.current = null;
     subscribedUserIdRef.current = null;
   }
 
@@ -130,6 +136,36 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       if (cr) ctrlUnsubRef.current = cr;
     } catch (e) {
       console.warn("[MQTT] subscribeControlResultForUser failed:", e);
+    }
+
+    // AI 모델 완료 알림 구독
+    try {
+      const aiCompleted = await subscribeAIModelCompleted(
+        userId,
+        (payload) => {
+          console.log('[AI-MODEL] Completed:', payload);
+          // 브로드캐스트 이벤트로 전파하여 AI 페이지에서 처리
+          window.dispatchEvent(new CustomEvent('ai-model-completed', { detail: payload }));
+        }
+      ).catch(() => null);
+      if (aiCompleted) aiCompletedUnsubRef.current = aiCompleted;
+    } catch (e) {
+      console.warn("[MQTT] subscribeAIModelCompleted failed:", e);
+    }
+
+    // AI 모델 실패 알림 구독
+    try {
+      const aiFailed = await subscribeAIModelFailed(
+        userId,
+        (payload) => {
+          console.log('[AI-MODEL] Failed:', payload);
+          // 브로드캐스트 이벤트로 전파하여 AI 페이지에서 처리
+          window.dispatchEvent(new CustomEvent('ai-model-failed', { detail: payload }));
+        }
+      ).catch(() => null);
+      if (aiFailed) aiFailedUnsubRef.current = aiFailed;
+    } catch (e) {
+      console.warn("[MQTT] subscribeAIModelFailed failed:", e);
     }
 
     subscribedUserIdRef.current = userId; // 성공했을 때만 표시

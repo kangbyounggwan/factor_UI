@@ -104,6 +104,10 @@ ios/App/build/
 # Supabase
 .supabase/
 
+# Firebase service account keys (NEVER commit these!)
+**/firebase-service-account.json
+**/*firebase-adminsdk*.json
+
 
 # --- 예외: Vite 앱의 public 은 추적 ---
 !packages/web/public/

@@ -353,14 +353,16 @@ const UserSettings = () => {
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      // Get signed URL (24시간 유효)
+      const { data: urlData, error: urlError } = await supabase.storage
         .from('avatars')
-        .getPublicUrl(filePath);
+        .createSignedUrl(filePath, 86400);
+
+      if (urlError) throw urlError;
 
       // Update user metadata
       const { error: updateError } = await supabase.auth.updateUser({
-        data: { avatar_url: publicUrl }
+        data: { avatar_url: urlData.signedUrl }
       });
 
       if (updateError) throw updateError;

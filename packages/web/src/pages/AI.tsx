@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Lazy load ModelViewer to reduce initial bundle size
@@ -100,6 +102,7 @@ import {
   Image,
   Box,
   FileText,
+  File as FileIcon,
   Printer,
   Settings,
   Loader2,
@@ -127,7 +130,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
-import { onDashStatusMessage } from "@shared/services/mqttService";
+import { onDashStatusMessage, mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, waitForSdUploadResult, publishGcodePrint } from "@shared/services/mqttService";
 import { buildCommon, postTextTo3D, postImageTo3D, extractGLBUrl, extractSTLUrl, extractMetadata, extractThumbnailUrl, pollTaskUntilComplete, AIModelResponse, uploadSTLAndSlice, SlicingSettings, PrinterDefinition } from "@shared/services/aiService";
 import { createAIModel, updateAIModel, listAIModels, deleteAIModel } from "@shared/services/supabaseService/aiModel";
 import { supabase } from "@shared/integrations/supabase/client";
@@ -316,6 +319,16 @@ const AI = () => {
         // Update UI with completed task
         setCurrentGCodeUrl(task.output_url);
         setIsSlicing(false);
+
+        // Generate default filename for print
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const modelName = task.input_params?.modelName || currentModelId || 'model';
+        const printerName = task.input_params?.printerName || selectedPrinter?.name || 'printer';
+        const defaultFileName = `${modelName.replace(/[^a-zA-Z0-9가-힣-]/g, '_')}-${printerName.replace(/[^a-zA-Z0-9가-힣-]/g, '_')}-${timestamp}`;
+        setPrintFileName(defaultFileName);
+
+        // Auto-switch to file settings tab after slicing
+        setSettingsTab('file');
 
         // Update gcode info if metadata available
         if (task.output_metadata) {
@@ -527,7 +540,11 @@ const AI = () => {
           setCurrentGlbUrl(model.download_url);
           setCurrentStlUrl(model.stl_download_url);
           setCurrentGCodeUrl(gcodeUrl);
-          setModelViewerUrl(model.download_url);
+          // 캐시 무효화를 위해 updated_at 타임스탬프 추가
+          const cacheBustedUrl = model.download_url ?
+            `${model.download_url}?t=${new Date(model.updated_at || model.created_at).getTime()}` :
+            model.download_url;
+          setModelViewerUrl(cacheBustedUrl);
           setTargetPrinterModelId(printerModelId); // 프린터 모델 ID 저장
 
           if (gcodeData && !gcodeError) {
@@ -561,6 +578,14 @@ const AI = () => {
   // 출력 설정 다이얼로그 상태
   const [printDialogOpen, setPrintDialogOpen] = useState<boolean>(false);
   const [selectedPrinter, setSelectedPrinter] = useState<Printer | null>(null);
+
+  // 출력 파일 설정 상태
+  const [printFileName, setPrintFileName] = useState<string>('');
+  const [startPrintImmediately, setStartPrintImmediately] = useState<boolean>(true);
+  const [navigateToDashboard, setNavigateToDashboard] = useState<boolean>(true);
+
+  // 설정 탭 상태 ('printer' | 'file')
+  const [settingsTab, setSettingsTab] = useState<'printer' | 'file'>('printer');
 
   // 프린터 선택 확인 모달 상태
   const [printerConfirmDialogOpen, setPrinterConfirmDialogOpen] = useState<boolean>(false);
@@ -630,19 +655,26 @@ const AI = () => {
 
       if (uploadError) throw uploadError;
 
-      // 2. Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      // 2. Get signed URL (24시간 유효)
+      const { data: urlData, error: urlError } = await supabase.storage
         .from('ai-models')
-        .getPublicUrl(filePath);
+        .createSignedUrl(filePath, 86400);
+
+      if (urlError) {
+        console.error('[AI] Failed to create signed URL:', urlError);
+        throw urlError;
+      }
+
+      const signedUrl = urlData.signedUrl;
 
       console.log('[AI] GLB uploaded successfully:', {
-        publicUrl,
+        signedUrl,
         uploadPath: uploadData.path
       });
 
       // 3. Update the model record in database
       await updateAIModel(supabase, currentModelId, {
-        download_url: publicUrl,
+        download_url: signedUrl,
         generation_metadata: {
           rotation: data.rotation,
           scale: data.scale,
@@ -658,8 +690,8 @@ const AI = () => {
       setCurrentStlUrl(null);
 
       // 5. Update local state
-      setCurrentGlbUrl(publicUrl);
-      setModelViewerUrl(publicUrl);
+      setCurrentGlbUrl(signedUrl);
+      setModelViewerUrl(signedUrl);
 
       console.log('[AI] Local state updated with new GLB URL');
 
@@ -854,10 +886,15 @@ const AI = () => {
           console.log('[AI] - file_path:', existingGcode.file_path);
           console.log('[AI] - Created at:', existingGcode.created_at);
 
-          // Public URL 생성
-          const { data: urlData } = supabase.storage
+          // Signed URL 생성 (24시간 유효)
+          const { data: urlData, error: urlError } = await supabase.storage
             .from('gcode-files')
-            .getPublicUrl(existingGcode.file_path);
+            .createSignedUrl(existingGcode.file_path, 86400);
+
+          if (urlError) {
+            console.error('[AI] Failed to create signed URL for GCode:', urlError);
+            throw urlError;
+          }
 
           // 캐시된 메타데이터를 UI에 표시
           setGcodeInfo({
@@ -880,7 +917,7 @@ const AI = () => {
             printerName: existingGcode.printer_name,
           });
 
-          setCurrentGCodeUrl(urlData.publicUrl);
+          setCurrentGCodeUrl(urlData.signedUrl);
           setIsSlicing(false);
 
           console.log('[AI] ========================================');
@@ -981,30 +1018,130 @@ const AI = () => {
   };
 
   const startPrint = async () => {
-    if (!currentGCodeUrl || !selectedPrinter) {
+    if (!currentGCodeUrl || !selectedPrinter || !printFileName.trim()) {
       toast({
-        title: '오류',
-        description: 'GCode 파일이나 프린터 정보가 없습니다.',
+        title: t('errors.general'),
+        description: t('ai.missingFileOrPrinter'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!selectedPrinter.device_uuid) {
+      toast({
+        title: t('errors.general'),
+        description: t('ai.printerUuidMissing'),
         variant: 'destructive',
       });
       return;
     }
 
     try {
+      // 1. GCode 파일 다운로드
       toast({
-        title: t('ai.printStart'),
-        description: `${selectedPrinter.name}${t('ai.printJobSent')}`,
+        title: t('ai.downloadingGCode'),
+        description: t('ai.preparingPrint'),
       });
 
-      // TODO: 프린터로 GCode 전송 로직 추가
-      // MQTT나 다른 방식으로 프린터에 GCode 전송
+      const gcodeResponse = await fetch(currentGCodeUrl);
+      if (!gcodeResponse.ok) {
+        throw new Error(t('ai.gcodeDownloadFailed'));
+      }
+      const gcodeBlob = await gcodeResponse.blob();
 
+      // 2. MQTT 연결
+      await mqttConnect();
+
+      // 3. GCode 파일을 라즈베리파이(OctoPrint) local에 업로드
+      const uploadId = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+      const arrayBuf = await gcodeBlob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuf);
+      const total = bytes.length;
+      const chunkSize = 32 * 1024; // 32KB
+
+      const toB64 = (chunk: Uint8Array) => {
+        let binary = '';
+        for (let i = 0; i < chunk.length; i += 1) binary += String.fromCharCode(chunk[i]);
+        return btoa(binary);
+      };
+
+      const fileName = `${printFileName.replace(/[^a-zA-Z0-9가-힣-_]/g, '_')}.gcode`;
+
+      // 첫 번째 청크 전송
+      await publishSdUploadChunkFirst(selectedPrinter.device_uuid, {
+        type: 'sd_upload_chunk',
+        upload_id: uploadId,
+        index: 0,
+        name: fileName,
+        total_size: total,
+        data_b64: toB64(bytes.subarray(0, Math.min(chunkSize, total))),
+        size: Math.min(chunkSize, total),
+        upload_traget: 'local',
+      });
+
+      // 나머지 청크 전송
+      let sent = Math.min(chunkSize, total);
+      let index = 1;
+      while (sent < total) {
+        const next = Math.min(sent + chunkSize, total);
+        await publishSdUploadChunk(selectedPrinter.device_uuid, {
+          type: 'sd_upload_chunk',
+          upload_id: uploadId,
+          index,
+          data_b64: toB64(bytes.subarray(sent, next)),
+          size: next - sent,
+        });
+        sent = next;
+        index += 1;
+      }
+
+      // 업로드 완료 (commit)
+      await publishSdUploadCommit(selectedPrinter.device_uuid, uploadId, 'local');
+
+      // 업로드 결과 대기
+      const uploadResult = await waitForSdUploadResult(selectedPrinter.device_uuid, () => {});
+
+      if (!uploadResult.ok) {
+        throw new Error(uploadResult.message || t('ai.uploadFailed'));
+      }
+
+      toast({
+        title: t('gcode.uploadSuccess'),
+        description: t('ai.fileUploadedToPrinter', { fileName }),
+      });
+
+      // 4. 즉시 프린팅 시작 (옵션이 활성화된 경우)
+      if (startPrintImmediately) {
+        const jobId = fileName.replace(/\.[^/.]+$/, '');
+        await publishGcodePrint(selectedPrinter.device_uuid, {
+          filename: fileName,
+          origin: 'local',
+          job_id: jobId,
+        });
+
+        toast({
+          title: t('ai.printStart'),
+          description: `${selectedPrinter.name}${t('ai.printJobSent')}`,
+        });
+      }
+
+      // 5. 모달 닫기
       setPrintDialogOpen(false);
+
+      // 6. 대시보드로 이동 (옵션이 활성화된 경우)
+      if (navigateToDashboard && startPrintImmediately) {
+        // 사용자에게 선택권 주기
+        const shouldNavigate = window.confirm(t('ai.navigateToDashboardConfirm'));
+        if (shouldNavigate) {
+          navigate(`/dashboard/${selectedPrinter.id}`);
+        }
+      }
+
     } catch (error) {
       console.error('[AI] Print start failed:', error);
       toast({
-        title: '출력 시작 실패',
-        description: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+        title: t('ai.printStartFailed'),
+        description: error instanceof Error ? error.message : t('errors.general'),
         variant: 'destructive',
       });
     }
@@ -2244,7 +2381,9 @@ const AI = () => {
                           model => model.source_image_url === file.storagePath || model.source_image_url === file.url
                         );
                         if (linkedModel?.download_url) {
-                          setModelViewerUrl(linkedModel.download_url);
+                          // 캐시 무효화를 위해 updated_at 타임스탬프 추가
+                          const cacheBustedUrl = `${linkedModel.download_url}?t=${new Date(linkedModel.updated_at || linkedModel.created_at).getTime()}`;
+                          setModelViewerUrl(cacheBustedUrl);
                           setSelectedImageHasModel(true);
                           toast({ title: t('ai.imageSelected'), description: file.name });
                         } else {
@@ -2360,10 +2499,14 @@ const AI = () => {
 
                       // GLB 우선, STL 폴백으로 뷰어 URL 설정
                       const viewerUrl = model.download_url || model.stl_download_url;
+                      // 캐시 무효화를 위해 updated_at 타임스탬프 추가
+                      const cacheBustedViewerUrl = viewerUrl ?
+                        `${viewerUrl}?t=${new Date(model.updated_at || model.created_at).getTime()}` :
+                        viewerUrl;
                       console.log('[AI] ===== MODEL SELECTION =====');
-                      console.log('[AI] Setting modelViewerUrl to:', viewerUrl);
+                      console.log('[AI] Setting modelViewerUrl to:', cacheBustedViewerUrl);
                       console.log('[AI] Previous modelViewerUrl was:', modelViewerUrl);
-                      setModelViewerUrl(viewerUrl);
+                      setModelViewerUrl(cacheBustedViewerUrl);
 
                       // 다운로드 버튼용 URL 설정
                       setCurrentGlbUrl(model.download_url || null);
@@ -2564,67 +2707,129 @@ const AI = () => {
               </DialogHeader>
             </div>
 
-            {/* 프린터 선택 바 (상단 수평 레이아웃) */}
+            {/* 설정 탭 (프린터 선택 / 파일 설정) */}
             <div className="px-6 pt-4 pb-2 bg-muted/30">
-              <div className="flex items-end gap-4">
-                <div className="flex-1 min-w-[200px]">
-                  <label className="text-xs text-muted-foreground block mb-1.5">{t('ai.manufacturer')}</label>
-                  <select
-                    className="w-full px-3 py-2 text-sm border rounded-md bg-background"
-                    value={resliceManufacturer}
-                    onChange={(e) => setResliceManufacturer(e.target.value)}
-                    disabled={isSlicing}
-                  >
-                    <option value="">{t('ai.selectOption')}</option>
-                    {manufacturers.map(m => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                </div>
+              <Tabs value={settingsTab} onValueChange={(v) => setSettingsTab(v as 'printer' | 'file')} className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-3">
+                  <TabsTrigger value="printer" className="text-xs">
+                    <Printer className="w-3.5 h-3.5 mr-1.5" />
+                    {t('ai.printerSelection')}
+                  </TabsTrigger>
+                  <TabsTrigger value="file" className="text-xs" disabled={!currentGCodeUrl}>
+                    <FileIcon className="w-3.5 h-3.5 mr-1.5" />
+                    {t('ai.printFileSettings')}
+                  </TabsTrigger>
+                </TabsList>
 
-                <div className="flex-1 min-w-[200px]">
-                  <label className="text-xs text-muted-foreground block mb-1.5">{t('ai.series')}</label>
-                  <select
-                    className="w-full px-3 py-2 text-sm border rounded-md bg-background"
-                    value={resliceSeries}
-                    onChange={(e) => setResliceSeries(e.target.value)}
-                    disabled={isSlicing || !resliceManufacturer}
-                  >
-                    <option value="">{t('ai.selectOption')}</option>
-                    {seriesList.map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
+                <TabsContent value="printer" className="mt-0">
+                  <div className="flex items-end gap-4">
+                    <div className="flex-1 min-w-[200px]">
+                      <label className="text-xs text-muted-foreground block mb-1.5">{t('ai.manufacturer')}</label>
+                      <select
+                        className="w-full px-3 py-2 text-sm border rounded-md bg-background"
+                        value={resliceManufacturer}
+                        onChange={(e) => setResliceManufacturer(e.target.value)}
+                        disabled={isSlicing}
+                      >
+                        <option value="">{t('ai.selectOption')}</option>
+                        {manufacturers.map(m => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div className="flex-1 min-w-[200px]">
-                  <label className="text-xs text-muted-foreground block mb-1.5">{t('ai.printerModel')}</label>
-                  <select
-                    className="w-full px-3 py-2 text-sm border rounded-md bg-background"
-                    value={resliceModelId}
-                    onChange={(e) => setResliceModelId(e.target.value)}
-                    disabled={isSlicing || !resliceSeries}
-                  >
-                    <option value="">{t('ai.selectOption')}</option>
-                    {modelsList.map(model => (
-                      <option key={model.id} value={model.id}>{model.display_name}</option>
-                    ))}
-                  </select>
-                </div>
+                    <div className="flex-1 min-w-[200px]">
+                      <label className="text-xs text-muted-foreground block mb-1.5">{t('ai.series')}</label>
+                      <select
+                        className="w-full px-3 py-2 text-sm border rounded-md bg-background"
+                        value={resliceSeries}
+                        onChange={(e) => setResliceSeries(e.target.value)}
+                        disabled={isSlicing || !resliceManufacturer}
+                      >
+                        <option value="">{t('ai.selectOption')}</option>
+                        {seriesList.map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                <Button
-                  variant="default"
-                  className="px-8"
-                  disabled={
-                    isSlicing ||
-                    !resliceModelId ||
-                    selectedPrinter?.manufacture_id === resliceModelId
-                  }
-                  onClick={handleReslice}
-                >
-                  {isSlicing ? t('ai.reslicing') : t('ai.reslice')}
-                </Button>
-              </div>
+                    <div className="flex-1 min-w-[200px]">
+                      <label className="text-xs text-muted-foreground block mb-1.5">{t('ai.printerModel')}</label>
+                      <select
+                        className="w-full px-3 py-2 text-sm border rounded-md bg-background"
+                        value={resliceModelId}
+                        onChange={(e) => setResliceModelId(e.target.value)}
+                        disabled={isSlicing || !resliceSeries}
+                      >
+                        <option value="">{t('ai.selectOption')}</option>
+                        {modelsList.map(model => (
+                          <option key={model.id} value={model.id}>{model.display_name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <Button
+                      variant="default"
+                      className="px-8"
+                      disabled={
+                        isSlicing ||
+                        !resliceModelId ||
+                        selectedPrinter?.manufacture_id === resliceModelId
+                      }
+                      onClick={handleReslice}
+                    >
+                      {isSlicing ? t('ai.reslicing') : t('ai.reslice')}
+                    </Button>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="file" className="mt-0">
+                  <div className="space-y-3">
+                    {/* 파일명 입력 */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="print-filename-tab" className="text-xs text-muted-foreground">{t('ai.fileName')}</Label>
+                      <Input
+                        id="print-filename-tab"
+                        value={printFileName}
+                        onChange={(e) => setPrintFileName(e.target.value)}
+                        placeholder="my-model-2025-01-17"
+                        className="text-sm h-9"
+                        disabled={isSlicing}
+                      />
+                    </div>
+
+                    {/* 출력 옵션 */}
+                    <div className="flex items-center gap-6 text-xs pt-1">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="start-immediately-tab"
+                          checked={startPrintImmediately}
+                          onChange={(e) => setStartPrintImmediately(e.target.checked)}
+                          className="rounded border-gray-300 w-4 h-4"
+                          disabled={isSlicing}
+                        />
+                        <Label htmlFor="start-immediately-tab" className="text-sm font-normal cursor-pointer">
+                          {t('ai.startPrintingImmediately')}
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="navigate-dashboard-tab"
+                          checked={navigateToDashboard}
+                          onChange={(e) => setNavigateToDashboard(e.target.checked)}
+                          className="rounded border-gray-300 w-4 h-4"
+                          disabled={isSlicing}
+                        />
+                        <Label htmlFor="navigate-dashboard-tab" className="text-sm font-normal cursor-pointer">
+                          {t('ai.navigateToDashboardAfter')}
+                        </Label>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
 
             {/* 본문 */}
@@ -2770,11 +2975,11 @@ const AI = () => {
               </div>
             </div>
 
-            {/* 푸터 */}
-            <div className="px-6 py-4 border-t">
+            {/* 푸터 - 스크롤 영역 내부로 이동 */}
+            <div className="px-6 py-4 border-t space-y-4 flex-shrink-0">
               {/* 프린터 연결 상태 경고 */}
               {selectedPrinter && !selectedPrinter.connected && (
-                <div className="mb-3 text-sm text-red-500 flex items-center gap-2">
+                <div className="text-sm text-red-500 flex items-center gap-2">
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
@@ -2788,7 +2993,7 @@ const AI = () => {
                 </Button>
                 <Button
                   onClick={startPrint}
-                  disabled={isSlicing || !currentGCodeUrl || !selectedPrinter?.connected}
+                  disabled={isSlicing || !currentGCodeUrl || !selectedPrinter?.connected || !printFileName.trim()}
                 >
                   <Printer className="w-4 h-4 mr-2" />
                   {t('ai.startPrint')}

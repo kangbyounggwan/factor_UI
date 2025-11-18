@@ -1,6 +1,58 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
 const BUCKET_NAME = 'ai-models';
+const GCODE_BUCKET_NAME = 'gcode-files';
+
+/**
+ * 파일 경로에서 Signed URL 생성 (24시간 유효)
+ * @param supabase - Supabase 클라이언트
+ * @param bucketName - 버킷 이름 ('ai-models' | 'gcode-files')
+ * @param path - 파일 경로
+ * @returns Signed URL 또는 null
+ */
+export async function createSignedUrlFromPath(
+  supabase: SupabaseClient,
+  bucketName: string,
+  path: string
+): Promise<string | null> {
+  if (!path) return null;
+
+  try {
+    const { data, error } = await supabase.storage
+      .from(bucketName)
+      .createSignedUrl(path, 86400); // 24시간
+
+    if (error) {
+      console.error('[aiStorage] Failed to create signed URL:', error);
+      return null;
+    }
+
+    return data.signedUrl;
+  } catch (error) {
+    console.error('[aiStorage] Exception creating signed URL:', error);
+    return null;
+  }
+}
+
+/**
+ * URL에서 경로 추출하는 함수
+ * @param url - Supabase storage URL
+ * @returns 경로 또는 null
+ */
+export function extractPathFromUrl(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    const urlObj = new URL(url);
+    // Supabase storage URL 형식: https://{project}.supabase.co/storage/v1/object/public/{bucket}/{path}
+    const match = urlObj.pathname.match(/\/storage\/v1\/object\/(?:public|sign)\/[^/]+\/(.+)/);
+    if (match) {
+      return decodeURIComponent(match[1].split('?')[0]); // 쿼리 파라미터 제거
+    }
+  } catch (e) {
+    console.warn('[aiStorage] Failed to parse URL:', url);
+  }
+  return null;
+}
 
 /**
  * GCode 슬라이싱 메타데이터 타입
@@ -82,15 +134,17 @@ export async function uploadSourceImage(
 
   if (error) throw error;
 
-  // Public URL 생성
-  const { data: urlData } = supabase.storage
+  // Signed URL 생성 (24시간 유효)
+  const { data: urlData, error: urlError } = await supabase.storage
     .from(BUCKET_NAME)
-    .getPublicUrl(path);
+    .createSignedUrl(path, 86400); // 24시간 = 86400초
+
+  if (urlError) throw urlError;
 
   return {
     path: path,
-    url: urlData.publicUrl,
-    publicUrl: urlData.publicUrl
+    url: urlData.signedUrl,
+    publicUrl: urlData.signedUrl
   };
 }
 
@@ -115,14 +169,17 @@ export async function uploadGeneratedModel(
 
   if (error) throw error;
 
-  const { data: urlData } = supabase.storage
+  // Signed URL 생성 (24시간 유효)
+  const { data: urlData, error: urlError } = await supabase.storage
     .from(BUCKET_NAME)
-    .getPublicUrl(path);
+    .createSignedUrl(path, 86400);
+
+  if (urlError) throw urlError;
 
   return {
     path: path,
-    url: urlData.publicUrl,
-    publicUrl: urlData.publicUrl
+    url: urlData.signedUrl,
+    publicUrl: urlData.signedUrl
   };
 }
 
@@ -193,14 +250,17 @@ export async function downloadAndUploadSTL(
 
   if (error) throw error;
 
-  const { data: urlData } = supabase.storage
+  // Signed URL 생성 (24시간 유효)
+  const { data: urlData, error: urlError } = await supabase.storage
     .from(BUCKET_NAME)
-    .getPublicUrl(path);
+    .createSignedUrl(path, 86400);
+
+  if (urlError) throw urlError;
 
   const result = {
     path: path,
-    url: urlData.publicUrl,
-    publicUrl: urlData.publicUrl
+    url: urlData.signedUrl,
+    publicUrl: urlData.signedUrl
   };
   console.log('[aiStorage] STL uploaded successfully:', result.publicUrl);
   return result;
@@ -255,16 +315,22 @@ export async function downloadAndUploadThumbnail(
       throw error;
     }
 
-    const { data: urlData } = supabase.storage
+    // Signed URL 생성 (24시간 유효)
+    const { data: urlData, error: urlError } = await supabase.storage
       .from(BUCKET_NAME)
-      .getPublicUrl(path);
+      .createSignedUrl(path, 86400);
 
-    console.log('[aiStorage] Thumbnail uploaded successfully:', urlData.publicUrl);
+    if (urlError) {
+      console.error('[aiStorage] Signed URL error:', urlError);
+      throw urlError;
+    }
+
+    console.log('[aiStorage] Thumbnail uploaded successfully:', urlData.signedUrl);
 
     return {
       path: path,
-      url: urlData.publicUrl,
-      publicUrl: urlData.publicUrl
+      url: urlData.signedUrl,
+      publicUrl: urlData.signedUrl
     };
   } catch (error) {
     console.error('[aiStorage] Failed to download/upload thumbnail:', error);
@@ -404,22 +470,32 @@ export async function listUserSourceImages(
 
   if (error) throw error;
 
-  return (data || []).map(file => {
-    const fullPath = `${folderPath}/${file.name}`;
-    const { data: urlData } = supabase.storage
-      .from(BUCKET_NAME)
-      .getPublicUrl(fullPath);
+  // Signed URL을 비동기로 생성해야 하므로 Promise.all 사용
+  const filesWithUrls = await Promise.all(
+    (data || []).map(async (file) => {
+      const fullPath = `${folderPath}/${file.name}`;
+      const { data: urlData, error: urlError } = await supabase.storage
+        .from(BUCKET_NAME)
+        .createSignedUrl(fullPath, 86400);
 
-    console.log('[aiStorage] Generated URL for', file.name, ':', urlData.publicUrl);
+      if (urlError) {
+        console.error('[aiStorage] Failed to create signed URL for', file.name, ':', urlError);
+      }
 
-    return {
-      name: file.name,
-      path: fullPath,
-      url: urlData.publicUrl,
-      created_at: file.created_at || new Date().toISOString(),
-      size: file.metadata?.size || 0
-    };
-  });
+      const url = urlData?.signedUrl || '';
+      console.log('[aiStorage] Generated URL for', file.name, ':', url);
+
+      return {
+        name: file.name,
+        path: fullPath,
+        url: url,
+        created_at: file.created_at || new Date().toISOString(),
+        size: file.metadata?.size || 0
+      };
+    })
+  );
+
+  return filesWithUrls;
 }
 
 /**
@@ -474,12 +550,17 @@ export async function downloadAndUploadGCode(
       throw error;
     }
 
-    // 3. Public URL 생성
-    const { data: urlData} = supabase.storage
+    // 3. Signed URL 생성 (24시간 유효)
+    const { data: urlData, error: urlError } = await supabase.storage
       .from(GCODE_BUCKET)
-      .getPublicUrl(path);
+      .createSignedUrl(path, 86400);
 
-    console.log('[aiStorage] GCode uploaded successfully:', urlData.publicUrl);
+    if (urlError) {
+      console.error('[aiStorage] GCode signed URL error:', urlError);
+      throw urlError;
+    }
+
+    console.log('[aiStorage] GCode uploaded successfully:', urlData.signedUrl);
 
     // 4. 메타데이터를 DB에 저장
     if (printerModelId && metadata) {
@@ -530,7 +611,7 @@ export async function downloadAndUploadGCode(
 
     return {
       path: path,
-      publicUrl: urlData.publicUrl,
+      publicUrl: urlData.signedUrl,
       metadata: metadata
     };
   } catch (error) {

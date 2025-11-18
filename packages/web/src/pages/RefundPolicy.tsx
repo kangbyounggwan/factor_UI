@@ -41,17 +41,34 @@ const RefundPolicy = () => {
 
           {/* 2. 결제 직후 철회 */}
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold">2. 결제 직후 철회(변심) - 쿨링오프</h2>
+            <h2 className="text-2xl font-semibold">2. 14일 취소권 (Paddle Buyer Terms)</h2>
             <div className="space-y-3">
               <p className="text-muted-foreground leading-relaxed">
-                결제 후 <strong className="text-foreground">7일 이내</strong>이고, 실질적 사용(대량 사용·다운로드·크레딧 소진 등)이 없을 경우 <strong className="text-foreground">전액 환불</strong>합니다.
+                결제 후 <strong className="text-foreground">14일 이내</strong> 계약 취소 및 환불을 요청할 수 있습니다.
               </p>
-              <p className="text-muted-foreground leading-relaxed">
-                사용 이력이 일부라도 있는 경우, 일할 차감 또는 사용량 차감 후 환불합니다.
-              </p>
+
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-4 rounded-lg">
+                <p className="text-sm font-semibold mb-2">디지털 콘텐츠 제공 시작 시 취소권 제한</p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                  <li>AI 모델 생성, 다운로드, 프리미엄 기능 사용 등 디지털 콘텐츠 제공이 시작되면 14일 취소권이 소멸됩니다</li>
+                  <li>구독 활성화 시점부터 서비스가 즉시 제공되므로, 실질적 사용 후에는 법적 취소권이 적용되지 않습니다</li>
+                </ul>
+              </div>
+
               <div className="bg-muted p-4 rounded-lg">
+                <p className="text-sm font-semibold mb-2">환불 가능 케이스</p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                  <li><strong>미사용 시:</strong> 14일 이내 + 서비스를 전혀 사용하지 않은 경우 전액 환불</li>
+                  <li><strong>기술적 문제:</strong> 서비스 장애, 중대한 품질 문제가 있는 경우 개별 검토 후 환불</li>
+                  <li><strong>과금 오류:</strong> 중복 결제, 시스템 오류로 인한 잘못된 청구는 전액 환불</li>
+                  <li><strong>재량적 환불:</strong> 기타 특별한 사유는 Paddle 및 운영자 재량으로 개별 검토</li>
+                </ul>
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-4 rounded-lg mt-3">
                 <p className="text-sm">
-                  <strong>예시:</strong> 월 30일 기준 3일 사용 시 → 결제금액 × (30-3)/30 환불
+                  <strong>Paddle Buyer Terms 준수:</strong> 본 환불 정책은 Paddle의 구매자 약관에 따라 구매 후 14일 이내 계약 취소 권리를 보장하되,
+                  디지털 콘텐츠 특성상 제공 시작 후에는 취소권이 제한됨을 명시합니다.
                 </p>
               </div>
             </div>
@@ -66,16 +83,39 @@ const RefundPolicy = () => {
             </ul>
           </section>
 
-          {/* 4. 중도 해지 */}
+          {/* 4. 구독 해지 */}
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold">4. 중도 해지(월 구독 기간 내)</h2>
+            <h2 className="text-2xl font-semibold">4. 구독 해지 정책</h2>
             <div className="space-y-3">
               <p className="text-muted-foreground leading-relaxed">
-                해지 즉시 미사용 기간에 대해 일할 계산하여 <strong className="text-foreground">영업일 5~10일</strong> 내 결제 수단으로 환불합니다.
+                구독은 언제든 해지할 수 있으며, 해지 시점에 따라 다음과 같이 처리됩니다:
               </p>
-              <p className="text-muted-foreground leading-relaxed">
-                해지 후에도 현재 결제 주기 종료일까지 서비스 이용 가능합니다.
-              </p>
+
+              <div className="bg-muted p-4 rounded-lg space-y-3">
+                <div>
+                  <p className="font-semibold text-sm mb-1">다음 결제일 48시간 전까지 해지</p>
+                  <ul className="list-disc list-inside text-sm text-muted-foreground ml-2">
+                    <li>다음 결제 주기부터 자동 갱신이 중단됩니다</li>
+                    <li>현재 결제 주기 종료일까지 서비스를 계속 이용할 수 있습니다</li>
+                    <li>이미 납부된 기간에 대한 환불은 없습니다</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <p className="font-semibold text-sm mb-1">기간 중 중도 해지</p>
+                  <ul className="list-disc list-inside text-sm text-muted-foreground ml-2">
+                    <li>원칙적으로 이미 납부된 구독료는 환불되지 않습니다</li>
+                    <li>특별한 사유(서비스 장애, 품질 문제 등)가 있는 경우 개별 검토 후 재량적으로 환불 가능</li>
+                    <li>환불 승인 시 미사용 기간을 일할 계산하여 영업일 5~10일 내 처리</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 rounded-lg">
+                <p className="text-sm">
+                  <strong>중요:</strong> 사기 또는 남용이 의심되는 경우 환불이 거절될 수 있으며, 계정 제한 조치가 취해질 수 있습니다.
+                </p>
+              </div>
             </div>
           </section>
 
@@ -162,10 +202,12 @@ const RefundPolicy = () => {
           {/* 요약 박스 */}
           <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-6 rounded-lg">
             <h3 className="font-semibold mb-3 text-lg">빠른 요약</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              결제 후 7일 이내 미사용 시 전액 환불, 사용 시 일할 계산 환불. 중도 해지 시 미사용 기간 환불(영업일 5~10일).
-              장애 12시간 이상 시 보상 제공. 중복 결제·오류는 전액 환불. 환불 요청은 factor@factor.io.kr로 문의 바랍니다.
-            </p>
+            <ul className="space-y-2 text-muted-foreground">
+              <li><strong>✅ 14일 취소권:</strong> 미사용 시 14일 이내 전액 환불, 사용 시작 후에는 취소권 소멸</li>
+              <li><strong>🔄 구독 해지:</strong> 다음 결제일 48시간 전 해지 시 자동 갱신 중단, 기납부 기간은 환불 없음</li>
+              <li><strong>🛠️ 재량적 환불:</strong> 서비스 장애, 과금 오류 등 특별한 사유는 개별 검토 후 환불 가능</li>
+              <li><strong>📧 문의:</strong> factor@factor.io.kr (영업일 5~10일 내 처리)</li>
+            </ul>
           </div>
             </>
           ) : (
@@ -181,19 +223,36 @@ const RefundPolicy = () => {
                 </ul>
               </section>
 
-              {/* 2. Cooling-off Period */}
+              {/* 2. 14-Day Right of Cancellation */}
               <section className="space-y-3">
-                <h2 className="text-2xl font-semibold">2. Post-Payment Withdrawal (Cooling-off)</h2>
+                <h2 className="text-2xl font-semibold">2. 14-Day Right of Cancellation (Paddle Buyer Terms)</h2>
                 <div className="space-y-3">
                   <p className="text-muted-foreground leading-relaxed">
-                    Within <strong className="text-foreground">7 days</strong> of payment, if there is no substantial usage (heavy usage, downloads, credit consumption, etc.), a <strong className="text-foreground">full refund</strong> is provided.
+                    You may cancel your agreement and request a refund within <strong className="text-foreground">14 days</strong> of purchase.
                   </p>
-                  <p className="text-muted-foreground leading-relaxed">
-                    If there is partial usage, a refund will be provided after deducting prorated amounts or usage.
-                  </p>
+
+                  <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-4 rounded-lg">
+                    <p className="text-sm font-semibold mb-2">Cancellation Right Limitation for Digital Content</p>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                      <li>The 14-day cancellation right expires once digital content delivery begins (AI model generation, downloads, premium feature usage, etc.)</li>
+                      <li>Service is provided immediately upon subscription activation, so legal cancellation rights do not apply after actual usage</li>
+                    </ul>
+                  </div>
+
                   <div className="bg-muted p-4 rounded-lg">
+                    <p className="text-sm font-semibold mb-2">Refund Eligible Cases</p>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                      <li><strong>No Usage:</strong> Full refund if service was not used at all within 14 days</li>
+                      <li><strong>Technical Issues:</strong> Service outages or critical quality problems reviewed individually</li>
+                      <li><strong>Billing Errors:</strong> Duplicate charges or system errors refunded in full</li>
+                      <li><strong>Discretionary Refunds:</strong> Other special circumstances reviewed by Paddle and operator discretion</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-4 rounded-lg mt-3">
                     <p className="text-sm">
-                      <strong>Example:</strong> If you used 3 days out of a 30-day month → Refund = Payment amount × (30-3)/30
+                      <strong>Paddle Buyer Terms Compliance:</strong> This refund policy guarantees the 14-day cancellation right per Paddle's Buyer Terms,
+                      while noting that this right is limited after digital content delivery begins due to the nature of the service.
                     </p>
                   </div>
                 </div>
@@ -208,16 +267,39 @@ const RefundPolicy = () => {
                 </ul>
               </section>
 
-              {/* 4. Mid-term Cancellation */}
+              {/* 4. Subscription Cancellation */}
               <section className="space-y-3">
-                <h2 className="text-2xl font-semibold">4. Mid-term Cancellation</h2>
+                <h2 className="text-2xl font-semibold">4. Subscription Cancellation Policy</h2>
                 <div className="space-y-3">
                   <p className="text-muted-foreground leading-relaxed">
-                    Upon cancellation, unused period will be prorated and refunded within <strong className="text-foreground">5-10 business days</strong> to your payment method.
+                    Subscriptions can be cancelled anytime, processed as follows based on cancellation timing:
                   </p>
-                  <p className="text-muted-foreground leading-relaxed">
-                    You can continue using the service until the end of the current billing cycle after cancellation.
-                  </p>
+
+                  <div className="bg-muted p-4 rounded-lg space-y-3">
+                    <div>
+                      <p className="font-semibold text-sm mb-1">Cancellation 48 Hours Before Next Billing</p>
+                      <ul className="list-disc list-inside text-sm text-muted-foreground ml-2">
+                        <li>Auto-renewal will be stopped from the next billing cycle</li>
+                        <li>Service continues until the end of current billing period</li>
+                        <li>No refund for already paid period</li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold text-sm mb-1">Mid-term Cancellation</p>
+                      <ul className="list-disc list-inside text-sm text-muted-foreground ml-2">
+                        <li>Paid subscription fees are generally non-refundable</li>
+                        <li>Special circumstances (service outages, quality issues) reviewed individually for discretionary refunds</li>
+                        <li>If approved, unused period prorated and processed within 5-10 business days</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 rounded-lg">
+                    <p className="text-sm">
+                      <strong>Important:</strong> Refunds may be denied and account restrictions applied if fraud or abuse is suspected.
+                    </p>
+                  </div>
                 </div>
               </section>
 
@@ -304,10 +386,12 @@ const RefundPolicy = () => {
               {/* Summary */}
               <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-6 rounded-lg">
                 <h3 className="font-semibold mb-3 text-lg">Quick Summary</h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Full refund within 7 days if unused, prorated if used. Mid-term cancellation refunds unused period (5-10 business days).
-                  Compensation for 12+ hour outages. Full refund for duplicate charges/errors. Contact factor@factor.io.kr for refund requests.
-                </p>
+                <ul className="space-y-2 text-muted-foreground">
+                  <li><strong>✅ 14-Day Cancellation:</strong> Full refund if unused within 14 days, right expires after service use begins</li>
+                  <li><strong>🔄 Subscription Cancellation:</strong> Cancel 48 hours before renewal to stop auto-renewal, no refund for paid period</li>
+                  <li><strong>🛠️ Discretionary Refunds:</strong> Service outages, billing errors reviewed individually</li>
+                  <li><strong>📧 Contact:</strong> factor@factor.io.kr (Processed within 5-10 business days)</li>
+                </ul>
               </div>
             </>
           )}

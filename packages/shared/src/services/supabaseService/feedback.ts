@@ -44,12 +44,17 @@ async function uploadFeedbackImages(
       throw error;
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
+    // Get signed URL (24시간 유효)
+    const { data: urlData, error: urlError } = await supabase.storage
       .from("feedback-images")
-      .getPublicUrl(data.path);
+      .createSignedUrl(data.path, 86400);
 
-    return urlData.publicUrl;
+    if (urlError) {
+      console.error("Failed to create signed URL:", urlError);
+      throw urlError;
+    }
+
+    return urlData.signedUrl;
   });
 
   return await Promise.all(uploadPromises);

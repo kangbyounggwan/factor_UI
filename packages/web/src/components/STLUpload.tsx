@@ -124,15 +124,19 @@ export const STLUpload = ({ onFileSelect }: STLUploadProps) => {
       if (thumbnailUploadError) throw thumbnailUploadError;
       setUploadProgress(80);
 
-      // Get public URL for thumbnail
-      const { data: thumbnailUrlData } = supabase.storage
+      // Get signed URL for thumbnail (24시간 유효)
+      const { data: thumbnailUrlData, error: thumbUrlError } = await supabase.storage
         .from('stl-thumbnails')
-        .getPublicUrl(thumbnailFileName);
+        .createSignedUrl(thumbnailFileName, 86400);
 
-      // Get signed URL for STL file
-      const { data: stlUrlData } = supabase.storage
+      if (thumbUrlError) throw thumbUrlError;
+
+      // Get signed URL for STL file (24시간 유효)
+      const { data: stlUrlData, error: stlUrlError } = await supabase.storage
         .from('stl-files')
-        .getPublicUrl(stlFileName);
+        .createSignedUrl(stlFileName, 86400);
+
+      if (stlUrlError) throw stlUrlError;
 
       // Save metadata to database
       const { error: dbError } = await supabase
@@ -142,9 +146,9 @@ export const STLUpload = ({ onFileSelect }: STLUploadProps) => {
           filename: file.name,
           file_path: stlFileName,
           file_size: file.size,
-          storage_url: stlUrlData.publicUrl,
+          storage_url: stlUrlData.signedUrl,
           thumbnail_path: thumbnailFileName,
-          thumbnail_url: thumbnailUrlData.publicUrl,
+          thumbnail_url: thumbnailUrlData.signedUrl,
           triangle_count: stlInfo.triangleCount,
           bounding_box: stlInfo.boundingBox,
           status: 'ready'

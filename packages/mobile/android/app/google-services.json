@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "645731278056",
+    "project_id": "factor-f38b9",
+    "storage_bucket": "factor-f38b9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:645731278056:android:3539d3e89b87c1f0df7d5d",
+        "android_client_info": {
+          "package_name": "com.factor.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCfVK4kNnMQXSCcJeAwj9jWBbbXfxvBMcc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

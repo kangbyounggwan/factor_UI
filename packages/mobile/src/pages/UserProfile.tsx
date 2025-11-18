@@ -88,12 +88,15 @@ const UserProfile = () => {
 
         if (uploadError) throw uploadError;
 
-        const { data: { publicUrl } } = supabase.storage
+        // Get signed URL (24시간 유효)
+        const { data: urlData, error: urlError } = await supabase.storage
           .from('avatars')
-          .getPublicUrl(filePath);
+          .createSignedUrl(filePath, 86400);
+
+        if (urlError) throw urlError;
 
         const { error: updateError } = await supabase.auth.updateUser({
-          data: { avatar_url: publicUrl }
+          data: { avatar_url: urlData.signedUrl }
         });
 
         if (updateError) throw updateError;
@@ -101,7 +104,7 @@ const UserProfile = () => {
         // 업데이트된 사용자 정보 가져오기 (메타데이터 새로고침)
         await supabase.auth.getUser();
 
-        setAvatarUrl(publicUrl);
+        setAvatarUrl(urlData.signedUrl);
         toast({
           title: t("profile.photoChangeComplete", "프로필 사진 변경 완료"),
           description: t("profile.photoChangeSuccess", "프로필 사진이 성공적으로 변경되었습니다."),
@@ -138,12 +141,15 @@ const UserProfile = () => {
 
             if (uploadError) throw uploadError;
 
-            const { data: { publicUrl } } = supabase.storage
+            // Get signed URL (24시간 유효)
+            const { data: urlData, error: urlError } = await supabase.storage
               .from('avatars')
-              .getPublicUrl(filePath);
+              .createSignedUrl(filePath, 86400);
+
+            if (urlError) throw urlError;
 
             const { error: updateError } = await supabase.auth.updateUser({
-              data: { avatar_url: publicUrl }
+              data: { avatar_url: urlData.signedUrl }
             });
 
             if (updateError) throw updateError;
@@ -151,7 +157,7 @@ const UserProfile = () => {
             // 업데이트된 사용자 정보 가져오기 (메타데이터 새로고침)
             await supabase.auth.getUser();
 
-            setAvatarUrl(publicUrl);
+            setAvatarUrl(urlData.signedUrl);
             toast({
               title: t("profile.photoChangeComplete", "프로필 사진 변경 완료"),
               description: t("profile.photoChangeSuccess", "프로필 사진이 성공적으로 변경되었습니다."),
