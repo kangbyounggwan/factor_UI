@@ -1,4 +1,5 @@
 import { PushNotifications, Token, ActionPerformed, PushNotificationSchema } from '@capacitor/push-notifications';
+import { Capacitor } from '@capacitor/core';
 import { supabase } from '@shared/integrations/supabase/client';
 
 /**
@@ -12,10 +13,18 @@ class PushNotificationService {
   /**
    * 푸시 알림 서비스 초기화
    */
-  async initialize(userId: string): Promise<void> {
-    console.log('[PushService] initialize() called for user:', userId);
-    if (this.isInitialized) {
-      console.log('[PushService] Already initialized, skipping');
+  async initialize(userId: string, force: boolean = false): Promise<void> {
+    console.log('[PushService] initialize() called for user:', userId, 'force:', force);
+
+    if (this.isInitialized && !force) {
+      console.log('[PushService] Already initialized, re-registering FCM...');
+      // 이미 초기화되어 있어도 FCM 재등록은 시도
+      try {
+        await PushNotifications.register();
+        console.log('[PushService] FCM re-registered');
+      } catch (error) {
+        console.error('[PushService] Error re-registering FCM:', error);
+      }
       return;
     }
 
@@ -32,9 +41,11 @@ class PushNotificationService {
         await PushNotifications.register();
         console.log('[PushService] FCM register() called');
 
-        // 이벤트 리스너 등록
-        this.setupListeners(userId);
-        console.log('[PushService] Event listeners setup complete');
+        // 이벤트 리스너 등록 (중복 방지 - 이미 등록되어 있으면 스킵)
+        if (!this.isInitialized || force) {
+          this.setupListeners(userId);
+          console.log('[PushService] Event listeners setup complete');
+        }
 
         this.isInitialized = true;
         console.log('[PushService] Initialization complete');
@@ -51,11 +62,21 @@ class PushNotificationService {
    * 이벤트 리스너 설정
    */
   private setupListeners(userId: string): void {
-    // FCM 토큰 수신
+    // FCM 토큰 수신 (Capacitor 기본)
     PushNotifications.addListener('registration', async (token: Token) => {
-      console.log('FCM token received:', token.value);
+      console.log('[PushService] FCM token received (Capacitor):', token.value);
       this.currentToken = token.value; // 토큰 저장
       await this.saveFCMToken(userId, token.value);
+    });
+
+    // FCM 토큰 수신 (AppDelegate에서 직접 전달)
+    window.addEventListener('pushNotificationRegistered', async (event: any) => {
+      const token = event.detail?.value;
+      if (token) {
+        console.log('[PushService] FCM token received (AppDelegate):', token);
+        this.currentToken = token;
+        await this.saveFCMToken(userId, token);
+      }
     });
 
     // FCM 등록 실패
@@ -85,7 +106,11 @@ class PushNotificationService {
    */
   private async saveFCMToken(userId: string, fcmToken: string): Promise<void> {
     try {
+      // 현재 플랫폼 자동 감지 (ios 또는 android)
+      const platform = Capacitor.getPlatform();
+
       console.log('Saving FCM token for user:', userId);
+      console.log('Platform:', platform);
       console.log('FCM token length:', fcmToken.length);
 
       const { data, error } = await supabase
@@ -93,7 +118,7 @@ class PushNotificationService {
         .upsert({
           user_id: userId,
           device_token: fcmToken,
-          platform: 'android',
+          platform: platform,  // 동적으로 플랫폼 설정 (ios/android)
           updated_at: new Date().toISOString(),
         }, {
           onConflict: 'user_id,device_token',
@@ -226,7 +251,22 @@ class PushNotificationService {
   async deactivateCurrentToken(userId: string): Promise<void> {
     try {
       if (!this.currentToken) {
-        console.warn('No current token to deactivate');
+        console.warn('[PushService] No current token to deactivate - disabling all tokens for this user');
+
+        // 토큰이 없으면 해당 유저의 모든 토큰을 비활성화
+        const { error } = await supabase
+          .from('user_device_tokens')
+          .update({ is_active: false })
+          .eq('user_id', userId);
+
+        if (error) {
+          console.error('[PushService] Error deactivating all tokens:', error);
+        } else {
+          console.log('[PushService] All user tokens deactivated successfully');
+        }
+
+        // 초기화 플래그 리셋 (다음에 다시 켤 수 있도록)
+        this.isInitialized = false;
         return;
       }
 
@@ -237,13 +277,16 @@ class PushNotificationService {
         .eq('device_token', this.currentToken);
 
       if (error) {
-        console.error('Error deactivating FCM token:', error);
+        console.error('[PushService] Error deactivating FCM token:', error);
       } else {
-        console.log('FCM token deactivated successfully');
+        console.log('[PushService] FCM token deactivated successfully');
         this.currentToken = null;
+
+        // 초기화 플래그 리셋 (다음에 다시 켤 수 있도록)
+        this.isInitialized = false;
       }
     } catch (error) {
-      console.error('Error in deactivateCurrentToken:', error);
+      console.error('[PushService] Error in deactivateCurrentToken:', error);
     }
   }
 

@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@shared/contexts/AuthContext";
-import { ArrowLeft, RefreshCw, Crown } from "lucide-react";
+import { ArrowLeft, RefreshCw, Crown, Bell, BellOff } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSafeAreaStyle } from "@/hooks/usePlatform";
+import { pushNotificationService } from "@/services/pushNotificationService";
+import { PushNotifications } from '@capacitor/push-notifications';
 
 interface NotificationPreferences {
   push_enabled: boolean;
@@ -78,6 +80,12 @@ const NotificationSettings = () => {
   const handleToggle = async (key: keyof NotificationPreferences) => {
     if (!user) return;
 
+    // 푸시 알림 토글 특별 처리
+    if (key === 'push_enabled') {
+      await handlePushNotificationToggle(!preferences.push_enabled);
+      return;
+    }
+
     const newPreferences = {
       ...preferences,
       [key]: !preferences[key],
@@ -100,7 +108,9 @@ const NotificationSettings = () => {
 
       const { error } = await supabase
         .from('user_notification_settings')
-        .upsert(dbData);
+        .upsert(dbData, {
+          onConflict: 'user_id'
+        });
 
       if (error) throw error;
 
@@ -115,6 +125,120 @@ const NotificationSettings = () => {
       toast({
         title: t("settings.error"),
         description: t("settings.updatePrinterError"),
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /**
+   * 푸시 알림 토글 처리
+   */
+  const handlePushNotificationToggle = async (enable: boolean) => {
+    if (!user) return;
+
+    try {
+      setSaving(true);
+
+      if (enable) {
+        // 푸시 알림 활성화
+        console.log('[NotificationSettings] Enabling push notifications...');
+
+        // 권한 확인
+        const permissionStatus = await PushNotifications.checkPermissions();
+        console.log('[NotificationSettings] Current permission:', permissionStatus);
+
+        if (permissionStatus.receive === 'denied') {
+          // 권한이 거부된 경우 - 설정으로 안내
+          toast({
+            title: t("userSettings.pushNotifications"),
+            description: "알림 권한이 거부되었습니다. 설정에서 알림을 허용해주세요.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (permissionStatus.receive !== 'granted') {
+          // 권한 요청
+          const permission = await PushNotifications.requestPermissions();
+          console.log('[NotificationSettings] Permission requested:', permission);
+
+          if (permission.receive !== 'granted') {
+            toast({
+              title: t("userSettings.pushNotifications"),
+              description: "알림 권한이 필요합니다.",
+              variant: "destructive",
+            });
+            return;
+          }
+        }
+
+        // 푸시 알림 서비스 초기화 (FCM 토큰 등록)
+        await pushNotificationService.initialize(user.id);
+        console.log('[NotificationSettings] Push notification service initialized');
+
+        // DB에 설정 저장 (onConflict로 중복 방지)
+        const { error } = await supabase
+          .from('user_notification_settings')
+          .upsert({
+            user_id: user.id,
+            push_notifications: true,
+            print_complete_notifications: preferences.print_complete,
+            error_notifications: preferences.error_alerts,
+            email_notifications: preferences.email_enabled,
+            weekly_report: preferences.weekly_report,
+          }, {
+            onConflict: 'user_id'
+          });
+
+        if (error) throw error;
+
+        setPreferences({ ...preferences, push_enabled: true });
+
+        toast({
+          title: t("userSettings.pushNotifications"),
+          description: "푸시 알림이 활성화되었습니다.",
+        });
+      } else {
+        // 푸시 알림 비활성화
+        console.log('[NotificationSettings] Disabling push notifications...');
+
+        // 현재 디바이스의 FCM 토큰 비활성화 (토큰이 없어도 계속 진행)
+        try {
+          await pushNotificationService.deactivateCurrentToken(user.id);
+        } catch (tokenError) {
+          console.warn('[NotificationSettings] Token deactivation failed (continuing):', tokenError);
+        }
+
+        // DB에 설정 저장 (onConflict로 중복 방지)
+        const { error } = await supabase
+          .from('user_notification_settings')
+          .upsert({
+            user_id: user.id,
+            push_notifications: false,
+            print_complete_notifications: preferences.print_complete,
+            error_notifications: preferences.error_alerts,
+            email_notifications: preferences.email_enabled,
+            weekly_report: preferences.weekly_report,
+          }, {
+            onConflict: 'user_id'
+          });
+
+        if (error) throw error;
+
+        setPreferences({ ...preferences, push_enabled: false });
+
+        toast({
+          title: t("userSettings.pushNotifications"),
+          description: "푸시 알림이 비활성화되었습니다.",
+        });
+      }
+    } catch (error) {
+      console.error('[NotificationSettings] Error toggling push notifications:', error);
+      toast({
+        title: t("settings.error"),
+        description: "푸시 알림 설정 변경에 실패했습니다.",
         variant: "destructive",
       });
     } finally {
@@ -202,6 +326,14 @@ const NotificationSettings = () => {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
+                    {/* 푸시 알림 아이콘 */}
+                    {item.key === 'push_enabled' && (
+                      preferences.push_enabled ? (
+                        <Bell className="h-4 w-4 text-primary" />
+                      ) : (
+                        <BellOff className="h-4 w-4 text-muted-foreground" />
+                      )
+                    )}
                     <h3 className="text-base font-semibold">{item.title}</h3>
                     {item.isPro && (
                       <Badge variant="default" className="text-xs px-2 py-0.5">

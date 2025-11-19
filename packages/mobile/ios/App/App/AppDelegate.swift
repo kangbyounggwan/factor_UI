@@ -1,14 +1,103 @@
 import UIKit
 import Capacitor
+import FirebaseCore
+import FirebaseMessaging
 
 @UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, MessagingDelegate, UNUserNotificationCenterDelegate {
 
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // Initialize Firebase
+        FirebaseApp.configure()
+
+        // Set FCM messaging delegate
+        Messaging.messaging().delegate = self
+
+        // Set UNUserNotificationCenter delegate
+        UNUserNotificationCenter.current().delegate = self
+
+        // Request notification permissions
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            print("Permission granted: \(granted)")
+        }
+
+        // Register for remote notifications
+        application.registerForRemoteNotifications()
+
         // Override point for customization after application launch.
         return true
+    }
+
+    // MARK: - FCM Token Handling
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        print("Firebase registration token: \(String(describing: fcmToken))")
+
+        // Notify Capacitor plugin of the token
+        if let token = fcmToken {
+            print("[AppDelegate] Attempting to dispatch FCM token to JavaScript...")
+            // JavaScript로 직접 FCM 토큰 전달
+            DispatchQueue.main.async {
+                if let bridge = (UIApplication.shared.delegate as? AppDelegate)?.window?.rootViewController as? CAPBridgeViewController {
+                    print("[AppDelegate] Bridge found, dispatching token...")
+                    bridge.bridge?.eval(js: """
+                        console.log('[AppDelegate] eval() called, dispatching event...');
+                        const event = new CustomEvent('pushNotificationRegistered', {
+                            detail: { value: '\(token)' }
+                        });
+                        window.dispatchEvent(event);
+                        console.log('[AppDelegate] FCM token dispatched:', '\(token)');
+                    """)
+                } else {
+                    print("[AppDelegate] ERROR: Bridge not found!")
+                }
+            }
+        } else {
+            print("[AppDelegate] ERROR: FCM token is nil!")
+        }
+    }
+
+    // MARK: - Remote Notification Registration
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        print("APNs device token: \(deviceToken.map { String(format: "%02.2hhx", $0) }.joined())")
+        Messaging.messaging().apnsToken = deviceToken
+
+        // FCM 토큰 명시적으로 가져오기
+        Messaging.messaging().token { token, error in
+            if let error = error {
+                print("Error fetching FCM token: \(error.localizedDescription)")
+            } else if let token = token {
+                print("FCM token fetched: \(token)")
+                print("[AppDelegate] Attempting to dispatch fetched FCM token to JavaScript...")
+                // FCM 토큰을 JavaScript로 직접 전달
+                DispatchQueue.main.async {
+                    if let bridge = (UIApplication.shared.delegate as? AppDelegate)?.window?.rootViewController as? CAPBridgeViewController {
+                        print("[AppDelegate] Bridge found for fetched token, dispatching...")
+                        bridge.bridge?.eval(js: """
+                            console.log('[AppDelegate] eval() called for fetched token, dispatching event...');
+                            const event = new CustomEvent('pushNotificationRegistered', {
+                                detail: { value: '\(token)' }
+                            });
+                            window.dispatchEvent(event);
+                            console.log('[AppDelegate] FCM token dispatched from fetch:', '\(token)');
+                        """)
+                    } else {
+                        print("[AppDelegate] ERROR: Bridge not found for fetched token!")
+                    }
+                }
+            }
+        }
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("Failed to register for remote notifications: \(error.localizedDescription)")
+    }
+
+    // MARK: - Foreground Notification Handling
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        // Show notification even when app is in foreground
+        completionHandler([.banner, .sound, .badge])
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

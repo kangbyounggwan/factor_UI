@@ -6,8 +6,9 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   plugins: {
     Keyboard: {
-      resize: 'ionic',
-      resizeOnFullScreen: false
+      resize: 'body',  // React 앱에서 표준 웹뷰 방식 사용 (iOS/Android 공통)
+      resizeOnFullScreen: true,  // 전체화면에서도 키보드에 맞춰 크기 조절
+      style: 'dark'  // 다크 테마에 맞는 키보드 스타일
     },
     StatusBar: {
       overlays: true,  // StatusBar가 콘텐츠 위에 오버레이됨 (SafeArea와 중복 방지)

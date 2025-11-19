@@ -326,19 +326,22 @@ const Auth = () => {
                 )}
               </Button>
 
-              <div className="text-center pt-2 md:pt-3">
-                <span className="text-xs md:text-sm text-muted-foreground">{t('auth.newUser')} </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSignUp(true);
-                    setError("");
-                  }}
-                  className="text-xs md:text-sm text-primary hover:text-primary/80 font-semibold"
-                >
-                  {t('auth.signup')}
-                </button>
-              </div>
+              {/* iOS에서는 회원가입 버튼 숨김 (Apple 정책: IAP 우회 방지) */}
+              {!isIOS && (
+                <div className="text-center pt-2 md:pt-3">
+                  <span className="text-xs md:text-sm text-muted-foreground">{t('auth.newUser')} </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSignUp(true);
+                      setError("");
+                    }}
+                    className="text-xs md:text-sm text-primary hover:text-primary/80 font-semibold"
+                  >
+                    {t('auth.signup')}
+                  </button>
+                </div>
+              )}
             </form>
           ) : (
             /* 회원가입 폼 */

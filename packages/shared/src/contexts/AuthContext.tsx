@@ -124,6 +124,38 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
     await teardownSubscriptions();
 
+    // 모바일 환경에서 푸시 알림 자동 초기화
+    if (variant === "mobile" && Capacitor.isNativePlatform()) {
+      try {
+        console.log('[AuthContext] Initializing push notifications for mobile...');
+
+        // 사용자의 푸시 알림 설정 확인
+        const { data: settings } = await supabase
+          .from('user_notification_settings')
+          .select('push_notifications')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        // 푸시 알림이 활성화되어 있으면 초기화
+        if (settings?.push_notifications !== false) {
+          // 동적 import로 모바일 전용 모듈 로드
+          const { pushNotificationService } = await import(
+            /* @vite-ignore */
+            '/src/services/pushNotificationService'
+          ).catch(() => ({ pushNotificationService: null }));
+
+          if (pushNotificationService) {
+            await pushNotificationService.initialize(userId);
+            console.log('[AuthContext] Push notification service initialized');
+          }
+        } else {
+          console.log('[AuthContext] Push notifications disabled by user');
+        }
+      } catch (e) {
+        console.warn('[AuthContext] Failed to initialize push notifications:', e);
+      }
+    }
+
     try {
       await startDashStatusSubscriptionsForUser(userId);
     } catch (e) {
