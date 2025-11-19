@@ -137,8 +137,7 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
   const group = useRef<Group>(null);
   const { camera, controls } = useThree();
 
-  // Signed URL을 직접 사용 - 추가 파라미터 없이 로드
-  // Signed URL은 이미 고유 토큰을 포함하므로 캐시 버스팅 불필요
+  // Public URL을 사용하므로 URL 정리 불필요
   const gltf = useLoader(GLTFLoader, url);
   const scene = gltf?.scene;
 
