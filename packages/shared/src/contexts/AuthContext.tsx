@@ -507,8 +507,8 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
         const subscriptionResult = await supabase.from('user_subscriptions').insert({
           user_id: data.user.id,
-          plan_name: 'basic',
-          status: 'trialing',
+          plan_name: 'free',   // 'basic' → 'free'로 변경 (PLAN_FEATURES와 일치)
+          status: 'trial',     // 'trialing' → 'trial'로 변경 (DB CHECK constraint와 일치)
           current_period_start: new Date().toISOString(),
           current_period_end: trialEndDate.toISOString(),
           cancel_at_period_end: false,

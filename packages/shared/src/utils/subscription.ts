@@ -2,9 +2,12 @@ import { SubscriptionPlan, PLAN_FEATURES, SubscriptionFeatures } from '../types/
 
 /**
  * Get features for a specific plan
+ * Falls back to 'free' features if plan is not recognized (e.g., 'basic')
  */
-export function getPlanFeatures(plan: SubscriptionPlan): SubscriptionFeatures {
-  return PLAN_FEATURES[plan];
+export function getPlanFeatures(plan: SubscriptionPlan | string): SubscriptionFeatures {
+  // 'basic'은 'free'와 동일하게 취급 (레거시 지원)
+  const normalizedPlan = plan === 'basic' ? 'free' : plan;
+  return PLAN_FEATURES[normalizedPlan as SubscriptionPlan] || PLAN_FEATURES['free'];
 }
 
 /**

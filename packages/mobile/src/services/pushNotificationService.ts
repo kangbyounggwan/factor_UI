@@ -102,23 +102,25 @@ class PushNotificationService {
   }
 
   /**
-   * FCM 토큰을 Supabase에 저장
+   * FCM 토큰을 Supabase에 저장 + user_notification_settings 자동 생성
    */
   private async saveFCMToken(userId: string, fcmToken: string): Promise<void> {
     try {
       // 현재 플랫폼 자동 감지 (ios 또는 android)
       const platform = Capacitor.getPlatform();
 
-      console.log('Saving FCM token for user:', userId);
-      console.log('Platform:', platform);
-      console.log('FCM token length:', fcmToken.length);
+      console.log('[PushService] Saving FCM token for user:', userId);
+      console.log('[PushService] Platform:', platform);
+      console.log('[PushService] FCM token length:', fcmToken.length);
 
+      // 1. user_device_tokens에 토큰 저장
       const { data, error } = await supabase
         .from('user_device_tokens')
         .upsert({
           user_id: userId,
           device_token: fcmToken,
           platform: platform,  // 동적으로 플랫폼 설정 (ios/android)
+          is_active: true,
           updated_at: new Date().toISOString(),
         }, {
           onConflict: 'user_id,device_token',
@@ -126,17 +128,35 @@ class PushNotificationService {
         .select();
 
       if (error) {
-        console.error('Error saving FCM token - Code:', error.code);
-        console.error('Error saving FCM token - Message:', error.message);
-        console.error('Error saving FCM token - Details:', error.details);
-        console.error('Error saving FCM token - Hint:', error.hint);
-        console.error('Full error object:', JSON.stringify(error, null, 2));
+        console.error('[PushService] Error saving FCM token:', error.message);
       } else {
-        console.log('FCM token saved successfully:', data);
+        console.log('[PushService] FCM token saved successfully:', data);
+      }
+
+      // 2. user_notification_settings 생성/업데이트 (push_enabled: true)
+      const { error: notifError } = await supabase
+        .from('user_notification_settings')
+        .upsert({
+          user_id: userId,
+          push_enabled: true,
+          email_enabled: true,
+          print_complete_enabled: true,
+          print_error_enabled: true,
+          ai_complete_enabled: true,
+          payment_enabled: true,
+          marketing_enabled: false,
+          quiet_hours_enabled: false,
+        }, {
+          onConflict: 'user_id',
+        });
+
+      if (notifError) {
+        console.error('[PushService] Error saving notification settings:', notifError.message);
+      } else {
+        console.log('[PushService] Notification settings saved successfully');
       }
     } catch (error) {
-      console.error('Exception in saveFCMToken:', error);
-      console.error('Exception details:', JSON.stringify(error, null, 2));
+      console.error('[PushService] Exception in saveFCMToken:', error);
     }
   }
 
