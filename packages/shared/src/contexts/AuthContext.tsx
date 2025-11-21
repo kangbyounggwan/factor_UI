@@ -539,8 +539,8 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     const isNativeMobile = typeof (window as any).Capacitor !== 'undefined';
 
     if (!isNativeMobile) {
-      // 웹에서는 기본 OAuth
-      const redirectUrl = (((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`);
+      // 웹에서는 기본 OAuth - /auth/callback으로 리다이렉트
+      const redirectUrl = (((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/auth/callback`);
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -689,8 +689,8 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         };
       }
     } else {
-      // 웹에서는 OAuth 방식 사용
-      const redirectUrl = (((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`);
+      // 웹에서는 OAuth 방식 사용 - /auth/callback으로 리다이렉트
+      const redirectUrl = (((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/auth/callback`);
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
