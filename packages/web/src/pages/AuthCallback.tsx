@@ -76,6 +76,20 @@ const AuthCallback = () => {
         // 프로필이 없거나 필수 정보가 없으면 프로필 설정 페이지로
         const needsSetup = !profile || !profile.display_name || !profile.phone;
 
+        // 새 탭에서 열렸는지 확인 (window.opener가 있으면 새 탭)
+        if (window.opener) {
+          console.log('[AuthCallback] Opened in new tab, closing window...');
+          // 새 탭인 경우: 원래 창에 메시지 보내고 닫기
+          try {
+            window.opener.postMessage({ type: 'OAUTH_SUCCESS', needsSetup }, window.location.origin);
+          } catch (e) {
+            console.log('[AuthCallback] Could not post message to opener');
+          }
+          window.close();
+          return;
+        }
+
+        // 같은 창인 경우: 정상 리다이렉트
         if (needsSetup) {
           console.log('[AuthCallback] Profile setup needed, redirecting to /profile-setup');
           navigate('/profile-setup', { replace: true });

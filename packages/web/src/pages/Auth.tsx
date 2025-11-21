@@ -35,6 +35,21 @@ const Auth = () => {
     phone: "",
   });
 
+  // OAuth 팝업/새탭에서 메시지 수신 리스너
+  useEffect(() => {
+    const handleOAuthMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === 'OAUTH_SUCCESS') {
+        console.log('[Auth] Received OAuth success message, needsSetup:', event.data.needsSetup);
+        // 페이지 새로고침하여 세션 반영
+        window.location.reload();
+      }
+    };
+
+    window.addEventListener('message', handleOAuthMessage);
+    return () => window.removeEventListener('message', handleOAuthMessage);
+  }, []);
+
   // 로그인된 사용자는 프로필 설정 필요 여부에 따라 리다이렉트
   const redirectPath = searchParams.get('redirect') || '/';
   if (user && profileCheckComplete) {
