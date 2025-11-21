@@ -38,6 +38,7 @@ interface AuthContextType {
   userRole: "admin" | "user" | null;
   isAdmin: boolean;
   loading: boolean;
+  needsProfileSetup: boolean;
   signUp: (email: string, password: string, displayName?: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
@@ -45,6 +46,7 @@ interface AuthContextType {
   linkGoogleAccount: () => Promise<{ error: any }>;
   unlinkProvider: (provider: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
+  checkProfileSetup: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -60,6 +62,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   const [session, setSession] = useState<Session | null>(null);
   const [userRole, setUserRole] = useState<"admin" | "user" | null>(null);
   const [loading, setLoading] = useState(true);
+  const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
   // refs to avoid stale closures and double-subscribe
   const initializedRef = useRef(false);
   const currentUserIdRef = useRef<string | null>(null);
@@ -86,14 +89,42 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     if (lastRoleLoadedUserIdRef.current === userId) return;
     try {
       const { data, error } = await supabase
-        .from("user_roles")
+        .from("profiles")
         .select("role")
         .eq("user_id", userId)
         .maybeSingle();
-      setUserRole(!error && data ? data.role : "user");
+      const role = data?.role as "admin" | "user" | null;
+      setUserRole(!error && role ? role : "user");
       lastRoleLoadedUserIdRef.current = userId;
     } catch {
       setUserRole("user");
+    }
+  };
+
+  // 프로필 설정 필요 여부 체크
+  const checkProfileSetup = async () => {
+    if (!user) {
+      setNeedsProfileSetup(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, display_name")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      // 프로필이 없거나 display_name이 없으면 설정 필요
+      if (error || !data || !data.display_name) {
+        console.log('[Auth] Profile setup needed for user:', user.id);
+        setNeedsProfileSetup(true);
+      } else {
+        setNeedsProfileSetup(false);
+      }
+    } catch (err) {
+      console.error('[Auth] Error checking profile:', err);
+      setNeedsProfileSetup(false);
     }
   };
 
@@ -139,14 +170,21 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         // 푸시 알림이 활성화되어 있으면 초기화
         if (settings?.push_notifications !== false) {
           // 동적 import로 모바일 전용 모듈 로드
-          const { pushNotificationService } = await import(
-            /* @vite-ignore */
-            '/src/services/pushNotificationService'
-          ).catch(() => ({ pushNotificationService: null }));
+          // Note: 이 import는 모바일 앱에서만 실행됨 (variant === "mobile" && Capacitor.isNativePlatform())
+          try {
+            const base = '@mobile';
+            const path = '/services/pushNotificationService';
+            const { pushNotificationService } = await import(
+              /* @vite-ignore */
+              base + path
+            );
 
-          if (pushNotificationService) {
-            await pushNotificationService.initialize(userId);
-            console.log('[AuthContext] Push notification service initialized');
+            if (pushNotificationService) {
+              await pushNotificationService.initialize(userId);
+              console.log('[AuthContext] Push notification service initialized');
+            }
+          } catch (importError) {
+            console.log('[AuthContext] Push notification service not available (web platform)');
           }
         } else {
           console.log('[AuthContext] Push notifications disabled by user');
@@ -233,6 +271,27 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
       if (nextUserId) {
         setTimeout(() => { if (isMounted) loadUserRole(nextUserId); }, 0);
+        // 프로필 설정 필요 여부 체크 (소셜 로그인 신규 사용자 감지)
+        setTimeout(async () => {
+          if (!isMounted) return;
+          try {
+            const { data, error } = await supabase
+              .from("profiles")
+              .select("id, display_name")
+              .eq("user_id", nextUserId)
+              .maybeSingle();
+
+            if (error || !data || !data.display_name) {
+              console.log('[Auth] Profile setup needed for user:', nextUserId);
+              setNeedsProfileSetup(true);
+            } else {
+              setNeedsProfileSetup(false);
+            }
+          } catch (err) {
+            console.error('[Auth] Error checking profile:', err);
+            setNeedsProfileSetup(false);
+          }
+        }, 0);
         // 기다리지 말고 백그라운드 실행하여 UI 로딩을 즉시 종료
         (async () => {
           try {
@@ -248,6 +307,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         })();
       } else {
         if (isMounted) setUserRole(null);
+        if (isMounted) setNeedsProfileSetup(false);
       }
       setReadyOnce();
       
@@ -378,6 +438,19 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     if (!error && data?.user) {
       try {
         console.log('[SignUp] 사용자 생성 완료, 기본 설정 생성 시작:', data.user.id);
+
+        // 프로필 생성
+        const profileResult = await supabase.from('profiles').insert({
+          user_id: data.user.id,
+          display_name: displayName || email.split("@")[0],
+          role: 'user',
+        }).select().maybeSingle();
+
+        if (profileResult.error) {
+          console.error('[SignUp] 프로필 생성 실패:', profileResult.error);
+        } else {
+          console.log('[SignUp] 프로필 생성 성공');
+        }
 
         // 기본 알림 설정 생성
         const notificationResult = await supabase.from('user_notification_settings').insert({
@@ -675,6 +748,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     userRole,
     isAdmin: userRole === "admin",
     loading,
+    needsProfileSetup,
     signUp,
     signIn,
     signInWithGoogle,
@@ -682,6 +756,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     linkGoogleAccount,
     unlinkProvider,
     signOut,
+    checkProfileSetup,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

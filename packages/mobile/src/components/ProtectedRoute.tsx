@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 
@@ -7,9 +7,10 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { user, loading } = useAuth();
+  const { user, loading, needsProfileSetup } = useAuth();
+  const location = useLocation();
 
-  console.log('ProtectedRoute 상태:', { loading, user: !!user });
+  console.log('ProtectedRoute 상태:', { loading, user: !!user, needsProfileSetup });
 
   if (loading) {
     console.log('ProtectedRoute: 로딩 중...');
@@ -23,6 +24,12 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   if (!user) {
     console.log('ProtectedRoute: 사용자 없음, /로 리다이렉트');
     return <Navigate to="/" replace />;
+  }
+
+  // 프로필 설정이 필요하고, 현재 프로필 설정 페이지가 아니면 리다이렉트
+  if (needsProfileSetup && location.pathname !== '/profile-setup') {
+    console.log('ProtectedRoute: 프로필 설정 필요, /profile-setup으로 리다이렉트');
+    return <Navigate to="/profile-setup" replace />;
   }
 
   console.log('ProtectedRoute: 사용자 인증됨, 페이지 렌더링');

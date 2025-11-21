@@ -30,10 +30,13 @@ export async function getEdgeDevices(): Promise<EdgeDevice[]> {
 
 export async function getUserRoles(): Promise<Array<{ user_id: string; role: 'admin'|'user' }>> {
   const { data, error } = await supabase
-    .from('user_roles')
+    .from('profiles')
     .select('user_id, role');
   if (error) throw error;
-  return (data || []) as Array<{ user_id: string; role: 'admin'|'user' }>;
+  return (data || []).map(d => ({
+    user_id: d.user_id,
+    role: (d.role as 'admin' | 'user') || 'user'
+  }));
 }
 
 export async function fetchAdminData(): Promise<{ devices: EdgeDevice[]; stats: AdminStats }> {

@@ -88,23 +88,33 @@ const UserProfile = () => {
 
         if (uploadError) throw uploadError;
 
-        // Get signed URL (24시간 유효)
-        const { data: urlData, error: urlError } = await supabase.storage
+        // Get public URL
+        const { data: urlData } = supabase.storage
           .from('avatars')
-          .createSignedUrl(filePath, 86400);
+          .getPublicUrl(filePath);
 
-        if (urlError) throw urlError;
+        const publicUrl = urlData.publicUrl;
 
         const { error: updateError } = await supabase.auth.updateUser({
-          data: { avatar_url: urlData.signedUrl }
+          data: { avatar_url: publicUrl }
         });
 
         if (updateError) throw updateError;
 
+        // Update profiles table
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ avatar_url: publicUrl })
+          .eq('user_id', user.id);
+
+        if (profileError) {
+          console.error('Error updating profile avatar:', profileError);
+        }
+
         // 업데이트된 사용자 정보 가져오기 (메타데이터 새로고침)
         await supabase.auth.getUser();
 
-        setAvatarUrl(urlData.signedUrl);
+        setAvatarUrl(publicUrl);
         toast({
           title: t("profile.photoChangeComplete", "프로필 사진 변경 완료"),
           description: t("profile.photoChangeSuccess", "프로필 사진이 성공적으로 변경되었습니다."),
@@ -141,23 +151,33 @@ const UserProfile = () => {
 
             if (uploadError) throw uploadError;
 
-            // Get signed URL (24시간 유효)
-            const { data: urlData, error: urlError } = await supabase.storage
+            // Get public URL
+            const { data: urlData } = supabase.storage
               .from('avatars')
-              .createSignedUrl(filePath, 86400);
+              .getPublicUrl(filePath);
 
-            if (urlError) throw urlError;
+            const publicUrl = urlData.publicUrl;
 
             const { error: updateError } = await supabase.auth.updateUser({
-              data: { avatar_url: urlData.signedUrl }
+              data: { avatar_url: publicUrl }
             });
 
             if (updateError) throw updateError;
 
+            // Update profiles table
+            const { error: profileError } = await supabase
+              .from('profiles')
+              .update({ avatar_url: publicUrl })
+              .eq('user_id', user.id);
+
+            if (profileError) {
+              console.error('Error updating profile avatar:', profileError);
+            }
+
             // 업데이트된 사용자 정보 가져오기 (메타데이터 새로고침)
             await supabase.auth.getUser();
 
-            setAvatarUrl(urlData.signedUrl);
+            setAvatarUrl(publicUrl);
             toast({
               title: t("profile.photoChangeComplete", "프로필 사진 변경 완료"),
               description: t("profile.photoChangeSuccess", "프로필 사진이 성공적으로 변경되었습니다."),
@@ -328,20 +348,36 @@ const UserProfile = () => {
             // DB에 즉시 저장
             try {
               const updateData: { [key: string]: string } = {};
+              const profileUpdateData: { [key: string]: string } = {};
 
               if (editingField.key === 'name') {
                 updateData.full_name = value;
+                profileUpdateData.display_name = value;
               } else if (editingField.key === 'phone') {
                 updateData.phone = value;
+                profileUpdateData.phone = value;
               } else if (editingField.key === 'bio') {
                 updateData.bio = value;
               }
 
+              // user_metadata 업데이트
               const { error } = await supabase.auth.updateUser({
                 data: updateData
               });
 
               if (error) throw error;
+
+              // profiles 테이블 업데이트
+              if (Object.keys(profileUpdateData).length > 0 && user) {
+                const { error: profileError } = await supabase
+                  .from('profiles')
+                  .update(profileUpdateData)
+                  .eq('user_id', user.id);
+
+                if (profileError) {
+                  console.error('Profile table update error:', profileError);
+                }
+              }
 
               // 업데이트된 사용자 정보 가져오기 (메타데이터 새로고침)
               await supabase.auth.getUser();

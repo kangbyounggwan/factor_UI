@@ -63,30 +63,23 @@ const Admin = () => {
 
       if (devicesError) throw devicesError;
 
-      // 사용자와 역할 로드
-      const { data: rolesData, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, role');
-
-      if (rolesError) throw rolesError;
-
-      // 프로필 정보 별도 로드
+      // 프로필 정보에서 역할 로드 (user_roles 테이블 대신 profiles 사용)
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('user_id, display_name');
+        .select('user_id, display_name, role');
 
       if (profilesError) throw profilesError;
 
       setDevices(devicesData || []);
-      
+
       // 통계 계산
       const activeDeviceCount = (devicesData || []).filter(d => d.status === 'active').length;
-      const adminCount = (rolesData || []).filter(r => r.role === 'admin').length;
+      const adminCount = (profilesData || []).filter(p => p.role === 'admin').length;
 
       setStats({
         totalDevices: devicesData?.length || 0,
         activeDevices: activeDeviceCount,
-        totalUsers: rolesData?.length || 0,
+        totalUsers: profilesData?.length || 0,
         adminUsers: adminCount
       });
 

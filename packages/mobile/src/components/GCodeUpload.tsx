@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Upload,
-  File,
+  File as FileIcon,
   Play,
   Trash2,
   Clock,
@@ -70,7 +70,6 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
       try {
         const result = await FilePicker.pickFiles({
           types: ['*/*'], // GCode는 특정 MIME type이 없으므로 모든 파일 허용
-          multiple: false,
         });
 
         if (!result.files || result.files.length === 0) return;
@@ -310,7 +309,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <File className="h-4 w-4" />
+            <FileIcon className="h-4 w-4" />
             {t('gcode.title')}
           </CardTitle>
           <div className="flex items-center gap-4">
@@ -346,7 +345,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
               ) : (
                 localMqttFiles.map((file, idx) => (
                   <div key={`${file.name}-${idx}`} className="flex items-center gap-2 p-2 border rounded text-xs">
-                    <File className="h-3 w-3 text-muted-foreground" />
+                    <FileIcon className="h-3 w-3 text-muted-foreground" />
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{file.display || file.name}</div>
                       <div className="text-muted-foreground flex items-center gap-2">
@@ -392,7 +391,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
               ) : (
                 sdFiles.map((file, idx) => (
                   <div key={`${file.name}-${idx}`} className="flex items-center gap-2 p-2 border rounded text-xs">
-                    <File className="h-3 w-3 text-muted-foreground" />
+                    <FileIcon className="h-3 w-3 text-muted-foreground" />
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{file.name}</div>
                       <div className="text-muted-foreground flex items-center gap-2">

@@ -2,14 +2,6 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@shared/contexts/AuthContext';
 import { supabase } from '@shared/integrations/supabase/client';
 
-export interface UserRole {
-  id: string;
-  user_id: string;
-  role: 'admin' | 'user';
-  created_at: string;
-  updated_at: string;
-}
-
 export const useUserRole = () => {
   const { user } = useAuth();
   const [userRole, setUserRole] = useState<'admin' | 'user' | null>(null);
@@ -25,7 +17,7 @@ export const useUserRole = () => {
 
       try {
         const { data, error } = await supabase
-          .from('user_roles')
+          .from('profiles')
           .select('role')
           .eq('user_id', user.id)
           .single();
@@ -34,7 +26,7 @@ export const useUserRole = () => {
           // 역할이 없으면 기본적으로 user 역할
           setUserRole('user');
         } else {
-          setUserRole(data.role);
+          setUserRole(data.role as 'admin' | 'user');
         }
       } catch (error) {
         console.error('Error fetching user role:', error);

@@ -18,7 +18,7 @@ import { onDashStatusMessage } from "@shared/services/mqttService";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
 import { getPrinterStatusInfo, isIdleState, type PrinterState, type PrinterStateFlags } from "@shared";
-import { useWebSocket } from "@shared/hooks/useWebSocket";
+
 
 // 로컬 스냅샷 퍼시스턴스 훅(한 파일 내 사용)
 function usePersistentState<T>(key: string, fallback: T) {

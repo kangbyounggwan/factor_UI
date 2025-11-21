@@ -46,6 +46,7 @@ const DeviceRegister = lazy(() => import("./pages/DeviceRegister"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
 
 const queryClient = new QueryClient();
 
@@ -135,85 +136,93 @@ const AppContent = () => {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
-    const handleAppUrlOpen = CapacitorApp.addListener('appUrlOpen', async (data) => {
-      console.log('[App] Deep link received:', data.url);
+    let listenerHandle: { remove: () => Promise<void> } | null = null;
 
-      // OAuth 콜백 URL 처리 (iOS: com.byeonggwan.factor://, Android: com.factor.app://)
-      if (data.url.includes('auth/callback')) {
-        try {
-          // 브라우저 닫기 시도 (즉시 닫기)
+    const setupListener = async () => {
+      listenerHandle = await CapacitorApp.addListener('appUrlOpen', async (data) => {
+        console.log('[App] Deep link received:', data.url);
+
+        // OAuth 콜백 URL 처리 (iOS: com.byeonggwan.factor://, Android: com.factor.app://)
+        if (data.url.includes('auth/callback')) {
           try {
-            const { Browser } = await import('@capacitor/browser');
-            await Browser.close();
-            console.log('[App] Browser closed');
-          } catch (browserErr) {
-            console.log('[App] Browser already closed or not found');
-          }
+            // 브라우저 닫기 시도 (즉시 닫기)
+            try {
+              const { Browser } = await import('@capacitor/browser');
+              await Browser.close();
+              console.log('[App] Browser closed');
+            } catch (browserErr) {
+              console.log('[App] Browser already closed or not found');
+            }
 
-          // URL 파싱
-          const url = new URL(data.url);
+            // URL 파싱
+            const url = new URL(data.url);
 
-          // URL fragment (#access_token=...) 또는 query (?code=...) 처리
-          const fragment = url.hash.substring(1); // # 제거
-          const params = new URLSearchParams(fragment || url.search.substring(1));
+            // URL fragment (#access_token=...) 또는 query (?code=...) 처리
+            const fragment = url.hash.substring(1); // # 제거
+            const params = new URLSearchParams(fragment || url.search.substring(1));
 
-          const access_token = params.get('access_token');
-          const refresh_token = params.get('refresh_token');
+            const access_token = params.get('access_token');
+            const refresh_token = params.get('refresh_token');
 
-          console.log('[App] Platform:', Capacitor.getPlatform());
-          console.log('[App] Full URL:', data.url);
-          console.log('[App] Fragment:', fragment);
-          console.log('[App] Search:', url.search);
-          console.log('[App] Access token found:', !!access_token);
-          console.log('[App] Refresh token found:', !!refresh_token);
+            console.log('[App] Platform:', Capacitor.getPlatform());
+            console.log('[App] Full URL:', data.url);
+            console.log('[App] Fragment:', fragment);
+            console.log('[App] Search:', url.search);
+            console.log('[App] Access token found:', !!access_token);
+            console.log('[App] Refresh token found:', !!refresh_token);
 
-          if (access_token && refresh_token) {
-            // 토큰이 있으면 세션 설정
-            const { error } = await supabase.auth.setSession({
-              access_token,
-              refresh_token
-            });
+            if (access_token && refresh_token) {
+              // 토큰이 있으면 세션 설정
+              const { error } = await supabase.auth.setSession({
+                access_token,
+                refresh_token
+              });
 
-            if (error) {
-              console.error('[App] OAuth session error:', error);
+              if (error) {
+                console.error('[App] OAuth session error:', error);
+                toast({
+                  title: '로그인 실패',
+                  description: '인증 처리 중 오류가 발생했습니다.',
+                  variant: 'destructive',
+                });
+              } else {
+                console.log('[App] OAuth login successful, redirecting to dashboard');
+                toast({
+                  title: '로그인 성공',
+                  description: '환영합니다!',
+                });
+
+                // 대시보드로 이동
+                setTimeout(() => {
+                  navigate('/dashboard', { replace: true });
+                }, 300);
+              }
+            } else {
+              console.error('[App] No tokens found in OAuth callback');
               toast({
                 title: '로그인 실패',
-                description: '인증 처리 중 오류가 발생했습니다.',
+                description: '인증 정보를 받지 못했습니다.',
                 variant: 'destructive',
               });
-            } else {
-              console.log('[App] OAuth login successful, redirecting to dashboard');
-              toast({
-                title: '로그인 성공',
-                description: '환영합니다!',
-              });
-
-              // 대시보드로 이동
-              setTimeout(() => {
-                navigate('/dashboard', { replace: true });
-              }, 300);
             }
-          } else {
-            console.error('[App] No tokens found in OAuth callback');
+          } catch (err) {
+            console.error('[App] Deep link processing error:', err);
             toast({
               title: '로그인 실패',
-              description: '인증 정보를 받지 못했습니다.',
+              description: '인증 처리 중 오류가 발생했습니다.',
               variant: 'destructive',
             });
           }
-        } catch (err) {
-          console.error('[App] Deep link processing error:', err);
-          toast({
-            title: '로그인 실패',
-            description: '인증 처리 중 오류가 발생했습니다.',
-            variant: 'destructive',
-          });
         }
-      }
-    });
+      });
+    };
+
+    setupListener();
 
     return () => {
-      handleAppUrlOpen.remove();
+      if (listenerHandle) {
+        listenerHandle.remove();
+      }
     };
   }, [navigate, toast]);
 
@@ -227,72 +236,80 @@ const AppContent = () => {
     // Bottom Navigation의 메인 페이지들
     const mainPages = ['/dashboard', '/create', '/settings', '/user-settings'];
 
-    const backButtonListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
-      const currentPath = location.pathname;
-      const currentSearch = location.search;
+    let backButtonListener: { remove: () => Promise<void> } | null = null;
 
-      // 현재 페이지가 메인 페이지(Bottom Navigation) 중 하나인지 확인
-      const isMainPage = mainPages.includes(currentPath);
+    const setupBackButtonListener = async () => {
+      backButtonListener = await CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+        const currentPath = location.pathname;
+        const currentSearch = location.search;
 
-      if (isMainPage) {
-        // Settings 페이지에서 모달(쿼리 파라미터)이 열려있는지 확인
-        if (currentPath === '/settings' && currentSearch) {
-          const params = new URLSearchParams(currentSearch);
-          if (params.has('addGroup') || params.has('editGroup') ||
-              params.has('addPrinter') || params.has('editPrinter')) {
-            // 모달이 열려있으면 뒤로가기로 모달 닫기
-            window.history.back();
-            return;
+        // 현재 페이지가 메인 페이지(Bottom Navigation) 중 하나인지 확인
+        const isMainPage = mainPages.includes(currentPath);
+
+        if (isMainPage) {
+          // Settings 페이지에서 모달(쿼리 파라미터)이 열려있는지 확인
+          if (currentPath === '/settings' && currentSearch) {
+            const params = new URLSearchParams(currentSearch);
+            if (params.has('addGroup') || params.has('editGroup') ||
+                params.has('addPrinter') || params.has('editPrinter')) {
+              // 모달이 열려있으면 뒤로가기로 모달 닫기
+              window.history.back();
+              return;
+            }
           }
+
+          // AI Studio 페이지에서 내부 단계가 있는지 확인
+          if (currentPath === '/create') {
+            // AI Studio의 내부 단계를 확인하기 위해 CustomEvent 발생
+            const hasInternalState = window.dispatchEvent(
+              new CustomEvent('ai-studio-back', { cancelable: true })
+            );
+
+            // 이벤트가 preventDefault()로 취소되었으면 내부 단계가 있다는 의미
+            if (!hasInternalState) {
+              return; // AI Studio 내부에서 뒤로가기 처리됨
+            }
+          }
+
+          // 메인 페이지에서는 히스토리 무시하고 무조건 앱 종료 동작만 수행
+          // 2초 내 두 번 누르면 앱 종료
+          const currentTime = new Date().getTime();
+
+          if (currentTime - lastBackPress < DOUBLE_PRESS_DELAY) {
+            // 두 번째 백 버튼 누름 - 앱 종료
+            CapacitorApp.exitApp();
+          } else {
+            // 첫 번째 백 버튼 누름 - 네이티브 토스트 메시지 표시
+            lastBackPress = currentTime;
+
+            // 네이티브 토스트 표시
+            CapacitorToast.show({
+              text: '한 번 더 누르면 앱이 종료됩니다',
+              duration: 'short',
+              position: 'bottom'
+            });
+          }
+          // 메인 페이지에서는 여기서 종료 - 페이지 이동 없음
+          return;
         }
 
-        // AI Studio 페이지에서 내부 단계가 있는지 확인
-        if (currentPath === '/create') {
-          // AI Studio의 내부 단계를 확인하기 위해 CustomEvent 발생
-          const hasInternalState = window.dispatchEvent(
-            new CustomEvent('ai-studio-back', { cancelable: true })
-          );
-
-          // 이벤트가 preventDefault()로 취소되었으면 내부 단계가 있다는 의미
-          if (!hasInternalState) {
-            return; // AI Studio 내부에서 뒤로가기 처리됨
-          }
-        }
-
-        // 메인 페이지에서는 히스토리 무시하고 무조건 앱 종료 동작만 수행
-        // 2초 내 두 번 누르면 앱 종료
-        const currentTime = new Date().getTime();
-
-        if (currentTime - lastBackPress < DOUBLE_PRESS_DELAY) {
-          // 두 번째 백 버튼 누름 - 앱 종료
-          CapacitorApp.exitApp();
+        // 메인 페이지가 아닌 경우에만 뒤로가기 처리
+        if (canGoBack) {
+          // 히스토리가 있으면 뒤로가기
+          window.history.back();
         } else {
-          // 첫 번째 백 버튼 누름 - 네이티브 토스트 메시지 표시
-          lastBackPress = currentTime;
-
-          // 네이티브 토스트 표시
-          CapacitorToast.show({
-            text: '한 번 더 누르면 앱이 종료됩니다',
-            duration: 'short',
-            position: 'bottom'
-          });
+          // 히스토리가 없으면 대시보드로 이동
+          navigate('/dashboard', { replace: true });
         }
-        // 메인 페이지에서는 여기서 종료 - 페이지 이동 없음
-        return;
-      }
+      });
+    };
 
-      // 메인 페이지가 아닌 경우에만 뒤로가기 처리
-      if (canGoBack) {
-        // 히스토리가 있으면 뒤로가기
-        window.history.back();
-      } else {
-        // 히스토리가 없으면 대시보드로 이동
-        navigate('/dashboard', { replace: true });
-      }
-    });
+    setupBackButtonListener();
 
     return () => {
-      backButtonListener.remove();
+      if (backButtonListener) {
+        backButtonListener.remove();
+      }
     };
   }, [location.pathname, location.search, navigate, toast]);
 
@@ -379,6 +396,11 @@ const AppContent = () => {
           <Routes>
             <Route path="/" element={<Auth />} />
             <Route path="/home" element={<Home />} />
+            <Route path="/profile-setup" element={
+              <ProtectedRoute>
+                <ProfileSetup />
+              </ProtectedRoute>
+            } />
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <Dashboard />
