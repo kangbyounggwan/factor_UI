@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { User, Phone, Sparkles } from "lucide-react";
 
 const ProfileSetup = () => {
-  const { user } = useAuth();
+  const { user, checkProfileSetup } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -118,13 +118,16 @@ const ProfileSetup = () => {
         console.error('Subscription error:', subError);
       }
 
+      // AuthContext 상태 업데이트 (needsProfileSetup = false로 변경)
+      await checkProfileSetup();
+
       toast({
         title: t("profileSetup.success", "프로필 설정 완료"),
         description: t("profileSetup.successDesc", "환영합니다! 서비스를 이용해보세요."),
       });
 
-      // 메인 페이지로 이동
-      navigate("/", { replace: true });
+      // 대시보드로 이동
+      navigate("/dashboard", { replace: true });
 
     } catch (error) {
       console.error('Profile setup error:', error);
