@@ -17,7 +17,7 @@ import { useSafeAreaStyle } from "@/hooks/usePlatform";
 
 const Auth = () => {
   const { t } = useTranslation();
-  const { user, signIn, signUp, signInWithGoogle, signInWithApple, loading } = useAuth();
+  const { user, signIn, signUp, signInWithGoogle, signInWithApple, loading, needsProfileSetup, profileCheckComplete } = useAuth();
   const { toast } = useToast();
   const [isSignUp, setIsSignUp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,8 +53,11 @@ const Auth = () => {
     phone: "",
   });
 
-  // 로그인된 사용자는 대시보드로 리다이렉트
-  if (user) {
+  // 로그인된 사용자는 프로필 설정 필요 여부에 따라 리다이렉트
+  if (user && profileCheckComplete) {
+    if (needsProfileSetup) {
+      return <Navigate to="/profile-setup" replace />;
+    }
     return <Navigate to="/dashboard" replace />;
   }
 

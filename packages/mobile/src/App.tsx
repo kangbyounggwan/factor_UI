@@ -47,6 +47,7 @@ const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 
 const queryClient = new QueryClient();
 
@@ -186,16 +187,36 @@ const AppContent = () => {
                   variant: 'destructive',
                 });
               } else {
-                console.log('[App] OAuth login successful, redirecting to dashboard');
-                toast({
-                  title: '로그인 성공',
-                  description: '환영합니다!',
-                });
+                console.log('[App] OAuth login successful, checking profile...');
 
-                // 대시보드로 이동
-                setTimeout(() => {
+                // 프로필 확인하여 적절한 페이지로 리다이렉트
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                  const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('display_name, phone')
+                    .eq('user_id', user.id)
+                    .maybeSingle();
+
+                  const needsSetup = !profile || !profile.display_name || !profile.phone;
+
+                  toast({
+                    title: '로그인 성공',
+                    description: needsSetup ? '프로필을 설정해주세요.' : '환영합니다!',
+                  });
+
+                  setTimeout(() => {
+                    if (needsSetup) {
+                      console.log('[App] Profile setup needed, redirecting to /profile-setup');
+                      navigate('/profile-setup', { replace: true });
+                    } else {
+                      console.log('[App] Profile complete, redirecting to /dashboard');
+                      navigate('/dashboard', { replace: true });
+                    }
+                  }, 300);
+                } else {
                   navigate('/dashboard', { replace: true });
-                }, 300);
+                }
               }
             } else {
               console.error('[App] No tokens found in OAuth callback');
@@ -395,6 +416,7 @@ const AppContent = () => {
         }>
           <Routes>
             <Route path="/" element={<Auth />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/home" element={<Home />} />
             <Route path="/profile-setup" element={
               <ProtectedRoute>

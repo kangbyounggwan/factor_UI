@@ -42,6 +42,7 @@ const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const RefundPolicy = lazy(() => import("./pages/RefundPolicy"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 
 const queryClient = new QueryClient();
 
@@ -89,6 +90,7 @@ const AppContent = () => {
         }>
           <Routes>
             <Route path="/auth" element={<Auth />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/email-verification" element={<EmailVerification />} />
             <Route path="/profile-setup" element={
               <ProtectedRoute>

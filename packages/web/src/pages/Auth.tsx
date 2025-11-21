@@ -16,7 +16,7 @@ import { useTheme } from "next-themes";
 
 const Auth = () => {
   const { t } = useTranslation();
-  const { user, signIn, signUp, signInWithGoogle, signInWithApple, loading } = useAuth();
+  const { user, signIn, signUp, signInWithGoogle, signInWithApple, loading, needsProfileSetup, profileCheckComplete } = useAuth();
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
@@ -35,9 +35,12 @@ const Auth = () => {
     phone: "",
   });
 
-  // 로그인된 사용자는 리다이렉트 경로 또는 메인 페이지로 이동
+  // 로그인된 사용자는 프로필 설정 필요 여부에 따라 리다이렉트
   const redirectPath = searchParams.get('redirect') || '/';
-  if (user) {
+  if (user && profileCheckComplete) {
+    if (needsProfileSetup) {
+      return <Navigate to="/profile-setup" replace />;
+    }
     return <Navigate to={redirectPath} replace />;
   }
 
