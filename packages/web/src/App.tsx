@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -50,6 +50,17 @@ const AppContent = () => {
   const [aiSidebarCollapsed, setAiSidebarCollapsed] = useState(true);
   const [aiSidebarWidth, setAiSidebarWidth] = useState(384);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // OAuth 해시 토큰 감지 및 /auth/callback으로 리다이렉트
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes('access_token=')) {
+      // 해시에 OAuth 토큰이 있으면 /auth/callback으로 리다이렉트
+      console.log('[App] OAuth hash token detected, redirecting to /auth/callback');
+      navigate(`/auth/callback${hash}`, { replace: true });
+    }
+  }, [navigate]);
 
   // AI 어시스턴트/작업공간 활성화
   const showAISidebar = true;
