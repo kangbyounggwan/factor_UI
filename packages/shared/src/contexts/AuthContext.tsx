@@ -539,12 +539,13 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     const isNativeMobile = typeof (window as any).Capacitor !== 'undefined';
 
     if (!isNativeMobile) {
-      // 웹에서는 기본 OAuth - /auth/callback으로 리다이렉트
+      // 웹에서는 같은 창에서 OAuth 진행 (새 탭 열지 않음)
       const redirectUrl = (((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/auth/callback`);
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: redirectUrl,
+          skipBrowserRedirect: false, // 같은 창에서 리다이렉트
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
