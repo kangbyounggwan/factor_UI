@@ -14,6 +14,8 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,  // URL에서 토큰 자동 감지 및 처리
+    flowType: 'implicit',
   },
 });
 

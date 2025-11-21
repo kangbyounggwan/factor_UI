@@ -35,19 +35,39 @@ const Auth = () => {
     phone: "",
   });
 
-  // OAuth 팝업/새탭에서 메시지 수신 리스너
+  // OAuth 팝업/새탭에서 메시지 수신 리스너 (postMessage + localStorage 방식)
   useEffect(() => {
+    // postMessage 방식
     const handleOAuthMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type === 'OAUTH_SUCCESS') {
-        console.log('[Auth] Received OAuth success message, needsSetup:', event.data.needsSetup);
-        // 페이지 새로고침하여 세션 반영
+        console.log('[Auth] Received OAuth success message via postMessage');
         window.location.reload();
       }
     };
 
+    // localStorage 방식 (다른 탭에서 storage 변경 감지)
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === 'oauth_complete' && event.newValue) {
+        console.log('[Auth] Received OAuth success via localStorage');
+        try {
+          const data = JSON.parse(event.newValue);
+          console.log('[Auth] OAuth complete data:', data);
+          // 페이지 새로고침하여 세션 반영
+          window.location.reload();
+        } catch (e) {
+          console.error('[Auth] Error parsing oauth_complete:', e);
+        }
+      }
+    };
+
     window.addEventListener('message', handleOAuthMessage);
-    return () => window.removeEventListener('message', handleOAuthMessage);
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('message', handleOAuthMessage);
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   // 로그인된 사용자는 프로필 설정 필요 여부에 따라 리다이렉트

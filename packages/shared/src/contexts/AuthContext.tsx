@@ -535,8 +535,14 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   };
 
   const signInWithGoogle = async () => {
-    // 모바일 환경 감지 (Capacitor)
-    const isNativeMobile = typeof (window as any).Capacitor !== 'undefined';
+    // 모바일 환경 감지 (안전하게 체크)
+    let isNativeMobile = false;
+    try {
+      isNativeMobile = Capacitor.isNativePlatform();
+    } catch (e) {
+      console.log('[AuthContext] Capacitor not available, assuming web');
+      isNativeMobile = false;
+    }
 
     if (!isNativeMobile) {
       // 웹에서는 같은 창에서 OAuth 진행 (새 탭 열지 않음)
