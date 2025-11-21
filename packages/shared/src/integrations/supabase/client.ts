@@ -19,6 +19,8 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     autoRefreshToken: true,
     detectSessionInUrl: false, // 중복 호출 방지: AuthCallback에서 직접 처리
     flowType: 'pkce',
+    // @ts-expect-error - multiTab은 Supabase 내부 옵션
+    multiTab: true, // 탭 간 세션 동기화 안정화
     // storageKey, storage 커스텀 제거 - Supabase 기본값 사용
   },
 });

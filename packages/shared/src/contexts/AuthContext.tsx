@@ -66,15 +66,12 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
   const [profileCheckComplete, setProfileCheckComplete] = useState(false);
   // refs to avoid stale closures and double-subscribe
-  const initializedRef = useRef(false);
   const currentUserIdRef = useRef<string | null>(null);
   const subscribedUserIdRef = useRef<string | null>(null);
   const ctrlUnsubRef = useRef<null | (() => Promise<void>)>(null);
   const aiCompletedUnsubRef = useRef<null | (() => Promise<void>)>(null);
   const aiFailedUnsubRef = useRef<null | (() => Promise<void>)>(null);
   const lastRoleLoadedUserIdRef = useRef<string | null>(null);
-  const signOutInProgressRef = useRef(false);
-  const authEventReceivedRef = useRef(false);
 
   // 개발 환경에서만 렌더링 로그
   if (import.meta.env.DEV) {
@@ -87,21 +84,6 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     });
   }
 
-  const loadUserRole = async (userId: string) => {
-    if (lastRoleLoadedUserIdRef.current === userId) return;
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("user_id", userId)
-        .maybeSingle();
-      const role = data?.role as "admin" | "user" | null;
-      setUserRole(!error && role ? role : "user");
-      lastRoleLoadedUserIdRef.current = userId;
-    } catch {
-      setUserRole("user");
-    }
-  };
 
   // 프로필 설정 필요 여부 체크 (display_name과 phone 모두 필수)
   const checkProfileSetup = async () => {
@@ -251,212 +233,190 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     } catch {}
   }
 
-  const setReadyOnce = () => {
-    if (!initializedRef.current) {
-      setLoading(false);
-      initializedRef.current = true;
-    }
-  };
 
+  // ============================================
+  // Phase 1: onAuthStateChange - 세션/유저 상태만 관리
+  // ============================================
   useEffect(() => {
-    console.log('AuthProvider useEffect 시작');
-    let isMounted = true; // 컴포넌트가 마운트된 상태인지 확인
-    let sessionKickTimer: number | null = null; // onAuth 이벤트가 1초 내 없으면 getSession 실행
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
-      if (!isMounted) return; // 컴포넌트가 언마운트된 경우 중단
-      authEventReceivedRef.current = true; // 인증 이벤트 수신됨
-      if (sessionKickTimer) { try { clearTimeout(sessionKickTimer); } catch {} sessionKickTimer = null; }
+    console.log('[Auth] Setting up auth state listener');
+    let isMounted = true;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (!isMounted) return;
 
       const nextUserId = nextSession?.user?.id || null;
       const prevUserId = currentUserIdRef.current;
 
-      // 중복 SIGNED_IN 방지: 이미 같은 유저로 로그인된 상태면 완전히 무시
-      if (event === 'SIGNED_IN' && nextUserId && nextUserId === prevUserId) {
-        console.log('[Auth] Already signed in with same user, ignoring duplicate SIGNED_IN');
+      console.log('[Auth] State change:', { event, prevUserId, nextUserId });
+
+      // SIGNED_OUT: 상태 완전 초기화
+      if (event === 'SIGNED_OUT') {
+        console.log('[Auth] Signed out, clearing state');
+        setUser(null);
+        setSession(null);
+        setUserRole(null);
+        setNeedsProfileSetup(false);
+        setProfileCheckComplete(true);
+        setLoading(false);
+        currentUserIdRef.current = null;
         return;
       }
 
-      // TOKEN_REFRESHED: 세션만 업데이트하고 다른 처리는 스킵
+      // 중복 SIGNED_IN 방지: 이미 같은 유저로 로그인된 상태면 무시
+      if (event === 'SIGNED_IN' && nextUserId && nextUserId === prevUserId) {
+        console.log('[Auth] Already signed in with same user, ignoring duplicate');
+        return;
+      }
+
+      // TOKEN_REFRESHED: 세션만 업데이트
       if (event === 'TOKEN_REFRESHED') {
         console.log('[Auth] Token refreshed, updating session only');
         setSession(nextSession);
         return;
       }
 
-      // INITIAL_SESSION: 이미 유저가 있으면 무시
+      // INITIAL_SESSION: 이미 같은 유저가 있으면 무시
       if (event === 'INITIAL_SESSION' && prevUserId && nextUserId === prevUserId) {
         console.log('[Auth] Initial session with existing user, ignoring');
+        setLoading(false);
         return;
       }
 
-      console.log('Auth 상태 변경 처리:', { event, user: !!nextSession?.user, variant, prevUserId, nextUserId });
+      // 상태 업데이트
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
       currentUserIdRef.current = nextUserId;
-
-      if (nextUserId) {
-        // 프로필 체크 시작 전 완료 플래그 리셋
-        if (isMounted) setProfileCheckComplete(false);
-
-        // 프로필 설정 필요 여부를 먼저 체크 (로딩 상태 유지)
-        try {
-          const { data: profileData, error: profileError } = await supabase
-            .from("profiles")
-            .select("id, display_name, phone")
-            .eq("user_id", nextUserId)
-            .maybeSingle();
-
-          // 프로필이 없거나 display_name 또는 phone이 없으면 설정 필요
-          if (profileError || !profileData || !profileData.display_name || !profileData.phone) {
-            console.log('[Auth] Profile setup needed for user:', nextUserId, {
-              hasProfile: !!profileData,
-              hasDisplayName: !!profileData?.display_name,
-              hasPhone: !!profileData?.phone
-            });
-            if (isMounted) {
-              setNeedsProfileSetup(true);
-              setProfileCheckComplete(true);
-            }
-          } else {
-            if (isMounted) {
-              setNeedsProfileSetup(false);
-              setProfileCheckComplete(true);
-            }
-          }
-        } catch (err) {
-          console.error('[Auth] Error checking profile:', err);
-          if (isMounted) {
-            setNeedsProfileSetup(false);
-            setProfileCheckComplete(true);
-          }
-        }
-
-        setTimeout(() => { if (isMounted) loadUserRole(nextUserId); }, 0);
-        // 기다리지 말고 백그라운드 실행하여 UI 로딩을 즉시 종료
-        (async () => {
-          try {
-            // 타임박스가 필요하면 Promise.race로 감싸기
-            const ENSURE_TMO = 7000;
-            await Promise.race([
-              ensureSubscriptions(nextUserId),
-              new Promise((res) => setTimeout(res, ENSURE_TMO)),
-            ]);
-          } catch (e) {
-            console.warn('[MQTT] ensure failed', e);
-          }
-        })();
-      } else {
-        if (isMounted) {
-          setUserRole(null);
-          setNeedsProfileSetup(false);
-          setProfileCheckComplete(true);
-        }
-      }
-      setReadyOnce();
-      
-      if (event === 'SIGNED_OUT') {
-        // MQTT 구독 해제
-        await teardownSubscriptions();
-        
-        // 사용자별 MQTT client ID 삭제
-        if (prevUserId) { try { clearMqttClientId(prevUserId); } catch {} }
-        try { await disconnectSharedMqtt(); } catch {}
-      }
+      setLoading(false);
     });
 
-    // 1초 안에 onAuth 이벤트가 안 오면 그때만 getSession 시도
-    sessionKickTimer = window.setTimeout(async () => {
-      if (!isMounted) return;
-      if (authEventReceivedRef.current) {
-        console.log('onAuthStateChange 이벤트 수신됨(지연 1초 내) → getSession 생략');
-        setReadyOnce();
-        return;
-      }
+    // 초기 세션 체크 (onAuthStateChange가 INITIAL_SESSION을 보내지 않는 경우 대비)
+    const initSession = async () => {
       try {
-        console.log('세션 확인 시작(지연 1초 후)');
-        console.log('Supabase 클라이언트 상태:', supabase);
-        const TIMEOUT_MS = 15000; // 15초로 완화
-        const result = await Promise.race([
-          supabase.auth.getSession().then((r) => ({ type: 'session', r })).catch((e) => ({ type: 'error', e })),
-          new Promise((res) => setTimeout(() => res({ type: 'timeout' }), TIMEOUT_MS)),
-        ]) as any;
+        const { data: { session }, error } = await supabase.auth.getSession();
 
-        if (!isMounted) return;
-
-        if (result?.type === 'session') {
-          const { data: { session }, error } = result.r || {};
-          console.log('세션 확인 결과:', { session: !!session, error: !!error, variant });
-          if (error) {
-            console.log('세션 에러:', error?.message);
-            const msg = String(error?.message || "");
-            if (msg.includes("Invalid Refresh Token") || msg.includes("Refresh Token Not Found")) {
-              if (!signOutInProgressRef.current) {
-                signOutInProgressRef.current = true;
-                setUser(null);
-                setSession(null);
-                setUserRole(null);
-                setReadyOnce();
-                try {
-                  Object.keys(localStorage)
-                    .filter((k) => k.startsWith("sb-"))
-                    .forEach((k) => localStorage.removeItem(k));
-                } catch {}
-                try { await supabase.auth.signOut(); } finally {
-                  signOutInProgressRef.current = false;
-                }
-              }
-            }
-          }
-
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          currentUserIdRef.current = session.user.id;
-          await loadUserRole(session.user.id);
-          // 프로필 체크 (지연 세션 확인 시)
-          try {
-            const { data: profileData } = await supabase
-              .from("profiles")
-              .select("display_name, phone")
-              .eq("user_id", session.user.id)
-              .maybeSingle();
-            setNeedsProfileSetup(!profileData?.display_name || !profileData?.phone);
-          } catch {
+        if (error) {
+          console.log('[Auth] Session error:', error.message);
+          const msg = String(error.message || "");
+          // Invalid Token 에러: 로컬 상태만 초기화 (signOut 호출 안 함)
+          if (msg.includes("Invalid Refresh Token") || msg.includes("Refresh Token Not Found")) {
+            console.log('[Auth] Session expired, clearing local state only');
+            setUser(null);
+            setSession(null);
+            setUserRole(null);
             setNeedsProfileSetup(false);
+            setProfileCheckComplete(true);
+            setLoading(false);
+            currentUserIdRef.current = null;
+            return;
           }
-          setProfileCheckComplete(true);
-          await ensureSubscriptions(session.user.id);
-        } else {
-          setUserRole(null);
-          setNeedsProfileSetup(false);
-          setProfileCheckComplete(true);
         }
-        } else if (result?.type === 'timeout') {
-          console.log('세션 느림 → 이벤트 대기 모드 전환 (timeout)');
-          const uid = currentUserIdRef.current;
-          if (uid && authEventReceivedRef.current) {
-            try { await ensureSubscriptions(uid); } catch {}
-          }
-        } else if (result?.type === 'error') {
-          console.log('세션 확인 중 네트워크/일시 오류 → 이벤트 대기 모드 전환', result.e);
+
+        if (isMounted && session?.user && !currentUserIdRef.current) {
+          console.log('[Auth] Initial session found:', session.user.id);
+          setSession(session);
+          setUser(session.user);
+          currentUserIdRef.current = session.user.id;
         }
+      } catch (err) {
+        console.warn('[Auth] Init session error:', err);
       } finally {
-        if (isMounted) {
-          setReadyOnce();
-          console.log('AuthProvider 로딩 완료:', { loading: false, user: !!user });
-        }
+        if (isMounted) setLoading(false);
       }
-    }, 1000);
+    };
+
+    initSession();
 
     return () => {
-      isMounted = false; // 컴포넌트 언마운트 시 플래그 설정
+      isMounted = false;
+      console.log('[Auth] Cleaning up auth state listener');
       subscription.unsubscribe();
-      if (sessionKickTimer) { try { clearTimeout(sessionKickTimer); } catch {} }
     };
   }, []);
 
-  // 포커스/온라인 복귀 시 재시도 훅
+  // ============================================
+  // Phase 2: user.id 변경 시 프로필/Role 로드
+  // ============================================
+  useEffect(() => {
+    if (!user?.id) {
+      setUserRole(null);
+      setNeedsProfileSetup(false);
+      setProfileCheckComplete(true);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadUserData = async () => {
+      setProfileCheckComplete(false);
+
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('id, display_name, phone, role')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (cancelled) return;
+
+        if (error) {
+          console.error('[Auth] Error loading profile:', error);
+          setNeedsProfileSetup(false);
+          setUserRole('user');
+        } else {
+          setNeedsProfileSetup(!profile?.display_name || !profile?.phone);
+          setUserRole(profile?.role || 'user');
+          lastRoleLoadedUserIdRef.current = user.id;
+        }
+      } catch (err) {
+        console.error('[Auth] Error loading user data:', err);
+        if (!cancelled) {
+          setNeedsProfileSetup(false);
+          setUserRole('user');
+        }
+      } finally {
+        if (!cancelled) {
+          setProfileCheckComplete(true);
+        }
+      }
+    };
+
+    loadUserData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  // ============================================
+  // Phase 3: user.id 변경 시 MQTT 설정
+  // ============================================
+  useEffect(() => {
+    if (!user?.id) {
+      teardownSubscriptions();
+      return;
+    }
+
+    let cancelled = false;
+
+    const setupMqtt = async () => {
+      try {
+        await ensureSubscriptions(user.id);
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('[Auth] MQTT setup failed:', err);
+        }
+      }
+    };
+
+    setupMqtt();
+
+    return () => {
+      cancelled = true;
+      teardownSubscriptions();
+    };
+  }, [user?.id]);
+
+  // 포커스/온라인 복귀 시 MQTT 재연결
   useEffect(() => {
     const kick = () => {
       const uid = currentUserIdRef.current;
@@ -470,50 +430,10 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     };
   }, []);
 
-  // 다른 탭에서 세션 변경 감지 및 탭 활성화 시 세션 동기화
-  useEffect(() => {
-    // localStorage storage 이벤트 (다른 탭에서 변경 시)
-    const handleStorageChange = async (event: StorageEvent) => {
-      if (event.key && event.key.includes('auth-token')) {
-        console.log('[Auth] Session changed in another tab, syncing...');
-        try {
-          const { data: { session: newSession } } = await supabase.auth.getSession();
-          if (newSession?.user) {
-            setSession(newSession);
-            setUser(newSession.user);
-            currentUserIdRef.current = newSession.user.id;
-            setProfileCheckComplete(false);
-            await loadUserRole(newSession.user.id);
-            // 프로필 체크
-            const { data: profileData } = await supabase
-              .from("profiles")
-              .select("display_name, phone")
-              .eq("user_id", newSession.user.id)
-              .maybeSingle();
-            setNeedsProfileSetup(!profileData?.display_name || !profileData?.phone);
-            setProfileCheckComplete(true);
-          } else {
-            setSession(null);
-            setUser(null);
-            setUserRole(null);
-            setNeedsProfileSetup(false);
-            setProfileCheckComplete(true);
-            currentUserIdRef.current = null;
-          }
-        } catch (err) {
-          console.error('[Auth] Error syncing session:', err);
-        }
-      }
-    };
-
-    // Supabase가 내부적으로 탭 간 세션 동기화를 처리하므로
-    // visibilitychange는 제거하고 storage 이벤트만 리스닝
-    window.addEventListener('storage', handleStorageChange);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
+  // ============================================
+  // Phase 6: storage 이벤트 리스너 제거
+  // Supabase multiTab: true 설정으로 탭 간 세션 동기화 자동 처리
+  // ============================================
 
   const signUp = async (email: string, password: string, displayName?: string, phone?: string) => {
     const redirectUrl = ((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`;
@@ -839,41 +759,33 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     return { error };
   };
 
-  const signOut = async () => {
-    setUserRole(null);
+  // ============================================
+  // Phase 5: signOut 함수 개선 (scope: local 기본)
+  // ============================================
+  const signOut = async (options?: { global?: boolean }) => {
     try {
-      // 현재 사용자의 MQTT client ID 삭제
-      if (user) { clearMqttClientId(user.id); }
+      // 로컬 상태 먼저 정리
+      setUser(null);
+      setSession(null);
+      setUserRole(null);
+      setNeedsProfileSetup(false);
+      setProfileCheckComplete(true);
+      currentUserIdRef.current = null;
 
-      if (!signOutInProgressRef.current) {
-        signOutInProgressRef.current = true;
-        // 즉시 상태 클리어로 UI 전환
-        setUser(null);
-        setSession(null);
-        setUserRole(null);
-        setNeedsProfileSetup(false);
-        setProfileCheckComplete(false);
-
-        // localStorage 먼저 삭제 (세션 토큰 제거)
-        try {
-          Object.keys(localStorage)
-            .filter((k) => k.startsWith("sb-"))
-            .forEach((k) => localStorage.removeItem(k));
-        } catch {}
-
-        // scope: 'global'로 모든 세션 삭제
-        await supabase.auth.signOut({ scope: 'global' });
-        try { await disconnectSharedMqtt(); } catch {}
-        signOutInProgressRef.current = false;
+      // MQTT client ID 삭제 및 구독 해제
+      if (user?.id) {
+        clearMqttClientId(user.id);
       }
-    } finally {
-      // 한 번 더 localStorage 정리
-      try {
-        Object.keys(localStorage)
-          .filter((k) => k.startsWith("sb-"))
-          .forEach((k) => localStorage.removeItem(k));
-      } catch {}
       await teardownSubscriptions();
+      try { await disconnectSharedMqtt(); } catch {}
+
+      // Supabase 로그아웃 (기본: local - 현재 탭만)
+      const scope = options?.global ? 'global' : 'local';
+      await supabase.auth.signOut({ scope });
+
+      console.log('[Auth] Sign out complete, scope:', scope);
+    } catch (err) {
+      console.error('[Auth] Sign out error:', err);
     }
   };
 

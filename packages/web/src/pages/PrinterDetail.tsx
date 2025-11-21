@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useParams, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, RefreshCw, Wifi, WifiOff } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,7 +10,6 @@ import { IoTDevicePanel } from "@/components/IoTDevicePanel";
 import { CameraFeed } from "@/components/CameraFeed";
 import { PrinterControlPad } from "@/components/PrinterControlPad";
 import { GCodeUpload } from "@/components/GCodeUpload";
-import { WebSocketStatus } from "@/components/WebSocketStatus";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { supabase } from "@shared/integrations/supabase/client"
 import { onDashStatusMessage } from "@shared/services/mqttService";
