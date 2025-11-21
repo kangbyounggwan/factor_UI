@@ -392,6 +392,7 @@ export default {
     printerModel: "Model",
     selectOption: "Select",
     // Additional Art Styles
+    realistic: "Realistic",
     cartoon: "Cartoon",
     abstract: "Abstract",
     pixelArt: "Pixel Art",
@@ -1414,8 +1415,7 @@ export default {
     email: "Email",
     verified: "Verified",
     emailChangeNotice: "Contact customer support to change email",
-    bio: "Bio",
-    bioPlaceholder: "Tell us about yourself",
+    phone: "Phone Number",
     saveChanges: "Save Changes",
     resetProfileTitle: "Reset Profile Information",
     resetProfileDescription: "Are you sure you want to reset your profile information? All changes will be discarded.",

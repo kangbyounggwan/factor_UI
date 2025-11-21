@@ -3,15 +3,21 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@shared/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { Loader2 } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
 
 /**
  * OAuth 콜백 핸들러 (모바일)
  * detectSessionInUrl: true 설정으로 Supabase가 자동으로 code exchange 처리
  * 이 페이지는 세션 완료를 대기하고 적절한 페이지로 리다이렉트
+ *
+ * iOS에서는 신규 사용자 소셜 로그인을 차단 (웹에서 먼저 회원가입 필요)
  */
 const AuthCallback = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+
+  // 플랫폼 한 번만 읽기
+  const platform = Capacitor.getPlatform();
 
   useEffect(() => {
     // URL에서 에러 확인
@@ -23,6 +29,8 @@ const AuthCallback = () => {
       setError(errorDesc);
       return;
     }
+
+    let handled = false;
 
     // 리다이렉트 처리 함수
     const handleRedirect = async (session: Session | null) => {
@@ -39,6 +47,15 @@ const AuthCallback = () => {
           .maybeSingle();
 
         const needsSetup = !profile || !profile.display_name || !profile.phone;
+
+        // iOS에서 신규 사용자(프로필 없음)인 경우 → 로그아웃 후 에러 표시
+        if (needsSetup && platform === 'ios') {
+          console.log('[AuthCallback] iOS new user detected, signing out...');
+          await supabase.auth.signOut();
+          setError('회원가입이 필요합니다. 웹사이트에서 먼저 가입해주세요.');
+          return;
+        }
+
         console.log('[AuthCallback] Redirecting to:', needsSetup ? '/profile-setup' : '/dashboard');
         navigate(needsSetup ? '/profile-setup' : '/dashboard', { replace: true });
       } catch {
@@ -46,30 +63,52 @@ const AuthCallback = () => {
       }
     };
 
+    // 즉시 세션 확인 (딥링크에서 setSession 후 바로 올 수 있음)
+    const checkExistingSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user && !handled) {
+        console.log('[AuthCallback] Existing session found immediately');
+        handled = true;
+        handleRedirect(session);
+        return true;
+      }
+      return false;
+    };
+
+    checkExistingSession();
+
     // Supabase가 자동으로 code exchange 처리 (detectSessionInUrl: true)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('[AuthCallback] Auth state change:', event);
 
-      if (event === 'SIGNED_IN') {
-        subscription.unsubscribe(); // 즉시 구독 해제
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user && !handled) {
+        handled = true;
+        subscription.unsubscribe();
         handleRedirect(session);
       }
     });
 
-    // 이미 세션이 있는 경우 확인 (약간의 지연 후)
+    // 이미 세션이 있는 경우 재확인 (약간의 지연 후)
     const timer = setTimeout(async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        console.log('[AuthCallback] Existing session found');
-        subscription.unsubscribe();
-        handleRedirect(session);
+      if (!handled) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          console.log('[AuthCallback] Existing session found after delay');
+          handled = true;
+          subscription.unsubscribe();
+          handleRedirect(session);
+        }
       }
     }, 500);
 
     // 타임아웃: 15초 후에도 처리되지 않으면 auth로 리다이렉트
     const timeout = setTimeout(() => {
-      console.log('[AuthCallback] Timeout reached');
-      navigate('/', { replace: true });
+      if (!handled) {
+        console.log('[AuthCallback] Timeout reached');
+        handled = true;
+        subscription.unsubscribe();
+        navigate('/', { replace: true });
+      }
     }, 15000);
 
     return () => {
@@ -77,7 +116,7 @@ const AuthCallback = () => {
       clearTimeout(timer);
       clearTimeout(timeout);
     };
-  }, [navigate]);
+  }, [navigate, platform]);
 
   if (error) {
     return (

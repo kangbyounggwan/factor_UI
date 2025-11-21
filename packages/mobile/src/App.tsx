@@ -186,38 +186,14 @@ const AppContent = () => {
                   description: '인증 처리 중 오류가 발생했습니다.',
                   variant: 'destructive',
                 });
-              } else {
-                console.log('[App] OAuth login successful, checking profile...');
-
-                // 프로필 확인하여 적절한 페이지로 리다이렉트
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                  const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('display_name, phone')
-                    .eq('user_id', user.id)
-                    .maybeSingle();
-
-                  const needsSetup = !profile || !profile.display_name || !profile.phone;
-
-                  toast({
-                    title: '로그인 성공',
-                    description: needsSetup ? '프로필을 설정해주세요.' : '환영합니다!',
-                  });
-
-                  setTimeout(() => {
-                    if (needsSetup) {
-                      console.log('[App] Profile setup needed, redirecting to /profile-setup');
-                      navigate('/profile-setup', { replace: true });
-                    } else {
-                      console.log('[App] Profile complete, redirecting to /dashboard');
-                      navigate('/dashboard', { replace: true });
-                    }
-                  }, 300);
-                } else {
-                  navigate('/dashboard', { replace: true });
-                }
+                return;
               }
+
+              console.log('[App] OAuth session set successfully');
+              // AuthCallback 페이지로 이동하여 나머지 처리 위임
+              // AuthCallback이 onAuthStateChange를 통해 SIGNED_IN 이벤트를 받아
+              // 프로필 체크 후 적절한 페이지로 리다이렉트
+              navigate('/auth/callback', { replace: true });
             } else {
               console.error('[App] No tokens found in OAuth callback');
               toast({

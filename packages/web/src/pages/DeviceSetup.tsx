@@ -42,7 +42,13 @@ const DeviceSetup = () => {
       await mqttClient.connect();
 
       const topic = `device/${uuid}/registration`;
-      const payload: any = {
+      const payload: {
+        status: 'timeout' | 'failed';
+        error: string;
+        attempted_at: string;
+        timeout_duration_ms?: number;
+        error_code?: string;
+      } = {
         status,
         error,
         attempted_at: new Date().toISOString(),
@@ -178,7 +184,7 @@ const DeviceSetup = () => {
         .single();
 
       if (error) {
-        const errorCode = (error as any)?.code;
+        const errorCode = error.code;
         const errorMessage = errorCode === '23505'
           ? t('deviceSetup.deviceAlreadyRegistered')
           : t('deviceSetup.databaseError');

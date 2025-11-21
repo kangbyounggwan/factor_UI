@@ -108,10 +108,12 @@ const UserSettings = () => {
     user?.user_metadata?.full_name || "",
   );
   const [email, setEmail] = useState(user?.email || "");
-  const [bio, setBio] = useState(user?.user_metadata?.bio || "");
+  const [phone, setPhone] = useState("");
   const [avatarUrl, setAvatarUrl] = useState(user?.user_metadata?.avatar_url || "");
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [originalProfile, setOriginalProfile] = useState({ displayName: "", phone: "" });
 
   // Notification preferences
   const [emailNotifications, setEmailNotifications] = useState(false);
@@ -166,17 +168,44 @@ const UserSettings = () => {
     paymentHistoryPage * ITEMS_PER_PAGE
   );
 
-  // Update avatar when user changes
+  // Load profile data from DB (including phone)
   useEffect(() => {
-    if (user?.user_metadata?.avatar_url) {
-      setAvatarUrl(user.user_metadata.avatar_url);
-    }
-    if (user?.user_metadata?.full_name) {
-      setDisplayName(user.user_metadata.full_name);
-    }
-    if (user?.user_metadata?.bio) {
-      setBio(user.user_metadata.bio);
-    }
+    const loadProfile = async () => {
+      if (!user) {
+        setLoadingProfile(false);
+        return;
+      }
+
+      try {
+        setLoadingProfile(true);
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('display_name, phone, avatar_url')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (!error && profile) {
+          const name = profile.display_name || "";
+          const ph = profile.phone || "";
+          setDisplayName(name);
+          setPhone(ph);
+          if (profile.avatar_url) setAvatarUrl(profile.avatar_url);
+          setOriginalProfile({ displayName: name, phone: ph });
+        } else {
+          // Fallback to user_metadata
+          const name = user.user_metadata?.full_name || "";
+          setDisplayName(name);
+          if (user.user_metadata?.avatar_url) setAvatarUrl(user.user_metadata.avatar_url);
+          setOriginalProfile({ displayName: name, phone: "" });
+        }
+      } catch (err) {
+        console.error('Error loading profile:', err);
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+
+    loadProfile();
   }, [user]);
 
   // Load subscription data from Supabase
@@ -401,14 +430,27 @@ const UserSettings = () => {
     if (!user) return;
 
     try {
-      const { error } = await supabase.auth.updateUser({
+      // 1. Update auth user_metadata
+      const { error: authError } = await supabase.auth.updateUser({
         data: {
           full_name: displayName,
-          bio: bio,
         }
       });
 
-      if (error) throw error;
+      if (authError) throw authError;
+
+      // 2. Update profiles table (including phone)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          user_id: user.id,
+          display_name: displayName,
+          phone: phone || null,
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (profileError) throw profileError;
 
       setIsEditingProfile(false);
       toast({
@@ -664,22 +706,18 @@ const UserSettings = () => {
                   </div>
                 </div>
 
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="bio">{t("userSettings.bio")}</Label>
-                  <textarea
-                    id="bio"
-                    value={bio}
+                <div className="space-y-2">
+                  <Label htmlFor="phone">{t("userSettings.phone", "휴대폰 번호")}</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={phone}
                     onChange={(e) => {
-                      setBio(e.target.value);
+                      setPhone(e.target.value);
                       setIsEditingProfile(true);
                     }}
-                    placeholder={t("userSettings.bioPlaceholder")}
-                    className="w-full min-h-[100px] px-3 py-2 text-sm rounded-md border border-input bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                    maxLength={200}
+                    placeholder="010-0000-0000"
                   />
-                  <p className="text-xs text-muted-foreground text-right">
-                    {bio.length}/200
-                  </p>
                 </div>
               </div>
 
@@ -703,8 +741,8 @@ const UserSettings = () => {
                         <AlertDialogCancel>취소</AlertDialogCancel>
                         <AlertDialogAction
                           onClick={() => {
-                            setDisplayName(user?.user_metadata?.full_name || "");
-                            setBio(user?.user_metadata?.bio || "");
+                            setDisplayName(originalProfile.displayName);
+                            setPhone(originalProfile.phone);
                             setIsEditingProfile(false);
                           }}
                         >

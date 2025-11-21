@@ -390,6 +390,12 @@ export default {
     series: "시리즈",
     printerModel: "모델",
     selectOption: "선택하세요",
+    // 추가 아트 스타일
+    realistic: "사실적",
+    cartoon: "카툰",
+    abstract: "추상",
+    pixelArt: "픽셀 아트",
+    resolution: "해상도",
     // 기타
     estimatedCost: "예상 비용",
     noSlicingData: "슬라이싱을 완료하면\n출력 정보가 표시됩니다.",
@@ -1364,8 +1370,7 @@ export default {
     email: "이메일",
     verified: "인증됨",
     emailChangeNotice: "이메일 변경은 고객지원팀에 문의하세요",
-    bio: "소개",
-    bioPlaceholder: "간단한 소개를 입력하세요",
+    phone: "휴대폰 번호",
     saveChanges: "변경사항 저장",
     resetProfileTitle: "프로필 정보 초기화",
     resetProfileDescription: "정말로 프로필 정보를 초기화하시겠습니까? 변경된 내용이 모두 삭제됩니다.",
