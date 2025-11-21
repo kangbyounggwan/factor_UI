@@ -100,7 +100,7 @@ const ProfileSetup = () => {
         .upsert({
           user_id: user.id,
           plan_name: 'basic',
-          status: 'trial',
+          status: 'trialing',
           current_period_start: new Date().toISOString(),
           current_period_end: trialEndDate.toISOString(),
           cancel_at_period_end: false,

@@ -262,11 +262,11 @@ const AI = () => {
     if (!user?.id) return;
     try {
       setIsLoadingHistory(true);
-      const models = await listAIModels(supabase, user.id, {
+      const result = await listAIModels(supabase, user.id, {
         page: 1,
         pageSize: 100,
       });
-      setHistoryModels(models);
+      setHistoryModels(result.items);
     } catch (error) {
       console.error('[AI] Failed to load models:', error);
       toast({
@@ -1158,8 +1158,15 @@ const AI = () => {
 
   const handleDeleteHistoryModel = async (modelId: string) => {
     try {
+      // 삭제할 모델 데이터 찾기
+      const modelToDelete = historyModels.find(m => m.id === modelId);
+
       await deleteAIModel(supabase, modelId);
-      await deleteModelFiles(supabase, modelId);
+
+      // 모델 파일도 삭제 (모델 데이터가 있는 경우)
+      if (modelToDelete && user) {
+        await deleteModelFiles(supabase, user.id, modelToDelete);
+      }
 
       setHistoryModels(prev => prev.filter(m => m.id !== modelId));
 

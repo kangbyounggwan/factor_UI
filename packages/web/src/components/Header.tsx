@@ -70,7 +70,7 @@ export const Header = () => {
   const [attachedImages, setAttachedImages] = useState<File[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, signOut, isAdmin } = useAuth();
+  const { user, signOut, isAdmin, needsProfileSetup } = useAuth();
   const { theme, setTheme } = useTheme();
   const summary = useDashboardSummary();
   const { toast } = useToast();
@@ -96,9 +96,9 @@ export const Header = () => {
     { name: t('nav.api'), href: "#api", icon: Code2 },
   ];
 
-  // 실제 프린터 상태 로드
+  // 실제 프린터 상태 로드 (프로필 설정이 완료된 경우에만)
   useEffect(() => {
-    if (user) {
+    if (user && !needsProfileSetup) {
       loadPrinterStatus();
       loadUserPlan();
       loadNotifications();
@@ -126,7 +126,7 @@ export const Header = () => {
         notificationSubscription.unsubscribe();
       };
     }
-  }, [user]);
+  }, [user, needsProfileSetup]);
 
   const loadPrinterStatus = async () => {
     try {
@@ -163,8 +163,8 @@ export const Header = () => {
       const { data: subscription, error } = await supabase
         .from('user_subscriptions')
         .select('plan_name, status')
-        .eq('user_id', user.id)
-        .single();
+        .eq('user_id', user?.id)
+        .maybeSingle();
 
       if (error) {
         console.error('Error loading user subscription:', error);
@@ -172,7 +172,7 @@ export const Header = () => {
         return;
       }
 
-      if (subscription && subscription.status === 'active') {
+      if (subscription && (subscription.status === 'active' || subscription.status === 'trialing')) {
         setUserPlan(subscription.plan_name);
       } else {
         setUserPlan('basic');

@@ -14,15 +14,15 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
       .from('user_subscriptions')
       .select('*')
       .eq('user_id', userId)
-      .eq('status', 'active')
-      .single();
+      .in('status', ['active', 'trialing'])
+      .maybeSingle();
 
     if (error) {
       console.error('[subscription] Error fetching user subscription:', error);
       return null;
     }
 
-    return data as UserSubscription;
+    return data as UserSubscription | null;
   } catch (error) {
     console.error('[subscription] Error fetching user subscription:', error);
     return null;
@@ -36,7 +36,7 @@ export async function getUserPlan(userId: string): Promise<SubscriptionPlan> {
   try {
     const subscription = await getUserSubscription(userId);
 
-    if (!subscription || subscription.status !== 'active') {
+    if (!subscription || (subscription.status !== 'active' && subscription.status !== 'trialing')) {
       return 'free';
     }
 

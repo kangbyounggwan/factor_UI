@@ -487,7 +487,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         const subscriptionResult = await supabase.from('user_subscriptions').insert({
           user_id: data.user.id,
           plan_name: 'basic',
-          status: 'trial',
+          status: 'trialing',
           current_period_start: new Date().toISOString(),
           current_period_end: trialEndDate.toISOString(),
           cancel_at_period_end: false,
