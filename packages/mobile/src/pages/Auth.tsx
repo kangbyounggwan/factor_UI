@@ -211,7 +211,9 @@ const Auth = () => {
     }
   };
 
-  if (loading) {
+  // 로딩 중이고 에러가 없을 때만 로딩 화면 표시
+  // 에러가 있으면 로그인 폼을 보여줘서 사용자가 에러를 볼 수 있도록 함
+  if (loading && !error) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center" style={safeAreaStyle}>
         <div className="text-center">
