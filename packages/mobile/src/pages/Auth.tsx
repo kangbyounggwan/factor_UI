@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import { Loader2, Mail, Lock, User, Eye, EyeOff, Phone } from "lucide-react";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { startDashStatusSubscriptionsForUser } from "@shared/component/mqtt";
@@ -50,6 +50,7 @@ const Auth = () => {
     password: "",
     confirmPassword: "",
     displayName: "",
+    phone: "",
   });
 
   // 로그인된 사용자는 대시보드로 리다이렉트
@@ -110,11 +111,18 @@ const Auth = () => {
       return;
     }
 
+    if (!signUpData.phone.trim()) {
+      setError(t('auth.phoneRequired', '전화번호를 입력해주세요.'));
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const { error } = await signUp(
         signUpData.email,
         signUpData.password,
-        signUpData.displayName
+        signUpData.displayName,
+        signUpData.phone
       );
 
       if (error) {
@@ -130,7 +138,7 @@ const Auth = () => {
           title: t('auth.signupSuccess'),
           description: t('auth.signupSuccessMessage'),
         });
-        setSignUpData({ email: "", password: "", confirmPassword: "", displayName: "" });
+        setSignUpData({ email: "", password: "", confirmPassword: "", displayName: "", phone: "" });
         setIsSignUp(false);
       }
     } catch (err) {
@@ -172,18 +180,18 @@ const Auth = () => {
       if (error) {
         // 에러 메시지가 i18n 키인지 확인하고 번역
         const errorMessage = error.message;
-        const translatedError = t(`auth.${errorMessage}`, errorMessage);
+        const translatedError = t(`auth.${errorMessage}`, errorMessage) as string;
 
         setError(translatedError);
         toast({
-          title: t('auth.loginError'),
+          title: t('auth.loginError') as string,
           description: translatedError,
           variant: "destructive",
         });
       } else {
         toast({
-          title: t('auth.loginSuccess'),
-          description: t('auth.welcomeMessage'),
+          title: t('auth.loginSuccess') as string,
+          description: t('auth.welcomeMessage') as string,
         });
         // 로그인 성공 시점: MQTT dash_status 구독 시작
         try {
@@ -382,6 +390,27 @@ const Auth = () => {
                     required
                     disabled={isSubmitting}
                     readOnly={false}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1 md:space-y-2">
+                <Label htmlFor="signup-phone" className="text-sm md:text-base text-foreground font-medium">
+                  {t('auth.phone', '전화번호')} <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
+                  <Input
+                    id="signup-phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    placeholder={t('auth.enterPhone', '010-0000-0000')}
+                    value={signUpData.phone}
+                    onChange={(e) => setSignUpData({ ...signUpData, phone: e.target.value })}
+                    className="pl-9 md:pl-11 h-10 md:h-12 lg:h-14 bg-muted/50 border-muted text-sm md:text-base"
+                    required
+                    disabled={isSubmitting}
                   />
                 </div>
               </div>

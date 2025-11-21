@@ -15,12 +15,11 @@ const ProfileSetup = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // 소셜 로그인 제공자 감지
+  // 소셜 로그인 제공자 감지 (ProfileSetup은 소셜 로그인 사용자에게만 표시됨)
   const socialProvider = user?.app_metadata?.provider;
-  const isSocialLogin = socialProvider && socialProvider !== 'email';
   const providerName = socialProvider === 'google' ? 'Google' :
                        socialProvider === 'apple' ? 'Apple' :
-                       socialProvider;
+                       socialProvider || '';
 
   const [displayName, setDisplayName] = useState(
     user?.user_metadata?.full_name || user?.user_metadata?.name || ""
@@ -147,14 +146,12 @@ const ProfileSetup = () => {
 
       {/* 타이틀 */}
       <h1 className="text-2xl font-bold text-center mb-2">
-        {isSocialLogin
+        {providerName
           ? t("profileSetup.socialWelcome", "{{provider}}로 시작하시는군요!", { provider: providerName })
           : t("profileSetup.welcome", "환영합니다!")}
       </h1>
       <p className="text-muted-foreground text-center mb-8">
-        {isSocialLogin
-          ? t("profileSetup.socialDescription", "메일 인증 없이 진행합니다! 간단한 정보로 바로 시작하세요.")
-          : t("profileSetup.description", "서비스 이용을 위해 간단한 정보를 입력해주세요.")}
+        {t("profileSetup.socialDescription", "메일 인증 없이 진행합니다! 간단한 정보로 바로 시작하세요.")}
       </p>
 
       {/* 폼 */}

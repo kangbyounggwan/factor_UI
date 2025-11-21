@@ -40,7 +40,7 @@ interface AuthContextType {
   loading: boolean;
   needsProfileSetup: boolean;
   profileCheckComplete: boolean;  // 프로필 체크가 완료되었는지 여부
-  signUp: (email: string, password: string, displayName?: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, displayName?: string, phone?: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
   signInWithApple: () => Promise<{ error: any }>;
@@ -436,15 +436,21 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     };
   }, []);
 
-  const signUp = async (email: string, password: string, displayName?: string) => {
+  const signUp = async (email: string, password: string, displayName?: string, phone?: string) => {
     const redirectUrl = ((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`;
 
-    console.log('[SignUp] 회원가입 시작:', { email, displayName, redirectUrl });
+    console.log('[SignUp] 회원가입 시작:', { email, displayName, phone, redirectUrl });
 
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: redirectUrl, data: { display_name: displayName || email.split("@")[0] } },
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: {
+          display_name: displayName || email.split("@")[0],
+          phone: phone || null,
+        }
+      },
     });
 
     console.log('[SignUp] Supabase Auth 응답:', {
@@ -463,10 +469,11 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       try {
         console.log('[SignUp] 사용자 생성 완료, 기본 설정 생성 시작:', data.user.id);
 
-        // 프로필 생성
+        // 프로필 생성 (이메일 회원가입 시 phone 포함)
         const profileResult = await supabase.from('profiles').insert({
           user_id: data.user.id,
           display_name: displayName || email.split("@")[0],
+          phone: phone || null,
           role: 'user',
         }).select().maybeSingle();
 
@@ -751,12 +758,23 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         setUser(null);
         setSession(null);
         setUserRole(null);
-        setReadyOnce();
-        await supabase.auth.signOut();
+        setNeedsProfileSetup(false);
+        setProfileCheckComplete(false);
+
+        // localStorage 먼저 삭제 (세션 토큰 제거)
+        try {
+          Object.keys(localStorage)
+            .filter((k) => k.startsWith("sb-"))
+            .forEach((k) => localStorage.removeItem(k));
+        } catch {}
+
+        // scope: 'global'로 모든 세션 삭제
+        await supabase.auth.signOut({ scope: 'global' });
         try { await disconnectSharedMqtt(); } catch {}
         signOutInProgressRef.current = false;
       }
     } finally {
+      // 한 번 더 localStorage 정리
       try {
         Object.keys(localStorage)
           .filter((k) => k.startsWith("sb-"))
