@@ -7,13 +7,14 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { user, loading, needsProfileSetup } = useAuth();
+  const { user, loading, needsProfileSetup, profileCheckComplete } = useAuth();
   const location = useLocation();
 
-  console.log('ProtectedRoute 상태:', { loading, user: !!user, needsProfileSetup });
+  console.log('ProtectedRoute 상태:', { loading, user: !!user, needsProfileSetup, profileCheckComplete });
 
-  if (loading) {
-    console.log('ProtectedRoute: 로딩 중...');
+  // 로딩 중이거나 프로필 체크가 완료되지 않은 경우 로딩 화면 표시
+  if (loading || (user && !profileCheckComplete)) {
+    console.log('ProtectedRoute: 로딩 중... (profileCheckComplete:', profileCheckComplete, ')');
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin" />

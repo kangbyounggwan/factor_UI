@@ -16,6 +16,13 @@ const ProfileSetup = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // 소셜 로그인 제공자 감지
+  const socialProvider = user?.app_metadata?.provider;
+  const isSocialLogin = socialProvider && socialProvider !== 'email';
+  const providerName = socialProvider === 'google' ? 'Google' :
+                       socialProvider === 'apple' ? 'Apple' :
+                       socialProvider;
+
   const [displayName, setDisplayName] = useState(
     user?.user_metadata?.full_name || user?.user_metadata?.name || ""
   );
@@ -141,10 +148,14 @@ const ProfileSetup = () => {
           </div>
           <div>
             <CardTitle className="text-2xl">
-              {t("profileSetup.welcome", "환영합니다!")}
+              {isSocialLogin
+                ? t("profileSetup.socialWelcome", "{{provider}}로 시작하시는군요!", { provider: providerName })
+                : t("profileSetup.welcome", "환영합니다!")}
             </CardTitle>
             <CardDescription className="mt-2">
-              {t("profileSetup.description", "서비스 이용을 위해 간단한 정보를 입력해주세요.")}
+              {isSocialLogin
+                ? t("profileSetup.socialDescription", "메일 인증 없이 진행합니다! 간단한 정보로 바로 시작하세요.")
+                : t("profileSetup.description", "서비스 이용을 위해 간단한 정보를 입력해주세요.")}
             </CardDescription>
           </div>
         </CardHeader>

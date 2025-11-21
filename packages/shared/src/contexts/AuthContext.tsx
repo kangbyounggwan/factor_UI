@@ -39,6 +39,7 @@ interface AuthContextType {
   isAdmin: boolean;
   loading: boolean;
   needsProfileSetup: boolean;
+  profileCheckComplete: boolean;  // 프로필 체크가 완료되었는지 여부
   signUp: (email: string, password: string, displayName?: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
@@ -63,6 +64,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   const [userRole, setUserRole] = useState<"admin" | "user" | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
+  const [profileCheckComplete, setProfileCheckComplete] = useState(false);
   // refs to avoid stale closures and double-subscribe
   const initializedRef = useRef(false);
   const currentUserIdRef = useRef<string | null>(null);
@@ -274,33 +276,43 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       currentUserIdRef.current = nextUserId;
 
       if (nextUserId) {
-        setTimeout(() => { if (isMounted) loadUserRole(nextUserId); }, 0);
-        // 프로필 설정 필요 여부 체크 (소셜 로그인 신규 사용자 감지 - display_name과 phone 모두 필수)
-        setTimeout(async () => {
-          if (!isMounted) return;
-          try {
-            const { data, error } = await supabase
-              .from("profiles")
-              .select("id, display_name, phone")
-              .eq("user_id", nextUserId)
-              .maybeSingle();
+        // 프로필 체크 시작 전 완료 플래그 리셋
+        if (isMounted) setProfileCheckComplete(false);
 
-            // 프로필이 없거나 display_name 또는 phone이 없으면 설정 필요
-            if (error || !data || !data.display_name || !data.phone) {
-              console.log('[Auth] Profile setup needed for user:', nextUserId, {
-                hasProfile: !!data,
-                hasDisplayName: !!data?.display_name,
-                hasPhone: !!data?.phone
-              });
+        // 프로필 설정 필요 여부를 먼저 체크 (로딩 상태 유지)
+        try {
+          const { data: profileData, error: profileError } = await supabase
+            .from("profiles")
+            .select("id, display_name, phone")
+            .eq("user_id", nextUserId)
+            .maybeSingle();
+
+          // 프로필이 없거나 display_name 또는 phone이 없으면 설정 필요
+          if (profileError || !profileData || !profileData.display_name || !profileData.phone) {
+            console.log('[Auth] Profile setup needed for user:', nextUserId, {
+              hasProfile: !!profileData,
+              hasDisplayName: !!profileData?.display_name,
+              hasPhone: !!profileData?.phone
+            });
+            if (isMounted) {
               setNeedsProfileSetup(true);
-            } else {
-              setNeedsProfileSetup(false);
+              setProfileCheckComplete(true);
             }
-          } catch (err) {
-            console.error('[Auth] Error checking profile:', err);
-            setNeedsProfileSetup(false);
+          } else {
+            if (isMounted) {
+              setNeedsProfileSetup(false);
+              setProfileCheckComplete(true);
+            }
           }
-        }, 0);
+        } catch (err) {
+          console.error('[Auth] Error checking profile:', err);
+          if (isMounted) {
+            setNeedsProfileSetup(false);
+            setProfileCheckComplete(true);
+          }
+        }
+
+        setTimeout(() => { if (isMounted) loadUserRole(nextUserId); }, 0);
         // 기다리지 말고 백그라운드 실행하여 UI 로딩을 즉시 종료
         (async () => {
           try {
@@ -315,8 +327,11 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
           }
         })();
       } else {
-        if (isMounted) setUserRole(null);
-        if (isMounted) setNeedsProfileSetup(false);
+        if (isMounted) {
+          setUserRole(null);
+          setNeedsProfileSetup(false);
+          setProfileCheckComplete(true);
+        }
       }
       setReadyOnce();
       
@@ -758,6 +773,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     isAdmin: userRole === "admin",
     loading,
     needsProfileSetup,
+    profileCheckComplete,
     signUp,
     signIn,
     signInWithGoogle,
