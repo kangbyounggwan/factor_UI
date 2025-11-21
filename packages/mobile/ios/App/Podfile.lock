@@ -17,10 +17,6 @@ PODS:
     - IONFilesystemLib (~> 1.0.1)
   - CapacitorKeyboard (7.0.3):
     - Capacitor
-  - CapacitorNetwork (7.0.2):
-    - Capacitor
-  - CapacitorPreferences (7.0.2):
-    - Capacitor
   - CapacitorPushNotifications (7.0.3):
     - Capacitor
   - CapacitorShare (7.0.2):
@@ -101,8 +97,6 @@ DEPENDENCIES:
   - "CapacitorCordova (from `../../../../node_modules/@capacitor/ios`)"
   - "CapacitorFilesystem (from `../../../../node_modules/@capacitor/filesystem`)"
   - "CapacitorKeyboard (from `../../../../node_modules/@capacitor/keyboard`)"
-  - "CapacitorNetwork (from `../../../../node_modules/@capacitor/network`)"
-  - "CapacitorPreferences (from `../../../../node_modules/@capacitor/preferences`)"
   - "CapacitorPushNotifications (from `../../../../node_modules/@capacitor/push-notifications`)"
   - "CapacitorShare (from `../../../../node_modules/@capacitor/share`)"
   - "CapacitorStatusBar (from `../../../../node_modules/@capacitor/status-bar`)"
@@ -142,10 +136,6 @@ EXTERNAL SOURCES:
     :path: "../../../../node_modules/@capacitor/filesystem"
   CapacitorKeyboard:
     :path: "../../../../node_modules/@capacitor/keyboard"
-  CapacitorNetwork:
-    :path: "../../../../node_modules/@capacitor/network"
-  CapacitorPreferences:
-    :path: "../../../../node_modules/@capacitor/preferences"
   CapacitorPushNotifications:
     :path: "../../../../node_modules/@capacitor/push-notifications"
   CapacitorShare:
@@ -167,8 +157,6 @@ SPEC CHECKSUMS:
   CapacitorCordova: 435121e81a2df4d0034f0fb11fcefab5104cfdb5
   CapacitorFilesystem: f9bd850c41e048180e5dc0cbb90f2033ede9d2cc
   CapacitorKeyboard: 62f36104f26d53d8b3a2a43f2a69fe714f1777d5
-  CapacitorNetwork: 695069886b3c5ed514db69aa3d026b8dc3c03a6b
-  CapacitorPreferences: 65107ed7437d96ee72583df5763985e3c0ff2bc2
   CapacitorPushNotifications: bdd621fbd562be34a41f4a7b1750efa000447d5a
   CapacitorShare: be166411fa995ead2d39b104aa0aae56d8615c66
   CapacitorStatusBar: 0659ddc7b1713764a05831463d215b177a15d054
@@ -185,6 +173,6 @@ SPEC CHECKSUMS:
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
 
-PODFILE CHECKSUM: 73d4a94424668662529c45f11ee894b529654589
+PODFILE CHECKSUM: 677fc3b5a64aa494abee3f60c5c46dc498b31454
 
 COCOAPODS: 1.16.2

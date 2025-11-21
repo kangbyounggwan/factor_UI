@@ -254,16 +254,20 @@ const Auth = () => {
             </p>
           </div>
 
-          {/* 에러 메시지 */}
-          {error && (
-            <Alert variant="destructive" className="mb-4 py-2">
-              <AlertDescription className="text-sm">{error}</AlertDescription>
-            </Alert>
-          )}
-
           {/* 로그인 폼 */}
           {!isSignUp ? (
             <form onSubmit={handleSignIn} className="space-y-3 md:space-y-4">
+              {/* 에러 메시지 - 사용자 이름 필드 바로 위 */}
+              {error && (
+                <Alert variant="destructive" className="py-2">
+                  <AlertDescription className="text-sm">
+                    {error}
+                    <br />
+                    <span className="text-xs opacity-80">{t('auth.checkAccountInfo', '계정 정보를 확인해주세요.')}</span>
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="space-y-1 md:space-y-2">
                 <Label htmlFor="email" className="text-sm md:text-base text-foreground font-medium">
                   {t('auth.username')}
@@ -359,6 +363,17 @@ const Auth = () => {
           ) : (
             /* 회원가입 폼 */
             <form onSubmit={handleSignUp} className="space-y-3 md:space-y-4">
+              {/* 에러 메시지 - 사용자 이름 필드 바로 위 */}
+              {error && (
+                <Alert variant="destructive" className="py-2">
+                  <AlertDescription className="text-sm">
+                    {error}
+                    <br />
+                    <span className="text-xs opacity-80">{t('auth.checkAccountInfo', '계정 정보를 확인해주세요.')}</span>
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="space-y-1 md:space-y-2">
                 <Label htmlFor="signup-name" className="text-sm md:text-base text-foreground font-medium">
                   {t('auth.username')} <span className="text-destructive">*</span>

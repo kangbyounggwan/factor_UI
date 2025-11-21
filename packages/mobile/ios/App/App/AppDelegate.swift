@@ -18,13 +18,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, MessagingDelegate, UNUser
         // Set UNUserNotificationCenter delegate
         UNUserNotificationCenter.current().delegate = self
 
-        // Request notification permissions
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-            print("Permission granted: \(granted)")
-        }
-
-        // Register for remote notifications
-        application.registerForRemoteNotifications()
+        // 푸시 알림 등록은 로그인 후 JavaScript에서 처리
+        // (앱 시작 시 자동 등록하지 않음)
 
         // Override point for customization after application launch.
         return true

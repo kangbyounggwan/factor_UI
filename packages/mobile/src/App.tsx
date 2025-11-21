@@ -61,43 +61,25 @@ const AppContent = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // 푸시 알림 초기화 (로그인 상태일 때만)
+  // 푸시 알림 로그아웃 시 토큰 비활성화만 처리
+  // (초기화는 Dashboard에서 프로필 확인 후 진행)
   useEffect(() => {
-    console.log('[App] FCM useEffect running, isNative:', Capacitor.isNativePlatform());
     if (!Capacitor.isNativePlatform()) return;
 
     let currentUserId: string | null = null;
 
-    const initPushNotifications = async () => {
-      try {
-        console.log('[App] Getting user from Supabase...');
-        const { data: { user } } = await supabase.auth.getUser();
-        console.log('[App] User:', user ? user.id : 'No user');
+    // 현재 유저 ID 가져오기 (로그아웃 처리용)
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) currentUserId = user.id;
+    });
 
-        if (user) {
-          currentUserId = user.id;
-          console.log('[App] Initializing push notifications for user:', user.id);
-          await pushNotificationService.initialize(user.id);
-          console.log('[App] Push notifications initialized for user:', user.id);
-        } else {
-          console.log('[App] No user logged in, skipping FCM initialization');
-        }
-      } catch (error) {
-        console.error('[App] Failed to initialize push notifications:', error);
-      }
-    };
-
-    initPushNotifications();
-
-    // 인증 상태 변경 시 푸시 알림 재초기화
+    // 로그아웃 시에만 FCM 토큰 비활성화
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         currentUserId = session.user.id;
-        await pushNotificationService.initialize(session.user.id);
-        console.log('[App] Push notifications re-initialized after sign in');
+        // 푸시 알림 초기화는 Dashboard에서 처리
       } else if (event === 'SIGNED_OUT') {
         console.log('[App] User signed out, deactivating FCM token');
-        // 로그아웃 시 FCM 토큰 비활성화
         if (currentUserId) {
           await pushNotificationService.deactivateCurrentToken(currentUserId);
           currentUserId = null;

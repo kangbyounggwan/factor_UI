@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { computeDashboardSummary, publishDashboardSummary, useDashboardSummary } from "@shared/component/dashboardSummary";
+import { Capacitor } from "@capacitor/core";
+import { pushNotificationService } from "@/services/pushNotificationService";
 
 // 로컬 스냅샷 퍼시스턴스 훅
 function usePersistentState<T>(key: string, fallback: T) {
@@ -519,6 +521,23 @@ const Home = () => {
   // 설정 유도 모달 상태
   const [showSetupPrompt, setShowSetupPrompt] = useState(false);
   const [printerToSetup, setPrinterToSetup] = useState<string | null>(null);
+
+  // 푸시 알림 초기화 (Dashboard 접근 = 프로필 있는 사용자)
+  useEffect(() => {
+    if (!user || !Capacitor.isNativePlatform()) return;
+
+    const initPush = async () => {
+      try {
+        console.log('[Dashboard] Initializing push notifications for user:', user.id);
+        await pushNotificationService.initialize(user.id);
+        console.log('[Dashboard] Push notifications initialized');
+      } catch (error) {
+        console.error('[Dashboard] Failed to initialize push notifications:', error);
+      }
+    };
+
+    initPush();
+  }, [user]);
 
   // 설정 유도 핸들러
   const handleSetupRequired = (printerId: string) => {

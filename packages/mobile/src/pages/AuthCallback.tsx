@@ -4,6 +4,7 @@ import { supabase } from "@shared/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { Loader2 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
+import { Toast } from "@capacitor/toast";
 
 /**
  * OAuth 콜백 핸들러 (모바일)
@@ -48,11 +49,25 @@ const AuthCallback = () => {
 
         const needsSetup = !profile || !profile.display_name || !profile.phone;
 
-        // iOS에서 신규 사용자(프로필 없음)인 경우 → 로그아웃 후 에러 표시
+        // iOS에서 신규 사용자(프로필 없음)인 경우 → Toast 표시 후 로그아웃 및 리다이렉트
         if (needsSetup && platform === 'ios') {
-          console.log('[AuthCallback] iOS new user detected, signing out...');
-          await supabase.auth.signOut();
-          setError('회원가입이 필요합니다. 웹사이트에서 먼저 가입해주세요.');
+          console.log('[AuthCallback] iOS new user detected, redirecting to login...');
+
+          // Toast 표시 (비동기 기다리지 않음 - UI 블로킹 방지)
+          Toast.show({
+            text: '신규 가입은 웹에서만 가능합니다. 웹사이트에서 먼저 가입해주세요.',
+            duration: 'long',
+            position: 'bottom',
+          });
+
+          // 로그아웃 먼저 (await 없이 시작)
+          const signOutPromise = supabase.auth.signOut();
+
+          // 로그인 화면으로 즉시 리다이렉트
+          navigate('/', { replace: true });
+
+          // 백그라운드에서 로그아웃 완료 대기
+          signOutPromise.catch(console.error);
           return;
         }
 
