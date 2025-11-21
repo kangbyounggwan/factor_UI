@@ -11,17 +11,14 @@ if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
 // Supabase 클라이언트 설정
 // - persistSession: 세션을 localStorage에 저장
 // - autoRefreshToken: 토큰 자동 갱신
-// - detectSessionInUrl: false - 콜백 페이지에서 수동으로 exchangeCodeForSession 호출
-// - flowType: 'pkce' - OAuth PKCE 흐름 사용 (보안 강화)
+// - detectSessionInUrl: true - Supabase가 URL에서 자동으로 token 처리
+// - flowType: 'implicit' - URL hash로 직접 access_token 반환 (code_verifier 불필요)
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false, // 중복 호출 방지: AuthCallback에서 직접 처리
-    flowType: 'pkce',
-    // @ts-expect-error - multiTab은 Supabase 내부 옵션
-    multiTab: true, // 탭 간 세션 동기화 안정화
-    // storageKey, storage 커스텀 제거 - Supabase 기본값 사용
+    detectSessionInUrl: true, // Supabase가 URL hash에서 자동으로 token 처리
+    flowType: 'implicit',
   },
 });
 

@@ -1,111 +1,82 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@shared/integrations/supabase/client";
+import { Session } from "@supabase/supabase-js";
 import { Loader2 } from "lucide-react";
 
 /**
  * OAuth 콜백 핸들러 (모바일)
- * Supabase에서 리다이렉트된 후 세션을 설정하고
- * 프로필 설정이 필요한지 확인하여 적절한 페이지로 이동
+ * detectSessionInUrl: true 설정으로 Supabase가 자동으로 code exchange 처리
+ * 이 페이지는 세션 완료를 대기하고 적절한 페이지로 리다이렉트
  */
 const AuthCallback = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const handleCallback = async () => {
+    // URL에서 에러 확인
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const searchParams = new URLSearchParams(window.location.search);
+    const errorDesc = hashParams.get('error_description') || searchParams.get('error_description');
+
+    if (errorDesc) {
+      setError(errorDesc);
+      return;
+    }
+
+    // 리다이렉트 처리 함수
+    const handleRedirect = async (session: Session | null) => {
+      if (!session?.user) {
+        navigate('/', { replace: true });
+        return;
+      }
+
       try {
-        const url = window.location.href;
-        const hasCode = url.includes('code=');
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const hasAccessToken = hashParams.get('access_token');
-
-        console.log('[AuthCallback] Processing callback', { hasCode, hasAccessToken: !!hasAccessToken });
-
-        const error_description = hashParams.get('error_description') || new URLSearchParams(window.location.search).get('error_description');
-        if (error_description) {
-          setError(error_description);
-          return;
-        }
-
-        let userId: string | null = null;
-
-        if (hasCode) {
-          // PKCE 흐름 - code를 세션으로 교환
-          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(url);
-
-          if (exchangeError) {
-            console.error('[AuthCallback] Code exchange error:', exchangeError);
-            setError(exchangeError.message);
-            return;
-          }
-
-          userId = data.session?.user?.id || null;
-          console.log('[AuthCallback] Session obtained via PKCE');
-        } else if (hasAccessToken) {
-          // Implicit 흐름 (fallback)
-          const refresh_token = hashParams.get('refresh_token');
-          if (hasAccessToken && refresh_token) {
-            const { error: sessionError } = await supabase.auth.setSession({
-              access_token: hasAccessToken,
-              refresh_token
-            });
-
-            if (sessionError) {
-              console.error('[AuthCallback] Session error:', sessionError);
-              setError('인증 처리 중 오류가 발생했습니다.');
-              return;
-            }
-          }
-
-          const { data: { user } } = await supabase.auth.getUser();
-          userId = user?.id || null;
-          console.log('[AuthCallback] Session obtained via implicit flow');
-        } else {
-          // 기존 세션 확인
-          const { data: { session } } = await supabase.auth.getSession();
-          userId = session?.user?.id || null;
-        }
-
-        if (!userId) {
-          console.log('[AuthCallback] No session found, redirecting to auth');
-          navigate('/', { replace: true });
-          return;
-        }
-
-        console.log('[AuthCallback] User authenticated:', userId);
-
-        // 프로필 확인
         const { data: profile } = await supabase
           .from('profiles')
           .select('display_name, phone')
-          .eq('user_id', userId)
+          .eq('user_id', session.user.id)
           .maybeSingle();
 
         const needsSetup = !profile || !profile.display_name || !profile.phone;
-
-        if (needsSetup) {
-          console.log('[AuthCallback] Profile setup needed');
-          navigate('/profile-setup', { replace: true });
-        } else {
-          console.log('[AuthCallback] Redirecting to dashboard');
-          navigate('/dashboard', { replace: true });
-        }
-      } catch (err) {
-        console.error('[AuthCallback] Error:', err);
-        setError('인증 처리 중 오류가 발생했습니다.');
+        console.log('[AuthCallback] Redirecting to:', needsSetup ? '/profile-setup' : '/dashboard');
+        navigate(needsSetup ? '/profile-setup' : '/dashboard', { replace: true });
+      } catch {
+        navigate('/dashboard', { replace: true });
       }
     };
 
-    handleCallback();
+    // Supabase가 자동으로 code exchange 처리 (detectSessionInUrl: true)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[AuthCallback] Auth state change:', event);
 
-    // 타임아웃
+      if (event === 'SIGNED_IN') {
+        subscription.unsubscribe(); // 즉시 구독 해제
+        handleRedirect(session);
+      }
+    });
+
+    // 이미 세션이 있는 경우 확인 (약간의 지연 후)
+    const timer = setTimeout(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        console.log('[AuthCallback] Existing session found');
+        subscription.unsubscribe();
+        handleRedirect(session);
+      }
+    }, 500);
+
+    // 타임아웃: 15초 후에도 처리되지 않으면 auth로 리다이렉트
     const timeout = setTimeout(() => {
       console.log('[AuthCallback] Timeout reached');
       navigate('/', { replace: true });
     }, 15000);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timer);
+      clearTimeout(timeout);
+    };
   }, [navigate]);
 
   if (error) {
