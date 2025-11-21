@@ -15,6 +15,10 @@ const AuthCallback = () => {
   useEffect(() => {
     const handleCallback = async () => {
       try {
+        console.log('[AuthCallback] Starting callback handling...');
+        console.log('[AuthCallback] Current URL:', window.location.href);
+        console.log('[AuthCallback] Hash:', window.location.hash);
+
         // URL에서 토큰 추출 (hash fragment 또는 query params)
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         const queryParams = new URLSearchParams(window.location.search);
@@ -23,6 +27,9 @@ const AuthCallback = () => {
         const refresh_token = hashParams.get('refresh_token') || queryParams.get('refresh_token');
         const error_description = hashParams.get('error_description') || queryParams.get('error_description');
 
+        console.log('[AuthCallback] access_token exists:', !!access_token);
+        console.log('[AuthCallback] refresh_token exists:', !!refresh_token);
+
         if (error_description) {
           setError(error_description);
           return;
@@ -30,6 +37,7 @@ const AuthCallback = () => {
 
         // 토큰이 있으면 세션 설정
         if (access_token && refresh_token) {
+          console.log('[AuthCallback] Setting session with tokens...');
           const { error: sessionError } = await supabase.auth.setSession({
             access_token,
             refresh_token
@@ -40,10 +48,15 @@ const AuthCallback = () => {
             setError('인증 처리 중 오류가 발생했습니다.');
             return;
           }
+          console.log('[AuthCallback] Session set successfully');
+        } else {
+          // 토큰이 없으면 기존 세션 확인 (Supabase가 이미 처리했을 수 있음)
+          console.log('[AuthCallback] No tokens in URL, checking existing session...');
         }
 
         // 현재 사용자 가져오기
         const { data: { user } } = await supabase.auth.getUser();
+        console.log('[AuthCallback] getUser result:', user ? user.id : 'null');
 
         if (!user) {
           // 세션이 없으면 로그인 페이지로

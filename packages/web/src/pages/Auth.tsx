@@ -329,7 +329,10 @@ const Auth = () => {
                   <TabsContent value="signup" className="space-y-6 mt-6">
                     <form onSubmit={handleSignUp} className="space-y-5">
                       <div className="space-y-2">
-                        <Label htmlFor="signup-email">{t('auth.email', 'Email')}</Label>
+                        <Label htmlFor="signup-email">
+                          {t('auth.email', 'Email')}
+                          <span className="text-destructive ml-1">*</span>
+                        </Label>
                         <Input
                           id="signup-email"
                           type="email"
@@ -343,7 +346,10 @@ const Auth = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="signup-displayname">{t('auth.displayName', 'Display Name')}</Label>
+                        <Label htmlFor="signup-displayname">
+                          {t('auth.displayName', 'Display Name')}
+                          <span className="text-destructive ml-1">*</span>
+                        </Label>
                         <Input
                           id="signup-displayname"
                           type="text"
@@ -352,6 +358,7 @@ const Auth = () => {
                           onChange={(e) =>
                             setSignUpData({ ...signUpData, displayName: e.target.value })
                           }
+                          required
                           disabled={isSubmitting}
                         />
                       </div>
@@ -374,7 +381,10 @@ const Auth = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="signup-password">{t('auth.password', 'Password')}</Label>
+                        <Label htmlFor="signup-password">
+                          {t('auth.password', 'Password')}
+                          <span className="text-destructive ml-1">*</span>
+                        </Label>
                         <Input
                           id="signup-password"
                           type="password"
@@ -388,7 +398,10 @@ const Auth = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="signup-confirm-password">{t('auth.confirmPassword', 'Confirm Password')}</Label>
+                        <Label htmlFor="signup-confirm-password">
+                          {t('auth.confirmPassword', 'Confirm Password')}
+                          <span className="text-destructive ml-1">*</span>
+                        </Label>
                         <Input
                           id="signup-confirm-password"
                           type="password"

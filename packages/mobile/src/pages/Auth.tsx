@@ -359,7 +359,7 @@ const Auth = () => {
             <form onSubmit={handleSignUp} className="space-y-3 md:space-y-4">
               <div className="space-y-1 md:space-y-2">
                 <Label htmlFor="signup-name" className="text-sm md:text-base text-foreground font-medium">
-                  {t('auth.username')}
+                  {t('auth.username')} <span className="text-destructive">*</span>
                 </Label>
                 <div className="relative">
                   <User className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
@@ -377,7 +377,7 @@ const Auth = () => {
 
               <div className="space-y-1 md:space-y-2">
                 <Label htmlFor="signup-email" className="text-sm md:text-base text-foreground font-medium">
-                  {t('auth.email')}
+                  {t('auth.email')} <span className="text-destructive">*</span>
                 </Label>
                 <div className="relative">
                   <Mail className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
@@ -420,7 +420,7 @@ const Auth = () => {
 
               <div className="space-y-1 md:space-y-2">
                 <Label htmlFor="signup-password" className="text-sm md:text-base text-foreground font-medium">
-                  {t('auth.password')}
+                  {t('auth.password')} <span className="text-destructive">*</span>
                 </Label>
                 <div className="relative">
                   <Lock className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
@@ -449,7 +449,7 @@ const Auth = () => {
 
               <div className="space-y-1 md:space-y-2">
                 <Label htmlFor="signup-confirm" className="text-sm md:text-base text-foreground font-medium">
-                  {t('auth.confirmPassword')}
+                  {t('auth.confirmPassword')} <span className="text-destructive">*</span>
                 </Label>
                 <div className="relative">
                   <Lock className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
