@@ -15,59 +15,80 @@ const AuthCallback = () => {
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        // URL에서 토큰 추출 (hash fragment 또는 query params)
+        const url = window.location.href;
+        const hasCode = url.includes('code=');
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const queryParams = new URLSearchParams(window.location.search);
+        const hasAccessToken = hashParams.get('access_token');
 
-        const access_token = hashParams.get('access_token') || queryParams.get('access_token');
-        const refresh_token = hashParams.get('refresh_token') || queryParams.get('refresh_token');
-        const error_description = hashParams.get('error_description') || queryParams.get('error_description');
+        console.log('[AuthCallback] Processing callback', { hasCode, hasAccessToken: !!hasAccessToken });
 
+        const error_description = hashParams.get('error_description') || new URLSearchParams(window.location.search).get('error_description');
         if (error_description) {
           setError(error_description);
           return;
         }
 
-        // 토큰이 있으면 세션 설정
-        if (access_token && refresh_token) {
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token,
-            refresh_token
-          });
+        let userId: string | null = null;
 
-          if (sessionError) {
-            console.error('[AuthCallback] Session error:', sessionError);
-            setError('인증 처리 중 오류가 발생했습니다.');
+        if (hasCode) {
+          // PKCE 흐름 - code를 세션으로 교환
+          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(url);
+
+          if (exchangeError) {
+            console.error('[AuthCallback] Code exchange error:', exchangeError);
+            setError(exchangeError.message);
             return;
           }
+
+          userId = data.session?.user?.id || null;
+          console.log('[AuthCallback] Session obtained via PKCE');
+        } else if (hasAccessToken) {
+          // Implicit 흐름 (fallback)
+          const refresh_token = hashParams.get('refresh_token');
+          if (hasAccessToken && refresh_token) {
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token: hasAccessToken,
+              refresh_token
+            });
+
+            if (sessionError) {
+              console.error('[AuthCallback] Session error:', sessionError);
+              setError('인증 처리 중 오류가 발생했습니다.');
+              return;
+            }
+          }
+
+          const { data: { user } } = await supabase.auth.getUser();
+          userId = user?.id || null;
+          console.log('[AuthCallback] Session obtained via implicit flow');
+        } else {
+          // 기존 세션 확인
+          const { data: { session } } = await supabase.auth.getSession();
+          userId = session?.user?.id || null;
         }
 
-        // 현재 사용자 가져오기
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (!user) {
-          // 세션이 없으면 로그인 페이지로
+        if (!userId) {
+          console.log('[AuthCallback] No session found, redirecting to auth');
           navigate('/', { replace: true });
           return;
         }
 
-        console.log('[AuthCallback] User authenticated:', user.id);
+        console.log('[AuthCallback] User authenticated:', userId);
 
         // 프로필 확인
         const { data: profile } = await supabase
           .from('profiles')
           .select('display_name, phone')
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .maybeSingle();
 
-        // 프로필이 없거나 필수 정보가 없으면 프로필 설정 페이지로
         const needsSetup = !profile || !profile.display_name || !profile.phone;
 
         if (needsSetup) {
-          console.log('[AuthCallback] Profile setup needed, redirecting to /profile-setup');
+          console.log('[AuthCallback] Profile setup needed');
           navigate('/profile-setup', { replace: true });
         } else {
-          console.log('[AuthCallback] Profile complete, redirecting to /dashboard');
+          console.log('[AuthCallback] Redirecting to dashboard');
           navigate('/dashboard', { replace: true });
         }
       } catch (err) {
@@ -77,6 +98,14 @@ const AuthCallback = () => {
     };
 
     handleCallback();
+
+    // 타임아웃
+    const timeout = setTimeout(() => {
+      console.log('[AuthCallback] Timeout reached');
+      navigate('/', { replace: true });
+    }, 15000);
+
+    return () => clearTimeout(timeout);
   }, [navigate]);
 
   if (error) {

@@ -267,10 +267,30 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       if (!isMounted) return; // 컴포넌트가 언마운트된 경우 중단
       authEventReceivedRef.current = true; // 인증 이벤트 수신됨
       if (sessionKickTimer) { try { clearTimeout(sessionKickTimer); } catch {} sessionKickTimer = null; }
-      
-      console.log('Auth 상태 변경:', { event, user: !!nextSession?.user, variant });
-      const prevUserId = currentUserIdRef.current;
+
       const nextUserId = nextSession?.user?.id || null;
+      const prevUserId = currentUserIdRef.current;
+
+      // 중복 SIGNED_IN 방지: 이미 같은 유저로 로그인된 상태면 완전히 무시
+      if (event === 'SIGNED_IN' && nextUserId && nextUserId === prevUserId) {
+        console.log('[Auth] Already signed in with same user, ignoring duplicate SIGNED_IN');
+        return;
+      }
+
+      // TOKEN_REFRESHED: 세션만 업데이트하고 다른 처리는 스킵
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('[Auth] Token refreshed, updating session only');
+        setSession(nextSession);
+        return;
+      }
+
+      // INITIAL_SESSION: 이미 유저가 있으면 무시
+      if (event === 'INITIAL_SESSION' && prevUserId && nextUserId === prevUserId) {
+        console.log('[Auth] Initial session with existing user, ignoring');
+        return;
+      }
+
+      console.log('Auth 상태 변경 처리:', { event, user: !!nextSession?.user, variant, prevUserId, nextUserId });
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
       currentUserIdRef.current = nextUserId;
@@ -394,9 +414,23 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         if (session?.user) {
           currentUserIdRef.current = session.user.id;
           await loadUserRole(session.user.id);
+          // 프로필 체크 (지연 세션 확인 시)
+          try {
+            const { data: profileData } = await supabase
+              .from("profiles")
+              .select("display_name, phone")
+              .eq("user_id", session.user.id)
+              .maybeSingle();
+            setNeedsProfileSetup(!profileData?.display_name || !profileData?.phone);
+          } catch {
+            setNeedsProfileSetup(false);
+          }
+          setProfileCheckComplete(true);
           await ensureSubscriptions(session.user.id);
         } else {
           setUserRole(null);
+          setNeedsProfileSetup(false);
+          setProfileCheckComplete(true);
         }
         } else if (result?.type === 'timeout') {
           console.log('세션 느림 → 이벤트 대기 모드 전환 (timeout)');
@@ -433,6 +467,51 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     return () => {
       window.removeEventListener("focus", kick);
       window.removeEventListener("online", kick);
+    };
+  }, []);
+
+  // 다른 탭에서 세션 변경 감지 및 탭 활성화 시 세션 동기화
+  useEffect(() => {
+    // localStorage storage 이벤트 (다른 탭에서 변경 시)
+    const handleStorageChange = async (event: StorageEvent) => {
+      if (event.key && event.key.includes('auth-token')) {
+        console.log('[Auth] Session changed in another tab, syncing...');
+        try {
+          const { data: { session: newSession } } = await supabase.auth.getSession();
+          if (newSession?.user) {
+            setSession(newSession);
+            setUser(newSession.user);
+            currentUserIdRef.current = newSession.user.id;
+            setProfileCheckComplete(false);
+            await loadUserRole(newSession.user.id);
+            // 프로필 체크
+            const { data: profileData } = await supabase
+              .from("profiles")
+              .select("display_name, phone")
+              .eq("user_id", newSession.user.id)
+              .maybeSingle();
+            setNeedsProfileSetup(!profileData?.display_name || !profileData?.phone);
+            setProfileCheckComplete(true);
+          } else {
+            setSession(null);
+            setUser(null);
+            setUserRole(null);
+            setNeedsProfileSetup(false);
+            setProfileCheckComplete(true);
+            currentUserIdRef.current = null;
+          }
+        } catch (err) {
+          console.error('[Auth] Error syncing session:', err);
+        }
+      }
+    };
+
+    // Supabase가 내부적으로 탭 간 세션 동기화를 처리하므로
+    // visibilitychange는 제거하고 storage 이벤트만 리스닝
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 
@@ -530,6 +609,13 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   };
 
   const signIn = async (email: string, password: string) => {
+    // 이미 로그인된 경우 기존 세션 확인
+    const { data: { session: existingSession } } = await supabase.auth.getSession();
+    if (existingSession?.user) {
+      console.log('[Auth] Already logged in, skipping signIn');
+      return { error: null };
+    }
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error };
   };
@@ -562,7 +648,6 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     }
 
     // 모바일: 플랫폼별 redirect URL 설정
-    const { Capacitor } = await import('@capacitor/core');
     const platform = Capacitor.getPlatform();
 
     let redirectUrl: string;
