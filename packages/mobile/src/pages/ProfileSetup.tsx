@@ -34,6 +34,14 @@ const ProfileSetup = () => {
       return;
     }
 
+    if (!phone.trim()) {
+      toast({
+        title: t("profileSetup.phoneRequired", "휴대폰 번호를 입력해주세요"),
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setIsSubmitting(true);
 
@@ -164,7 +172,7 @@ const ProfileSetup = () => {
           <Label htmlFor="phone" className="flex items-center gap-2">
             <Phone className="h-4 w-4" />
             {t("profileSetup.phone", "휴대폰 번호")}
-            <span className="text-muted-foreground text-xs">(선택)</span>
+            <span className="text-destructive">*</span>
           </Label>
           <Input
             id="phone"
@@ -173,6 +181,7 @@ const ProfileSetup = () => {
             onChange={(e) => setPhone(e.target.value)}
             placeholder={t("profileSetup.phonePlaceholder", "010-0000-0000")}
             className="h-12"
+            required
           />
         </div>
 
@@ -180,7 +189,7 @@ const ProfileSetup = () => {
         <Button
           type="submit"
           className="w-full h-12 text-base"
-          disabled={isSubmitting || !displayName.trim()}
+          disabled={isSubmitting || !displayName.trim() || !phone.trim()}
         >
           {isSubmitting ? (
             <div className="flex items-center gap-2">

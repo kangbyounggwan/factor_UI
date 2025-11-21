@@ -101,7 +101,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     }
   };
 
-  // 프로필 설정 필요 여부 체크
+  // 프로필 설정 필요 여부 체크 (display_name과 phone 모두 필수)
   const checkProfileSetup = async () => {
     if (!user) {
       setNeedsProfileSetup(false);
@@ -111,13 +111,17 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, display_name")
+        .select("id, display_name, phone")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      // 프로필이 없거나 display_name이 없으면 설정 필요
-      if (error || !data || !data.display_name) {
-        console.log('[Auth] Profile setup needed for user:', user.id);
+      // 프로필이 없거나 display_name 또는 phone이 없으면 설정 필요
+      if (error || !data || !data.display_name || !data.phone) {
+        console.log('[Auth] Profile setup needed for user:', user.id, {
+          hasProfile: !!data,
+          hasDisplayName: !!data?.display_name,
+          hasPhone: !!data?.phone
+        });
         setNeedsProfileSetup(true);
       } else {
         setNeedsProfileSetup(false);
@@ -271,18 +275,23 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
       if (nextUserId) {
         setTimeout(() => { if (isMounted) loadUserRole(nextUserId); }, 0);
-        // 프로필 설정 필요 여부 체크 (소셜 로그인 신규 사용자 감지)
+        // 프로필 설정 필요 여부 체크 (소셜 로그인 신규 사용자 감지 - display_name과 phone 모두 필수)
         setTimeout(async () => {
           if (!isMounted) return;
           try {
             const { data, error } = await supabase
               .from("profiles")
-              .select("id, display_name")
+              .select("id, display_name, phone")
               .eq("user_id", nextUserId)
               .maybeSingle();
 
-            if (error || !data || !data.display_name) {
-              console.log('[Auth] Profile setup needed for user:', nextUserId);
+            // 프로필이 없거나 display_name 또는 phone이 없으면 설정 필요
+            if (error || !data || !data.display_name || !data.phone) {
+              console.log('[Auth] Profile setup needed for user:', nextUserId, {
+                hasProfile: !!data,
+                hasDisplayName: !!data?.display_name,
+                hasPhone: !!data?.phone
+              });
               setNeedsProfileSetup(true);
             } else {
               setNeedsProfileSetup(false);
