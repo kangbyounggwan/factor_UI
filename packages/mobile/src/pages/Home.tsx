@@ -1,16 +1,31 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Monitor, Settings, Zap, BarChart3, Play, ShoppingCart } from "lucide-react";
+import { Monitor, Settings, Zap, BarChart3, Play, ShoppingCart, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { Capacitor } from "@capacitor/core";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 
 const Home = () => {
   const { user } = useAuth();
+  const [showIosProfileWarning, setShowIosProfileWarning] = useState(false);
 
-  // 페이지 진입 시 스크롤 초기화
+  // 페이지 진입 시 스크롤 초기화 및 iOS 프로필 경고 체크
   useEffect(() => {
     window.scrollTo(0, 0);
+
+    // iOS에서 프로필 없이 로그아웃된 경우 경고 표시
+    const platform = Capacitor.getPlatform();
+    const wasLoggedOutDueToProfile = localStorage.getItem('iosProfileSetupRequired');
+
+    if (platform === 'ios' && wasLoggedOutDueToProfile === 'true') {
+      setShowIosProfileWarning(true);
+      localStorage.removeItem('iosProfileSetupRequired');
+
+      // 5초 후 경고 자동 숨김
+      setTimeout(() => setShowIosProfileWarning(false), 10000);
+    }
   }, []);
 
   const quickMenuItems = [
@@ -53,6 +68,20 @@ const Home = () => {
 
   return (
     <div className="min-h-screen bg-background overflow-hidden">
+      {/* iOS 프로필 설정 필요 경고 */}
+      {showIosProfileWarning && (
+        <div className="px-4 pt-4">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>프로필 설정 필요</AlertTitle>
+            <AlertDescription>
+              iOS 앱에서는 프로필 설정이 지원되지 않습니다.
+              웹사이트에서 먼저 회원가입을 완료해주세요.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
       {/* Quick Menu Grid */}
       <section className="py-8 px-4">
         <div className="max-w-4xl mx-auto">

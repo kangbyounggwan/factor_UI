@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { User, Phone, Sparkles } from "lucide-react";
+import { User, Phone, Sparkles, LogOut } from "lucide-react";
 
 const ProfileSetup = () => {
-  const { user, checkProfileSetup } = useAuth();
+  const { user, checkProfileSetup, signOut } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -210,6 +210,20 @@ const ProfileSetup = () => {
           ) : (
             t("profileSetup.start", "시작하기")
           )}
+        </Button>
+
+        {/* 로그아웃 버튼 */}
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full h-10 text-sm text-muted-foreground"
+          onClick={async () => {
+            await signOut();
+            navigate("/", { replace: true });
+          }}
+        >
+          <LogOut className="h-4 w-4 mr-2" />
+          {t("nav.logout", "로그아웃")}
         </Button>
       </form>
     </div>

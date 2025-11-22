@@ -48,6 +48,7 @@ interface AuthContextType {
   unlinkProvider: (provider: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   checkProfileSetup: () => Promise<void>;
+  setSessionFromDeepLink: (accessToken: string, refreshToken: string) => Promise<{ error: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -567,27 +568,20 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       return { error };
     }
 
-    // 모바일: 플랫폼별 redirect URL 설정
+    // 모바일: 외부 브라우저로 OAuth 진행 후 딥링크로 복귀
     const platform = Capacitor.getPlatform();
-
-    let redirectUrl: string;
-    if (platform === 'ios') {
-      redirectUrl = IOS_REDIRECT;
-    } else if (platform === 'android') {
-      redirectUrl = ANDROID_REDIRECT;
-    } else {
-      redirectUrl = `${window.location.origin}/`;
-    }
-
     console.log('[AuthContext] Platform:', platform);
-    console.log('[AuthContext] Redirect URL:', redirectUrl);
 
-    // 모바일에서는 skipBrowserRedirect를 true로 설정하여 직접 처리
+    // 플랫폼별 딥링크 URL
+    const redirectUrl = platform === 'ios' ? IOS_REDIRECT : ANDROID_REDIRECT;
+    console.log('[AuthContext] Redirect URL (deep link):', redirectUrl);
+
+    // skipBrowserRedirect: true로 설정하여 URL을 가져온 후 외부 브라우저로 열기
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: redirectUrl,
-        skipBrowserRedirect: true, // 모바일에서는 직접 브라우저 관리
+        skipBrowserRedirect: true,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
@@ -595,25 +589,17 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       },
     });
 
-    // 모바일에서 직접 브라우저 열기
-    if (data?.url) {
-      try {
-        const { Browser } = await import('@capacitor/browser');
-        console.log('[AuthContext] Opening browser with URL:', data.url);
-
-        await Browser.open({
-          url: data.url,
-          presentationStyle: 'popover', // iOS에서 popover 스타일
-        });
-
-        console.log('[AuthContext] Browser opened successfully');
-      } catch (err) {
-        console.error('[AuthContext] Failed to open browser:', err);
-        return { error: err };
-      }
+    if (error) {
+      return { error };
     }
 
-    return { error };
+    // 외부 브라우저로 OAuth URL 열기
+    if (data?.url) {
+      const { Browser } = await import('@capacitor/browser');
+      await Browser.open({ url: data.url });
+    }
+
+    return { error: null };
   };
 
   const signInWithApple = async () => {
@@ -789,6 +775,48 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     }
   };
 
+  // ============================================
+  // Mobile OAuth Deep Link Handler
+  // singleTask 모드에서 setSession API가 응답하지 않는 문제 해결:
+  // localStorage에 저장하고 페이지 새로고침으로 Supabase 초기화 시 자동 복구
+  // ============================================
+  const setSessionFromDeepLink = async (accessToken: string, refreshToken: string) => {
+    console.log('[Auth] setSessionFromDeepLink called');
+
+    try {
+      // Supabase localStorage 키 형식: sb-{project-ref}-auth-token
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
+      const storageKey = `sb-${projectRef}-auth-token`;
+
+      // Supabase 세션 형식으로 저장
+      const sessionData = {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_in: 3600,
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'bearer',
+        user: null, // Supabase 초기화 시 자동으로 채워짐
+      };
+
+      localStorage.setItem(storageKey, JSON.stringify(sessionData));
+      console.log('[Auth] Session saved to localStorage:', storageKey);
+
+      // 목표 경로를 localStorage에 저장 (새로고침 후 이동)
+      localStorage.setItem('postAuthRedirect', '/dashboard');
+      console.log('[Auth] Reloading to apply session...');
+
+      // 페이지 새로고침 - Supabase가 localStorage에서 자동으로 세션 복구
+      window.location.reload();
+
+      return { error: null };
+    } catch (e: any) {
+      console.error('[Auth] setSessionFromDeepLink exception:', e);
+      setLoading(false);
+      return { error: e };
+    }
+  };
+
   const value: AuthContextType = {
     user,
     session,
@@ -805,6 +833,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     unlinkProvider,
     signOut,
     checkProfileSetup,
+    setSessionFromDeepLink,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

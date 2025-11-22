@@ -4,18 +4,27 @@ import './index.css'
 import { AuthProvider } from '@shared/contexts/AuthContext'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar } from '@capacitor/status-bar'
-import { Keyboard, KeyboardResize } from '@capacitor/keyboard'
-import { App as CapApp } from '@capacitor/app'
 import { SafeArea, initialize as initSafeArea } from '@capacitor-community/safe-area'
 import './i18n' // i18n 초기화
 
-// 프로덕션 환경에서 console 로그 제거
-if (import.meta.env.PROD) {
-  console.log = () => {};
-  console.debug = () => {};
-  console.info = () => {};
-  // console.warn과 console.error는 유지 (중요한 경고/에러 확인용)
+// 프로덕션 환경에서 console 로그 제거 (현재 비활성화 - 디버깅용)
+// if (import.meta.env.PROD) {
+//   console.log = () => {};
+//   console.debug = () => {};
+//   console.info = () => {};
+//   // console.warn과 console.error는 유지 (중요한 경고/에러 확인용)
+// }
+
+// 글로벌 딥링크 URL 저장소 (React 렌더링 전에 캡처)
+declare global {
+  interface Window {
+    __PENDING_DEEP_LINK__?: string;
+  }
 }
+
+// 딥링크 처리는 네이티브(MainActivity/AppDelegate)에서 직접 처리하며
+// window.__PENDING_DEEP_LINK__ + deep-link-received 이벤트로 전달합니다.
+// React 앱에서는 useDeepLinkHandler 훅이 이를 처리합니다.
 
 // Capacitor 초기화 및 앱 시작
 async function initializeApp() {

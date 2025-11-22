@@ -120,6 +120,28 @@ class AppDelegate: UIResponder, UIApplicationDelegate, MessagingDelegate, UNUser
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         // Called when the app was launched with a url. Feel free to add additional processing here,
         // but if you want the App API to support tracking app url opens, make sure to keep this call
+
+        let urlString = url.absoluteString
+        print("[AppDelegate] Deep link received: \(urlString)")
+
+        // OAuth 콜백 URL인지 확인
+        if urlString.contains("auth/callback") {
+            print("[AppDelegate] OAuth callback detected, notifying WebView")
+
+            // WebView에 딥링크 URL 전달
+            DispatchQueue.main.async {
+                if let bridge = (UIApplication.shared.delegate as? AppDelegate)?.window?.rootViewController as? CAPBridgeViewController {
+                    let escapedUrl = urlString.replacingOccurrences(of: "'", with: "\\'")
+                    bridge.bridge?.eval(js: """
+                        window.__PENDING_DEEP_LINK__ = '\(escapedUrl)';
+                        window.dispatchEvent(new CustomEvent('deep-link-received', { detail: '\(escapedUrl)' }));
+                        console.log('[AppDelegate] Deep link injected to WebView');
+                    """)
+                    print("[AppDelegate] Deep link injected to WebView")
+                }
+            }
+        }
+
         return ApplicationDelegateProxy.shared.application(app, open: url, options: options)
     }
 

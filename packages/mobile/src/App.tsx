@@ -20,6 +20,7 @@ import { AdminRoute } from "@/components/AdminRoute";
 import { AISidebarProvider } from "@/contexts/AISidebarContext";
 import { useToast } from "@/hooks/use-toast";
 import { pushNotificationService } from "@/services/pushNotificationService";
+import { useDeepLinkHandler } from "@/hooks/useDeepLinkHandler";
 
 // Lazy load all pages for code splitting
 const Home = lazy(() => import("./pages/Home"));
@@ -60,6 +61,19 @@ const AppContent = () => {
   const { theme } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  // 딥링크 처리 (제일 먼저 실행되어야 함)
+  useDeepLinkHandler();
+
+  // OAuth 리다이렉트 처리 (localStorage에서 postAuthRedirect 확인)
+  useEffect(() => {
+    const redirectPath = localStorage.getItem('postAuthRedirect');
+    if (redirectPath) {
+      console.log('[App] Found postAuthRedirect, navigating to:', redirectPath);
+      localStorage.removeItem('postAuthRedirect');
+      navigate(redirectPath, { replace: true });
+    }
+  }, [navigate]);
 
   // 푸시 알림 로그아웃 시 토큰 비활성화만 처리
   // (초기화는 Dashboard에서 프로필 확인 후 진행)
@@ -114,96 +128,6 @@ const AppContent = () => {
     };
     applyStatusBar();
   }, [theme]);
-
-  // OAuth 딥링크 처리 (모바일 전용)
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
-
-    let listenerHandle: { remove: () => Promise<void> } | null = null;
-
-    const setupListener = async () => {
-      listenerHandle = await CapacitorApp.addListener('appUrlOpen', async (data) => {
-        console.log('[App] Deep link received:', data.url);
-
-        // OAuth 콜백 URL 처리 (iOS: com.byeonggwan.factor://, Android: com.factor.app://)
-        if (data.url.includes('auth/callback')) {
-          try {
-            // 브라우저 닫기 시도 (즉시 닫기)
-            try {
-              const { Browser } = await import('@capacitor/browser');
-              await Browser.close();
-              console.log('[App] Browser closed');
-            } catch (browserErr) {
-              console.log('[App] Browser already closed or not found');
-            }
-
-            // URL 파싱
-            const url = new URL(data.url);
-
-            // URL fragment (#access_token=...) 또는 query (?code=...) 처리
-            const fragment = url.hash.substring(1); // # 제거
-            const params = new URLSearchParams(fragment || url.search.substring(1));
-
-            const access_token = params.get('access_token');
-            const refresh_token = params.get('refresh_token');
-
-            console.log('[App] Platform:', Capacitor.getPlatform());
-            console.log('[App] Full URL:', data.url);
-            console.log('[App] Fragment:', fragment);
-            console.log('[App] Search:', url.search);
-            console.log('[App] Access token found:', !!access_token);
-            console.log('[App] Refresh token found:', !!refresh_token);
-
-            if (access_token && refresh_token) {
-              // 토큰이 있으면 세션 설정
-              const { error } = await supabase.auth.setSession({
-                access_token,
-                refresh_token
-              });
-
-              if (error) {
-                console.error('[App] OAuth session error:', error);
-                toast({
-                  title: '로그인 실패',
-                  description: '인증 처리 중 오류가 발생했습니다.',
-                  variant: 'destructive',
-                });
-                return;
-              }
-
-              console.log('[App] OAuth session set successfully');
-              // AuthCallback 페이지로 이동하여 나머지 처리 위임
-              // AuthCallback이 onAuthStateChange를 통해 SIGNED_IN 이벤트를 받아
-              // 프로필 체크 후 적절한 페이지로 리다이렉트
-              navigate('/auth/callback', { replace: true });
-            } else {
-              console.error('[App] No tokens found in OAuth callback');
-              toast({
-                title: '로그인 실패',
-                description: '인증 정보를 받지 못했습니다.',
-                variant: 'destructive',
-              });
-            }
-          } catch (err) {
-            console.error('[App] Deep link processing error:', err);
-            toast({
-              title: '로그인 실패',
-              description: '인증 처리 중 오류가 발생했습니다.',
-              variant: 'destructive',
-            });
-          }
-        }
-      });
-    };
-
-    setupListener();
-
-    return () => {
-      if (listenerHandle) {
-        listenerHandle.remove();
-      }
-    };
-  }, [navigate, toast]);
 
   // Android 하드웨어 백 버튼 처리
   useEffect(() => {
