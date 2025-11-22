@@ -24,6 +24,7 @@
     "@capacitor/filesystem": "^7.1.4",
     "@capacitor/ios": "^7.4.3",
     "@capacitor/keyboard": "^7.0.2",
+    "@capacitor/preferences": "^7.0.2",
     "@capacitor/push-notifications": "^7.0.3",
     "@capacitor/share": "^7.0.2",
     "@capacitor/status-bar": "^7.0.2",

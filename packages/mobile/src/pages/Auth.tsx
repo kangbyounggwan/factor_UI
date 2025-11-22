@@ -35,10 +35,23 @@ const Auth = () => {
     bottomPadding: '1rem',
   });
 
-  // 페이지 진입 시 스크롤 초기화
+  // 페이지 진입 시 스크롤 초기화 및 iOS 신규 회원 알림 표시
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, []);
+
+    // iOS에서 프로필 설정이 필요한 신규 회원인 경우 알림 표시
+    const iosProfileSetupRequired = localStorage.getItem('iosProfileSetupRequired');
+    if (iosProfileSetupRequired === 'true') {
+      localStorage.removeItem('iosProfileSetupRequired'); // 플래그 제거
+
+      toast({
+        title: t('auth.webSignupRequired', '웹에서 회원가입이 필요합니다'),
+        description: t('auth.webSignupRequiredDescription', 'iOS 앱에서는 신규 회원가입이 제한됩니다. 웹사이트에서 회원가입을 진행해주세요.'),
+        variant: "destructive",
+        duration: 7000, // 7초간 표시
+      });
+    }
+  }, [t, toast]);
 
   const [signInData, setSignInData] = useState({
     email: "",

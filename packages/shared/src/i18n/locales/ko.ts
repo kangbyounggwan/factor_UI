@@ -107,6 +107,9 @@ export default {
     appleSignInCancelled: "Apple 로그인이 취소되었습니다.",
     appleSignInFailed: "Apple 로그인에 실패했습니다. 다시 시도해주세요.",
     appleSignInNotAvailable: "Apple 로그인을 사용할 수 없습니다.",
+    // iOS 신규 회원 알림
+    webSignupRequired: "웹에서 회원가입이 필요합니다",
+    webSignupRequiredDescription: "iOS 앱에서는 신규 회원가입이 제한됩니다. 웹사이트에서 회원가입을 진행해주세요.",
     displayName: "사용자 이름",
     signInSubtitle: "FACTOR 계정으로 로그인하세요",
     signingIn: "로그인 중...",

@@ -107,6 +107,9 @@ export default {
     appleSignInCancelled: "Apple Sign In was cancelled.",
     appleSignInFailed: "Apple Sign In failed. Please try again.",
     appleSignInNotAvailable: "Apple Sign In is not available.",
+    // iOS new user notification
+    webSignupRequired: "Web signup required",
+    webSignupRequiredDescription: "New account registration is restricted in the iOS app. Please sign up on our website.",
     displayName: "Display Name",
     signInSubtitle: "Sign in to your FACTOR account",
     signingIn: "Signing in...",
