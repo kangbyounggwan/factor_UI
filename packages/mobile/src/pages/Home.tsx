@@ -11,6 +11,9 @@ const Home = () => {
   const { user } = useAuth();
   const [showIosProfileWarning, setShowIosProfileWarning] = useState(false);
 
+  // iOS 플랫폼 체크
+  const isIOS = Capacitor.getPlatform() === 'ios';
+
   // 페이지 진입 시 스크롤 초기화 및 iOS 프로필 경고 체크
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -28,7 +31,8 @@ const Home = () => {
     }
   }, []);
 
-  const quickMenuItems = [
+  // iOS에서는 구독 메뉴 제거 (Apple IAP 정책 준수)
+  const allMenuItems = [
     {
       icon: Monitor,
       title: "대시보드",
@@ -57,14 +61,16 @@ const Home = () => {
       path: user ? "/settings" : "/auth",
       color: "bg-gray-500/10 hover:bg-gray-500/20 text-gray-600"
     },
-    {
+    ...(!isIOS ? [{
       icon: ShoppingCart,
       title: "구독",
       description: "요금제 및 결제",
       path: "/subscription",
       color: "bg-pink-500/10 hover:bg-pink-500/20 text-pink-600"
-    }
+    }] : [])
   ];
+
+  const quickMenuItems = allMenuItems;
 
   return (
     <div className="min-h-screen bg-background overflow-hidden">

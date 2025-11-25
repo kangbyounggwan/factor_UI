@@ -62,6 +62,9 @@ const AppContent = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
+  // iOS 플랫폼 체크
+  const isIOS = Capacitor.getPlatform() === 'ios';
+
   // 딥링크 처리 (제일 먼저 실행되어야 함)
   useDeepLinkHandler();
 
@@ -360,14 +363,19 @@ const AppContent = () => {
                 <ChangePassword />
               </ProtectedRoute>
             } />
-            <Route path="/subscription" element={<Subscription />} />
-            <Route path="/payment/checkout" element={
-              <ProtectedRoute>
-                <PaymentCheckout />
-              </ProtectedRoute>
-            } />
-            <Route path="/payment/success" element={<PaymentSuccess />} />
-            <Route path="/payment/fail" element={<PaymentFail />} />
+            {/* iOS에서는 구독/결제 라우트 완전 차단 (Apple IAP 정책 준수) */}
+            {!isIOS && (
+              <>
+                <Route path="/subscription" element={<Subscription />} />
+                <Route path="/payment/checkout" element={
+                  <ProtectedRoute>
+                    <PaymentCheckout />
+                  </ProtectedRoute>
+                } />
+                <Route path="/payment/success" element={<PaymentSuccess />} />
+                <Route path="/payment/fail" element={<PaymentFail />} />
+              </>
+            )}
             <Route path="/supported-printers" element={<SupportedPrinters />} />
             <Route path="/create" element={
               <ProtectedRoute>
