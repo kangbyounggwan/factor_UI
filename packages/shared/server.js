@@ -266,6 +266,175 @@ function extractAccessToken(req) {
   return bearer || fromBody || fromUser || null;
 }
 
+// API 키 추출 (X-API-Key 헤더 또는 api_key 쿼리 파라미터)
+function extractApiKey(req) {
+  const fromHeader = req.headers['x-api-key'] || req.headers['X-Api-Key'] || null;
+  const fromQuery = req.query?.api_key || null;
+  return fromHeader || fromQuery || null;
+}
+
+// SHA-256 해시 생성 (Node.js crypto 사용)
+async function hashApiKey(apiKey) {
+  const crypto = await import('crypto');
+  return crypto.createHash('sha256').update(apiKey).digest('hex');
+}
+
+// API 키로 사용자 ID 조회
+async function getUserIdFromApiKey(env, apiKey) {
+  const keyHash = await hashApiKey(apiKey);
+
+  const url = `${String(env.url).replace(/\/$/, '')}/rest/v1/api_keys` +
+    `?select=user_id,permissions,is_active,expires_at` +
+    `&key_hash=eq.${encodeURIComponent(keyHash)}` +
+    `&is_active=eq.true`;
+
+  const res = await fetch(url, {
+    headers: {
+      'apikey': env.key,
+      'Authorization': `Bearer ${env.key}`,
+    },
+  });
+
+  if (!res.ok) {
+    console.warn('[API_KEY] Lookup failed:', res.status);
+    return null;
+  }
+
+  const rows = await res.json();
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return null;
+  }
+
+  const keyData = rows[0];
+
+  // 만료 확인
+  if (keyData.expires_at && new Date(keyData.expires_at) < new Date()) {
+    console.warn('[API_KEY] Key expired');
+    return null;
+  }
+
+  // 마지막 사용 시간 업데이트
+  updateApiKeyLastUsed(env, keyHash).catch(() => {});
+
+  return {
+    userId: keyData.user_id,
+    permissions: keyData.permissions || ['read'],
+  };
+}
+
+// API 키 마지막 사용 시간 업데이트
+async function updateApiKeyLastUsed(env, keyHash) {
+  const url = `${String(env.url).replace(/\/$/, '')}/rest/v1/api_keys` +
+    `?key_hash=eq.${encodeURIComponent(keyHash)}`;
+
+  await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': env.key,
+      'Authorization': `Bearer ${env.key}`,
+      'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({ last_used_at: new Date().toISOString() }),
+  });
+}
+
+// 사용자의 모든 프린터 상세 정보 조회
+async function fetchPrintersDetailForUser(env, userId) {
+  const baseUrl = String(env.url).replace(/\/$/, '');
+  const url =
+    `${baseUrl}/rest/v1/printers` +
+    `?select=id,printer_uuid,device_uuid,name,model,manufacturer,series,firmware,status,group_id,ip_address,port,created_at,updated_at` +
+    `&user_id=eq.${encodeURIComponent(userId)}` +
+    `&order=name.asc`;
+
+  const res = await fetch(url, {
+    headers: {
+      'apikey': env.key,
+      'Authorization': `Bearer ${env.key}`,
+    },
+  });
+
+  if (!res.ok) {
+    console.warn('[FETCH] printers detail error:', res.status);
+    return [];
+  }
+
+  return await res.json();
+}
+
+// 사용자의 카메라 정보 조회
+async function fetchCamerasForUser(env, userId) {
+  const baseUrl = String(env.url).replace(/\/$/, '');
+  const url =
+    `${baseUrl}/rest/v1/cameras` +
+    `?select=id,device_uuid,stream_url,resolution,created_at` +
+    `&user_id=eq.${encodeURIComponent(userId)}`;
+
+  const res = await fetch(url, {
+    headers: {
+      'apikey': env.key,
+      'Authorization': `Bearer ${env.key}`,
+    },
+  });
+
+  if (!res.ok) {
+    console.warn('[FETCH] cameras error:', res.status);
+    return [];
+  }
+
+  return await res.json();
+}
+
+// 사용자의 구독 정보 조회
+async function fetchSubscriptionForUser(env, userId) {
+  const baseUrl = String(env.url).replace(/\/$/, '');
+  const url =
+    `${baseUrl}/rest/v1/subscriptions` +
+    `?select=*` +
+    `&user_id=eq.${encodeURIComponent(userId)}` +
+    `&status=eq.active` +
+    `&limit=1`;
+
+  const res = await fetch(url, {
+    headers: {
+      'apikey': env.key,
+      'Authorization': `Bearer ${env.key}`,
+    },
+  });
+
+  if (!res.ok) {
+    return null;
+  }
+
+  const rows = await res.json();
+  return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+}
+
+// 사용자의 AI 모델 목록 조회
+async function fetchAiModelsForUser(env, userId, limit = 20) {
+  const baseUrl = String(env.url).replace(/\/$/, '');
+  const url =
+    `${baseUrl}/rest/v1/ai_generated_models` +
+    `?select=id,name,prompt,source_type,status,thumbnail_url,created_at` +
+    `&user_id=eq.${encodeURIComponent(userId)}` +
+    `&order=created_at.desc` +
+    `&limit=${limit}`;
+
+  const res = await fetch(url, {
+    headers: {
+      'apikey': env.key,
+      'Authorization': `Bearer ${env.key}`,
+    },
+  });
+
+  if (!res.ok) {
+    return [];
+  }
+
+  return await res.json();
+}
+
 function mountRest(app) {
   app.post('/api/auth/login', async (req, res) => {
     try {
@@ -352,6 +521,234 @@ function mountRest(app) {
     } catch (error) {
       console.error('printers summary API 오류:', error);
       return res.status(500).json({ success: false, message: '서버 오류가 발생했습니다.' });
+    }
+  });
+
+  // ============================================
+  // API Key 기반 엔드포인트 (External API)
+  // ============================================
+
+  // API 키 인증 미들웨어
+  const apiKeyAuth = async (req, res, next) => {
+    try {
+      const apiKey = extractApiKey(req);
+      if (!apiKey) {
+        return res.status(401).json({
+          success: false,
+          error: 'API key required',
+          message: 'X-API-Key 헤더 또는 api_key 쿼리 파라미터가 필요합니다.',
+        });
+      }
+
+      const env = await resolveSupabaseEnv();
+      if (!env.url || !env.key) {
+        return res.status(500).json({ success: false, error: 'Server configuration error' });
+      }
+
+      const keyData = await getUserIdFromApiKey(env, apiKey);
+      if (!keyData) {
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid API key',
+          message: 'API 키가 유효하지 않거나 만료되었습니다.',
+        });
+      }
+
+      // 요청 객체에 사용자 정보 첨부
+      req.apiKeyUserId = keyData.userId;
+      req.apiKeyPermissions = keyData.permissions;
+      req.supabaseEnv = env;
+
+      next();
+    } catch (error) {
+      console.error('[API_KEY] Auth error:', error);
+      return res.status(500).json({ success: false, error: 'Authentication failed' });
+    }
+  };
+
+  // GET /api/v1/me - 현재 API 키 소유자 정보
+  app.get('/api/v1/me', apiKeyAuth, async (req, res) => {
+    try {
+      const { apiKeyUserId, apiKeyPermissions, supabaseEnv } = req;
+
+      // 사용자 기본 정보 조회
+      const url = `${String(supabaseEnv.url).replace(/\/$/, '')}/rest/v1/user_roles` +
+        `?select=role` +
+        `&user_id=eq.${encodeURIComponent(apiKeyUserId)}`;
+
+      const roleRes = await fetch(url, {
+        headers: {
+          'apikey': supabaseEnv.key,
+          'Authorization': `Bearer ${supabaseEnv.key}`,
+        },
+      });
+
+      const roles = roleRes.ok ? await roleRes.json() : [];
+      const role = Array.isArray(roles) && roles.length > 0 ? roles[0].role : 'user';
+
+      return res.json({
+        success: true,
+        data: {
+          user_id: apiKeyUserId,
+          role,
+          permissions: apiKeyPermissions,
+        },
+      });
+    } catch (error) {
+      console.error('[API_KEY] /me error:', error);
+      return res.status(500).json({ success: false, error: 'Failed to fetch user info' });
+    }
+  });
+
+  // GET /api/v1/printers - 모든 프린터 정보
+  app.get('/api/v1/printers', apiKeyAuth, async (req, res) => {
+    try {
+      const { apiKeyUserId, supabaseEnv } = req;
+      const printers = await fetchPrintersDetailForUser(supabaseEnv, apiKeyUserId);
+
+      return res.json({
+        success: true,
+        data: printers,
+        count: printers.length,
+      });
+    } catch (error) {
+      console.error('[API_KEY] /printers error:', error);
+      return res.status(500).json({ success: false, error: 'Failed to fetch printers' });
+    }
+  });
+
+  // GET /api/v1/printers/:deviceUuid - 특정 프린터 정보
+  app.get('/api/v1/printers/:deviceUuid', apiKeyAuth, async (req, res) => {
+    try {
+      const { apiKeyUserId, supabaseEnv } = req;
+      const { deviceUuid } = req.params;
+
+      const baseUrl = String(supabaseEnv.url).replace(/\/$/, '');
+      const url =
+        `${baseUrl}/rest/v1/printers` +
+        `?select=*` +
+        `&user_id=eq.${encodeURIComponent(apiKeyUserId)}` +
+        `&device_uuid=eq.${encodeURIComponent(deviceUuid)}`;
+
+      const printerRes = await fetch(url, {
+        headers: {
+          'apikey': supabaseEnv.key,
+          'Authorization': `Bearer ${supabaseEnv.key}`,
+        },
+      });
+
+      if (!printerRes.ok) {
+        return res.status(500).json({ success: false, error: 'Failed to fetch printer' });
+      }
+
+      const printers = await printerRes.json();
+      if (!Array.isArray(printers) || printers.length === 0) {
+        return res.status(404).json({ success: false, error: 'Printer not found' });
+      }
+
+      return res.json({
+        success: true,
+        data: printers[0],
+      });
+    } catch (error) {
+      console.error('[API_KEY] /printers/:id error:', error);
+      return res.status(500).json({ success: false, error: 'Failed to fetch printer' });
+    }
+  });
+
+  // GET /api/v1/cameras - 모든 카메라 정보
+  app.get('/api/v1/cameras', apiKeyAuth, async (req, res) => {
+    try {
+      const { apiKeyUserId, supabaseEnv } = req;
+      const cameras = await fetchCamerasForUser(supabaseEnv, apiKeyUserId);
+
+      return res.json({
+        success: true,
+        data: cameras,
+        count: cameras.length,
+      });
+    } catch (error) {
+      console.error('[API_KEY] /cameras error:', error);
+      return res.status(500).json({ success: false, error: 'Failed to fetch cameras' });
+    }
+  });
+
+  // GET /api/v1/subscription - 구독 정보
+  app.get('/api/v1/subscription', apiKeyAuth, async (req, res) => {
+    try {
+      const { apiKeyUserId, supabaseEnv } = req;
+      const subscription = await fetchSubscriptionForUser(supabaseEnv, apiKeyUserId);
+
+      return res.json({
+        success: true,
+        data: subscription || { plan: 'free', status: 'active' },
+      });
+    } catch (error) {
+      console.error('[API_KEY] /subscription error:', error);
+      return res.status(500).json({ success: false, error: 'Failed to fetch subscription' });
+    }
+  });
+
+  // GET /api/v1/models - AI 생성 모델 목록
+  app.get('/api/v1/models', apiKeyAuth, async (req, res) => {
+    try {
+      const { apiKeyUserId, supabaseEnv } = req;
+      const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+      const models = await fetchAiModelsForUser(supabaseEnv, apiKeyUserId, limit);
+
+      return res.json({
+        success: true,
+        data: models,
+        count: models.length,
+      });
+    } catch (error) {
+      console.error('[API_KEY] /models error:', error);
+      return res.status(500).json({ success: false, error: 'Failed to fetch models' });
+    }
+  });
+
+  // GET /api/v1/overview - 전체 개요 (대시보드용)
+  app.get('/api/v1/overview', apiKeyAuth, async (req, res) => {
+    try {
+      const { apiKeyUserId, supabaseEnv } = req;
+
+      // 병렬로 모든 데이터 조회
+      const [printers, cameras, subscription, models] = await Promise.all([
+        fetchPrintersDetailForUser(supabaseEnv, apiKeyUserId),
+        fetchCamerasForUser(supabaseEnv, apiKeyUserId),
+        fetchSubscriptionForUser(supabaseEnv, apiKeyUserId),
+        fetchAiModelsForUser(supabaseEnv, apiKeyUserId, 5),
+      ]);
+
+      // 프린터 상태 집계
+      const printerStats = {
+        total: printers.length,
+        connected: printers.filter(p => p.status === 'connected').length,
+        printing: printers.filter(p => p.status === 'printing').length,
+        idle: printers.filter(p => p.status === 'idle').length,
+        error: printers.filter(p => p.status === 'error').length,
+      };
+
+      return res.json({
+        success: true,
+        data: {
+          user_id: apiKeyUserId,
+          subscription: subscription || { plan: 'free', status: 'active' },
+          printers: {
+            stats: printerStats,
+            items: printers,
+          },
+          cameras: {
+            count: cameras.length,
+            items: cameras,
+          },
+          recent_models: models,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('[API_KEY] /overview error:', error);
+      return res.status(500).json({ success: false, error: 'Failed to fetch overview' });
     }
   });
 }

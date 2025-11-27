@@ -22,7 +22,10 @@ export default {
     share: "Share",
     waiting: "Waiting",
     backToHome: "Back to Home",
-    user: "User"
+    user: "User",
+    rename: "Rename",
+    copied: "Copied!",
+    done: "Done"
   },
   nav: {
     home: "Home",
@@ -1406,6 +1409,7 @@ export default {
     account: "Account",
     subscription: "Subscription",
     notifications: "Notifications",
+    apiKeys: "API Keys",
     // Profile Tab
     profileInfo: "Profile Information",
     profileDescription: "Manage your publicly displayed profile information",
@@ -1637,6 +1641,81 @@ export default {
     userNotFound: "User not found",
     deleteGenericError: "An error occurred while deleting your account"
   },
+  pricing: {
+    badge: "Simple, transparent pricing",
+    title: "Choose your plan",
+    subtitle: "Start free, upgrade when you need more power. All plans include core features.",
+    monthly: "Monthly",
+    yearly: "Yearly",
+    year: "year",
+    month: "month",
+    savePercent: "Save ~17%",
+    free: "Free",
+    custom: "Custom",
+    getStarted: "Get Started",
+    subscribe: "Subscribe",
+    contactSales: "Contact Sales",
+    processing: "Processing...",
+    popular: "Most Popular",
+    whatsIncluded: "What's included",
+    billedAnnually: "billed annually",
+    unlimited: "Unlimited",
+    plans: {
+      basic: {
+        name: "Free",
+        description: "For hobbyists and makers"
+      },
+      pro: {
+        name: "Pro",
+        description: "For professionals and small teams"
+      },
+      enterprise: {
+        name: "Enterprise",
+        description: "For large organizations"
+      }
+    },
+    features: {
+      printers: "Printers",
+      realtimeMonitoring: "Real-time monitoring",
+      remoteControl: "Remote control",
+      pushNotifications: "Push notifications",
+      aiGeneration: "AI Model Generation",
+      analytics: "Advanced analytics",
+      apiAccess: "API access",
+      prioritySupport: "Priority support",
+      dedicatedSupport: "Dedicated support",
+      sla: "SLA guarantee",
+      customIntegration: "Custom integration"
+    },
+    trust: {
+      secure: "Secure payment",
+      cards: "All major cards accepted",
+      paddleMerchant: "Payments are processed by Paddle, our Merchant of Record."
+    },
+    success: {
+      title: "Subscription activated!",
+      description: "Thank you for subscribing. Your plan is now active."
+    },
+    error: {
+      title: "Payment failed",
+      description: "Please try again or contact support.",
+      notReady: "Payment system loading",
+      tryAgain: "Please wait a moment and try again.",
+      configError: "Configuration error",
+      contactSupport: "Please contact support."
+    },
+    faq: {
+      title: "Frequently asked questions",
+      q1: "Can I switch plans anytime?",
+      a1: "Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.",
+      q2: "What payment methods do you accept?",
+      a2: "We accept all major credit cards, PayPal, Apple Pay, and Google Pay through our payment partner Paddle.",
+      q3: "Is there a free trial?",
+      a3: "The Free plan is available forever with limited features. Try it out before upgrading to Pro.",
+      q4: "How do I cancel my subscription?",
+      a4: "You can cancel anytime from your account settings. Your access continues until the end of your billing period."
+    }
+  },
   deviceSetup: {
     // Page title & description
     title: "3D Printer Setup",
@@ -1692,5 +1771,58 @@ export default {
     alreadyRegisteredTitle: "Already Registered Device",
     alreadyRegisteredDescription: "This device has already been registered.",
     alreadyRegisteredMessage: "{{deviceName}} device is already registered with FACTOR. You can check it on the dashboard."
+  },
+  apiKeys: {
+    title: "API Keys",
+    description: "Manage API keys for external access to your FACTOR data.",
+    createNew: "Create API Key",
+    createTitle: "Create API Key",
+    createDescription: "Give your API key a memorable name to help you identify it later.",
+    create: "Create",
+    keyName: "Key Name",
+    keyNamePlaceholder: "e.g., Home Server, Production App",
+    yourKeys: "Your API Keys",
+    keysDescription: "Use these keys to authenticate API requests from external applications.",
+    noKeys: "No API keys yet. Create one to get started.",
+    createFirst: "Create your first API key",
+    keyCreated: "API Key Created",
+    created: "Created",
+    createdDesc: "Your new API key has been created successfully.",
+    lastUsed: "Last used",
+    inactive: "Inactive",
+    activate: "Activate",
+    activated: "API key activated",
+    deactivate: "Deactivate",
+    deactivated: "API key deactivated",
+    renamed: "API key renamed",
+    deleted: "API key deleted",
+    deletedDesc: "The API key has been deleted.",
+    deleteConfirm: "Delete API Key?",
+    deleteWarning: "This action cannot be undone. Any applications using this API key will no longer be able to access your data.",
+    copyWarning: "Copy your API key now. You won't be able to see it again!",
+    saveKeyWarning: "Make sure to copy and save this key securely. For security reasons, we cannot show it again.",
+    copiedToClipboard: "API key copied to clipboard.",
+    securityInfo: "Security Information",
+    securityDesc: "API keys provide access to your data. Keep them secure and never share them publicly. You can deactivate or delete keys at any time.",
+    howToUse: "How to use API Keys",
+    authHeader: "Include your API key in the request header:",
+    exampleRequest: "Example API request:",
+    availableEndpoints: "Available Endpoints:",
+    endpoint: {
+      me: "Get user profile",
+      printers: "List your printers",
+      printer: "Get printer details",
+      cameras: "List your cameras",
+      subscription: "Get subscription info",
+      overview: "Get dashboard overview"
+    },
+    error: {
+      nameRequired: "Name required",
+      enterName: "Please enter a name for the API key.",
+      createFailed: "Failed to create",
+      deleteFailed: "Failed to delete",
+      renameFailed: "Failed to rename",
+      tryAgain: "Please try again."
+    }
   }
 };

@@ -22,7 +22,10 @@ export default {
     share: "공유",
     waiting: "대기",
     backToHome: "홈으로 돌아가기",
-    user: "사용자"
+    user: "사용자",
+    rename: "이름 변경",
+    copied: "복사됨!",
+    done: "완료"
   },
   nav: {
     home: "홈",
@@ -1361,6 +1364,7 @@ export default {
     account: "계정",
     subscription: "구독",
     notifications: "알림",
+    apiKeys: "API 키",
     // Profile Tab
     profileInfo: "프로필 정보",
     profileDescription: "공개적으로 표시되는 프로필 정보를 관리합니다",
@@ -1599,6 +1603,81 @@ export default {
     userNotFound: "사용자를 찾을 수 없습니다",
     deleteGenericError: "계정 삭제 중 오류가 발생했습니다"
   },
+  pricing: {
+    badge: "심플하고 투명한 가격 정책",
+    title: "플랜을 선택하세요",
+    subtitle: "무료로 시작하고, 더 많은 기능이 필요할 때 업그레이드하세요. 모든 플랜에 핵심 기능이 포함됩니다.",
+    monthly: "월간",
+    yearly: "연간",
+    year: "년",
+    month: "월",
+    savePercent: "약 17% 할인",
+    free: "무료",
+    custom: "맞춤형",
+    getStarted: "시작하기",
+    subscribe: "구독하기",
+    contactSales: "영업팀 문의",
+    processing: "처리 중...",
+    popular: "가장 인기",
+    whatsIncluded: "포함된 기능",
+    billedAnnually: "연간 청구",
+    unlimited: "무제한",
+    plans: {
+      basic: {
+        name: "무료",
+        description: "취미 및 메이커용"
+      },
+      pro: {
+        name: "Pro",
+        description: "전문가 및 소규모 팀용"
+      },
+      enterprise: {
+        name: "Enterprise",
+        description: "대규모 조직용"
+      }
+    },
+    features: {
+      printers: "프린터",
+      realtimeMonitoring: "실시간 모니터링",
+      remoteControl: "원격 제어",
+      pushNotifications: "푸시 알림",
+      aiGeneration: "AI 모델 생성",
+      analytics: "고급 분석",
+      apiAccess: "API 접근",
+      prioritySupport: "우선 지원",
+      dedicatedSupport: "전담 지원",
+      sla: "SLA 보장",
+      customIntegration: "맞춤형 통합"
+    },
+    trust: {
+      secure: "안전한 결제",
+      cards: "모든 주요 카드 지원",
+      paddleMerchant: "결제는 공식 판매자 Paddle을 통해 처리됩니다."
+    },
+    success: {
+      title: "구독이 활성화되었습니다!",
+      description: "구독해 주셔서 감사합니다. 플랜이 활성화되었습니다."
+    },
+    error: {
+      title: "결제 실패",
+      description: "다시 시도하시거나 고객 지원에 문의해 주세요.",
+      notReady: "결제 시스템 로딩 중",
+      tryAgain: "잠시 후 다시 시도해 주세요.",
+      configError: "설정 오류",
+      contactSupport: "고객 지원에 문의해 주세요."
+    },
+    faq: {
+      title: "자주 묻는 질문",
+      q1: "언제든지 플랜을 변경할 수 있나요?",
+      a1: "네, 언제든지 플랜을 업그레이드하거나 다운그레이드할 수 있습니다. 변경사항은 즉시 적용됩니다.",
+      q2: "어떤 결제 수단을 지원하나요?",
+      a2: "결제 파트너 Paddle을 통해 모든 주요 신용카드, PayPal, Apple Pay, Google Pay를 지원합니다.",
+      q3: "무료 체험이 있나요?",
+      a3: "무료 플랜은 제한된 기능으로 영원히 사용할 수 있습니다. Pro로 업그레이드하기 전에 먼저 사용해 보세요.",
+      q4: "구독을 어떻게 취소하나요?",
+      a4: "계정 설정에서 언제든지 취소할 수 있습니다. 결제 기간이 끝날 때까지 서비스를 계속 이용할 수 있습니다."
+    }
+  },
   deviceSetup: {
     // Page title & description
     title: "3D 프린터 설정",
@@ -1654,5 +1733,58 @@ export default {
     alreadyRegisteredTitle: "이미 등록된 설비",
     alreadyRegisteredDescription: "이 설비는 이미 등록되었습니다.",
     alreadyRegisteredMessage: "{{deviceName}} 설비는 이미 FACTOR에 등록되어 있습니다. 대시보드에서 확인하실 수 있습니다."
+  },
+  apiKeys: {
+    title: "API 키",
+    description: "외부에서 FACTOR 데이터에 접근하기 위한 API 키를 관리합니다.",
+    createNew: "API 키 생성",
+    createTitle: "API 키 생성",
+    createDescription: "나중에 식별할 수 있도록 API 키에 이름을 지정하세요.",
+    create: "생성",
+    keyName: "키 이름",
+    keyNamePlaceholder: "예: 홈 서버, 프로덕션 앱",
+    yourKeys: "내 API 키",
+    keysDescription: "외부 애플리케이션에서 API 요청을 인증하는 데 이 키를 사용하세요.",
+    noKeys: "아직 API 키가 없습니다. 키를 생성하여 시작하세요.",
+    createFirst: "첫 번째 API 키 생성하기",
+    keyCreated: "API 키 생성됨",
+    created: "생성일",
+    createdDesc: "새 API 키가 성공적으로 생성되었습니다.",
+    lastUsed: "마지막 사용",
+    inactive: "비활성",
+    activate: "활성화",
+    activated: "API 키가 활성화되었습니다",
+    deactivate: "비활성화",
+    deactivated: "API 키가 비활성화되었습니다",
+    renamed: "API 키 이름이 변경되었습니다",
+    deleted: "API 키 삭제됨",
+    deletedDesc: "API 키가 삭제되었습니다.",
+    deleteConfirm: "API 키를 삭제하시겠습니까?",
+    deleteWarning: "이 작업은 취소할 수 없습니다. 이 API 키를 사용하는 모든 애플리케이션은 더 이상 데이터에 접근할 수 없게 됩니다.",
+    copyWarning: "지금 API 키를 복사하세요. 다시 볼 수 없습니다!",
+    saveKeyWarning: "이 키를 안전하게 복사하여 저장하세요. 보안상의 이유로 다시 표시할 수 없습니다.",
+    copiedToClipboard: "API 키가 클립보드에 복사되었습니다.",
+    securityInfo: "보안 정보",
+    securityDesc: "API 키는 데이터에 대한 접근을 제공합니다. 키를 안전하게 보관하고 공개적으로 공유하지 마세요. 언제든지 키를 비활성화하거나 삭제할 수 있습니다.",
+    howToUse: "API 키 사용 방법",
+    authHeader: "요청 헤더에 API 키를 포함하세요:",
+    exampleRequest: "API 요청 예시:",
+    availableEndpoints: "사용 가능한 엔드포인트:",
+    endpoint: {
+      me: "사용자 프로필 조회",
+      printers: "프린터 목록 조회",
+      printer: "프린터 상세 정보 조회",
+      cameras: "카메라 목록 조회",
+      subscription: "구독 정보 조회",
+      overview: "대시보드 개요 조회"
+    },
+    error: {
+      nameRequired: "이름 필요",
+      enterName: "API 키의 이름을 입력하세요.",
+      createFailed: "생성 실패",
+      deleteFailed: "삭제 실패",
+      renameFailed: "이름 변경 실패",
+      tryAgain: "다시 시도해 주세요."
+    }
   }
 };

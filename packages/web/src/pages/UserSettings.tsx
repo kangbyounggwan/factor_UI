@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -21,6 +21,11 @@ import { PLAN_FEATURES, type SubscriptionPlan } from "@shared/types/subscription
 import { getUserPaymentHistory, type PaymentHistory } from "@shared/services/supabaseService/subscription";
 import { getUserPaymentMethods, type PaymentMethod } from "@shared/services/supabaseService/paymentMethod";
 import {
+  initializePaddleService,
+  openPaddleCheckout,
+  getPaddlePriceId,
+} from "@/lib/paddleService";
+import {
   User,
   Mail,
   Bell,
@@ -37,6 +42,15 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  Key,
+  Copy,
+  Plus,
+  Eye,
+  EyeOff,
+  MoreVertical,
+  Power,
+  Pencil,
+  Loader2,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -63,6 +77,21 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  createApiKey,
+  getApiKeys,
+  deleteApiKey,
+  toggleApiKeyStatus,
+  renameApiKey,
+  type ApiKey,
+} from "@shared/services/supabaseService/apiKeys";
 
 // Google Logo SVG Component
 const GoogleLogo = () => (
@@ -161,6 +190,22 @@ const UserSettings = () => {
   const [loadingPaymentData, setLoadingPaymentData] = useState(false);
   const [paymentHistoryPage, setPaymentHistoryPage] = useState(1);
   const ITEMS_PER_PAGE = 5;
+
+  // Paddle states
+  const [paddleReady, setPaddleReady] = useState(false);
+  const [paddleLoading, setPaddleLoading] = useState(false);
+
+  // API Keys states
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [loadingApiKeys, setLoadingApiKeys] = useState(true);
+  const [showCreateApiKeyModal, setShowCreateApiKeyModal] = useState(false);
+  const [newApiKeyName, setNewApiKeyName] = useState("");
+  const [creatingApiKey, setCreatingApiKey] = useState(false);
+  const [newlyCreatedKey, setNewlyCreatedKey] = useState<string | null>(null);
+  const [showNewKeyModal, setShowNewKeyModal] = useState(false);
+  const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
+  const [editingKeyName, setEditingKeyName] = useState("");
+  const [deletingKeyId, setDeletingKeyId] = useState<string | null>(null);
 
   // 클라이언트 사이드 페이지네이션 - 현재 페이지의 데이터만 계산
   const paginatedPaymentHistory = allPaymentHistory.slice(
@@ -343,6 +388,238 @@ const UserSettings = () => {
 
     loadNotificationSettings();
   }, [user]);
+
+  // Paddle checkout handlers
+  const handlePaddleCheckoutComplete = useCallback(() => {
+    console.log('[UserSettings] Paddle checkout completed');
+    setShowChangePlanModal(false);
+    setPaddleLoading(false);
+    toast({
+      title: t("pricing.success.title", "Subscription activated!"),
+      description: t("pricing.success.description", "Thank you for subscribing. Your plan is now active."),
+    });
+    // Refresh subscription data
+    window.location.reload();
+  }, [toast, t]);
+
+  const handlePaddleCheckoutClose = useCallback(() => {
+    console.log('[UserSettings] Paddle checkout closed');
+    setPaddleLoading(false);
+  }, []);
+
+  const handlePaddleCheckoutError = useCallback(() => {
+    console.error('[UserSettings] Paddle checkout error');
+    setPaddleLoading(false);
+    toast({
+      title: t("payment.error", "Payment failed"),
+      description: t("payment.requestFailed", "Please try again or contact support."),
+      variant: "destructive",
+    });
+  }, [toast, t]);
+
+  // Initialize Paddle
+  useEffect(() => {
+    const initPaddle = async () => {
+      const paddle = await initializePaddleService({
+        onCheckoutComplete: handlePaddleCheckoutComplete,
+        onCheckoutClose: handlePaddleCheckoutClose,
+        onCheckoutError: handlePaddleCheckoutError,
+      });
+      setPaddleReady(!!paddle);
+    };
+
+    initPaddle();
+  }, [handlePaddleCheckoutComplete, handlePaddleCheckoutClose, handlePaddleCheckoutError]);
+
+  // Load API Keys
+  useEffect(() => {
+    const loadApiKeys = async () => {
+      if (!user) {
+        setLoadingApiKeys(false);
+        return;
+      }
+
+      try {
+        setLoadingApiKeys(true);
+        const keys = await getApiKeys();
+        setApiKeys(keys);
+      } catch (error) {
+        console.error('Error loading API keys:', error);
+      } finally {
+        setLoadingApiKeys(false);
+      }
+    };
+
+    loadApiKeys();
+  }, [user]);
+
+  // API Key handlers
+  const handleCreateApiKey = async () => {
+    if (!newApiKeyName.trim()) {
+      toast({
+        title: t("apiKeys.error.nameRequired", "Name required"),
+        description: t("apiKeys.error.enterName", "Please enter a name for the API key."),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setCreatingApiKey(true);
+    try {
+      const result = await createApiKey(newApiKeyName.trim());
+      if (result.success && result.apiKey) {
+        setNewlyCreatedKey(result.apiKey);
+        setShowCreateApiKeyModal(false);
+        setShowNewKeyModal(true);
+        setNewApiKeyName("");
+        // Reload API keys
+        const keys = await getApiKeys();
+        setApiKeys(keys);
+        toast({
+          title: t("apiKeys.created", "API key created"),
+          description: t("apiKeys.createdDesc", "Your new API key has been created successfully."),
+        });
+      } else {
+        toast({
+          title: t("apiKeys.error.createFailed", "Failed to create"),
+          description: result.error || t("apiKeys.error.tryAgain", "Please try again."),
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error creating API key:', error);
+      toast({
+        title: t("apiKeys.error.createFailed", "Failed to create"),
+        description: t("apiKeys.error.tryAgain", "Please try again."),
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingApiKey(false);
+    }
+  };
+
+  const handleDeleteApiKey = async (keyId: string) => {
+    try {
+      const result = await deleteApiKey(keyId);
+      if (result.success) {
+        setApiKeys(prev => prev.filter(k => k.id !== keyId));
+        toast({
+          title: t("apiKeys.deleted", "API key deleted"),
+          description: t("apiKeys.deletedDesc", "The API key has been deleted."),
+        });
+      } else {
+        toast({
+          title: t("apiKeys.error.deleteFailed", "Failed to delete"),
+          description: result.error || t("apiKeys.error.tryAgain", "Please try again."),
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting API key:', error);
+    }
+    setDeletingKeyId(null);
+  };
+
+  const handleToggleApiKey = async (keyId: string, isActive: boolean) => {
+    try {
+      const result = await toggleApiKeyStatus(keyId, isActive);
+      if (result.success) {
+        setApiKeys(prev => prev.map(k =>
+          k.id === keyId ? { ...k, is_active: isActive } : k
+        ));
+        toast({
+          title: isActive ? t("apiKeys.activated", "API key activated") : t("apiKeys.deactivated", "API key deactivated"),
+        });
+      }
+    } catch (error) {
+      console.error('Error toggling API key:', error);
+    }
+  };
+
+  const handleRenameApiKey = async (keyId: string) => {
+    if (!editingKeyName.trim()) return;
+
+    try {
+      const result = await renameApiKey(keyId, editingKeyName.trim());
+      if (result.success) {
+        setApiKeys(prev => prev.map(k =>
+          k.id === keyId ? { ...k, name: editingKeyName.trim() } : k
+        ));
+        toast({
+          title: t("apiKeys.renamed", "API key renamed"),
+        });
+      } else {
+        toast({
+          title: t("apiKeys.error.renameFailed", "Failed to rename"),
+          description: result.error,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error renaming API key:', error);
+    }
+    setEditingKeyId(null);
+    setEditingKeyName("");
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: t("common.copied", "Copied!"),
+        description: t("apiKeys.copiedToClipboard", "API key copied to clipboard."),
+      });
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  // Handle Pro plan upgrade with Paddle
+  const handleProUpgrade = async (cycle: 'monthly' | 'yearly' = 'monthly') => {
+    if (!paddleReady) {
+      toast({
+        title: t("pricing.error.notReady", "Payment system loading"),
+        description: t("pricing.error.tryAgain", "Please wait a moment and try again."),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const priceId = getPaddlePriceId('pro', cycle === 'yearly');
+
+    if (!priceId) {
+      toast({
+        title: t("pricing.error.configError", "Configuration error"),
+        description: t("pricing.error.contactSupport", "Please contact support."),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPaddleLoading(true);
+
+    try {
+      await openPaddleCheckout({
+        priceId,
+        customerEmail: user?.email,
+        locale: 'en',
+        successUrl: `${window.location.origin}/settings?tab=subscription&upgraded=true`,
+      });
+    } catch (error) {
+      console.error('[UserSettings] Failed to open Paddle checkout:', error);
+      setPaddleLoading(false);
+      toast({
+        title: t("payment.error", "Payment failed"),
+        description: t("payment.requestFailed", "Please try again or contact support."),
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -603,6 +880,18 @@ const UserSettings = () => {
             >
               <Bell className="h-4 w-4 shrink-0" />
               <span>{t("userSettings.notifications")}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('api-keys')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium ${
+                activeTab === 'api-keys'
+                  ? 'bg-muted text-foreground'
+                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+              }`}
+            >
+              <Key className="h-4 w-4 shrink-0" />
+              <span>{t("userSettings.apiKeys", "API Keys")}</span>
             </button>
           </nav>
       </aside>
@@ -1542,10 +1831,322 @@ const UserSettings = () => {
         </div>
         )}
 
+        {/* API Keys Tab */}
+        {activeTab === 'api-keys' && (
+          <div className="space-y-6">
+            {/* Header Section */}
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <h2 className="text-2xl font-bold tracking-tight">{t("apiKeys.title", "API Keys")}</h2>
+                <p className="text-muted-foreground">
+                  {t("apiKeys.description", "Manage API keys for external access to your FACTOR data.")}
+                </p>
+              </div>
+              <Button onClick={() => setShowCreateApiKeyModal(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                {t("apiKeys.createNew", "Create API Key")}
+              </Button>
+            </div>
+
+            {/* API Key Info Card */}
+            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                  <div className="space-y-1">
+                    <p className="font-medium text-blue-900 dark:text-blue-100">
+                      {t("apiKeys.securityInfo", "Security Information")}
+                    </p>
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      {t("apiKeys.securityDesc", "API keys provide access to your data. Keep them secure and never share them publicly. You can deactivate or delete keys at any time.")}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* API Keys List */}
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("apiKeys.yourKeys", "Your API Keys")}</CardTitle>
+                <CardDescription>
+                  {t("apiKeys.keysDescription", "Use these keys to authenticate API requests from external applications.")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingApiKeys ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : apiKeys.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Key className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+                    <p className="text-muted-foreground mb-4">
+                      {t("apiKeys.noKeys", "No API keys yet. Create one to get started.")}
+                    </p>
+                    <Button variant="outline" onClick={() => setShowCreateApiKeyModal(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      {t("apiKeys.createFirst", "Create your first API key")}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {apiKeys.map((key) => (
+                      <div
+                        key={key.id}
+                        className={`flex items-center justify-between p-4 rounded-lg border ${
+                          key.is_active
+                            ? 'bg-background'
+                            : 'bg-muted/50 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <div className={`p-2 rounded-md ${key.is_active ? 'bg-primary/10' : 'bg-muted'}`}>
+                            <Key className={`h-4 w-4 ${key.is_active ? 'text-primary' : 'text-muted-foreground'}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {editingKeyId === key.id ? (
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  value={editingKeyName}
+                                  onChange={(e) => setEditingKeyName(e.target.value)}
+                                  className="h-8 w-48"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleRenameApiKey(key.id);
+                                    if (e.key === 'Escape') {
+                                      setEditingKeyId(null);
+                                      setEditingKeyName("");
+                                    }
+                                  }}
+                                />
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleRenameApiKey(key.id)}
+                                >
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium truncate">{key.name}</span>
+                                  {!key.is_active && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      {t("apiKeys.inactive", "Inactive")}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3 text-sm text-muted-foreground mt-0.5">
+                                  <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">
+                                    {key.key_prefix}...
+                                  </code>
+                                  <span>•</span>
+                                  <span>{t("apiKeys.created", "Created")}: {formatDate(key.created_at)}</span>
+                                  {key.last_used_at && (
+                                    <>
+                                      <span>•</span>
+                                      <span>{t("apiKeys.lastUsed", "Last used")}: {formatDate(key.last_used_at)}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setEditingKeyId(key.id);
+                                setEditingKeyName(key.name);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4 mr-2" />
+                              {t("common.rename", "Rename")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleToggleApiKey(key.id, !key.is_active)}
+                            >
+                              <Power className="h-4 w-4 mr-2" />
+                              {key.is_active
+                                ? t("apiKeys.deactivate", "Deactivate")
+                                : t("apiKeys.activate", "Activate")}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => setDeletingKeyId(key.id)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              {t("common.delete", "Delete")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* API Documentation Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("apiKeys.howToUse", "How to use API Keys")}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    {t("apiKeys.authHeader", "Include your API key in the request header:")}
+                  </p>
+                  <div className="bg-muted rounded-lg p-4 font-mono text-sm overflow-x-auto">
+                    <code className="text-foreground">
+                      X-API-Key: fk_live_xxxxxxxx...
+                    </code>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    {t("apiKeys.exampleRequest", "Example API request:")}
+                  </p>
+                  <div className="bg-muted rounded-lg p-4 font-mono text-sm overflow-x-auto">
+                    <pre className="text-foreground whitespace-pre-wrap">{`curl -X GET "https://factor.io.kr/api/v1/printers" \\
+  -H "X-API-Key: YOUR_API_KEY"`}</pre>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium mb-2">{t("apiKeys.availableEndpoints", "Available Endpoints:")}</p>
+                  <ul className="text-sm text-muted-foreground space-y-1 ml-4 list-disc">
+                    <li><code className="text-xs bg-muted px-1 rounded">GET /api/v1/me</code> - {t("apiKeys.endpoint.me", "Get user profile")}</li>
+                    <li><code className="text-xs bg-muted px-1 rounded">GET /api/v1/printers</code> - {t("apiKeys.endpoint.printers", "List your printers")}</li>
+                    <li><code className="text-xs bg-muted px-1 rounded">GET /api/v1/printers/:uuid</code> - {t("apiKeys.endpoint.printer", "Get printer details")}</li>
+                    <li><code className="text-xs bg-muted px-1 rounded">GET /api/v1/cameras</code> - {t("apiKeys.endpoint.cameras", "List your cameras")}</li>
+                    <li><code className="text-xs bg-muted px-1 rounded">GET /api/v1/subscription</code> - {t("apiKeys.endpoint.subscription", "Get subscription info")}</li>
+                    <li><code className="text-xs bg-muted px-1 rounded">GET /api/v1/overview</code> - {t("apiKeys.endpoint.overview", "Get dashboard overview")}</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         </div>
         {/* End Inner Container */}
       </div>
       {/* End Main Content Area */}
+
+      {/* Create API Key Dialog */}
+      <Dialog open={showCreateApiKeyModal} onOpenChange={setShowCreateApiKeyModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("apiKeys.createTitle", "Create API Key")}</DialogTitle>
+            <DialogDescription>
+              {t("apiKeys.createDescription", "Give your API key a memorable name to help you identify it later.")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="api-key-name">{t("apiKeys.keyName", "Key Name")}</Label>
+              <Input
+                id="api-key-name"
+                placeholder={t("apiKeys.keyNamePlaceholder", "e.g., Home Server, Production App")}
+                value={newApiKeyName}
+                onChange={(e) => setNewApiKeyName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateApiKey();
+                }}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setShowCreateApiKeyModal(false)}>
+              {t("common.cancel", "Cancel")}
+            </Button>
+            <Button onClick={handleCreateApiKey} disabled={creatingApiKey}>
+              {creatingApiKey && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {t("apiKeys.create", "Create")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* New API Key Display Dialog */}
+      <Dialog open={showNewKeyModal} onOpenChange={(open) => {
+        if (!open) setNewlyCreatedKey(null);
+        setShowNewKeyModal(open);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="h-5 w-5 text-green-500" />
+              {t("apiKeys.keyCreated", "API Key Created")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("apiKeys.copyWarning", "Copy your API key now. You won't be able to see it again!")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="bg-muted rounded-lg p-4 flex items-center gap-2">
+              <code className="flex-1 font-mono text-sm break-all">
+                {newlyCreatedKey}
+              </code>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => newlyCreatedKey && copyToClipboard(newlyCreatedKey)}
+                className="shrink-0"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+              <div className="flex gap-2">
+                <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0 mt-0.5" />
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  {t("apiKeys.saveKeyWarning", "Make sure to copy and save this key securely. For security reasons, we cannot show it again.")}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={() => {
+              setShowNewKeyModal(false);
+              setNewlyCreatedKey(null);
+            }}>
+              {t("common.done", "Done")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete API Key Confirmation */}
+      <AlertDialog open={!!deletingKeyId} onOpenChange={(open) => !open && setDeletingKeyId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("apiKeys.deleteConfirm", "Delete API Key?")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("apiKeys.deleteWarning", "This action cannot be undone. Any applications using this API key will no longer be able to access your data.")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel", "Cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingKeyId && handleDeleteApiKey(deletingKeyId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t("common.delete", "Delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Downgrade Warning Dialog */}
       <Dialog open={showDowngradeWarningModal} onOpenChange={setShowDowngradeWarningModal}>
@@ -1901,11 +2502,17 @@ const UserSettings = () => {
               {currentPlan !== 'pro' && (
                 <Button
                   className="w-full mb-4 bg-primary hover:bg-primary/90"
-                  onClick={() => {
-                    window.location.href = '/payment/checkout?plan=pro&cycle=monthly';
-                  }}
+                  onClick={() => handleProUpgrade('monthly')}
+                  disabled={paddleLoading || !paddleReady}
                 >
-                  Pro 플랜으로 업그레이드
+                  {paddleLoading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      처리 중...
+                    </>
+                  ) : (
+                    'Pro 플랜으로 업그레이드'
+                  )}
                 </Button>
               )}
               {currentPlan === 'pro' && (

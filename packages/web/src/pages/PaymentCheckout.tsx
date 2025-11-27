@@ -1,30 +1,27 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Loader2, ChevronLeft, Shield, Lock } from "lucide-react";
+import { Loader2, ChevronLeft, Shield, Lock, Check, CreditCard } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useTheme } from "next-themes";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import {
-  initializePaymentWidget,
-  renderPaymentWidget,
-  requestPayment,
-  generateOrderId,
-  formatKRW,
-  getPlanAmount,
-  getPlanName,
-} from "@/lib/tossPaymentsService";
-import { PaymentWidgetInstance } from "@tosspayments/payment-widget-sdk";
+  initializePaddleService,
+  openPaddleCheckout,
+  getPaddlePriceId,
+  formatUSD,
+  PLAN_DISPLAY_PRICES,
+  CheckoutEventData,
+} from "@/lib/paddleService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 
 const PaymentCheckout = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { theme } = useTheme();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
 
@@ -34,17 +31,48 @@ const PaymentCheckout = () => {
   const isYearly = billingCycle === "yearly";
 
   const [loading, setLoading] = useState(false);
-  const [widgetLoading, setWidgetLoading] = useState(true);
+  const [paddleReady, setPaddleReady] = useState(false);
   const [customerName, setCustomerName] = useState(user?.user_metadata?.full_name || "");
   const [customerEmail, setCustomerEmail] = useState(user?.email || "");
-  const [paymentWidget, setPaymentWidget] = useState<PaymentWidgetInstance | null>(null);
-  const [orderId] = useState(generateOrderId("SUB", planId, billingCycle));
 
-  const paymentMethodsRef = useRef<HTMLDivElement>(null);
+  // 가격 정보
+  const planPrices = PLAN_DISPLAY_PRICES[planId as keyof typeof PLAN_DISPLAY_PRICES] || PLAN_DISPLAY_PRICES.pro;
+  const amount = isYearly ? planPrices.yearly : planPrices.monthly;
+  const monthlyAmount = planPrices.monthly;
 
-  const amount = getPlanAmount(planId, isYearly);
+  // 플랜 이름
+  const getPlanName = (id: string): string => {
+    const names: Record<string, string> = {
+      basic: "Basic",
+      pro: "Pro",
+      enterprise: "Enterprise",
+    };
+    return names[id] || "Pro";
+  };
   const planName = getPlanName(planId);
-  const monthlyAmount = getPlanAmount(planId, false);
+
+  // 체크아웃 완료 핸들러
+  const handleCheckoutComplete = useCallback((data: CheckoutEventData) => {
+    console.log('[PaymentCheckout] Checkout completed:', data);
+    navigate(`/payment/success?provider=paddle&plan=${planId}&transactionId=${data.transactionId || ''}`);
+  }, [navigate, planId]);
+
+  // 체크아웃 닫기 핸들러
+  const handleCheckoutClose = useCallback(() => {
+    console.log('[PaymentCheckout] Checkout closed');
+    setLoading(false);
+  }, []);
+
+  // 체크아웃 에러 핸들러
+  const handleCheckoutError = useCallback((error: Error) => {
+    console.error('[PaymentCheckout] Checkout error:', error);
+    toast({
+      title: t("payment.error"),
+      description: t("payment.requestFailed"),
+      variant: "destructive",
+    });
+    setLoading(false);
+  }, [toast, t]);
 
   // 메타 태그 설정
   useEffect(() => {
@@ -58,14 +86,6 @@ const PaymentCheckout = () => {
       document.head.appendChild(meta);
     }
     meta.setAttribute('content', desc);
-
-    let canonical = document.querySelector('link[rel="canonical"]');
-    if (!canonical) {
-      canonical = document.createElement('link');
-      canonical.setAttribute('rel', 'canonical');
-      document.head.appendChild(canonical);
-    }
-    canonical.setAttribute('href', `${window.location.origin}/payment/checkout`);
 
     // robots meta - 결제 페이지는 인덱싱 방지
     let robots = document.querySelector('meta[name="robots"]');
@@ -89,70 +109,31 @@ const PaymentCheckout = () => {
     }
   }, [user]);
 
-  // 결제 위젯 초기화
+  // Paddle 초기화
   useEffect(() => {
-    let mounted = true;
-
-    const initWidget = async () => {
-      try {
-        setWidgetLoading(true);
-
-        const customerKey = user?.id || "ANONYMOUS";
-
-        console.log("결제 위젯 초기화 시작...", { customerKey, amount, theme });
-
-        const widget = await initializePaymentWidget(customerKey);
-
-        if (!mounted) return;
-
-        console.log("결제 위젯 초기화 완료");
-        setPaymentWidget(widget);
-
-        await new Promise(resolve => setTimeout(resolve, 300));
-
-        if (!mounted || !paymentMethodsRef.current) {
-          console.log("DOM이 준비되지 않음");
-          return;
-        }
-
-        console.log("결제 위젯 렌더링 시작...");
-
-        await renderPaymentWidget({
-          paymentWidget: widget,
-          amount,
-          selector: "#payment-methods",
-          variantKey: "DEFAULT",
-        });
-
-        if (!mounted) return;
-
-        console.log("결제 위젯 렌더링 완료");
-        setWidgetLoading(false);
-      } catch (error) {
-        console.error("위젯 초기화 실패:", error);
-        if (!mounted) return;
-        setWidgetLoading(false);
-      }
+    const init = async () => {
+      const paddle = await initializePaddleService({
+        onCheckoutComplete: handleCheckoutComplete,
+        onCheckoutClose: handleCheckoutClose,
+        onCheckoutError: handleCheckoutError,
+      });
+      setPaddleReady(!!paddle);
     };
 
-    initWidget();
-
-    return () => {
-      mounted = false;
-    };
-  }, [amount, user?.id, theme]);
+    init();
+  }, [handleCheckoutComplete, handleCheckoutClose, handleCheckoutError]);
 
   const handlePayment = async () => {
-    if (!paymentWidget) {
+    if (!paddleReady) {
       toast({
         title: t("payment.error"),
-        description: t("payment.checkout.widgetNotReady"),
+        description: t("pricing.error.notReady"),
         variant: "destructive",
       });
       return;
     }
 
-    if (!customerName || !customerEmail) {
+    if (!customerEmail) {
       toast({
         title: t("payment.error"),
         description: t("payment.checkout.fillAllFields"),
@@ -161,40 +142,49 @@ const PaymentCheckout = () => {
       return;
     }
 
+    const priceId = getPaddlePriceId(planId, isYearly);
+
+    if (!priceId) {
+      toast({
+        title: t("payment.error"),
+        description: t("pricing.error.configError"),
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const orderName = `${planName} - ${isYearly ? t("payment.checkout.yearlySubscription") : t("payment.checkout.monthlySubscription")}`;
-
-      await requestPayment({
-        paymentWidget,
-        orderId,
-        orderName,
-        customerName,
+      await openPaddleCheckout({
+        priceId,
         customerEmail,
-        // windowTarget을 지정하지 않아 기본 동작 사용 (모바일: self, PC: iframe)
+        locale: 'en',
+        successUrl: `${window.location.origin}/payment/success?provider=paddle&plan=${planId}`,
       });
-
-      // 결제 요청 성공 (Redirect 방식이므로 successUrl로 이동)
-      setLoading(false);
-    } catch (error: unknown) {
+    } catch (error) {
       console.error("결제 요청 실패:", error);
       setLoading(false);
-
-      // 사용자가 취소한 경우가 아닌 경우에만 에러 토스트 표시
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (!errorMessage.includes('취소')) {
-        toast({
-          title: t("payment.error"),
-          description: errorMessage || t("payment.requestFailed"),
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: t("payment.error"),
+        description: t("payment.requestFailed"),
+        variant: "destructive",
+      });
     }
   };
 
+  // Pro 플랜 기능 목록
+  const proFeatures = [
+    t("subscription.plans.pro.feature1", "Connect up to 5 3D printers"),
+    t("subscription.plans.pro.feature2", "Unlimited webcam streaming"),
+    t("subscription.plans.pro.feature3", "50 AI model generations/month"),
+    t("subscription.plans.pro.feature4", "Advanced analytics dashboard"),
+    t("subscription.plans.pro.feature5", "API access"),
+    t("subscription.plans.pro.feature6", "Priority email support"),
+  ];
+
   return (
-    <div className="bg-background">
+    <div className="bg-background min-h-screen">
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid lg:grid-cols-2 gap-8">
@@ -220,27 +210,7 @@ const PaymentCheckout = () => {
               </div>
             </div>
 
-            {/* Payment Method - 위로 이동 */}
-            <div className="bg-card rounded-xl border p-6">
-              <h2 className="text-lg font-semibold mb-4">
-                {t("payment.checkout.paymentMethod")}
-              </h2>
-
-              {/* Payment Widget Area */}
-              <div className="relative">
-                <div id="payment-methods" ref={paymentMethodsRef}></div>
-                {widgetLoading && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm rounded-lg">
-                    <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mb-3" />
-                    <p className="text-sm text-muted-foreground">
-                      {t("payment.checkout.loadingWidget")}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Customer Information - 아래로 이동 */}
+            {/* Customer Information */}
             <div className="bg-card rounded-xl border p-6 space-y-4">
               <h2 className="text-lg font-semibold">
                 {t("payment.checkout.customerInfo")}
@@ -260,7 +230,7 @@ const PaymentCheckout = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="name">{t("payment.checkout.name")}</Label>
+                  <Label htmlFor="name">{t("payment.checkout.name")} <span className="text-muted-foreground text-xs">({t("common.optional", "Optional")})</span></Label>
                   <Input
                     id="name"
                     placeholder={t("payment.checkout.namePlaceholder")}
@@ -272,13 +242,47 @@ const PaymentCheckout = () => {
               </div>
             </div>
 
+            {/* Payment Method Info */}
+            <div className="bg-card rounded-xl border p-6">
+              <h2 className="text-lg font-semibold mb-4">
+                {t("payment.checkout.paymentMethod")}
+              </h2>
+
+              <div className="space-y-4">
+                {/* Paddle Badge */}
+                <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
+                  <CreditCard className="h-8 w-8 text-primary" />
+                  <div>
+                    <p className="font-medium">Paddle Checkout</p>
+                    <p className="text-sm text-muted-foreground">
+                      {t("pricing.trust.cards", "All major cards accepted")}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Supported Payment Methods */}
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="secondary">Visa</Badge>
+                  <Badge variant="secondary">Mastercard</Badge>
+                  <Badge variant="secondary">American Express</Badge>
+                  <Badge variant="secondary">PayPal</Badge>
+                  <Badge variant="secondary">Apple Pay</Badge>
+                  <Badge variant="secondary">Google Pay</Badge>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  {t("pricing.trust.paddleMerchant", "Payments are processed by Paddle, our Merchant of Record.")}
+                </p>
+              </div>
+            </div>
+
             {/* Security Notice */}
             <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg border">
               <Lock className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
               <div className="text-sm space-y-1">
                 <p className="font-medium">{t("payment.checkout.securePayment")}</p>
                 <p className="text-muted-foreground">
-                  {t("payment.checkout.securePaymentDesc")}
+                  {t("pricing.faq.a2", "We accept all major credit cards, PayPal, Apple Pay, and Google Pay through our payment partner Paddle.")}
                 </p>
               </div>
             </div>
@@ -307,10 +311,32 @@ const PaymentCheckout = () => {
                     <span className="text-sm text-muted-foreground">
                       {t("payment.checkout.billingCycle")}
                     </span>
-                    <span className="font-medium">
-                      {isYearly ? t("payment.checkout.yearly") : t("payment.checkout.monthly")}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">
+                        {isYearly ? t("payment.checkout.yearly") : t("payment.checkout.monthly")}
+                      </span>
+                      {isYearly && (
+                        <Badge variant="default" className="bg-green-500/10 text-green-600 border-green-500/20">
+                          {t("pricing.savePercent", "Save ~17%")}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
+                </div>
+
+                <Separator />
+
+                {/* Features */}
+                <div className="space-y-3">
+                  <h3 className="font-medium text-sm">{t("pricing.whatsIncluded", "What's included")}</h3>
+                  <ul className="space-y-2">
+                    {proFeatures.map((feature, index) => (
+                      <li key={index} className="flex items-start gap-2 text-sm">
+                        <Check className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
 
                 <Separator />
@@ -318,18 +344,18 @@ const PaymentCheckout = () => {
                 {/* Price Breakdown */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span>{t("payment.checkout.monthlyPrice")}</span>
+                    <span>{isYearly ? t("subscription.yearly", "Yearly") : t("subscription.monthly", "Monthly")} {t("subscription.perMonth", "price")}</span>
                     <span className="font-medium">
-                      {formatKRW(monthlyAmount)}
+                      {formatUSD(monthlyAmount)}/{t("pricing.month", "month")}
                     </span>
                   </div>
 
                   {isYearly && (
                     <>
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">{t("payment.checkout.multiply12Months")}</span>
+                        <span className="text-muted-foreground">x 12 {t("pricing.month", "months")}</span>
                         <span>
-                          {formatKRW(monthlyAmount * 12)}
+                          {formatUSD(monthlyAmount * 12)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
@@ -337,17 +363,11 @@ const PaymentCheckout = () => {
                           {t("payment.checkout.yearlyDiscount")}
                         </span>
                         <span className="text-green-600 font-medium">
-                          -{formatKRW(monthlyAmount * 12 * 0.1)}
+                          -{formatUSD(monthlyAmount * 12 - amount)}
                         </span>
                       </div>
                     </>
                   )}
-
-                  {/* Tax Info */}
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{t("payment.checkout.vat")}</span>
-                    <span>{t("payment.checkout.included")}</span>
-                  </div>
                 </div>
 
                 <Separator />
@@ -359,13 +379,14 @@ const PaymentCheckout = () => {
                   </span>
                   <div className="text-right">
                     <div className="text-3xl font-bold text-primary">
-                      {formatKRW(amount)}
+                      {formatUSD(amount)}
                     </div>
-                    {isYearly && (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {t("payment.checkout.perMonth")} {formatKRW(amount / 12)}
-                      </div>
-                    )}
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {isYearly
+                        ? `${formatUSD(amount / 12)}/${t("pricing.month", "month")} ${t("pricing.billedAnnually", "billed annually")}`
+                        : t("subscription.billedMonthly", "Billed monthly")
+                      }
+                    </div>
                   </div>
                 </div>
 
@@ -374,12 +395,17 @@ const PaymentCheckout = () => {
                   size="lg"
                   className="w-full h-14 text-lg font-semibold"
                   onClick={handlePayment}
-                  disabled={loading || widgetLoading || !paymentWidget || !customerName || !customerEmail}
+                  disabled={loading || !paddleReady || !customerEmail}
                 >
                   {loading ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                       {t("payment.checkout.processing")}
+                    </>
+                  ) : !paddleReady ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      {t("common.loading", "Loading...")}
                     </>
                   ) : (
                     <>{t("payment.checkout.subscribe")}</>
@@ -390,28 +416,30 @@ const PaymentCheckout = () => {
                 <div className="text-xs text-muted-foreground text-center space-y-1">
                   <p>
                     {t("payment.checkout.termsNotice1")}{" "}
-                    <button className="underline hover:text-foreground">
+                    <button
+                      onClick={() => navigate("/terms")}
+                      className="underline hover:text-foreground"
+                    >
                       {t("payment.checkout.termsOfService")}
                     </button>
                     {t("payment.checkout.and")}{" "}
-                    <button className="underline hover:text-foreground">
+                    <button
+                      onClick={() => navigate("/privacy")}
+                      className="underline hover:text-foreground"
+                    >
                       {t("payment.checkout.privacyPolicy")}
                     </button>
                     {t("payment.checkout.termsNotice2")}
-                  </p>
-                  <p className="text-muted-foreground/60">
-                    {t("payment.checkout.orderId")}: {orderId}
                   </p>
                 </div>
               </div>
             </div>
 
             {/* Additional Info */}
-            <div className="mt-4 p-4 bg-muted/50 rounded-lg">
-              <p className="text-xs text-muted-foreground text-center">
-                <strong>Powered by TossPayments</strong>
-                <br />
-                {t("payment.checkout.poweredByDesc")}
+            <div className="mt-4 p-4 bg-muted/50 rounded-lg flex items-center justify-center gap-2">
+              <Shield className="h-4 w-4 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">
+                <strong>Powered by Paddle</strong> - {t("pricing.trust.secure", "Secure payment")}
               </p>
             </div>
           </div>
