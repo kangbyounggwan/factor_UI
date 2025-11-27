@@ -2188,7 +2188,7 @@ const AI = () => {
 
                                   {/* Estimated time */}
                                   <p className="text-sm text-gray-400 text-center">
-                                    {t('ai.estimatedTime')}: {Math.max(1, Math.ceil((100 - progress) / 25))}s
+                                    {t('ai.estimatedTime')}: 5m
                                   </p>
                                 </div>
                               )}

@@ -37,7 +37,7 @@ export const Footer = () => {
   const socialLinks = [
     { name: "GitHub", icon: Github, href: "https://github.com" },
     { name: "Email", icon: Mail, href: "mailto:factor@factor.io.kr" },
-    { name: "Discord", icon: MessageCircle, href: "#discord" },
+    { name: "Discord", icon: MessageCircle, href: "https://discord.gg/wy29sYDrCP" },
   ];
 
   return (
