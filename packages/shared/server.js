@@ -781,6 +781,103 @@ export function createApp({ staticDir, enableRest = true, enableWs = true } = {}
   const clients = new Set();
   const edgeClients = new Set();
   const webClients = new Set();
+
+  // 디바이스별 실시간 데이터 저장소
+  const realtimeDataStore = new Map();
+
+  // 기본 프린터 데이터 템플릿
+  const createDefaultPrinterData = () => ({
+    status: 'idle',
+    connected: false,
+    printing: false,
+    error_message: null,
+    temperature: { tool: { current: 0, target: 0 }, bed: { current: 0, target: 0 } },
+    position: { x: 0, y: 0, z: 0, e: 0 },
+    printProgress: { completion: 0, file_position: 0, file_size: 0, print_time: 0, print_time_left: 0, filament_used: 0 },
+    lastUpdated: null
+  });
+
+  // 디바이스별 데이터 가져오기 (없으면 생성)
+  const getDeviceData = (deviceUuid) => {
+    if (!realtimeDataStore.has(deviceUuid)) {
+      realtimeDataStore.set(deviceUuid, createDefaultPrinterData());
+    }
+    return realtimeDataStore.get(deviceUuid);
+  };
+
+  // 디바이스 데이터 업데이트
+  const updateDeviceData = (deviceUuid, updates) => {
+    const data = getDeviceData(deviceUuid);
+    Object.assign(data, updates, { lastUpdated: new Date().toISOString() });
+    return data;
+  };
+
+  // 실시간 데이터 조회 API 엔드포인트
+  app.get('/api/v1/realtime/:deviceUuid', apiKeyAuth, async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const userId = req.apiKeyUserId;
+
+      // 사용자가 해당 프린터를 소유하고 있는지 확인
+      const { data: printer, error } = await supabase
+        .from('printers')
+        .select('device_uuid, name')
+        .eq('device_uuid', deviceUuid)
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !printer) {
+        return res.status(404).json({ success: false, error: 'Printer not found or access denied' });
+      }
+
+      const realtimeData = realtimeDataStore.get(deviceUuid) || createDefaultPrinterData();
+
+      res.json({
+        success: true,
+        data: {
+          device_uuid: deviceUuid,
+          name: printer.name,
+          ...realtimeData
+        }
+      });
+    } catch (error) {
+      console.error('[API] Realtime data error:', error);
+      res.status(500).json({ success: false, error: 'Failed to get realtime data' });
+    }
+  });
+
+  // 모든 프린터의 실시간 데이터 조회
+  app.get('/api/v1/realtime', apiKeyAuth, async (req, res) => {
+    try {
+      const userId = req.apiKeyUserId;
+
+      const { data: printers, error } = await supabase
+        .from('printers')
+        .select('device_uuid, name, model')
+        .eq('user_id', userId);
+
+      if (error) {
+        return res.status(500).json({ success: false, error: 'Failed to get printers' });
+      }
+
+      const result = printers.map(printer => {
+        const realtimeData = realtimeDataStore.get(printer.device_uuid) || createDefaultPrinterData();
+        return {
+          device_uuid: printer.device_uuid,
+          name: printer.name,
+          model: printer.model,
+          ...realtimeData
+        };
+      });
+
+      res.json({ success: true, data: result, count: result.length });
+    } catch (error) {
+      console.error('[API] Realtime data error:', error);
+      res.status(500).json({ success: false, error: 'Failed to get realtime data' });
+    }
+  });
+
+  // 레거시 호환을 위한 단일 printerData (마지막 업데이트된 프린터)
   let printerData = {
     status: 'idle',
     connected: false,
@@ -836,16 +933,38 @@ export function createApp({ staticDir, enableRest = true, enableWs = true } = {}
     ws.on('message', (raw) => {
       try {
         const message = JSON.parse(raw);
-        const { type, data } = message || {};
+        const { type, data, device_uuid } = message || {};
         if (!type) return;
 
         if (isEdgeClient) {
+          // 디바이스 UUID가 있으면 디바이스별로 저장
+          if (device_uuid) {
+            const deviceData = getDeviceData(device_uuid);
+            switch (type) {
+              case 'printer_status':
+                Object.assign(deviceData, data, { lastUpdated: new Date().toISOString() });
+                break;
+              case 'temperature_update':
+                deviceData.temperature = { ...deviceData.temperature, ...data };
+                deviceData.lastUpdated = new Date().toISOString();
+                break;
+              case 'position_update':
+                deviceData.position = { ...deviceData.position, ...data };
+                deviceData.lastUpdated = new Date().toISOString();
+                break;
+              case 'print_progress':
+                deviceData.printProgress = { ...deviceData.printProgress, ...data };
+                deviceData.lastUpdated = new Date().toISOString();
+                break;
+            }
+          }
+
+          // 레거시 호환: 전역 printerData도 업데이트
           switch (type) {
-            // WebRTC 관련 메시지 처리 제거
-            case 'printer_status': printerData = { ...printerData, ...data }; broadcastToWebClients('printer_status', printerData); break;
-            case 'temperature_update': printerData.temperature = { ...printerData.temperature, ...data }; broadcastToWebClients('temperature_update', printerData.temperature); break;
-            case 'position_update': printerData.position = { ...printerData.position, ...data }; broadcastToWebClients('position_update', printerData.position); break;
-            case 'print_progress': printerData.printProgress = { ...printerData.printProgress, ...data }; broadcastToWebClients('print_progress', printerData.printProgress); break;
+            case 'printer_status': printerData = { ...printerData, ...data }; broadcastToWebClients('printer_status', { ...printerData, device_uuid }); break;
+            case 'temperature_update': printerData.temperature = { ...printerData.temperature, ...data }; broadcastToWebClients('temperature_update', { ...printerData.temperature, device_uuid }); break;
+            case 'position_update': printerData.position = { ...printerData.position, ...data }; broadcastToWebClients('position_update', { ...printerData.position, device_uuid }); break;
+            case 'print_progress': printerData.printProgress = { ...printerData.printProgress, ...data }; broadcastToWebClients('print_progress', { ...printerData.printProgress, device_uuid }); break;
             default: console.log('알 수 없는 메시지 타입:', type);
           }
           if (ws && ws.readyState === WebSocket.OPEN) {
