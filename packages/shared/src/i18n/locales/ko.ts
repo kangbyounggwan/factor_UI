@@ -1012,6 +1012,8 @@ export default {
     reprapDesc: "Duet 보드 전용 펌웨어",
     prusa: "Prusa Firmware",
     prusaDesc: "Prusa 프린터 전용 최적화",
+    sla: "SLA/Resin",
+    slaDesc: "레진 기반 프린터 펌웨어",
     fullySupported: "완전 지원",
     partialSupport: "부분 지원",
     viewFullList: "전체 지원 목록 보기",

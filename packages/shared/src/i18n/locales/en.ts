@@ -1020,6 +1020,8 @@ export default {
     reprapDesc: "Firmware for Duet boards",
     prusa: "Prusa Firmware",
     prusaDesc: "Optimized for Prusa printers",
+    sla: "SLA/Resin",
+    slaDesc: "Resin-based printer firmware",
     fullySupported: "Fully Supported",
     partialSupport: "Partial Support",
     viewFullList: "View Full Support List",

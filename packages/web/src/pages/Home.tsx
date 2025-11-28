@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Monitor, Play, Bell, BarChart3, Settings, Zap, Shield, Smartphone, ShoppingCart, Code2, Wand2, Image, Box, Layers, Download, Video } from "lucide-react";
+import { Monitor, Play, Bell, BarChart3, Settings, Zap, Shield, Smartphone, ShoppingCart, Code2, Wand2, Image, Box, Layers, Download, Video, Copy, Check } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
@@ -16,11 +16,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TypingEffect } from "@/components/TypingEffect";
 
 
+const PLUGIN_URL = "https://github.com/kangbyounggwan/octoprint-factor-plugin/archive/main.zip";
+
 const Home = () => {
   const { user } = useAuth();
   const { t } = useTranslation();
   const location = useLocation();
   const [showVideoModal, setShowVideoModal] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(PLUGIN_URL);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
 
   // 해시 변경 시 스크롤 처리
   useEffect(() => {
@@ -418,7 +431,7 @@ POST /api/v1/printers/{id}/print
 
       {/* Installation Video Modal */}
       <Dialog open={showVideoModal} onOpenChange={setShowVideoModal}>
-        <DialogContent className="max-w-5xl">
+        <DialogContent className="max-w-5xl" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{t('landing.installationVideo')}</DialogTitle>
           </DialogHeader>
@@ -430,15 +443,43 @@ POST /api/v1/printers/{id}/print
             </TabsList>
 
             <TabsContent value="plugin">
+              {/* Plugin URL Copy Section */}
+              <div className="mb-4 p-3 bg-muted rounded-lg">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-medium">from URL</span>
+                </div>
+                <p className="text-xs text-muted-foreground mb-2">
+                  OctoPrint → Settings → Plugin Manager → Get More → ... from URL 에 붙여넣기
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs bg-background px-3 py-2 rounded border truncate">
+                    {PLUGIN_URL}
+                  </code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyUrl}
+                    className="shrink-0"
+                  >
+                    {copied ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
               <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
-                <iframe
-                  className="absolute top-0 left-0 w-full h-full rounded-lg"
-                  src="https://www.youtube.com/embed/dQw4w9WgXcQ"
-                  title="Plugin Installation Guide"
-                  frameBorder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
+                <video
+                  className="absolute top-0 left-0 w-full h-full rounded-lg bg-black"
+                  src="/videos/installation-guide.mp4"
+                  controls
+                  playsInline
+                  preload="metadata"
+                >
+                  Your browser does not support the video tag.
+                </video>
               </div>
               <p className="text-sm text-muted-foreground mt-4">
                 {t('landing.pluginInstallationDesc')}
