@@ -353,19 +353,22 @@ async function fetchPrintersDetailForUser(env, userId) {
   const baseUrl = String(env.url).replace(/\/$/, '');
   const url =
     `${baseUrl}/rest/v1/printers` +
-    `?select=id,printer_uuid,device_uuid,name,model,manufacturer,series,firmware,status,group_id,ip_address,port,created_at,updated_at` +
+    `?select=id,printer_uuid,device_uuid,name,model,manufacture_id,firmware,status,group_id,ip_address,port,created_at,updated_at` +
     `&user_id=eq.${encodeURIComponent(userId)}` +
     `&order=name.asc`;
 
+  // RLS 우회를 위해 service role key 사용
+  const authKey = env.serviceKey || env.key;
   const res = await fetch(url, {
     headers: {
-      'apikey': env.key,
-      'Authorization': `Bearer ${env.key}`,
+      'apikey': authKey,
+      'Authorization': `Bearer ${authKey}`,
     },
   });
 
   if (!res.ok) {
-    console.warn('[FETCH] printers detail error:', res.status);
+    const text = await res.text().catch(() => '');
+    console.warn('[FETCH] printers detail error:', res.status, text);
     return [];
   }
 
@@ -380,10 +383,12 @@ async function fetchCamerasForUser(env, userId) {
     `?select=id,device_uuid,stream_url,resolution,created_at` +
     `&user_id=eq.${encodeURIComponent(userId)}`;
 
+  // RLS 우회를 위해 service role key 사용
+  const authKey = env.serviceKey || env.key;
   const res = await fetch(url, {
     headers: {
-      'apikey': env.key,
-      'Authorization': `Bearer ${env.key}`,
+      'apikey': authKey,
+      'Authorization': `Bearer ${authKey}`,
     },
   });
 
@@ -405,10 +410,12 @@ async function fetchSubscriptionForUser(env, userId) {
     `&status=eq.active` +
     `&limit=1`;
 
+  // RLS 우회를 위해 service role key 사용
+  const authKey = env.serviceKey || env.key;
   const res = await fetch(url, {
     headers: {
-      'apikey': env.key,
-      'Authorization': `Bearer ${env.key}`,
+      'apikey': authKey,
+      'Authorization': `Bearer ${authKey}`,
     },
   });
 
@@ -430,10 +437,12 @@ async function fetchAiModelsForUser(env, userId, limit = 20) {
     `&order=created_at.desc` +
     `&limit=${limit}`;
 
+  // RLS 우회를 위해 service role key 사용
+  const authKey = env.serviceKey || env.key;
   const res = await fetch(url, {
     headers: {
-      'apikey': env.key,
-      'Authorization': `Bearer ${env.key}`,
+      'apikey': authKey,
+      'Authorization': `Bearer ${authKey}`,
     },
   });
 
@@ -1112,7 +1121,12 @@ function readJsonBody(req) {
 }
 
 // CLI 실행 지원: 현재 작업 디렉토리의 dist를 정적 폴더로 서빙
-if (fileURLToPath(import.meta.url) === process.argv[1]) {
+const scriptPath = fileURLToPath(import.meta.url);
+const isDirectRun = process.argv[1] === scriptPath ||
+                   process.argv[1]?.endsWith('server.js') ||
+                   process.argv[1]?.includes('packages/shared/server.js') ||
+                   process.env.pm_id !== undefined;  // PM2 환경 감지
+if (isDirectRun) {
   const args = new Set(process.argv.slice(2));
   const portArgIndex = process.argv.findIndex((a) => a === '--port');
   const hostArgIndex = process.argv.findIndex((a) => a === '--host');
