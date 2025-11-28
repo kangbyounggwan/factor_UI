@@ -11,8 +11,9 @@ import { createMqttProxy } from './mqttProxyServer.js';
 async function resolveSupabaseEnv() {
   let url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   let key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  let serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (url && key) return { url, key, source: 'env' };
+  if (url && key && serviceKey) return { url, key, serviceKey, source: 'env' };
 
   // .env 탐색 (cwd → 상위)
   const candidates = [
@@ -33,12 +34,13 @@ async function resolveSupabaseEnv() {
         const v = l.slice(i + 1).trim().replace(/^"|"$/g, '');
         if (k === 'SUPABASE_URL' || k === 'VITE_SUPABASE_URL') url = url || v;
         if (k === 'SUPABASE_ANON_KEY' || k === 'VITE_SUPABASE_ANON_KEY') key = key || v;
+        if (k === 'SUPABASE_SERVICE_ROLE_KEY') serviceKey = serviceKey || v;
       }
-      if (url && key) return { url, key, source: p };
+      if (url && key) return { url, key, serviceKey, source: p };
     } catch {}
   }
 
-  return { url: undefined, key: undefined, source: 'missing' };
+  return { url: undefined, key: undefined, serviceKey: undefined, source: 'missing' };
 }
 
 async function supabasePasswordLogin(email, password) {
@@ -282,25 +284,32 @@ async function hashApiKey(apiKey) {
 // API 키로 사용자 ID 조회
 async function getUserIdFromApiKey(env, apiKey) {
   const keyHash = await hashApiKey(apiKey);
+  console.log('[API_KEY] Looking up hash:', keyHash);
 
   const url = `${String(env.url).replace(/\/$/, '')}/rest/v1/api_keys` +
     `?select=user_id,permissions,is_active,expires_at` +
     `&key_hash=eq.${encodeURIComponent(keyHash)}` +
     `&is_active=eq.true`;
 
+  console.log('[API_KEY] Query URL:', url);
+
+  // RLS 우회를 위해 service role key 사용
+  const authKey = env.serviceKey || env.key;
   const res = await fetch(url, {
     headers: {
-      'apikey': env.key,
-      'Authorization': `Bearer ${env.key}`,
+      'apikey': authKey,
+      'Authorization': `Bearer ${authKey}`,
     },
   });
 
   if (!res.ok) {
-    console.warn('[API_KEY] Lookup failed:', res.status);
+    const text = await res.text().catch(() => '');
+    console.warn('[API_KEY] Lookup failed:', res.status, text);
     return null;
   }
 
   const rows = await res.json();
+  console.log('[API_KEY] Query result:', JSON.stringify(rows));
   if (!Array.isArray(rows) || rows.length === 0) {
     return null;
   }
@@ -434,6 +443,36 @@ async function fetchAiModelsForUser(env, userId, limit = 20) {
 
   return await res.json();
 }
+
+// 디바이스별 실시간 데이터 저장소 (전역)
+const realtimeDataStore = new Map();
+
+// 기본 프린터 데이터 템플릿
+const createDefaultPrinterData = () => ({
+  status: 'idle',
+  connected: false,
+  printing: false,
+  error_message: null,
+  temperature: { tool: { current: 0, target: 0 }, bed: { current: 0, target: 0 } },
+  position: { x: 0, y: 0, z: 0, e: 0 },
+  printProgress: { completion: 0, file_position: 0, file_size: 0, print_time: 0, print_time_left: 0, filament_used: 0 },
+  lastUpdated: null
+});
+
+// 디바이스별 데이터 가져오기 (없으면 생성)
+const getDeviceData = (deviceUuid) => {
+  if (!realtimeDataStore.has(deviceUuid)) {
+    realtimeDataStore.set(deviceUuid, createDefaultPrinterData());
+  }
+  return realtimeDataStore.get(deviceUuid);
+};
+
+// 디바이스 데이터 업데이트
+const updateDeviceData = (deviceUuid, updates) => {
+  const data = getDeviceData(deviceUuid);
+  Object.assign(data, updates, { lastUpdated: new Date().toISOString() });
+  return data;
+};
 
 function mountRest(app) {
   app.post('/api/auth/login', async (req, res) => {
@@ -751,6 +790,79 @@ function mountRest(app) {
       return res.status(500).json({ success: false, error: 'Failed to fetch overview' });
     }
   });
+
+  // GET /api/v1/realtime/:deviceUuid - 특정 프린터의 실시간 데이터
+  app.get('/api/v1/realtime/:deviceUuid', apiKeyAuth, async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const { apiKeyUserId, supabaseEnv } = req;
+
+      // 사용자가 해당 프린터를 소유하고 있는지 확인
+      const baseUrl = String(supabaseEnv.url).replace(/\/$/, '');
+      const url = `${baseUrl}/rest/v1/printers` +
+        `?select=device_uuid,name,model` +
+        `&user_id=eq.${encodeURIComponent(apiKeyUserId)}` +
+        `&device_uuid=eq.${encodeURIComponent(deviceUuid)}`;
+
+      // RLS 우회를 위해 service role key 사용
+      const authKey = supabaseEnv.serviceKey || supabaseEnv.key;
+      const printerRes = await fetch(url, {
+        headers: {
+          'apikey': authKey,
+          'Authorization': `Bearer ${authKey}`,
+        },
+      });
+
+      if (!printerRes.ok) {
+        return res.status(500).json({ success: false, error: 'Failed to fetch printer' });
+      }
+
+      const printers = await printerRes.json();
+      if (!Array.isArray(printers) || printers.length === 0) {
+        return res.status(404).json({ success: false, error: 'Printer not found or access denied' });
+      }
+
+      const printer = printers[0];
+      const realtimeData = realtimeDataStore.get(deviceUuid) || createDefaultPrinterData();
+
+      res.json({
+        success: true,
+        data: {
+          device_uuid: deviceUuid,
+          name: printer.name,
+          model: printer.model,
+          ...realtimeData
+        }
+      });
+    } catch (error) {
+      console.error('[API] Realtime data error:', error);
+      res.status(500).json({ success: false, error: 'Failed to get realtime data' });
+    }
+  });
+
+  // GET /api/v1/realtime - 모든 프린터의 실시간 데이터
+  app.get('/api/v1/realtime', apiKeyAuth, async (req, res) => {
+    try {
+      const { apiKeyUserId, supabaseEnv } = req;
+
+      const printers = await fetchPrintersDetailForUser(supabaseEnv, apiKeyUserId);
+
+      const result = printers.map(printer => {
+        const realtimeData = realtimeDataStore.get(printer.device_uuid) || createDefaultPrinterData();
+        return {
+          device_uuid: printer.device_uuid,
+          name: printer.name,
+          model: printer.model,
+          ...realtimeData
+        };
+      });
+
+      res.json({ success: true, data: result, count: result.length });
+    } catch (error) {
+      console.error('[API] Realtime data error:', error);
+      res.status(500).json({ success: false, error: 'Failed to get realtime data' });
+    }
+  });
 }
 
 export function createApp({ staticDir, enableRest = true, enableWs = true } = {}) {
@@ -781,101 +893,6 @@ export function createApp({ staticDir, enableRest = true, enableWs = true } = {}
   const clients = new Set();
   const edgeClients = new Set();
   const webClients = new Set();
-
-  // 디바이스별 실시간 데이터 저장소
-  const realtimeDataStore = new Map();
-
-  // 기본 프린터 데이터 템플릿
-  const createDefaultPrinterData = () => ({
-    status: 'idle',
-    connected: false,
-    printing: false,
-    error_message: null,
-    temperature: { tool: { current: 0, target: 0 }, bed: { current: 0, target: 0 } },
-    position: { x: 0, y: 0, z: 0, e: 0 },
-    printProgress: { completion: 0, file_position: 0, file_size: 0, print_time: 0, print_time_left: 0, filament_used: 0 },
-    lastUpdated: null
-  });
-
-  // 디바이스별 데이터 가져오기 (없으면 생성)
-  const getDeviceData = (deviceUuid) => {
-    if (!realtimeDataStore.has(deviceUuid)) {
-      realtimeDataStore.set(deviceUuid, createDefaultPrinterData());
-    }
-    return realtimeDataStore.get(deviceUuid);
-  };
-
-  // 디바이스 데이터 업데이트
-  const updateDeviceData = (deviceUuid, updates) => {
-    const data = getDeviceData(deviceUuid);
-    Object.assign(data, updates, { lastUpdated: new Date().toISOString() });
-    return data;
-  };
-
-  // 실시간 데이터 조회 API 엔드포인트
-  app.get('/api/v1/realtime/:deviceUuid', apiKeyAuth, async (req, res) => {
-    try {
-      const { deviceUuid } = req.params;
-      const userId = req.apiKeyUserId;
-
-      // 사용자가 해당 프린터를 소유하고 있는지 확인
-      const { data: printer, error } = await supabase
-        .from('printers')
-        .select('device_uuid, name')
-        .eq('device_uuid', deviceUuid)
-        .eq('user_id', userId)
-        .single();
-
-      if (error || !printer) {
-        return res.status(404).json({ success: false, error: 'Printer not found or access denied' });
-      }
-
-      const realtimeData = realtimeDataStore.get(deviceUuid) || createDefaultPrinterData();
-
-      res.json({
-        success: true,
-        data: {
-          device_uuid: deviceUuid,
-          name: printer.name,
-          ...realtimeData
-        }
-      });
-    } catch (error) {
-      console.error('[API] Realtime data error:', error);
-      res.status(500).json({ success: false, error: 'Failed to get realtime data' });
-    }
-  });
-
-  // 모든 프린터의 실시간 데이터 조회
-  app.get('/api/v1/realtime', apiKeyAuth, async (req, res) => {
-    try {
-      const userId = req.apiKeyUserId;
-
-      const { data: printers, error } = await supabase
-        .from('printers')
-        .select('device_uuid, name, model')
-        .eq('user_id', userId);
-
-      if (error) {
-        return res.status(500).json({ success: false, error: 'Failed to get printers' });
-      }
-
-      const result = printers.map(printer => {
-        const realtimeData = realtimeDataStore.get(printer.device_uuid) || createDefaultPrinterData();
-        return {
-          device_uuid: printer.device_uuid,
-          name: printer.name,
-          model: printer.model,
-          ...realtimeData
-        };
-      });
-
-      res.json({ success: true, data: result, count: result.length });
-    } catch (error) {
-      console.error('[API] Realtime data error:', error);
-      res.status(500).json({ success: false, error: 'Failed to get realtime data' });
-    }
-  });
 
   // 레거시 호환을 위한 단일 printerData (마지막 업데이트된 프린터)
   let printerData = {
