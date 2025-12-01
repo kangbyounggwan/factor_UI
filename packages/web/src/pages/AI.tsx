@@ -2682,8 +2682,8 @@ const AI = () => {
 
       {/* 출력 설정 다이얼로그 */}
       <Dialog open={printDialogOpen} onOpenChange={setPrintDialogOpen}>
-        <DialogContent className="w-[75vw] max-w-[75vw] max-h-[90vh] overflow-hidden p-0 rounded-xl" aria-describedby={undefined}>
-          <div className="flex flex-col h-full">
+        <DialogContent className="w-[75vw] max-w-[75vw] h-[90vh] max-h-[90vh] overflow-hidden p-0 rounded-xl flex flex-col" aria-describedby={undefined}>
+          <div className="flex flex-col h-full min-h-0">
             {/* 헤더 */}
             <div className="px-6 py-4 border-b">
               <DialogHeader className="flex flex-row items-center justify-between w-full">
@@ -2833,7 +2833,7 @@ const AI = () => {
             </div>
 
             {/* 본문 */}
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(560px,1fr)_440px] gap-6 p-6 overflow-hidden flex-1 relative">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(560px,1fr)_440px] gap-6 p-6 overflow-hidden flex-1 min-h-0 relative">
               {/* 슬라이싱 중 오버레이 */}
               {isSlicing && (
                 <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center">
@@ -2846,8 +2846,8 @@ const AI = () => {
               )}
 
               {/* 좌: G-code 프리뷰 */}
-              <Card className="overflow-hidden">
-                <CardContent className="p-0 h-[60vh]">
+              <Card className="overflow-hidden h-full min-h-0">
+                <CardContent className="p-0 h-full">
                   <Suspense fallback={<div className="w-full h-full flex items-center justify-center">Loading...</div>}>
                     <GCodePreview gcodeUrl={currentGCodeUrl ?? modelViewerUrl ?? undefined} />
                   </Suspense>
@@ -2855,7 +2855,7 @@ const AI = () => {
               </Card>
 
               {/* 우: 출력 정보 */}
-              <div className="h-[60vh] overflow-y-auto pr-1">
+              <div className="h-full overflow-y-auto pr-1 min-h-0">
                 <div className="space-y-4">
                   <h3 className="font-semibold text-lg">{t('ai.printInfo')}</h3>
 
@@ -2975,8 +2975,8 @@ const AI = () => {
               </div>
             </div>
 
-            {/* 푸터 - 스크롤 영역 내부로 이동 */}
-            <div className="px-6 py-4 border-t space-y-4 flex-shrink-0">
+            {/* 푸터 */}
+            <div className="px-6 py-4 border-t space-y-4 flex-shrink-0 bg-background">
               {/* 프린터 연결 상태 경고 */}
               {selectedPrinter && !selectedPrinter.connected && (
                 <div className="text-sm text-red-500 flex items-center gap-2">

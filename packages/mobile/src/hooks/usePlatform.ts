@@ -12,25 +12,40 @@ export const useKeyboardVisible = (): boolean => {
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   useEffect(() => {
+    // 웹 환경에서는 키보드 감지 불필요
     if (!Capacitor.isNativePlatform()) return;
 
     let showListener: { remove: () => Promise<void> } | null = null;
     let hideListener: { remove: () => Promise<void> } | null = null;
+    let isMounted = true;
 
     const setupListeners = async () => {
-      showListener = await Keyboard.addListener('keyboardWillShow', () => {
-        setIsKeyboardVisible(true);
-      });
-      hideListener = await Keyboard.addListener('keyboardWillHide', () => {
-        setIsKeyboardVisible(false);
-      });
+      try {
+        // Keyboard 플러그인이 사용 가능한지 확인
+        if (!Keyboard || typeof Keyboard.addListener !== 'function') {
+          console.warn('[useKeyboardVisible] Keyboard plugin not available');
+          return;
+        }
+
+        showListener = await Keyboard.addListener('keyboardWillShow', () => {
+          if (isMounted) setIsKeyboardVisible(true);
+        });
+        hideListener = await Keyboard.addListener('keyboardWillHide', () => {
+          if (isMounted) setIsKeyboardVisible(false);
+        });
+      } catch (error) {
+        console.warn('[useKeyboardVisible] Failed to setup keyboard listeners:', error);
+      }
     };
 
-    setupListeners();
+    // 약간의 지연 후 리스너 설정 (Capacitor 브릿지 준비 대기)
+    const timeoutId = setTimeout(setupListeners, 100);
 
     return () => {
-      showListener?.remove();
-      hideListener?.remove();
+      isMounted = false;
+      clearTimeout(timeoutId);
+      showListener?.remove().catch(() => {});
+      hideListener?.remove().catch(() => {});
     };
   }, []);
 

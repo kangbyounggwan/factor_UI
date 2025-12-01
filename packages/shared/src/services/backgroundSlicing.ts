@@ -151,12 +151,12 @@ export async function processSlicingTask(
 
     // Update AI model with GCode URL
     const { error: updateError } = await supabase
-      .from('ai_models')
+      .from('ai_generated_models')
       .update({ gcode_url: gcodeUploadResult.publicUrl })
       .eq('id', task.model_id);
 
     if (updateError) {
-      console.error('[backgroundSlicing] Failed to update ai_models:', updateError);
+      console.error('[backgroundSlicing] Failed to update ai_generated_models:', updateError);
     }
 
     // Create notification for user

@@ -1,7 +1,8 @@
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Box, Trash2, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Box, Trash2, Loader2, Printer } from "lucide-react";
 
 export interface ModelArchiveItem {
   id: string | number;  // UUID 또는 숫자 모두 허용
@@ -76,6 +77,16 @@ export default function ModelArchive({ items, onSelect, onDelete }: ModelArchive
                           <Loader2 className="w-8 h-8 text-primary animate-spin" />
                         </div>
                       )}
+                      {/* 슬라이싱 완료 뱃지 */}
+                      {model.gcode_url && !model.isGenerating && (
+                        <Badge
+                          className="absolute top-1 left-1 bg-green-500 hover:bg-green-600 text-white text-[9px] px-1.5 py-0 h-5 gap-0.5"
+                          title="즉시 출력 가능"
+                        >
+                          <Printer className="w-2.5 h-2.5" />
+                          <span>READY</span>
+                        </Badge>
+                      )}
                     </div>
                   ) : (
                     <div className="w-full aspect-square bg-primary/10 rounded-lg flex items-center justify-center mb-2 relative">
@@ -83,6 +94,16 @@ export default function ModelArchive({ items, onSelect, onDelete }: ModelArchive
                         <Loader2 className="w-8 h-8 text-primary animate-spin" />
                       ) : (
                         <Box className="w-8 h-8 text-primary" />
+                      )}
+                      {/* 썸네일 없는 경우에도 슬라이싱 완료 뱃지 */}
+                      {model.gcode_url && !model.isGenerating && (
+                        <Badge
+                          className="absolute top-1 left-1 bg-green-500 hover:bg-green-600 text-white text-[9px] px-1.5 py-0 h-5 gap-0.5"
+                          title="즉시 출력 가능"
+                        >
+                          <Printer className="w-2.5 h-2.5" />
+                          <span>READY</span>
+                        </Badge>
                       )}
                     </div>
                   )}
