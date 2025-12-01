@@ -41,7 +41,6 @@ export default {
     admin: "관리자",
     features: "제품 소개",
     supportedPrinters: "지원 프린터",
-    marketplace: "마켓플레이스",
     pricing: "요금제",
     api: "API",
     backToHome: "홈으로 돌아가기",
@@ -987,11 +986,6 @@ export default {
     groupManagementDesc: "여러 프린터를 그룹으로 구성하여 체계적으로 관리하세요.",
     fastResponse: "빠른 응답",
     fastResponseDesc: "실시간 데이터 동기화로 즉각적인 상태 확인이 가능합니다.",
-    // Marketplace Section
-    marketplaceTitle: "마켓플레이스",
-    marketplaceSubtitle: "3D 프린터 설비 및 소모품 구매",
-    comingSoon: "곧 출시 예정",
-    marketplaceDesc: "3D 프린터, 필라멘트, 노즐, 빌드 플레이트 등 다양한 설비와 부속품을 구매할 수 있는 마켓플레이스가 곧 출시됩니다.",
     // Supported Printers Section
     supportedPrintersTitle: "지원하는 3D 프린터",
     supportedPrintersSubtitle: "다양한 3D 프린터에 대한 완전한 모니터링 지원",
@@ -1466,7 +1460,6 @@ export default {
     product: "제품",
     features: "기능",
     supportedPrinters: "지원 프린터",
-    marketplace: "마켓플레이스",
     pricing: "요금제",
     api: "API",
 

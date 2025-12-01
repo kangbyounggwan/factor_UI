@@ -41,7 +41,6 @@ export default {
     admin: "Admin",
     features: "Features",
     supportedPrinters: "Supported Printers",
-    marketplace: "Marketplace",
     pricing: "Pricing",
     api: "API",
     backToHome: "Back to Home",
@@ -995,11 +994,6 @@ export default {
     groupManagementDesc: "Organize multiple printers into groups for systematic management.",
     fastResponse: "Fast Response",
     fastResponseDesc: "Real-time data synchronization enables instant status checking.",
-    // Marketplace Section
-    marketplaceTitle: "Marketplace",
-    marketplaceSubtitle: "Purchase 3D printer equipment and supplies",
-    comingSoon: "Coming Soon",
-    marketplaceDesc: "A marketplace where you can purchase various equipment and accessories such as 3D printers, filaments, nozzles, build plates, and more will be launching soon.",
     // Supported Printers Section
     supportedPrintersTitle: "Supported 3D Printers",
     supportedPrintersSubtitle: "Complete monitoring support for various 3D printers",
@@ -1511,7 +1505,6 @@ export default {
     product: "Product",
     features: "Features",
     supportedPrinters: "Supported Printers",
-    marketplace: "Marketplace",
     pricing: "Pricing",
     api: "API",
 

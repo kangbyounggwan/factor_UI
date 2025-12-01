@@ -21,6 +21,7 @@ import { AISidebarProvider } from "@/contexts/AISidebarContext";
 import { useToast } from "@/hooks/use-toast";
 import { pushNotificationService } from "@/services/pushNotificationService";
 import { useDeepLinkHandler } from "@/hooks/useDeepLinkHandler";
+import { useKeyboardVisible } from "@/hooks/usePlatform";
 
 // Lazy load all pages for code splitting
 const Home = lazy(() => import("./pages/Home"));
@@ -64,6 +65,9 @@ const AppContent = () => {
 
   // iOS 플랫폼 체크
   const isIOS = Capacitor.getPlatform() === 'ios';
+
+  // 키보드 상태 감지 (키보드가 올라오면 BottomNavigation 숨김)
+  const isKeyboardVisible = useKeyboardVisible();
 
   // 딥링크 처리 (제일 먼저 실행되어야 함)
   useDeepLinkHandler();
@@ -412,8 +416,8 @@ const AppContent = () => {
       )}
       **/}
 
-      {/* 하단 네비게이션 바 */}
-      {shouldShowBottomNav && <BottomNavigation />}
+      {/* 하단 네비게이션 바 (키보드가 올라오면 숨김) */}
+      {shouldShowBottomNav && !isKeyboardVisible && <BottomNavigation />}
     </div>
   );
 };

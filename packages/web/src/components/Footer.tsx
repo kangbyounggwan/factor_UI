@@ -11,7 +11,6 @@ export const Footer = () => {
     product: [
       { name: t('footer.features'), href: "#features" },
       { name: t('footer.supportedPrinters'), href: "#printers" },
-      { name: t('footer.marketplace'), href: "#marketplace" },
       { name: t('footer.pricing'), href: "/subscription" },
       { name: t('footer.api'), href: "#api" },
     ],

@@ -1,7 +1,41 @@
 import { useState, useEffect, CSSProperties } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { Keyboard } from '@capacitor/keyboard';
 
 export type Platform = 'ios' | 'android' | 'web';
+
+/**
+ * 키보드 표시 상태를 감지하는 훅
+ * 키보드가 올라오면 하단 SafeArea를 비활성화하는 데 사용
+ */
+export const useKeyboardVisible = (): boolean => {
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let showListener: { remove: () => Promise<void> } | null = null;
+    let hideListener: { remove: () => Promise<void> } | null = null;
+
+    const setupListeners = async () => {
+      showListener = await Keyboard.addListener('keyboardWillShow', () => {
+        setIsKeyboardVisible(true);
+      });
+      hideListener = await Keyboard.addListener('keyboardWillHide', () => {
+        setIsKeyboardVisible(false);
+      });
+    };
+
+    setupListeners();
+
+    return () => {
+      showListener?.remove();
+      hideListener?.remove();
+    };
+  }, []);
+
+  return isKeyboardVisible;
+};
 
 export const usePlatform = (): Platform => {
   // 초기값을 직접 Capacitor.getPlatform()으로 설정하여 첫 렌더링부터 올바른 플랫폼 감지

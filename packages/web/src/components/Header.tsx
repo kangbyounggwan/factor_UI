@@ -30,7 +30,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Monitor, Settings, Menu, Activity, LogOut, Sun, Moon, BookOpen, ShoppingCart, CreditCard, Code2, Layers, Shield, User, Globe, Check, Bell, MessageSquare, Lightbulb, AlertTriangle, Upload, X, Image as ImageIcon } from "lucide-react";
+import { Monitor, Settings, Menu, Activity, LogOut, Sun, Moon, BookOpen, CreditCard, Code2, Layers, Shield, User, Globe, Check, Bell, MessageSquare, Lightbulb, AlertTriangle, Upload, X, Image as ImageIcon } from "lucide-react";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useDashboardSummary } from "@shared/component/dashboardSummary";
 import { useTheme } from "next-themes";
@@ -91,7 +91,6 @@ export const Header = () => {
   const homeNavigation = [
     { name: t('nav.features'), href: "#features", icon: BookOpen },
     { name: t('nav.supportedPrinters'), href: "#printers", icon: Settings },
-    { name: t('nav.marketplace'), href: "#marketplace", icon: ShoppingCart },
     { name: t('nav.pricing'), href: "/subscription", icon: CreditCard },
     { name: t('nav.api'), href: "#api", icon: Code2 },
   ];

@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Monitor, Play, Bell, BarChart3, Settings, Zap, Shield, Smartphone, ShoppingCart, Code2, Wand2, Image, Box, Layers, Download, Video, Copy, Check } from "lucide-react";
+import { Monitor, Play, Bell, BarChart3, Settings, Zap, Shield, Smartphone, Code2, Wand2, Image, Box, Layers, Download, Video, Copy, Check } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
@@ -309,28 +309,6 @@ const Home = () => {
                 {t('landing.viewFullList')}
               </Link>
             </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* Marketplace Section */}
-      <section id="marketplace" className="scroll-mt-16 py-24 px-6 bg-background">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">{t('landing.marketplaceTitle')}</h2>
-            <p className="text-xl text-muted-foreground">
-              {t('landing.marketplaceSubtitle')}
-            </p>
-          </div>
-
-          <div className="text-center">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-              <ShoppingCart className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold mb-4">{t('landing.comingSoon')}</h3>
-            <p className="text-muted-foreground leading-relaxed max-w-2xl mx-auto">
-              {t('landing.marketplaceDesc')}
-            </p>
           </div>
         </div>
       </section>

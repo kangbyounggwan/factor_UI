@@ -133,15 +133,17 @@ class PushNotificationService {
         console.log('[PushService] FCM token saved successfully:', data);
       }
 
-      // 2. user_notification_settings 생성/업데이트 (push_enabled: true)
+      // 2. user_notification_settings 생성/업데이트 (push_notifications: true)
+      // 컬럼명은 DB 스키마에 맞춤: push_notifications, email_notifications,
+      // print_complete_notifications, error_notifications, ai_complete_enabled, payment_enabled, marketing_enabled
       const { error: notifError } = await supabase
         .from('user_notification_settings')
         .upsert({
           user_id: userId,
-          push_enabled: true,
-          email_enabled: true,
-          print_complete_enabled: true,
-          print_error_enabled: true,
+          push_notifications: true,
+          email_notifications: true,
+          print_complete_notifications: true,
+          error_notifications: true,
           ai_complete_enabled: true,
           payment_enabled: true,
           marketing_enabled: false,

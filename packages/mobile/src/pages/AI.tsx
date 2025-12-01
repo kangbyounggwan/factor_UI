@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PlatformHeader } from "@/components/PlatformHeader";
-import { useSafeAreaStyle } from "@/hooks/usePlatform";
+import { useSafeAreaStyle, useKeyboardVisible } from "@/hooks/usePlatform";
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
@@ -109,6 +109,9 @@ const AI = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // 키보드 상태 감지 (키보드가 올라오면 하단 SafeArea 비활성화)
+  const isKeyboardVisible = useKeyboardVisible();
+
   // Safe Area 패딩 (컨텐츠 영역은 bottom padding 불필요)
   const safeAreaStyle = useSafeAreaStyle({
     bottom: false,
@@ -117,9 +120,11 @@ const AI = () => {
   // 하단 버튼 영역: BottomNavigation 높이 + safe area
   // App.tsx가 /create 경로에서는 paddingBottom을 적용하지 않으므로
   // 버튼이 BottomNavigation(64px)과 겹치지 않도록 padding 필요
-  // p-4 클래스의 padding(1rem)을 inline style로 덮어쓰므로 1rem도 포함
+  // 키보드가 올라왔을 때는 SafeArea와 BottomNavigation 패딩을 제거
   const buttonAreaStyle: React.CSSProperties = {
-    paddingBottom: 'calc(1rem + 4rem + env(safe-area-inset-bottom, 0px))',
+    paddingBottom: isKeyboardVisible
+      ? '1rem'  // 키보드가 올라오면 기본 패딩만
+      : 'calc(1rem + 4rem + env(safe-area-inset-bottom, 0px))',
   };
 
   const [currentStep, setCurrentStep] = useState<Step>("select-input");
@@ -295,12 +300,37 @@ const AI = () => {
       });
     };
 
-    const handleAIModelFailed = (event: Event) => {
+    const handleAIModelFailed = async (event: Event) => {
       const customEvent = event as CustomEvent;
       const payload = customEvent.detail;
-      console.log('[AI] Model generation failed:', payload);
+      console.log('[AI] Model generation failed (MQTT):', payload);
 
-      // 토스트 알림
+      // MQTT FAILED 메시지 수신 시, DB에서 실제 상태를 확인
+      // AI Python 서버가 타이밍 이슈로 FAILED를 잘못 보내는 경우가 있음
+      if (payload.model_id) {
+        try {
+          // 약간의 지연 후 DB 상태 확인 (폴링이 완료될 시간을 줌)
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          const { data: model } = await supabase
+            .from('ai_generated_models')
+            .select('status')
+            .eq('id', payload.model_id)
+            .single();
+
+          console.log('[AI] Actual model status from DB:', model?.status);
+
+          // DB에서 실제로 completed면 MQTT FAILED 무시
+          if (model?.status === 'completed') {
+            console.log('[AI] Ignoring MQTT FAILED - model actually succeeded');
+            return;
+          }
+        } catch (e) {
+          console.warn('[AI] Could not verify model status:', e);
+        }
+      }
+
+      // 실제로 실패한 경우에만 토스트 표시
       toast({
         title: t('ai.modelGenerationFailed'),
         description: t('ai.modelGenerationFailedDesc', { error: payload.error_message || '알 수 없는 오류' }),

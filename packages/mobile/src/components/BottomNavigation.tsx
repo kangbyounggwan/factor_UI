@@ -2,21 +2,25 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Home, Sparkles, Settings, User } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
-import { useSafeAreaStyle } from "@/hooks/usePlatform";
+import { useSafeAreaStyle, useKeyboardVisible } from "@/hooks/usePlatform";
 
 /**
  * 플랫폼별 SafeArea를 자동으로 처리하는 하단 네비게이션 바
  * - iOS: safe-area-inset-bottom만 적용
  * - Android/Web: 추가 패딩 없음
+ * - 키보드가 올라오면 SafeArea 패딩 비활성화
  */
 export function BottomNavigation() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
 
-  // 하단 SafeArea만 적용 (추가 패딩 없음)
+  // 키보드 상태 감지
+  const isKeyboardVisible = useKeyboardVisible();
+
+  // 하단 SafeArea만 적용 (키보드가 올라오면 비활성화)
   const safeAreaStyle = useSafeAreaStyle({
-    bottom: true,
+    bottom: !isKeyboardVisible,  // 키보드가 올라오면 하단 SafeArea 비활성화
     bottomPadding: '0',
   });
 
