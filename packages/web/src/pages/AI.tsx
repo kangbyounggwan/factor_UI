@@ -138,6 +138,8 @@ import { useAIImageUpload } from "@shared/hooks/useAIImageUpload";
 import { downloadAndUploadModel, downloadAndUploadSTL, downloadAndUploadThumbnail, downloadAndUploadGCode, deleteModelFiles } from "@shared/services/supabaseService/aiStorage";
 import { getManufacturers, getSeriesByManufacturer, getModelsByManufacturerAndSeries, getManufacturingPrinterById } from "@shared/api/manufacturingPrinter";
 import { createSlicingTask, subscribeToTaskUpdates, processSlicingTask, BackgroundTask } from "@shared/services/backgroundSlicing";
+import { canGenerateAiModel, getAiGenerationLimit, getRemainingAiGenerations } from "@shared/utils/subscription";
+import { SubscriptionPlan } from "@shared/types/subscription";
 
 const AI = () => {
   const { t } = useTranslation();
@@ -198,6 +200,11 @@ const AI = () => {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const location = useLocation();
+
+  // 구독 플랜 상태
+  const [userPlan, setUserPlan] = useState<SubscriptionPlan>('free');
+  const [monthlyAiUsage, setMonthlyAiUsage] = useState<number>(0);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState<boolean>(false);
 
   // 프린터 영역 높이 조절
   const [printerAreaHeight, setPrinterAreaHeight] = useState<number>(25); // 기본값 25% (flex-[1] 대신 사용)
@@ -269,6 +276,43 @@ const AI = () => {
       });
     }
   });
+
+  // 구독 플랜 및 AI 사용량 로드
+  useEffect(() => {
+    const loadSubscriptionData = async () => {
+      if (!user?.id) return;
+
+      try {
+        // 1. 사용자 구독 플랜 로드
+        const { data: subscription } = await supabase
+          .from('user_subscriptions')
+          .select('plan_name')
+          .eq('user_id', user.id)
+          .single();
+
+        const planName = (subscription?.plan_name?.toLowerCase() || 'free') as SubscriptionPlan;
+        setUserPlan(planName);
+
+        // 2. 이번 달 AI 모델 생성 횟수 로드
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+
+        const { count } = await supabase
+          .from('ai_generated_models')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .gte('created_at', startOfMonth)
+          .lte('created_at', endOfMonth);
+
+        setMonthlyAiUsage(count || 0);
+      } catch (error) {
+        console.error('[AI] Failed to load subscription data:', error);
+      }
+    };
+
+    loadSubscriptionData();
+  }, [user?.id]);
 
   // 연결된 프린터 로드 (Supabase) - Dashboard와 동일한 구조
   useEffect(() => {
@@ -1667,6 +1711,23 @@ const AI = () => {
       return;
     }
 
+    // 구독 플랜 제한 체크 (text-to-3d, image-to-3d 탭에서만)
+    if (activeTab === 'text-to-3d' || activeTab === 'image-to-3d') {
+      if (!canGenerateAiModel(userPlan, monthlyAiUsage)) {
+        const limit = getAiGenerationLimit(userPlan);
+        setShowUpgradePrompt(true);
+        toast({
+          title: t('ai.limitReached'),
+          description: t('ai.limitReachedDescription', {
+            limit: limit === 'unlimited' ? '∞' : limit,
+            plan: userPlan.toUpperCase()
+          }),
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
     setIsProcessing(true);
     toast({ title: t('ai.generating'), description: t('ai.generatingDescription') });
 
@@ -1789,6 +1850,9 @@ const AI = () => {
 
           // 모델 목록 새로고침
           await reloadModels();
+
+          // 월별 AI 사용량 증가
+          setMonthlyAiUsage(prev => prev + 1);
         } else {
           // URL이 없으면 실패 처리
           await updateAIModel(supabase, dbModelId, {
@@ -1937,6 +2001,9 @@ const AI = () => {
 
           // 모델 목록 새로고침
           await reloadModels();
+
+          // 월별 AI 사용량 증가
+          setMonthlyAiUsage(prev => prev + 1);
         } else {
           await updateAIModel(supabase, dbModelId, {
             status: 'failed',
@@ -1976,18 +2043,53 @@ const AI = () => {
     }
   };
 
+  // AI 생성 제한 정보
+  const aiLimit = getAiGenerationLimit(userPlan);
+  const remainingGenerations = getRemainingAiGenerations(userPlan, monthlyAiUsage);
+
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-background">
+      {/* 업그레이드 프롬프트 다이얼로그 */}
+      <AlertDialog open={showUpgradePrompt} onOpenChange={setShowUpgradePrompt}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('ai.upgradeRequired')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('ai.upgradeDescription', {
+                limit: aiLimit === 'unlimited' ? '∞' : aiLimit,
+                used: monthlyAiUsage,
+                plan: userPlan.toUpperCase()
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => window.location.href = '/user-settings?tab=subscription'}>
+              {t('ai.upgradePlan')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
         {/* 메인 작업 영역 */}
         <div className="flex-1 flex flex-col">
           {/* 헤더 */}
           <div className="border-b p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Layers className="w-6 h-6 text-primary" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Layers className="w-6 h-6 text-primary" />
+                </div>
+                <h1 className="text-2xl font-bold">{t('ai.title')}</h1>
               </div>
-              <h1 className="text-2xl font-bold">{t('ai.title')}</h1>
+              {/* AI 사용량 표시 */}
+              <div className="text-sm text-muted-foreground">
+                {t('ai.usageInfo', {
+                  used: monthlyAiUsage,
+                  limit: aiLimit === 'unlimited' ? '∞' : aiLimit
+                })}
+              </div>
             </div>
           </div>
 

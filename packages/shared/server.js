@@ -213,6 +213,54 @@ async function fetchPrintersForUser(env, accessToken, userId) {
   }));
 }
 
+// 플랜별 프린터 제한 상수
+const PLAN_MAX_PRINTERS = {
+  free: 1,
+  pro: 5,
+  enterprise: Infinity, // unlimited
+};
+
+// 프린터 개수 조회 함수
+async function countPrintersForUser(env, accessToken, userId) {
+  const baseUrl = String(env.url).replace(/\/$/, '');
+  const url =
+    `${baseUrl}/rest/v1/printers` +
+    `?select=id` +
+    `&user_id=eq.${encodeURIComponent(userId)}`;
+
+  const res = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'apikey': env.key,
+    },
+  });
+
+  if (!res.ok) {
+    return 0;
+  }
+
+  const rows = await res.json();
+  return Array.isArray(rows) ? rows.length : 0;
+}
+
+// 플랜 제한 체크 함수
+async function checkPrinterLimit(env, accessToken, userId) {
+  // 사용자 구독 정보 조회
+  const subscription = await fetchSubscriptionForUser(env, userId);
+  const planName = (subscription?.plan_name || subscription?.plan || 'free').toLowerCase();
+  const maxPrinters = PLAN_MAX_PRINTERS[planName] ?? PLAN_MAX_PRINTERS.free;
+
+  // 현재 프린터 개수 조회
+  const currentCount = await countPrintersForUser(env, accessToken, userId);
+
+  return {
+    canAdd: currentCount < maxPrinters,
+    currentCount,
+    maxPrinters,
+    planName,
+  };
+}
+
 function safeRedact(obj) {
   try {
     const json = JSON.parse(JSON.stringify(obj || {}));
@@ -535,6 +583,27 @@ function mountRest(app) {
       } catch {}
       if (!payload.client?.uuid) {
         return res.status(400).json({ success: false, message: 'client.uuid(MAC)가 필요합니다.' });
+      }
+
+      // 신규 등록(is_new)일 때만 플랜 제한 체크
+      const isNewRegistration = payload?.registration?.is_new === true;
+      if (isNewRegistration) {
+        const limitCheck = await checkPrinterLimit(env, accessToken, userId);
+        console.log('[REGISTER] plan limit check:', limitCheck);
+
+        if (!limitCheck.canAdd) {
+          return res.status(403).json({
+            success: false,
+            message: `프린터 등록 한도에 도달했습니다. ${limitCheck.planName.toUpperCase()} 플랜은 최대 ${limitCheck.maxPrinters}대까지 등록 가능합니다. (현재: ${limitCheck.currentCount}대)`,
+            code: 'PRINTER_LIMIT_REACHED',
+            data: {
+              currentCount: limitCheck.currentCount,
+              maxPrinters: limitCheck.maxPrinters,
+              planName: limitCheck.planName,
+              upgradeRequired: true,
+            },
+          });
+        }
       }
 
       await registerDeviceViaRest(env, accessToken, payload, userId);

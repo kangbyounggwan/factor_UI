@@ -427,7 +427,14 @@ export default {
     modelGenerationFailed: "AI Model Generation Failed",
     modelGenerationFailedDesc: "An error occurred during model generation: {{error}}",
     backgroundGenerationStarted: "Background Generation Started",
-    backgroundGenerationStartedDesc: "AI model generation is running in the background. You will be notified when complete."
+    backgroundGenerationStartedDesc: "AI model generation is running in the background. You will be notified when complete.",
+    // AI usage limits
+    limitReached: "AI Generation Limit Reached",
+    limitReachedDescription: "You have reached your monthly AI model generation limit ({{limit}}). Upgrade your {{plan}} plan to generate more models.",
+    upgradeRequired: "Plan Upgrade Required",
+    upgradeDescription: "You have used all {{limit}} AI model generations for this month on your {{plan}} plan. (Used: {{used}}) Upgrade your plan to generate more models.",
+    upgradePlan: "Upgrade Plan",
+    usageInfo: "AI usage this month: {{used}}/{{limit}}"
   },
   profile: {
     // UserSettings page

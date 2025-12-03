@@ -131,3 +131,43 @@ export function needsUpgradeFor(
 
   return comparePlans(currentPlan, requiredPlan) < 0;
 }
+
+/**
+ * Get AI model generation limit for a plan
+ */
+export function getAiGenerationLimit(plan: SubscriptionPlan): number | 'unlimited' {
+  const features = getPlanFeatures(plan);
+  return features.aiModelGeneration;
+}
+
+/**
+ * Check if user can generate more AI models this month
+ */
+export function canGenerateAiModel(
+  plan: SubscriptionPlan,
+  currentMonthlyUsage: number
+): boolean {
+  const limit = getAiGenerationLimit(plan);
+
+  if (limit === 'unlimited') {
+    return true;
+  }
+
+  return currentMonthlyUsage < limit;
+}
+
+/**
+ * Get remaining AI model generations for the month
+ */
+export function getRemainingAiGenerations(
+  plan: SubscriptionPlan,
+  currentMonthlyUsage: number
+): number | 'unlimited' {
+  const limit = getAiGenerationLimit(plan);
+
+  if (limit === 'unlimited') {
+    return 'unlimited';
+  }
+
+  return Math.max(0, limit - currentMonthlyUsage);
+}

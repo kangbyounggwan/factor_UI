@@ -2514,9 +2514,9 @@ const UserSettings = () => {
             </div>
 
             {/* Pro Plan */}
-            <div className={`relative border rounded-lg p-6 hover:border-primary/50 transition-colors ${currentPlan === 'pro' ? 'border-primary border-2 bg-primary/5' : 'border-border'}`}>
+            <div className={`relative border rounded-lg p-6 pt-8 hover:border-primary/50 transition-colors overflow-hidden ${currentPlan === 'pro' ? 'border-primary border-2 bg-primary/5' : 'border-border'}`}>
               {/* Popular Badge */}
-              <Badge className="absolute -top-2 right-4 bg-blue-500 hover:bg-blue-500">추천</Badge>
+              <Badge className="absolute top-3 right-3 bg-blue-500 hover:bg-blue-500">추천</Badge>
 
               <div className="flex justify-between items-start mb-4">
                 <div>
@@ -2532,13 +2532,13 @@ const UserSettings = () => {
               {/* 결제 주기 선택 탭 */}
               {currentPlan !== 'pro' && (
                 <div className="mb-4">
-                  <div className="flex rounded-lg border border-border p-1 bg-muted/50">
+                  <div className="flex rounded-lg border border-border p-1 bg-muted/30">
                     <button
                       type="button"
                       onClick={() => setProBillingCycle('monthly')}
                       className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
                         proBillingCycle === 'monthly'
-                          ? 'bg-background shadow-sm text-foreground'
+                          ? 'bg-primary text-primary-foreground shadow-sm'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
@@ -2549,11 +2549,11 @@ const UserSettings = () => {
                       onClick={() => setProBillingCycle('yearly')}
                       className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
                         proBillingCycle === 'yearly'
-                          ? 'bg-background shadow-sm text-foreground'
+                          ? 'bg-primary text-primary-foreground shadow-sm'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      연간 <span className="text-green-500 text-xs ml-1">17% 할인</span>
+                      연간 <span className={`text-xs ml-1 ${proBillingCycle === 'yearly' ? 'text-green-300' : 'text-green-500'}`}>17% 할인</span>
                     </button>
                   </div>
                 </div>

@@ -25,7 +25,7 @@ export const PLAN_FEATURES: Record<SubscriptionPlan, SubscriptionFeatures> = {
       enabled: true,
       reconnectInterval: undefined, // unlimited (기본 기능)
     },
-    aiModelGeneration: 0, // no AI model generation
+    aiModelGeneration: 20, // 20 AI model generations per month for free plan
     analytics: false,
     pushNotifications: true,
     apiAccess: false,

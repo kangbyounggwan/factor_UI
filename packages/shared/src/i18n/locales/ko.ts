@@ -444,7 +444,14 @@ export default {
     modelGenerationFailed: "AI 모델 생성 실패",
     modelGenerationFailedDesc: "모델 생성 중 오류가 발생했습니다: {{error}}",
     backgroundGenerationStarted: "백그라운드 생성 시작",
-    backgroundGenerationStartedDesc: "백그라운드에서 AI 모델 생성이 진행됩니다. 완료되면 알림으로 알려드립니다."
+    backgroundGenerationStartedDesc: "백그라운드에서 AI 모델 생성이 진행됩니다. 완료되면 알림으로 알려드립니다.",
+    // AI 사용량 제한
+    limitReached: "AI 생성 한도 도달",
+    limitReachedDescription: "이번 달 AI 모델 생성 한도({{limit}}회)에 도달했습니다. {{plan}} 플랜을 업그레이드하여 더 많은 모델을 생성하세요.",
+    upgradeRequired: "플랜 업그레이드 필요",
+    upgradeDescription: "{{plan}} 플랜의 이번 달 AI 모델 생성 한도({{limit}}회)를 모두 사용하셨습니다. (사용: {{used}}회) 더 많은 모델을 생성하려면 플랜을 업그레이드하세요.",
+    upgradePlan: "플랜 업그레이드",
+    usageInfo: "이번 달 AI 사용량: {{used}}/{{limit}}회"
   },
   profile: {
     // UserSettings 페이지
