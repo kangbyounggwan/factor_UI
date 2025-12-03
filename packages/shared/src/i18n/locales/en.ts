@@ -122,6 +122,18 @@ export default {
     userAlreadyRegistered: "This email is already registered.",
     welcome: "Welcome!",
     signupFailed: "Sign up failed",
+    // Account linking modal
+    accountExists: "Account Already Exists",
+    accountExistsDesc: " is already registered. Would you like to sign in with your existing account?",
+    accountExistsGoogle: " is registered with Google account.",
+    accountExistsApple: " is registered with Apple account.",
+    accountExistsEmail: " is already registered. Please sign in.",
+    accountExistsUnconfirmed: " is registered but email verification is pending. Please check your email.",
+    signInWithGoogle: "Sign in with Google",
+    signInWithApple: "Sign in with Apple",
+    signInWithEmail: "Sign in with Email",
+    checkEmailVerification: "Check Email Verification",
+    recommended: "Recommended",
     // Marketing banner
     marketing: {
       titleLine1: "A new experience for",

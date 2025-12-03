@@ -57,26 +57,56 @@ export async function upsertUserSubscription(
   periodEnd: Date
 ): Promise<UserSubscription | null> {
   try {
-    const { data, error } = await supabase
+    // 먼저 기존 구독이 있는지 확인
+    const { data: existing } = await supabase
       .from('user_subscriptions')
-      .upsert({
-        user_id: userId,
-        plan_name: plan,
-        status: 'active',
-        current_period_start: periodStart.toISOString(),
-        current_period_end: periodEnd.toISOString(),
-        cancel_at_period_end: false,
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle();
 
-    if (error) {
-      console.error('[subscription] Error upserting user subscription:', error);
-      return null;
+    if (existing) {
+      // 기존 구독이 있으면 update
+      const { data, error } = await supabase
+        .from('user_subscriptions')
+        .update({
+          plan_name: plan,
+          status: 'active',
+          current_period_start: periodStart.toISOString(),
+          current_period_end: periodEnd.toISOString(),
+          cancel_at_period_end: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[subscription] Error updating user subscription:', error);
+        return null;
+      }
+      return data as UserSubscription;
+    } else {
+      // 기존 구독이 없으면 insert
+      const { data, error } = await supabase
+        .from('user_subscriptions')
+        .insert({
+          user_id: userId,
+          plan_name: plan,
+          status: 'active',
+          current_period_start: periodStart.toISOString(),
+          current_period_end: periodEnd.toISOString(),
+          cancel_at_period_end: false,
+          updated_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[subscription] Error inserting user subscription:', error);
+        return null;
+      }
+      return data as UserSubscription;
     }
-
-    return data as UserSubscription;
   } catch (error) {
     console.error('[subscription] Error upserting user subscription:', error);
     return null;

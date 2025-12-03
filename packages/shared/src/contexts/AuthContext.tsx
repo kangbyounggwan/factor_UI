@@ -335,7 +335,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   }, []);
 
   // ============================================
-  // Phase 2: user.id 변경 시 프로필/Role 로드
+  // Phase 2: user.id 변경 시 프로필/Role 로드 및 기본 설정 생성
   // ============================================
   useEffect(() => {
     if (!user?.id) {
@@ -347,10 +347,97 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
     let cancelled = false;
 
+    // 기본 설정 생성 함수 (프로필, 알림, 구독)
+    const ensureUserSettings = async (userId: string) => {
+      console.log('[Auth] Ensuring user settings for:', userId);
+
+      // user_metadata에서 이메일 회원가입 시 저장된 정보 가져오기
+      const metadata = user.user_metadata || {};
+      const displayName = metadata.display_name || user.email?.split('@')[0] || 'User';
+      const phone = metadata.phone || null;
+
+      // 1. 프로필 생성 (없으면)
+      try {
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (!existingProfile) {
+          console.log('[Auth] Creating profile for user:', userId);
+          await supabase.from('profiles').insert({
+            user_id: userId,
+            display_name: displayName,
+            phone: phone,
+            role: 'user',
+          });
+        }
+      } catch (err) {
+        console.warn('[Auth] Error ensuring profile:', err);
+      }
+
+      // 2. 알림 설정 생성 (없으면)
+      try {
+        const { data: existingSettings } = await supabase
+          .from('user_notification_settings')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (!existingSettings) {
+          console.log('[Auth] Creating notification settings for user:', userId);
+          await supabase.from('user_notification_settings').insert({
+            user_id: userId,
+            push_notifications: true,
+            print_complete_notifications: true,
+            error_notifications: true,
+            email_notifications: false,
+            weekly_report: false,
+            notification_sound: true,
+            notification_frequency: 'immediate',
+            quiet_hours_enabled: false,
+          });
+        }
+      } catch (err) {
+        console.warn('[Auth] Error ensuring notification settings:', err);
+      }
+
+      // 3. 구독 정보 생성 (없으면) - 14일 무료 체험
+      try {
+        const { data: existingSubscription } = await supabase
+          .from('user_subscriptions')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (!existingSubscription) {
+          console.log('[Auth] Creating subscription for user:', userId);
+          const trialEndDate = new Date();
+          trialEndDate.setDate(trialEndDate.getDate() + 14);
+
+          await supabase.from('user_subscriptions').insert({
+            user_id: userId,
+            plan_name: 'free',
+            status: 'trial',
+            current_period_start: new Date().toISOString(),
+            current_period_end: trialEndDate.toISOString(),
+            cancel_at_period_end: false,
+          });
+        }
+      } catch (err) {
+        console.warn('[Auth] Error ensuring subscription:', err);
+      }
+    };
+
     const loadUserData = async () => {
       setProfileCheckComplete(false);
 
       try {
+        // 먼저 기본 설정 확인/생성
+        await ensureUserSettings(user.id);
+
+        // 그 다음 프로필 로드
         const { data: profile, error } = await supabase
           .from('profiles')
           .select('id, display_name, phone, role')
@@ -461,69 +548,28 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         name: error.name,
         details: error
       } : null,
-      userId: data?.user?.id
+      userId: data?.user?.id,
+      identities: data?.user?.identities?.length ?? 'none'
     });
 
-    // 회원가입 성공 시 기본 설정 생성 (트리거 대신 애플리케이션 레벨에서 처리)
+    // 이미 가입된 사용자 체크 (Email Enumeration Protection이 켜져 있을 때)
+    // Supabase는 이미 가입된 이메일로 signUp 시 에러 대신 빈 identities 배열을 반환
+    if (!error && data?.user && data.user.identities?.length === 0) {
+      console.log('[SignUp] 이미 가입된 이메일:', email);
+      return {
+        error: {
+          message: 'User already registered',
+          status: 400,
+          name: 'AuthApiError'
+        } as any
+      };
+    }
+
+    // 이메일 회원가입 성공: 이메일 인증 전까지는 세션이 없으므로 DB 작업 불가
+    // 프로필/알림/구독 설정은 이메일 인증 후 첫 로그인 시 ensureUserSettings()에서 생성됨
     if (!error && data?.user) {
-      try {
-        console.log('[SignUp] 사용자 생성 완료, 기본 설정 생성 시작:', data.user.id);
-
-        // 프로필 생성 (이메일 회원가입 시 phone 포함)
-        const profileResult = await supabase.from('profiles').insert({
-          user_id: data.user.id,
-          display_name: displayName || email.split("@")[0],
-          phone: phone || null,
-          role: 'user',
-        }).select().maybeSingle();
-
-        if (profileResult.error) {
-          console.error('[SignUp] 프로필 생성 실패:', profileResult.error);
-        } else {
-          console.log('[SignUp] 프로필 생성 성공');
-        }
-
-        // 기본 알림 설정 생성
-        const notificationResult = await supabase.from('user_notification_settings').insert({
-          user_id: data.user.id,
-          push_notifications: true,
-          print_complete_notifications: true,
-          error_notifications: true,
-          email_notifications: false,
-          weekly_report: false,
-          notification_sound: true,
-          notification_frequency: 'immediate',
-          quiet_hours_enabled: false,
-        }).select().maybeSingle();
-
-        if (notificationResult.error) {
-          console.error('[SignUp] 알림 설정 생성 실패:', notificationResult.error);
-          throw notificationResult.error;
-        }
-        console.log('[SignUp] 알림 설정 생성 성공');
-
-        // 기본 구독 정보 생성 (14일 무료 체험)
-        const trialEndDate = new Date();
-        trialEndDate.setDate(trialEndDate.getDate() + 14);
-
-        const subscriptionResult = await supabase.from('user_subscriptions').insert({
-          user_id: data.user.id,
-          plan_name: 'free',   // 'basic' → 'free'로 변경 (PLAN_FEATURES와 일치)
-          status: 'trial',     // 'trialing' → 'trial'로 변경 (DB CHECK constraint와 일치)
-          current_period_start: new Date().toISOString(),
-          current_period_end: trialEndDate.toISOString(),
-          cancel_at_period_end: false,
-        }).select().maybeSingle();
-
-        if (subscriptionResult.error) {
-          console.error('[SignUp] 구독 정보 생성 실패:', subscriptionResult.error);
-          throw subscriptionResult.error;
-        }
-        console.log('[SignUp] 구독 정보 생성 성공');
-      } catch (setupError) {
-        console.error('[SignUp] 회원가입 후 기본 설정 생성 실패:', setupError);
-        // 설정 생성 실패는 무시 - 나중에 사용자가 직접 생성 가능
-      }
+      console.log('[SignUp] 회원가입 성공, 이메일 인증 필요:', data.user.id);
+      console.log('[SignUp] user_metadata에 저장됨:', { display_name: displayName, phone });
     }
 
     return { error };

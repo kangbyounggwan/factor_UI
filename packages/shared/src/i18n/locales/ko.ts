@@ -122,6 +122,18 @@ export default {
     userAlreadyRegistered: "이미 등록된 이메일입니다.",
     welcome: "환영합니다!",
     signupFailed: "회원가입 실패",
+    // 계정 통합 모달
+    accountExists: "이미 가입된 계정이 있습니다",
+    accountExistsDesc: " 이메일로 이미 가입된 계정이 존재합니다. 기존 계정으로 로그인하시겠습니까?",
+    accountExistsGoogle: " 이메일은 Google 계정으로 가입되어 있습니다.",
+    accountExistsApple: " 이메일은 Apple 계정으로 가입되어 있습니다.",
+    accountExistsEmail: " 이메일은 이미 가입되어 있습니다. 로그인해주세요.",
+    accountExistsUnconfirmed: " 이메일로 가입했지만 인증이 완료되지 않았습니다. 이메일을 확인해주세요.",
+    signInWithGoogle: "Google 계정으로 로그인",
+    signInWithApple: "Apple 계정으로 로그인",
+    signInWithEmail: "이메일로 로그인",
+    checkEmailVerification: "이메일 인증 확인",
+    recommended: "추천",
     // 마케팅 배너
     marketing: {
       titleLine1: "3D 프린터 팜을 위한",
@@ -137,7 +149,24 @@ export default {
       ctaDescLine2: "클라우드 기반 3D 프린터 관리 솔루션"
     }
   },
+  emailVerification: {
+    title: "이메일을 확인해주세요",
+    subtitle: "인증 링크가 포함된 이메일을 발송했습니다",
+    sentTo: "발송된 이메일 주소",
+    step1: "이메일 받은편지함을 확인하세요",
+    step2: "인증 링크를 클릭하여 계정을 활성화하세요",
+    step3: "인증 완료 후 로그인하세요",
+    checkSpam: "이메일이 보이지 않나요? 스팸 메일함을 확인해보세요",
+    resendEmail: "인증 이메일 재전송",
+    resendSuccess: "인증 이메일을 다시 발송했습니다",
+    resendCountdown: "재전송 대기중 ({{countdown}}초)",
+    backToLogin: "로그인 페이지로 돌아가기",
+    needHelp: "도움이 필요하신가요?",
+    contactSupport: "고객지원 문의"
+  },
   ai: {
+    openAssistant: "AI 어시스턴트 열기",
+    closeAssistant: "AI 어시스턴트 닫기",
     title: "AI 3D 모델링 스튜디오",
     description: "텍스트와 이미지를 AI로 3D 모델로 변환하고, 프린터와 연동해 즉시 출력까지 진행하세요.",
     textTo3D: "텍스트 → 3D",
@@ -1131,6 +1160,9 @@ export default {
     downgradeToFree: "무료 플랜으로 전환",
     manageInSettings: "설정에서 관리",
     getStarted: "시작하기",
+    month: "월",
+    popular: "인기",
+    contactSales: "영업팀 문의",
     upgradeToPro: "프로 플랜으로 업그레이드",
     viewAllPlans: "모든 플랜 보기",
     contactForEnterprise: "엔터프라이즈 문의",

@@ -304,16 +304,18 @@ export const AIAssistantSidebar = ({ isCollapsed, onToggle, width, onWidthChange
           onClick={onToggle}
           variant="secondary"
           size="sm"
-          className="rounded-l-lg rounded-r-none shadow-lg"
+          className="rounded-l-lg rounded-r-none shadow-lg flex items-center gap-1 pr-3"
+          title={t('ai.openAssistant', 'AI 어시스턴트 열기')}
         >
           <ChevronLeft className="w-4 h-4" />
+          <Bot className="w-4 h-4" />
         </Button>
       </div>
     );
   }
 
   return (
-    <div 
+    <div
       className="fixed right-0 top-16 h-[calc(100vh-4rem)] bg-background border-l border-border shadow-lg z-40 flex flex-col"
       style={{ width: `${width}px` }}
     >
@@ -337,25 +339,28 @@ export const AIAssistantSidebar = ({ isCollapsed, onToggle, width, onWidthChange
             : 'bg-muted-foreground/30 group-hover:bg-primary/70 group-hover:scale-105'
         }`} />
       </div>
-      {/* 헤더 */}
-      <div className="flex items-center justify-between p-4 border-b border-border bg-card">
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Bot className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-sm">AI 어시스턴트</h3>
-            <p className="text-xs text-muted-foreground">실시간 지원</p>
-          </div>
-        </div>
+      {/* 닫기 버튼 - 사이드바 왼쪽 중앙에 위치 */}
+      <div className="absolute -left-10 top-1/2 -translate-y-1/2 z-50">
         <Button
           onClick={onToggle}
-          variant="ghost"
+          variant="secondary"
           size="sm"
-          className="h-8 w-8 p-0"
+          className="rounded-l-lg rounded-r-none shadow-lg flex items-center gap-1 pl-3"
+          title={t('ai.closeAssistant', 'AI 어시스턴트 닫기')}
         >
+          <Bot className="w-4 h-4" />
           <ChevronRight className="w-4 h-4" />
         </Button>
+      </div>
+      {/* 헤더 */}
+      <div className="flex items-center gap-2 p-4 border-b border-border bg-card">
+        <div className="p-2 bg-primary/10 rounded-lg">
+          <Bot className="w-5 h-5 text-primary" />
+        </div>
+        <div>
+          <h3 className="font-semibold text-sm">AI 어시스턴트</h3>
+          <p className="text-xs text-muted-foreground">실시간 지원</p>
+        </div>
       </div>
 
       {/* 메시지 영역 */}

@@ -35,11 +35,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import {
-  initializePaddleService,
-  openPaddleCheckout,
-  getPaddlePriceId,
-} from "@/lib/paddleService";
+import { initializePaddleService } from "@/lib/paddleService";
 
 // 구독 플랜 타입
 interface SubscriptionPlan {
@@ -257,50 +253,14 @@ const Subscription = () => {
       return;
     }
 
-    // Pro 플랜: Paddle 결제
-    if (!user) {
-      // 로그인하지 않은 사용자는 로그인 페이지로 이동
-      navigate('/auth');
+    // 로그인한 사용자: UserSettings 구독 탭으로 이동
+    if (user) {
+      navigate('/user-settings?tab=subscription');
       return;
     }
 
-    if (!isPaddleReady) {
-      toast({
-        title: t('payment.loading'),
-        description: t('payment.pleaseWait'),
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const priceId = getPaddlePriceId(planId, isYearly);
-    if (!priceId) {
-      toast({
-        title: t('payment.error'),
-        description: t('payment.configError'),
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsLoading(planId);
-
-    try {
-      await openPaddleCheckout({
-        priceId,
-        customerEmail: user.email || undefined,
-        customData: { user_id: user.id },
-        successUrl: `${window.location.origin}/payment/success?provider=paddle&plan=${planId}`,
-      });
-    } catch (error) {
-      console.error('Paddle checkout error:', error);
-      toast({
-        title: t('payment.error'),
-        description: t('payment.requestFailed'),
-        variant: "destructive",
-      });
-      setIsLoading(null);
-    }
+    // 로그인하지 않은 사용자는 로그인 페이지로 이동
+    navigate('/auth');
   };
 
   const formatPrice = (price: number) => {

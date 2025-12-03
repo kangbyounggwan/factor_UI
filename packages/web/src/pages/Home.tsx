@@ -125,7 +125,7 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-background scroll-smooth">
       {/* Hero Section */}
-      <section className="relative overflow-hidden py-24 px-6 bg-background">
+      <section className="relative overflow-hidden py-24 px-6">
         <div className="max-w-7xl mx-auto text-center">
           <div className="space-y-6">
             <div className="space-y-4">
@@ -162,9 +162,12 @@ const Home = () => {
 
         {/* Background decoration */}
         <div className="absolute inset-0 -z-10 overflow-hidden">
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-            <div className="w-[800px] h-[800px] bg-primary/5 rounded-full blur-3xl"></div>
-          </div>
+          <img
+            src="/images/hero-bg.png"
+            alt="Background"
+            className="absolute inset-0 w-full h-full object-cover opacity-30"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/40 to-background" />
         </div>
       </section>
 
@@ -182,9 +185,8 @@ const Home = () => {
             {features.map((feature, index) => (
               <Card
                 key={index}
-                className={`text-center hover:shadow-lg transition-all border-2 hover:border-primary/20 relative ${
-                  feature.clickable ? 'cursor-pointer hover:scale-105' : ''
-                }`}
+                className={`text-center hover:shadow-lg transition-all border-2 hover:border-primary/20 relative ${feature.clickable ? 'cursor-pointer hover:scale-105' : ''
+                  }`}
                 onClick={feature.clickable ? feature.onClick : undefined}
               >
                 {feature.hasVideo && (

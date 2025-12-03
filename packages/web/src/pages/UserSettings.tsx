@@ -18,7 +18,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@shared/integrations/supabase/client";
 import { PLAN_FEATURES, type SubscriptionPlan } from "@shared/types/subscription";
-import { getUserPaymentHistory, type PaymentHistory } from "@shared/services/supabaseService/subscription";
+import { getUserPaymentHistory, upsertUserSubscription, type PaymentHistory } from "@shared/services/supabaseService/subscription";
 import { getUserPaymentMethods, type PaymentMethod } from "@shared/services/supabaseService/paymentMethod";
 import {
   initializePaddleService,
@@ -2152,14 +2152,13 @@ const UserSettings = () => {
       {/* Downgrade Warning Dialog */}
       <Dialog open={showDowngradeWarningModal} onOpenChange={setShowDowngradeWarningModal}>
         <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold">Free 플랜으로 다운그레이드 확인</DialogTitle>
+            <DialogDescription>
+              Free 플랜으로 변경 시 일부 기능이 제한됩니다.
+            </DialogDescription>
+          </DialogHeader>
           <div className="space-y-6">
-            {/* Header */}
-            <div>
-              <h2 className="text-2xl font-bold mb-2">Free 플랜으로 다운그레이드 확인</h2>
-              <p className="text-sm text-muted-foreground">
-                Free 플랜으로 변경 시 일부 기능이 제한됩니다.
-              </p>
-            </div>
 
             <Separator />
 
@@ -2227,12 +2226,41 @@ const UserSettings = () => {
               </Button>
               <Button
                 variant="destructive"
-                onClick={() => {
+                onClick={async () => {
+                  if (!user) return;
+
+                  try {
+                    // Basic(Free) 플랜으로 다운그레이드
+                    const now = new Date();
+                    const periodEnd = new Date(now);
+                    periodEnd.setFullYear(periodEnd.getFullYear() + 100); // 무료 플랜은 무기한
+
+                    const result = await upsertUserSubscription(
+                      user.id,
+                      'basic',
+                      now,
+                      periodEnd
+                    );
+
+                    if (result) {
+                      setCurrentPlan('basic');
+                      toast({
+                        title: "플랜 변경 완료",
+                        description: "Free 플랜으로 변경되었습니다.",
+                      });
+                    } else {
+                      throw new Error('플랜 변경 실패');
+                    }
+                  } catch (error) {
+                    console.error('Downgrade error:', error);
+                    toast({
+                      title: "오류",
+                      description: "플랜 변경 중 오류가 발생했습니다.",
+                      variant: "destructive",
+                    });
+                  }
+
                   setShowDowngradeWarningModal(false);
-                  toast({
-                    title: "다운그레이드 요청",
-                    description: "고객 지원팀에 다운그레이드 요청이 전달되었습니다.",
-                  });
                 }}
               >
                 확인 및 다운그레이드
@@ -2247,14 +2275,12 @@ const UserSettings = () => {
         <DialogContent className="max-w-3xl h-[85vh] p-0 gap-0 flex flex-col">
           {/* Fixed Header */}
           <div className="px-6 pt-6 pb-4 border-b bg-background shrink-0">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex-1">
-                <h2 className="text-2xl font-bold mb-2">월 구독 플랜 환불 정책</h2>
-                <p className="text-sm text-muted-foreground">
-                  시행일: 2025년 11월 10일 | 적용 대상: FACTOR 3D의 월 구독 플랜
-                </p>
-              </div>
-            </div>
+            <DialogHeader className="mb-3">
+              <DialogTitle className="text-2xl font-bold">월 구독 플랜 환불 정책</DialogTitle>
+              <DialogDescription>
+                시행일: 2025년 11월 10일 | 적용 대상: FACTOR 3D의 월 구독 플랜
+              </DialogDescription>
+            </DialogHeader>
           </div>
 
           {/* Scrollable Content */}
