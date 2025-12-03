@@ -194,6 +194,7 @@ const UserSettings = () => {
   // Paddle states
   const [paddleReady, setPaddleReady] = useState(false);
   const [paddleLoading, setPaddleLoading] = useState(false);
+  const [proBillingCycle, setProBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
   // API Keys states
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
@@ -2514,6 +2515,9 @@ const UserSettings = () => {
 
             {/* Pro Plan */}
             <div className={`relative border rounded-lg p-6 hover:border-primary/50 transition-colors ${currentPlan === 'pro' ? 'border-primary border-2 bg-primary/5' : 'border-border'}`}>
+              {/* Popular Badge */}
+              <Badge className="absolute -top-2 right-4 bg-blue-500 hover:bg-blue-500">추천</Badge>
+
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <div className="flex items-center gap-2">
@@ -2522,14 +2526,55 @@ const UserSettings = () => {
                       <Badge className="bg-primary">현재 플랜</Badge>
                     )}
                   </div>
-                  <p className="text-3xl font-bold mt-3">$19 <span className="text-base font-normal text-muted-foreground">/ month</span></p>
                 </div>
+              </div>
+
+              {/* 결제 주기 선택 탭 */}
+              {currentPlan !== 'pro' && (
+                <div className="mb-4">
+                  <div className="flex rounded-lg border border-border p-1 bg-muted/50">
+                    <button
+                      type="button"
+                      onClick={() => setProBillingCycle('monthly')}
+                      className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+                        proBillingCycle === 'monthly'
+                          ? 'bg-background shadow-sm text-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      월간
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProBillingCycle('yearly')}
+                      className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+                        proBillingCycle === 'yearly'
+                          ? 'bg-background shadow-sm text-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      연간 <span className="text-green-500 text-xs ml-1">17% 할인</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 가격 표시 */}
+              <div className="mb-4">
+                {proBillingCycle === 'monthly' ? (
+                  <p className="text-3xl font-bold">$19 <span className="text-base font-normal text-muted-foreground">/ month</span></p>
+                ) : (
+                  <div>
+                    <p className="text-3xl font-bold">$190 <span className="text-base font-normal text-muted-foreground">/ year</span></p>
+                    <p className="text-sm text-muted-foreground">월 $15.83 (연간 청구)</p>
+                  </div>
+                )}
               </div>
 
               {currentPlan !== 'pro' && (
                 <Button
                   className="w-full mb-4 bg-primary hover:bg-primary/90"
-                  onClick={() => handleProUpgrade('monthly')}
+                  onClick={() => handleProUpgrade(proBillingCycle)}
                   disabled={paddleLoading || !paddleReady}
                 >
                   {paddleLoading ? (
@@ -2538,7 +2583,7 @@ const UserSettings = () => {
                       처리 중...
                     </>
                   ) : (
-                    'Pro 플랜으로 업그레이드'
+                    `Pro 플랜으로 업그레이드 (${proBillingCycle === 'yearly' ? '연간' : '월간'})`
                   )}
                 </Button>
               )}
