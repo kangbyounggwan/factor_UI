@@ -284,11 +284,11 @@ const UserSettings = () => {
           ? planName as SubscriptionPlan
           : 'free';
 
-        // Plan pricing info
+        // Plan pricing info (USD)
         const planPricing = {
           free: { price: 0 },
-          pro: { price: 19900 },
-          enterprise: { price: 99000 }
+          pro: { price: 19 }, // $19/month
+          enterprise: { price: -1 } // Contact Sales
         };
 
         setCurrentPlan(validPlan);
@@ -607,8 +607,9 @@ const UserSettings = () => {
       await openPaddleCheckout({
         priceId,
         customerEmail: user?.email,
+        customData: user?.id ? { user_id: user.id } : undefined,
         locale: 'en',
-        successUrl: `${window.location.origin}/settings?tab=subscription&upgraded=true`,
+        successUrl: `${window.location.origin}/payment/success?provider=paddle&plan=pro`,
       });
     } catch (error) {
       console.error('[UserSettings] Failed to open Paddle checkout:', error);
@@ -2495,7 +2496,7 @@ const UserSettings = () => {
                       <Badge className="bg-primary">현재 플랜</Badge>
                     )}
                   </div>
-                  <p className="text-3xl font-bold mt-3">₩19,900 <span className="text-base font-normal text-muted-foreground">/ 월</span></p>
+                  <p className="text-3xl font-bold mt-3">$19 <span className="text-base font-normal text-muted-foreground">/ month</span></p>
                 </div>
               </div>
 
@@ -2571,8 +2572,8 @@ const UserSettings = () => {
                       <Badge className="bg-primary">현재 플랜</Badge>
                     )}
                   </div>
-                  <p className="text-3xl font-bold mt-3">₩99,000 <span className="text-base font-normal text-muted-foreground">/ 월</span></p>
-                  <p className="text-xs text-muted-foreground mt-1">또는 맞춤형 견적</p>
+                  <p className="text-3xl font-bold mt-3">Custom <span className="text-base font-normal text-muted-foreground"></span></p>
+                  <p className="text-xs text-muted-foreground mt-1">Contact for pricing</p>
                 </div>
               </div>
 

@@ -1158,6 +1158,8 @@ export default {
     cancelConfirmTitle: "구독을 취소하시겠습니까?",
     cancelConfirmMessage: "구독을 취소하면 무료 플랜으로 전환되며, 유료 기능을 사용할 수 없게 됩니다.",
     cancelConfirmButton: "구독 취소",
+    paymentSuccess: "결제 완료",
+    paymentSuccessMessage: "구독이 활성화되었습니다.",
     cancelSuccessTitle: "구독이 취소되었습니다",
     cancelSuccessMessage: "무료 플랜으로 전환되었습니다.",
     compareTitle: "플랜별 세부 사항",
@@ -1309,6 +1311,9 @@ export default {
     errorMessage: "오류 메시지",
     failNotice: "문제가 지속되면 고객센터로 문의해주세요.",
     retryPayment: "다시 시도",
+    loading: "결제 로딩 중...",
+    pleaseWait: "잠시만 기다려주세요.",
+    configError: "결제 설정 오류입니다. 잠시 후 다시 시도해주세요.",
     checkout: {
       title: "구독 결제",
       subtitle: "FACTOR 3D PRINTER 서비스를 이용하기 위한 구독을 시작합니다",

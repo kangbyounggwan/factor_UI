@@ -215,6 +215,7 @@ const PaddlePricing = () => {
       await openPaddleCheckout({
         priceId,
         customerEmail: user?.email,
+        customData: user?.id ? { user_id: user.id } : undefined,
         locale: 'en', // TODO: 사용자 언어 설정 사용
         successUrl: `${window.location.origin}/payment/success?provider=paddle&plan=${plan.id}`,
       });

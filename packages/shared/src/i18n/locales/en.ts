@@ -1235,6 +1235,8 @@ export default {
     cancelConfirmTitle: "Cancel Subscription?",
     cancelConfirmMessage: "Canceling your subscription will downgrade you to the free plan, and you will lose access to premium features.",
     cancelConfirmButton: "Cancel Subscription",
+    paymentSuccess: "Payment Successful",
+    paymentSuccessMessage: "Your subscription has been activated.",
     compareTitle: "Plan Details",
     compareSubtitle: "Compare all features in detail",
     faq: "Frequently Asked Questions",
@@ -1353,6 +1355,9 @@ export default {
     errorMessage: "Error Message",
     failNotice: "If the problem persists, please contact customer support.",
     retryPayment: "Try Again",
+    loading: "Loading payment...",
+    pleaseWait: "Please wait a moment.",
+    configError: "Payment configuration error. Please try again later.",
     // Merge: checkout subsection moved under payment
     checkout: {
       title: "Subscription Checkout",

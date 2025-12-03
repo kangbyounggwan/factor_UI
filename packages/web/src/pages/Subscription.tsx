@@ -28,12 +28,18 @@ import {
   Headphones,
   Rocket,
   Mail,
-  ChevronDown
+  ChevronDown,
+  Loader2
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaymentDialog } from "@/components/PaymentDialog";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import {
+  initializePaddleService,
+  openPaddleCheckout,
+  getPaddlePriceId,
+} from "@/lib/paddleService";
 
 // 구독 플랜 타입
 interface SubscriptionPlan {
@@ -49,7 +55,7 @@ interface SubscriptionPlan {
   color: string;
 }
 
-// 구독 플랜 상세 정보
+// 구독 플랜 상세 정보 (USD)
 const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string, currentPlanId?: string): SubscriptionPlan[] => [
   {
     id: "basic",
@@ -70,7 +76,7 @@ const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string, cur
   {
     id: "pro",
     name: t('subscription.plans.pro.name'),
-    price: isYearly ? 238800 : 19900, // 연간: 19,900원 * 12 = 238,800원
+    price: isYearly ? 190 : 19, // USD: $19/month, $190/year (Save ~17%)
     interval: isYearly ? "year" : "month",
     max_printers: 5,
     description: t('subscription.plans.pro.description'),
@@ -117,7 +123,37 @@ const Subscription = () => {
   const [showDetailedTable, setShowDetailedTable] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [currentPlanId, setCurrentPlanId] = useState<string>('basic');
+  const [isPaddleReady, setIsPaddleReady] = useState(false);
+  const [isLoading, setIsLoading] = useState<string | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
+
+  // Paddle 초기화
+  useEffect(() => {
+    const initPaddle = async () => {
+      const paddle = await initializePaddleService({
+        onCheckoutComplete: () => {
+          toast({
+            title: t('subscription.paymentSuccess'),
+            description: t('subscription.paymentSuccessMessage'),
+          });
+          navigate('/payment/success?provider=paddle');
+        },
+        onCheckoutClose: () => {
+          setIsLoading(null);
+        },
+        onCheckoutError: () => {
+          toast({
+            title: t('payment.error'),
+            description: t('payment.requestFailed'),
+            variant: "destructive",
+          });
+          setIsLoading(null);
+        },
+      });
+      setIsPaddleReady(!!paddle);
+    };
+    initPaddle();
+  }, [navigate, toast, t]);
 
   // 로그인 체크 제거 - 공개 페이지로 변경
   // Subscription 페이지는 이제 마케팅/정보 페이지입니다
@@ -202,23 +238,75 @@ const Subscription = () => {
     }
   };
 
-  const handleUpgrade = (planId: string) => {
+  const handleUpgrade = async (planId: string) => {
     console.log('handleUpgrade called with planId:', planId, 'currentPlanId:', currentPlanId);
 
-    // 로그인한 사용자는 User Settings 페이지의 구독 탭으로 이동
-    if (user) {
-      navigate('/user-settings?tab=subscription');
+    // Basic 플랜: 무료이므로 로그인/회원가입으로 이동
+    if (planId === 'basic') {
+      if (!user) {
+        navigate('/auth');
+      } else {
+        navigate('/dashboard');
+      }
       return;
     }
 
-    // 로그인하지 않은 사용자는 로그인 페이지로 이동
-    navigate('/auth');
+    // Enterprise: Contact Sales
+    if (planId === 'enterprise') {
+      window.location.href = 'mailto:sales@factor.io.kr?subject=Enterprise Plan Inquiry';
+      return;
+    }
+
+    // Pro 플랜: Paddle 결제
+    if (!user) {
+      // 로그인하지 않은 사용자는 로그인 페이지로 이동
+      navigate('/auth');
+      return;
+    }
+
+    if (!isPaddleReady) {
+      toast({
+        title: t('payment.loading'),
+        description: t('payment.pleaseWait'),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const priceId = getPaddlePriceId(planId, isYearly);
+    if (!priceId) {
+      toast({
+        title: t('payment.error'),
+        description: t('payment.configError'),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(planId);
+
+    try {
+      await openPaddleCheckout({
+        priceId,
+        customerEmail: user.email || undefined,
+        customData: { user_id: user.id },
+        successUrl: `${window.location.origin}/payment/success?provider=paddle&plan=${planId}`,
+      });
+    } catch (error) {
+      console.error('Paddle checkout error:', error);
+      toast({
+        title: t('payment.error'),
+        description: t('payment.requestFailed'),
+        variant: "destructive",
+      });
+      setIsLoading(null);
+    }
   };
 
   const formatPrice = (price: number) => {
     if (price === 0) return t('subscription.free');
     if (price === -1) return t('subscription.contact');
-    return `₩${price.toLocaleString('ko-KR')}`;
+    return `$${price.toLocaleString('en-US')}`;
   };
 
   useEffect(() => {
@@ -247,7 +335,7 @@ const Subscription = () => {
         '@type': 'Offer',
         name: p.name,
         price: p.price,
-        priceCurrency: 'KRW',
+        priceCurrency: 'USD',
         availability: 'https://schema.org/InStock',
       }));
 
@@ -282,7 +370,7 @@ const Subscription = () => {
               <li>Real-time monitoring</li>
               <li>Remote control</li>
             </ul>
-            <h2>Pro Plan - ₩19,900/month</h2>
+            <h2>Pro Plan - $19/month</h2>
             <ul>
               <li>5 printer connections</li>
               <li>AI model generation (50/month)</li>
@@ -384,15 +472,15 @@ const Subscription = () => {
                   {/* 가격 */}
                   <div className="flex items-end gap-1.5 min-h-[50px] lg:min-h-[60px]">
                     <div className="flex items-start">
-                      <span className="text-lg lg:text-xl text-muted-foreground mr-0.5">₩</span>
+                      <span className="text-lg lg:text-xl text-muted-foreground mr-0.5">$</span>
                       <span className="text-4xl lg:text-5xl font-normal leading-none tracking-tight">
-                        {plan.price === 0 ? "0" : plan.price === -1 ? "" : plan.price.toLocaleString('ko-KR')}
+                        {plan.price === 0 ? "0" : plan.price === -1 ? "" : plan.price.toLocaleString('en-US')}
                       </span>
                     </div>
                     {plan.price >= 0 && (
                       <div className="mb-0.5 flex flex-col items-start">
                         <span className="text-muted-foreground text-[10px] lg:text-[11px] leading-tight">
-                          /<br />{isYearly ? '년' : '월'}
+                          /<br />{isYearly ? t('subscription.year') : t('subscription.month')}
                         </span>
                       </div>
                     )}
@@ -436,29 +524,33 @@ const Subscription = () => {
                           ? "bg-foreground hover:bg-foreground/90 text-background"
                           : "bg-muted hover:bg-muted/80 text-foreground"
                       }`}
-                      disabled={plan.current}
+                      disabled={plan.current || isLoading === plan.id}
                       onClick={() => handleUpgrade(plan.id)}
                     >
-                      {user && plan.current
-                        ? t('subscription.currentPlanButton')
-                        : user
-                        ? t('subscription.manageInSettings') // 로그인한 사용자: "설정에서 관리"
-                        : plan.price === -1
-                        ? t('subscription.contactSales')
-                        : (() => {
-                            const planOrder = { basic: 0, pro: 1, enterprise: 2 };
-                            const currentOrder = planOrder[currentPlanId as keyof typeof planOrder] || 0;
-                            const targetOrder = planOrder[plan.id as keyof typeof planOrder] || 0;
+                      {isLoading === plan.id ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          {t('payment.processing')}
+                        </>
+                      ) : user && plan.current ? (
+                        t('subscription.currentPlanButton')
+                      ) : plan.price === -1 ? (
+                        t('subscription.contactSales')
+                      ) : plan.id === 'basic' ? (
+                        user ? t('subscription.currentPlanButton') : t('subscription.getStarted')
+                      ) : (
+                        (() => {
+                          const planOrder = { basic: 0, pro: 1, enterprise: 2 };
+                          const currentOrder = planOrder[currentPlanId as keyof typeof planOrder] || 0;
+                          const targetOrder = planOrder[plan.id as keyof typeof planOrder] || 0;
 
-                            if (targetOrder > currentOrder) {
-                              return t('subscription.getStarted'); // 비로그인: "시작하기"
-                            } else if (plan.id === 'basic' && currentPlanId !== 'basic') {
-                              return t('subscription.getStarted');
-                            } else {
-                              return t('subscription.downgrade'); // 다운그레이드
-                            }
-                          })()
-                      }
+                          if (targetOrder > currentOrder) {
+                            return t('subscription.upgrade'); // 업그레이드
+                          } else {
+                            return t('subscription.downgrade'); // 다운그레이드
+                          }
+                        })()
+                      )}
                     </Button>
                   </div>
                 </CardContent>
