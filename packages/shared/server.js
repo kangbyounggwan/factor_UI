@@ -5,6 +5,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import mqtt from 'mqtt';
 import { createMqttProxy } from './mqttProxyServer.js';
 // 브라우저 전용 supabase client.ts는 Node 환경에서 사용하지 않습니다.
 
@@ -531,6 +532,116 @@ const updateDeviceData = (deviceUuid, updates) => {
   return data;
 };
 
+// MQTT 클라이언트 설정 및 realtimeDataStore 연동
+let mqttClient = null;
+
+function setupMqttSubscriber() {
+  const mqttUrl = process.env.MQTT_BROKER_URL || 'mqtt://127.0.0.1:1883';
+
+  try {
+    mqttClient = mqtt.connect(mqttUrl, {
+      clientId: `factor-api-server-${Date.now()}`,
+      clean: true,
+      reconnectPeriod: 5000,
+    });
+
+    mqttClient.on('connect', () => {
+      console.log('[MQTT] Connected to broker:', mqttUrl);
+      // octoprint 상태 토픽 구독 (모든 디바이스)
+      mqttClient.subscribe('octoprint/status/#', (err) => {
+        if (err) {
+          console.error('[MQTT] Subscribe error:', err);
+        } else {
+          console.log('[MQTT] Subscribed to octoprint/status/#');
+        }
+      });
+    });
+
+    mqttClient.on('message', (topic, message) => {
+      try {
+        // 토픽에서 device UUID 추출: octoprint/status/{deviceUuid}
+        const match = topic.match(/^octoprint\/status\/(.+)$/);
+        if (!match) return;
+
+        const deviceUuid = match[1];
+        const payload = JSON.parse(message.toString());
+
+        // realtimeDataStore에 데이터 저장
+        const deviceData = getDeviceData(deviceUuid);
+
+        // OctoPrint 데이터 구조에 맞게 파싱
+        if (payload.state) {
+          deviceData.status = payload.state.flags?.printing ? 'printing' :
+                              payload.state.flags?.operational ? 'idle' : 'disconnected';
+          deviceData.connected = payload.state.flags?.operational || false;
+          deviceData.printing = payload.state.flags?.printing || false;
+          deviceData.error_message = payload.state.flags?.error ? payload.state.text : null;
+        }
+
+        // temperatures (복수형) 처리
+        if (payload.temperatures) {
+          // tool0 온도
+          if (payload.temperatures.tool0) {
+            deviceData.temperature.tool = {
+              current: payload.temperatures.tool0.actual || 0,
+              target: payload.temperatures.tool0.target || 0,
+            };
+          }
+          // bed 온도
+          if (payload.temperatures.bed) {
+            deviceData.temperature.bed = {
+              current: payload.temperatures.bed.actual || 0,
+              target: payload.temperatures.bed.target || 0,
+            };
+          }
+        }
+
+        if (payload.progress) {
+          deviceData.printProgress = {
+            completion: payload.progress.completion || 0,
+            file_position: payload.progress.filepos || 0,
+            file_size: payload.progress.file_size || 0,
+            print_time: payload.progress.print_time || 0,
+            print_time_left: payload.progress.time_left || 0,
+            filament_used: payload.job?.filament?.length || 0,
+          };
+        }
+
+        // axes 위치 데이터
+        if (payload.axes?.current) {
+          deviceData.position = {
+            x: payload.axes.current.x || 0,
+            y: payload.axes.current.y || 0,
+            z: payload.axes.current.z || 0,
+            e: payload.axes.current.e || 0,
+          };
+        }
+
+        deviceData.lastUpdated = new Date().toISOString();
+
+        // 디버그 로그 (최초 수신 시에만)
+        if (!deviceData._logged) {
+          console.log(`[MQTT] First data received for device: ${deviceUuid}`);
+          deviceData._logged = true;
+        }
+      } catch (err) {
+        // JSON 파싱 오류 무시 (간헐적 깨진 메시지)
+      }
+    });
+
+    mqttClient.on('error', (err) => {
+      console.error('[MQTT] Connection error:', err.message);
+    });
+
+    mqttClient.on('close', () => {
+      console.log('[MQTT] Connection closed, will reconnect...');
+    });
+
+  } catch (err) {
+    console.error('[MQTT] Setup error:', err.message);
+  }
+}
+
 function mountRest(app) {
   app.post('/api/auth/login', async (req, res) => {
     try {
@@ -717,16 +828,36 @@ function mountRest(app) {
     }
   });
 
-  // GET /api/v1/printers - 모든 프린터 정보
+  // GET /api/v1/printers - 모든 프린터 정보 (MQTT 실시간 데이터 포함)
   app.get('/api/v1/printers', apiKeyAuth, async (req, res) => {
     try {
       const { apiKeyUserId, supabaseEnv } = req;
       const printers = await fetchPrintersDetailForUser(supabaseEnv, apiKeyUserId);
 
+      // MQTT 실시간 데이터와 병합
+      const printersWithRealtime = printers.map(printer => {
+        const realtimeData = realtimeDataStore.get(printer.device_uuid);
+        if (realtimeData) {
+          return {
+            ...printer,
+            status: realtimeData.connected ? (realtimeData.printing ? 'printing' : 'idle') : 'disconnected',
+            realtime: {
+              connected: realtimeData.connected,
+              printing: realtimeData.printing,
+              temperature: realtimeData.temperature,
+              position: realtimeData.position,
+              printProgress: realtimeData.printProgress,
+              lastUpdated: realtimeData.lastUpdated,
+            }
+          };
+        }
+        return printer;
+      });
+
       return res.json({
         success: true,
-        data: printers,
-        count: printers.length,
+        data: printersWithRealtime,
+        count: printersWithRealtime.length,
       });
     } catch (error) {
       console.error('[API_KEY] /printers error:', error);
@@ -734,7 +865,7 @@ function mountRest(app) {
     }
   });
 
-  // GET /api/v1/printers/:deviceUuid - 특정 프린터 정보
+  // GET /api/v1/printers/:deviceUuid - 특정 프린터 정보 (MQTT 실시간 데이터 포함)
   app.get('/api/v1/printers/:deviceUuid', apiKeyAuth, async (req, res) => {
     try {
       const { apiKeyUserId, supabaseEnv } = req;
@@ -763,9 +894,24 @@ function mountRest(app) {
         return res.status(404).json({ success: false, error: 'Printer not found' });
       }
 
+      // MQTT 실시간 데이터와 병합
+      const printer = printers[0];
+      const realtimeData = realtimeDataStore.get(deviceUuid);
+      if (realtimeData) {
+        printer.status = realtimeData.connected ? (realtimeData.printing ? 'printing' : 'idle') : 'disconnected';
+        printer.realtime = {
+          connected: realtimeData.connected,
+          printing: realtimeData.printing,
+          temperature: realtimeData.temperature,
+          position: realtimeData.position,
+          printProgress: realtimeData.printProgress,
+          lastUpdated: realtimeData.lastUpdated,
+        };
+      }
+
       return res.json({
         success: true,
-        data: printers[0],
+        data: printer,
       });
     } catch (error) {
       console.error('[API_KEY] /printers/:id error:', error);
@@ -948,7 +1094,8 @@ export function createApp({ staticDir, enableRest = true, enableWs = true } = {}
   const server = http.createServer(app);
   const wss = enableWs ? new WebSocketServer({ noServer: true }) : null;
 
-  app.use(cors());
+  // CORS는 nginx에서 처리 (X-API-Key 기반 동적 Origin 허용)
+  // app.use(cors());
   app.use(express.json());
   app.get('/', (_req, res) => {
     res.type('text/plain').send('hellow factor cnrk');
@@ -1133,6 +1280,9 @@ export function createApp({ staticDir, enableRest = true, enableWs = true } = {}
       console.error('[Server] Failed to create MQTT Proxy:', err.message);
     }
   }
+
+  // MQTT 구독 시작 (실시간 데이터 수집)
+  setupMqttSubscriber();
 
   return { app, server, wss, mqttProxyWss };
 }
