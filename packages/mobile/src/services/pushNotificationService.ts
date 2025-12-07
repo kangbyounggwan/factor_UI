@@ -147,6 +147,9 @@ class PushNotificationService {
           ai_complete_enabled: true,
           payment_enabled: true,
           marketing_enabled: false,
+          weekly_report: false,
+          notification_sound: true,
+          notification_frequency: 'immediate',
           quiet_hours_enabled: false,
         }, {
           onConflict: 'user_id',

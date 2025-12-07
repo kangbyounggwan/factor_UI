@@ -404,6 +404,7 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid, printer
                   <div className="text-xs text-muted-foreground text-center">
                     {fanSpeed[0]}%
                   </div>
+
                 </div>
               </AccordionContent>
             </AccordionItem>

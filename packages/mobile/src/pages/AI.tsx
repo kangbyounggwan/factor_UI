@@ -1477,11 +1477,8 @@ const AI = () => {
   // Throttle progress display to every 5% to reduce re-renders
   const displayProgress = useMemo(() => Math.floor(progress / 5) * 5, [Math.floor(progress / 5)]);
 
-  // Memoize estimated time calculation - only recalculate every 10%
-  const estimatedTime = useMemo(() =>
-    Math.max(1, Math.ceil((100 - progress) / 25)),
-    [Math.floor(progress / 10)]
-  );
+  // Fixed estimated time: 5 minutes
+  const estimatedTime = '5m';
 
   const renderGenerating = () => (
     <div className="flex flex-col items-center justify-center py-12 space-y-6">
@@ -1505,7 +1502,7 @@ const AI = () => {
           </p>
         )}
         <p className="text-xs text-center text-muted-foreground">
-          {t('ai.estimatedTime')}: {estimatedTime}s
+          {t('ai.estimatedTime')}: {estimatedTime}
         </p>
       </div>
     </div>
