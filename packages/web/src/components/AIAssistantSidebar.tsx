@@ -9,7 +9,7 @@ import { useAuth } from "@shared/contexts/AuthContext";
 import { getUserPlan } from "@shared/services/supabaseService/subscription";
 import { hasAiAssistantAccess } from "@shared/utils/subscription";
 import type { SubscriptionPlan } from "@shared/types/subscription";
-import { UpgradePrompt } from "@/components/UpgradePrompt";
+import { UpgradePrompt } from "@/components/Settings/UpgradePrompt";
 import { useTranslation } from "react-i18next";
 
 interface AIAssistantSidebarProps {

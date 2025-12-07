@@ -51,7 +51,7 @@ import {
 import { getUserPlan } from "@shared/services/supabaseService/subscription";
 import { canAddPrinter, getMaxPrinters } from "@shared/utils/subscription";
 import type { SubscriptionPlan } from "@shared/types/subscription";
-import { UpgradePrompt } from "@/components/UpgradePrompt";
+import { UpgradePrompt } from "@/components/Settings/UpgradePrompt";
 
 // 프린터 그룹 타입
 interface PrinterGroup {
@@ -706,33 +706,6 @@ const Settings = () => {
 
       setShowEditPrinter(false);
       setEditingPrinter(null);
-
-      // Dashboard의 localStorage 캐시 업데이트 (실시간 반영)
-      try {
-        const dashboardCacheKey = 'dashboard:printers';
-        const cachedData = localStorage.getItem(dashboardCacheKey);
-        if (cachedData) {
-          const printers = JSON.parse(cachedData);
-          const updatedPrinters = printers.map((p: { id: string; name?: string; model?: string }) => {
-            if (p.id === editingPrinter.id) {
-              return { ...p, name: updateData.name, model: updateData.model };
-            }
-            return p;
-          });
-          localStorage.setItem(dashboardCacheKey, JSON.stringify(updatedPrinters));
-
-          // StorageEvent 발생 (다른 탭에도 전파)
-          window.dispatchEvent(new StorageEvent('storage', {
-            key: dashboardCacheKey,
-            newValue: JSON.stringify(updatedPrinters),
-            oldValue: cachedData,
-            storageArea: localStorage,
-            url: window.location.href
-          }));
-        }
-      } catch (cacheError) {
-        console.log('Dashboard cache update failed:', cacheError);
-      }
 
       toast({
         title: t('settings.success'),

@@ -409,8 +409,8 @@ export async function deleteModelFiles(
   }
 
   // 4. GCode 파일들 삭제 (gcode-files 버킷의 모델 폴더 전체)
-  const modelName = (modelData.model_name || modelData.prompt || modelData.id).replace(/[^a-zA-Z0-9._-]/g, '_');
-  const gcodeFolderPath = `${userId}/${modelName}`;
+  // 새 구조: {userId}/{modelId}/
+  const gcodeFolderPath = `${userId}/${modelData.id}`;
 
   try {
     console.log('[deleteModelFiles] Deleting GCode folder:', gcodeFolderPath);
@@ -504,11 +504,30 @@ export async function downloadAndUploadGCode(
   try {
     const GCODE_BUCKET = 'gcode-files';
 
-    // 파일 구조: {userId}/{modelName}.gcode
-    // 모델 이름을 파일명으로 사용 (같은 모델은 프린터가 달라도 같은 결과)
-    const sanitizedModelName = (modelName || modelId).replace(/[^a-zA-Z0-9._-]/g, '_');
-    const path = `${userId}/${sanitizedModelName}.gcode`;
-    const filename = `${sanitizedModelName}.gcode`;
+    // 파일 구조: {userId}/{modelId}/{modelName}/{shortFileName}.gcode
+    // modelName을 폴더로 사용하여 원본 이름 유지, 파일명은 짧게
+    const modelFolder = modelName || modelId;
+
+    // 짧은 파일명 생성 (MQTT와 일치하도록)
+    // "Text-to-3D__3D-printable_snowman_with_inte...." -> "snowman.gcode"
+    let shortFileName: string;
+    if (modelName) {
+      // 모델명에서 의미있는 단어 추출
+      const words = modelName.split(/[_\s-]+/).filter(w => w.length > 0);
+      const meaningfulWord = words.find(w =>
+        !w.toLowerCase().includes('text') &&
+        !w.toLowerCase().includes('image') &&
+        !w.toLowerCase().includes('3d') &&
+        !w.toLowerCase().includes('printable') &&
+        w.length > 2
+      ) || words[words.length - 1] || modelId.substring(0, 8);
+      shortFileName = `${meaningfulWord}.gcode`;
+    } else {
+      shortFileName = `${modelId.substring(0, 8)}.gcode`;
+    }
+
+    const path = `${userId}/${modelId}/${modelFolder}/${shortFileName}`;
+    const filename = shortFileName;
 
     console.log('[aiStorage] Downloading GCode from AI server:', gcodeUrl);
 
@@ -561,6 +580,7 @@ export async function downloadAndUploadGCode(
           model_id: modelId,
           printer_id: printerModelId,
           filename: filename,
+          short_filename: shortFileName,
           file_path: path,
           file_size: gcodeBlob.size,
           manufacturer: printerInfo?.manufacturer,

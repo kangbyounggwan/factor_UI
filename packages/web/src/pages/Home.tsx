@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TypingEffect } from "@/components/TypingEffect";
+import { TypingEffect } from "@/components/Home/TypingEffect";
 
 
 const PLUGIN_URL = "https://github.com/kangbyounggwan/octoprint-factor-plugin/archive/main.zip";

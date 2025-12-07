@@ -282,7 +282,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
   }, []);
 
   const showIframe = !!webrtcUrl && !webrtcUrl.endsWith('.m3u8');
-  
+
 
   return (
     <Card className={`h-full ${isFullscreen ? "fixed inset-4 z-50 bg-background" : ""}`}>

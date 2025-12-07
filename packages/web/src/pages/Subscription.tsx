@@ -32,7 +32,7 @@ import {
   Loader2
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PaymentDialog } from "@/components/PaymentDialog";
+import { PaymentDialog } from "@/components/Subscription/PaymentDialog";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { initializePaddleService } from "@/lib/paddleService";

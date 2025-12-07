@@ -268,6 +268,271 @@ const dashStatusTopicHandlers = new Map<string, MqttMessageHandler>();
 type DashStatusListener = (uuid: string, data: any) => void;
 const dashStatusListeners = new Set<DashStatusListener>();
 
+// ============================================================
+// PrinterStatusManager: 프린터 상태 관리 통합 클래스
+// - 캐시 관리 (메모리)
+// - DB 동기화
+// - MQTT 타임아웃 체크
+// - 프린트 히스토리 관리
+// ============================================================
+class PrinterStatusManager {
+  // 프린터별 마지막 상태 캐시
+  private statusCache = new Map<string, string>();
+  // 프린터별 마지막 MQTT 메시지 수신 시간
+  private lastMessageTime = new Map<string, number>();
+  // 타임아웃 체크 인터벌 ID
+  private timeoutCheckInterval: ReturnType<typeof setInterval> | null = null;
+  // 설정
+  private readonly TIMEOUT_MS = 30000; // 30초
+  private readonly CHECK_INTERVAL_MS = 10000; // 10초마다 체크
+
+  // 프린트 히스토리 관리
+  // deviceUuid → { jobId, printerId, lastStatus }
+  private activeJobs = new Map<string, { jobId: string; printerId: string; lastStatus: string }>();
+
+  /**
+   * MQTT 페이로드에서 상태값 추출 및 매핑
+   */
+  extractStatus(parsed: any): string {
+    // connection 배열에서 상태 추출: ["Printing", "/dev/ttyUSB0", 115200, {...}]
+    const connectionArr = Array.isArray(parsed?.connection) ? parsed.connection : null;
+    const connectionState = connectionArr?.[0];
+    // state.text에서 상태 추출
+    const stateText = parsed?.state?.text;
+    // 우선순위: connection[0] > state.text
+    const rawState = (connectionState ?? stateText ?? '').toLowerCase();
+
+    // 상태 매핑 (OctoPrint → DB 상태)
+    switch (rawState) {
+      case 'printing': return 'printing';
+      case 'paused': return 'paused';
+      case 'operational':
+      case 'ready': return 'idle';
+      case 'offline':
+      case 'closed':
+      case 'closed_with_error': return 'disconnected';
+      case 'error': return 'error';
+      default: return 'idle'; // 연결되어 있지만 상태 불명
+    }
+  }
+
+  /**
+   * 메시지 수신 시간 업데이트
+   */
+  updateMessageTime(deviceUuid: string): void {
+    this.lastMessageTime.set(deviceUuid, Date.now());
+  }
+
+  /**
+   * 프린터 상태를 DB와 동기화
+   */
+  async syncToDb(deviceUuid: string, newStatus: string): Promise<void> {
+    if (!supabase) return;
+
+    // 캐시와 비교 (같으면 스킵)
+    if (this.statusCache.get(deviceUuid) === newStatus) return;
+
+    try {
+      // DB에서 현재 상태 조회
+      const { data: printer, error: selectError } = await supabase
+        .from('printers')
+        .select('id, status')
+        .eq('device_uuid', deviceUuid)
+        .maybeSingle();
+
+      if (selectError || !printer) return;
+
+      // DB 상태와 동일하면 캐시만 업데이트
+      if (printer.status === newStatus) {
+        this.statusCache.set(deviceUuid, newStatus);
+        return;
+      }
+
+      // DB 업데이트
+      const { error: updateError } = await supabase
+        .from('printers')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', printer.id);
+
+      if (!updateError) {
+        this.statusCache.set(deviceUuid, newStatus);
+        console.log(`[MQTT] ✅ 상태 동기화: ${deviceUuid} → ${newStatus}`);
+      }
+    } catch (error) {
+      console.error('[MQTT] DB 동기화 실패:', error);
+    }
+  }
+
+  /**
+   * 타임아웃 체크 시작
+   */
+  startTimeoutCheck(): void {
+    if (this.timeoutCheckInterval) return;
+
+    this.timeoutCheckInterval = setInterval(async () => {
+      const now = Date.now();
+
+      for (const [deviceUuid, lastTime] of this.lastMessageTime.entries()) {
+        const elapsed = now - lastTime;
+
+        if (elapsed >= this.TIMEOUT_MS) {
+          console.log(`[MQTT] ⏰ Timeout: ${deviceUuid} (${Math.round(elapsed / 1000)}s)`);
+          await this.syncToDb(deviceUuid, 'disconnected').catch(() => {});
+        }
+      }
+    }, this.CHECK_INTERVAL_MS);
+
+    console.log('[MQTT] ⏱️ 타임아웃 체크 시작');
+  }
+
+  /**
+   * 타임아웃 체크 중지
+   */
+  stopTimeoutCheck(): void {
+    if (this.timeoutCheckInterval) {
+      clearInterval(this.timeoutCheckInterval);
+      this.timeoutCheckInterval = null;
+      console.log('[MQTT] ⏱️ 타임아웃 체크 중지');
+    }
+  }
+
+  /**
+   * 모든 캐시 및 상태 초기화
+   */
+  clear(): void {
+    this.statusCache.clear();
+    this.lastMessageTime.clear();
+    this.activeJobs.clear();
+    this.stopTimeoutCheck();
+  }
+
+  // ============================================================
+  // Phase 2: 프린트 히스토리 관리
+  // ============================================================
+
+  /**
+   * 프린팅 상태 변경 감지 및 히스토리 관리
+   * - idle/operational → printing: 새 job 생성
+   * - printing → paused/cancelled/completed/failed: job 상태 업데이트
+   */
+  async handlePrintStatusChange(
+    deviceUuid: string,
+    newStatus: string,
+    parsed: any
+  ): Promise<void> {
+    if (!supabase) return;
+
+    const activeJob = this.activeJobs.get(deviceUuid);
+    const prevStatus = activeJob?.lastStatus || this.statusCache.get(deviceUuid) || 'idle';
+
+    // 상태가 동일하면 스킵
+    if (prevStatus === newStatus) return;
+
+    try {
+      // 프린터 ID 조회
+      const { data: printer } = await supabase
+        .from('printers')
+        .select('id, user_id')
+        .eq('device_uuid', deviceUuid)
+        .maybeSingle();
+
+      if (!printer) return;
+
+      // Case 1: 프린팅 시작 (idle/operational → printing)
+      if (newStatus === 'printing' && !activeJob) {
+        const jobFile = parsed?.job?.file;
+        const fileName = jobFile?.name || jobFile?.display || 'Unknown';
+
+        // model_print_history에 새 레코드 생성
+        const { data: newJob, error } = await supabase
+          .from('model_print_history')
+          .insert({
+            user_id: printer.user_id,
+            printer_id: printer.id,
+            print_status: 'printing',
+            started_at: new Date().toISOString(),
+            print_settings: {
+              file_name: fileName,
+              file_size: jobFile?.size,
+              estimated_time: parsed?.job?.estimatedPrintTime,
+            },
+          })
+          .select('id')
+          .single();
+
+        if (!error && newJob) {
+          this.activeJobs.set(deviceUuid, {
+            jobId: newJob.id,
+            printerId: printer.id,
+            lastStatus: 'printing',
+          });
+          console.log(`[MQTT] 🖨️ Print job started: ${newJob.id} for ${deviceUuid}`);
+        }
+      }
+
+      // Case 2: 프린팅 상태 변경 (printing → paused/cancelled/completed/failed)
+      else if (activeJob && ['paused', 'cancelled', 'completed', 'failed', 'idle', 'error'].includes(newStatus)) {
+        // DB 상태 매핑
+        let dbStatus = newStatus;
+        if (newStatus === 'idle') dbStatus = 'completed'; // idle로 돌아가면 완료
+        if (newStatus === 'error') dbStatus = 'failed';
+
+        const updateData: any = {
+          print_status: dbStatus,
+        };
+
+        // 완료/실패/취소 시 완료 시간 기록
+        if (['completed', 'failed', 'cancelled'].includes(dbStatus)) {
+          updateData.completed_at = new Date().toISOString();
+
+          // 활성 job 제거
+          this.activeJobs.delete(deviceUuid);
+        }
+
+        // 에러 메시지 저장
+        if (dbStatus === 'failed' && parsed?.state?.error) {
+          updateData.error_message = parsed.state.error;
+        }
+
+        await supabase
+          .from('model_print_history')
+          .update(updateData)
+          .eq('id', activeJob.jobId);
+
+        // lastStatus 업데이트
+        if (this.activeJobs.has(deviceUuid)) {
+          this.activeJobs.get(deviceUuid)!.lastStatus = newStatus;
+        }
+
+        console.log(`[MQTT] 🖨️ Print job ${activeJob.jobId} status: ${dbStatus}`);
+      }
+
+      // Case 3: 재개 (paused → printing)
+      else if (activeJob && prevStatus === 'paused' && newStatus === 'printing') {
+        await supabase
+          .from('model_print_history')
+          .update({ print_status: 'printing' })
+          .eq('id', activeJob.jobId);
+
+        activeJob.lastStatus = 'printing';
+        console.log(`[MQTT] 🖨️ Print job ${activeJob.jobId} resumed`);
+      }
+    } catch (error) {
+      console.error('[MQTT] Print history error:', error);
+    }
+  }
+
+  /**
+   * 활성 job ID 조회
+   */
+  getActiveJobId(deviceUuid: string): string | null {
+    return this.activeJobs.get(deviceUuid)?.jobId || null;
+  }
+}
+
+// 전역 싱글턴 인스턴스
+const printerStatusManager = new PrinterStatusManager();
+
 export function onDashStatusMessage(listener: DashStatusListener) {
   dashStatusListeners.add(listener);
   return () => dashStatusListeners.delete(listener);
@@ -292,6 +557,10 @@ export async function startDashStatusSubscriptionsForUser(userId: string, opts?:
       // 주제에서 uuid 추출하여 리스너 호출 (마지막 세그먼트 사용)
       const parts = t.split('/');
       const id = parts[parts.length - 1] || uuid;
+
+      // 마지막 메시지 수신 시간 업데이트 (타임아웃 체크용)
+      printerStatusManager.updateMessageTime(id);
+
       const flags = parsed?.state?.flags;
       const isConnected = Boolean(flags && (flags.operational || flags.printing || flags.paused || flags.ready || flags.error));
       // 온도 포맷 표준화: temperatures.{bed,chamber,tool0} 사용
@@ -395,18 +664,32 @@ export async function startDashStatusSubscriptionsForUser(userId: string, opts?:
         temperature_info,
         connection,
       } as any;
+
+      // DB 프린터 상태 업데이트 (페이로드에서 상태 추출)
+      const extractedStatus = printerStatusManager.extractStatus(parsed);
+      if (id) {
+        printerStatusManager.syncToDb(id, extractedStatus).catch(() => {});
+
+        // Phase 2: 프린트 히스토리 관리 (상태 변경 감지)
+        printerStatusManager.handlePrintStatusChange(id, extractedStatus, parsed).catch(() => {});
+      }
+
       dashStatusListeners.forEach((fn) => { try { fn(id, mapped); } catch {} });
     };
     await mqttClient.subscribe(topic, handler);
     dashStatusSubscribed.add(topic);
     dashStatusTopicHandlers.set(topic, handler);
     subscribedTopics.push(topic);
+
+    // 구독 시작 시 마지막 메시지 시간 초기화 (타임아웃 체크 대상으로 등록)
+    printerStatusManager.updateMessageTime(uuid);
   }
   if (subscribedTopics.length > 0) {
     console.log('%c[MQTT]%c%c[SUB]%c started for octoprint/status topics:', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #9C27B0; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #9C27B0; font-weight: bold;", subscribedTopics);
+
+    // 구독 시작 시 타임아웃 체크도 시작
+    printerStatusManager.startTimeoutCheck();
   }
-
-
 }
 
 export async function stopDashStatusSubscriptions() {
@@ -422,6 +705,10 @@ export async function stopDashStatusSubscriptions() {
     dashStatusTopicHandlers.delete(topic);
     dashStatusSubscribed.delete(topic);
   }
+
+  // 구독 해제 시 캐시 및 타임아웃 정리
+  printerStatusManager.clear();
+
   console.log('%c[MQTT]%c%c[SUB]%c stopped for topics:', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #9C27B0; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #9C27B0; font-weight: bold;", topics);
 }
 

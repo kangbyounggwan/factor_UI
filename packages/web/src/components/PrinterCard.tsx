@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { PrinterStatusBadge, type PrinterStatus } from "@/components/PrinterStatusBadge";
+import { PrinterStatusBadge, type PrinterStatus } from "@/components/Dashboard/PrinterStatusBadge";
 import { formatTemperature } from "@/lib/formatUtils";
 import { useTranslation } from "react-i18next";
 
@@ -63,14 +63,14 @@ export function PrinterCard({
           </div>
         </div>
 
-        {/* 진행률 (옵션) */}
+        {/* 진행률 (옵션) - 0~1 또는 0~100 범위 모두 지원 */}
         {typeof progress === 'number' && (
           <div className="space-y-1">
             <div className="flex justify-between text-xs">
               <span>{t('printer.progress')}</span>
-              <span>{progress}%</span>
+              <span>{progress <= 1 ? (progress * 100).toFixed(1) : progress.toFixed(1)}%</span>
             </div>
-            <Progress value={progress} className="h-1" />
+            <Progress value={progress <= 1 ? progress * 100 : progress} className="h-1" />
           </div>
         )}
       </div>

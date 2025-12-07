@@ -8,9 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Lazy load ModelViewer to reduce initial bundle size
-const ModelViewer = lazy(() => import("@/components/ModelViewer"));
-const GCodeViewer = lazy(() => import("@/components/GCodeViewer"));
-const GCodePreview = lazy(() => import("@/components/GCodePreview"));
+const ModelViewer = lazy(() => import("@/components/ai/ModelViewer"));
+const GCodeViewer = lazy(() => import("@/components/ai/GCodeViewer"));
+const GCodePreview = lazy(() => import("@/components/ai/GCodePreview"));
 import TextTo3DForm from "@/components/ai/TextTo3DForm";
 import ImageTo3DForm from "@/components/ai/ImageTo3DForm";
 import ModelPreview from "@/components/ai/ModelPreview";
@@ -1081,6 +1081,24 @@ const AI = () => {
     }
 
     try {
+      // 0. DB에서 short_filename 가져오기
+      let fileName = `${printFileName.replace(/[^a-zA-Z0-9가-힣-_]/g, '_')}.gcode`;
+
+      if (currentModelId) {
+        const { data: gcodeFile, error: gcodeError } = await supabase
+          .from('gcode_files')
+          .select('short_filename')
+          .eq('model_id', currentModelId)
+          .single();
+
+        if (gcodeFile?.short_filename && !gcodeError) {
+          fileName = gcodeFile.short_filename;
+          console.log('[AI] Using short_filename from DB:', fileName);
+        } else {
+          console.log('[AI] No short_filename found in DB, using generated name:', fileName);
+        }
+      }
+
       // 1. GCode 파일 다운로드
       toast({
         title: t('ai.downloadingGCode'),
@@ -1108,8 +1126,6 @@ const AI = () => {
         for (let i = 0; i < chunk.length; i += 1) binary += String.fromCharCode(chunk[i]);
         return btoa(binary);
       };
-
-      const fileName = `${printFileName.replace(/[^a-zA-Z0-9가-힣-_]/g, '_')}.gcode`;
 
       // 첫 번째 청크 전송
       await publishSdUploadChunkFirst(selectedPrinter.device_uuid, {

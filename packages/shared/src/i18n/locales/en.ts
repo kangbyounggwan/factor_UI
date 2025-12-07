@@ -776,6 +776,9 @@ export default {
   printerDetail: {
     // Navigation
     backToDashboard: "Back to Dashboard",
+    defaultPrinterName: "Printer",
+    monitoring: "Monitoring",
+    history: "History",
     // Connection Status
     noConnection: "No Connection",
     noConnectionDesc: "Available after printer connection",
@@ -811,8 +814,15 @@ export default {
     inProgress: "In Progress",
     stopped: "Stopped",
     pausing: "Pausing",
+    printingInProgress: "Printing in progress...",
     connection: "Connection",
     temperatureMonitoring: "Temperature Monitoring",
+    temperatureChart: "Temperature Chart",
+    last30Minutes: "Last 30 min",
+    nozzleActual: "Nozzle Actual",
+    nozzleTarget: "Nozzle Target",
+    bedActual: "Bed Actual",
+    bedTarget: "Bed Target",
     extruder: "Extruder",
     heatingBed: "Heating Bed",
     // Connection Settings
@@ -881,6 +891,20 @@ export default {
     error: "Error",
     success: "Success"
   },
+  printHistory: {
+    title: "Print History",
+    noHistory: "No print history",
+    unknownFile: "Unknown file",
+    printing: "Printing",
+    completed: "Completed",
+    failed: "Failed",
+    cancelled: "Cancelled",
+    paused: "Paused",
+    today: "Today",
+    yesterday: "Yesterday",
+    hour: "h",
+    minute: "m"
+  },
   control: {
     title: "Printer Remote Control",
     printControl: "Print Control",
@@ -922,6 +946,13 @@ export default {
     support: "Support",
     travelPath: "Travel Path",
     showTravelPath: "Show Travel Path",
+    parseFailed: "Parse Failed",
+    loadFailed: "Load Failed",
+    parsing: "Parsing...",
+    analyzing: "Analyzing...",
+    zoomIn: "Zoom In",
+    zoomOut: "Zoom Out",
+    resetViewport: "Reset Viewport",
     // File Management
     title: "G-code Space",
     localFiles: "Local Files",

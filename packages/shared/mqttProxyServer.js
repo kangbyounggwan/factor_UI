@@ -25,6 +25,100 @@ const stats = {
   messageLatencies: [],
 };
 
+// 프린터별 수집 상태 추적 (printer_id -> boolean)
+const printerCollectionStatus = new Map();
+
+// UUID -> printer_id 캐시 (device_uuid -> id)
+const uuidToPrinterIdCache = new Map();
+
+/**
+ * UUID로 printer_id 찾기 (캐시 사용)
+ */
+async function getPrinterIdByUuid(device_uuid) {
+  if (!supabase) return null;
+
+  // 캐시 확인
+  if (uuidToPrinterIdCache.has(device_uuid)) {
+    return uuidToPrinterIdCache.get(device_uuid);
+  }
+
+  // DB에서 조회
+  try {
+    const { data, error } = await supabase
+      .from('printers')
+      .select('id')
+      .eq('device_uuid', device_uuid)
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+
+    // 캐시 저장
+    uuidToPrinterIdCache.set(device_uuid, data.id);
+    return data.id;
+  } catch (error) {
+    console.error(`[MqttProxy] Error finding printer by UUID:`, error.message);
+    return null;
+  }
+}
+
+/**
+ * 온도 데이터를 printer_temperature_logs에 직접 저장
+ */
+async function saveTemperatureToDB(data) {
+  if (!supabase) {
+    console.error('[MqttProxy] Supabase client not configured');
+    return;
+  }
+
+  const { printer_id, temperature_info } = data;
+
+  // printers 테이블 status 기반으로 수집 여부 결정
+  const shouldCollect = printerCollectionStatus.get(printer_id);
+
+  if (!shouldCollect) {
+    // 로그 스팸 방지 - 첫 스킵만 로그
+    if (Math.random() < 0.001) {
+      console.log(`[MqttProxy] ⏭️  Skipping save - printer ${printer_id} not in PRINTING status`);
+    }
+    return;
+  }
+
+  // 온도 데이터 추출
+  const tool = temperature_info?.tool?.tool0 ?? temperature_info?.tool;
+  const bed = temperature_info?.bed;
+
+  console.log(`[MqttProxy] 🌡️  Temperature data - tool: ${JSON.stringify(tool)}, bed: ${JSON.stringify(bed)}`);
+
+  if (!tool && !bed) {
+    console.log('[MqttProxy] ⏭️  Skipping save - no temperature data');
+    return; // 온도 데이터 없으면 스킵
+  }
+
+  try {
+    // printer_temperature_logs에 INSERT
+    const { error } = await supabase
+      .from('printer_temperature_logs')
+      .insert({
+        printer_id,
+        nozzle_temp: tool?.actual || 0,
+        nozzle_target: tool?.target || 0,
+        bed_temp: bed?.actual || 0,
+        bed_target: bed?.target || 0,
+        recorded_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      console.error(`[MqttProxy] ❌ Failed to insert temperature log:`, error.message);
+    } else {
+      console.log(`[MqttProxy] ✅ Saved temperature for printer ${printer_id} (nozzle: ${tool?.actual}°C, bed: ${bed?.actual}°C)`);
+    }
+  } catch (error) {
+    console.error('[MqttProxy] ❌ Error saving temperature:', error.message);
+  }
+}
+
 export function createMqttProxy(server) {
   const wss = new WebSocketServer({
     noServer: true, // 수동 upgrade 처리
@@ -68,6 +162,7 @@ export function createMqttProxy(server) {
 
   mqttClient.on('connect', () => {
     console.log('[MqttProxy] ✅ Connected to MQTT broker:', mqttBrokerUrl);
+    // DB 상태 업데이트는 클라이언트(mqtt.ts)에서 처리
   });
 
   mqttClient.on('error', (err) => {
@@ -89,6 +184,42 @@ export function createMqttProxy(server) {
   mqttClient.on('offline', () => {
     console.warn('[MqttProxy] ⚠️  Client went offline');
   });
+
+  // Supabase Realtime: printers 테이블 status 변경 모니터링
+  if (supabase) {
+    console.log('[MqttProxy] 📡 Subscribing to printers table status changes...');
+
+    supabase
+      .channel('printers_status_monitor')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'printers',
+        },
+        (payload) => {
+          const { id: printer_id, status } = payload.new;
+          const oldStatus = payload.old.status;
+
+          if (status !== oldStatus) {
+            console.log(`[MqttProxy] 🔄 Printer ${printer_id} status changed: ${oldStatus} → ${status}`);
+
+            // printing 상태일 때만 온도 수집 활성화
+            if (status === 'printing') {
+              printerCollectionStatus.set(printer_id, true);
+              console.log(`[MqttProxy] ✅ Temperature collection STARTED for printer ${printer_id}`);
+            } else {
+              printerCollectionStatus.set(printer_id, false);
+              console.log(`[MqttProxy] ⏸️  Temperature collection STOPPED for printer ${printer_id}`);
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log(`[MqttProxy] 📡 Realtime subscription status:`, status);
+      });
+  }
 
   // 연결된 클라이언트 관리
   const clients = new Map();
@@ -257,8 +388,11 @@ export function createMqttProxy(server) {
     });
   });
 
+  // 온도 데이터 버퍼 (프린터별 3초마다 저장)
+  const temperatureBuffers = new Map(); // printer_id -> { lastSave, data }
+
   // MQTT 메시지를 WebSocket 클라이언트들에게 전달
-  mqttClient.on('message', (topic, payload) => {
+  mqttClient.on('message', async (topic, payload) => {
     const receiveTime = Date.now();
     const subscribers = topicSubscribers.get(topic);
 
@@ -286,6 +420,58 @@ export function createMqttProxy(server) {
         console.log(`[MqttProxy] Active subscriptions: ${topicSubscribers.size}`);
         console.log(`[MqttProxy] Active clients: ${clients.size}`);
       }
+    }
+
+    // 온도 데이터 3초마다 DB로 저장 (프린터 상태 업데이트는 클라이언트 mqtt.ts에서 처리)
+    try {
+      const data = JSON.parse(payload.toString());
+
+      // 프린터 UUID 추출 (topic에서: octoprint/status/{device_uuid})
+      const match = topic.match(/octoprint\/status\/([^\/]+)/);
+      if (!match) return;
+
+      const device_uuid = match[1];
+
+      // 온도 정보가 있는 메시지만 처리
+      if (!data.temperature_info) return;
+
+      // UUID로 printer_id 조회
+      const printer_id = await getPrinterIdByUuid(device_uuid);
+      if (!printer_id) {
+        console.warn(`[MqttProxy] ⚠️  Printer not found for UUID: ${device_uuid}`);
+        return;
+      }
+
+      // 버퍼 초기화 (printer_id 기반)
+      if (!temperatureBuffers.has(printer_id)) {
+        temperatureBuffers.set(printer_id, {
+          lastSave: 0,
+          data: null,
+        });
+      }
+
+      const buffer = temperatureBuffers.get(printer_id);
+      const now = Date.now();
+
+      // 최신 데이터 저장
+      buffer.data = {
+        printer_id: printer_id, // 실제 DB의 printer_id
+        temperature_info: data.temperature_info,
+        state: data.state,
+        flags: data.flags,
+      };
+
+      // 3초마다 온도 데이터만 저장
+      if (now - buffer.lastSave >= 3000) {
+        buffer.lastSave = now;
+
+        // 온도 데이터 저장 (비동기)
+        saveTemperatureToDB(buffer.data).catch(err => {
+          console.error(`[MqttProxy] Failed to save temperature for ${printer_id}:`, err.message);
+        });
+      }
+    } catch (err) {
+      // MQTT 메시지 파싱 실패는 무시 (온도 데이터가 아닐 수 있음)
     }
   });
 

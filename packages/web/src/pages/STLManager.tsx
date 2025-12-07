@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 
 // Lazy load ModelViewer to reduce initial bundle size
-const ModelViewer = lazy(() => import("@/components/ModelViewer"));
+const ModelViewer = lazy(() => import("@/components/ai/ModelViewer"));
 
 interface STLFile {
   id: string;

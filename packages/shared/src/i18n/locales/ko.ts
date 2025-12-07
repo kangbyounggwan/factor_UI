@@ -785,6 +785,9 @@ export default {
   printerDetail: {
     // 네비게이션
     backToDashboard: "전체 현황으로 돌아가기",
+    defaultPrinterName: "프린터",
+    monitoring: "모니터링",
+    history: "히스토리",
     // 연결 상태
     noConnection: "연결 없음",
     noConnectionDesc: "프린터 연결 후 이용 가능합니다",
@@ -820,8 +823,15 @@ export default {
     inProgress: "진행중",
     stopped: "중지",
     pausing: "중지중",
+    printingInProgress: "출력 진행 중...",
     connection: "연결",
     temperatureMonitoring: "온도 모니터링",
+    temperatureChart: "온도 그래프",
+    last30Minutes: "최근 30분",
+    nozzleActual: "노즐 실제",
+    nozzleTarget: "노즐 타겟",
+    bedActual: "베드 실제",
+    bedTarget: "베드 타겟",
     extruder: "익스트루더",
     heatingBed: "히팅베드",
     // 연결 설정
@@ -890,6 +900,20 @@ export default {
     error: "오류",
     success: "성공"
   },
+  printHistory: {
+    title: "프린트 히스토리",
+    noHistory: "프린트 기록이 없습니다",
+    unknownFile: "알 수 없는 파일",
+    printing: "출력 중",
+    completed: "완료",
+    failed: "실패",
+    cancelled: "취소됨",
+    paused: "일시정지",
+    today: "오늘",
+    yesterday: "어제",
+    hour: "시간",
+    minute: "분"
+  },
   control: {
     title: "프린터 원격 제어",
     printControl: "프린트 제어",
@@ -931,6 +955,13 @@ export default {
     support: "서포트",
     travelPath: "이동 경로",
     showTravelPath: "이동 경로 표시",
+    parseFailed: "파싱 실패",
+    loadFailed: "로드 실패",
+    parsing: "파싱 중...",
+    analyzing: "분석 중...",
+    zoomIn: "확대",
+    zoomOut: "축소",
+    resetViewport: "뷰포트 리셋",
     // File Management
     title: "G-code 파일관리",
     localFiles: "로컬 파일",

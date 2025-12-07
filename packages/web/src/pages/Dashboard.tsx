@@ -11,7 +11,7 @@ import { supabase } from "@shared/integrations/supabase/client"
 import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { useToast } from "@/hooks/use-toast";
 import { onDashStatusMessage } from "@shared/services/mqttService";
-import { PrinterStatusBadge } from "@/components/PrinterStatusBadge";
+import { PrinterStatusBadge } from "@/components/Dashboard/PrinterStatusBadge";
 import {
   Select,
   SelectContent,
@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { computeDashboardSummary, publishDashboardSummary, useDashboardSummary } from "@shared/component/dashboardSummary";
-import { PrinterSetupModal } from "@/components/PrinterSetupModal";
+import { PrinterSetupModal } from "@/components/Dashboard/PrinterSetupModal";
 
 // 로컬 스냅샷 퍼시스턴스 훅
 function usePersistentState<T>(key: string, fallback: T) {
