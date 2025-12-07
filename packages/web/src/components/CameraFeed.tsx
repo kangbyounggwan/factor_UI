@@ -147,6 +147,18 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
     loadUserPlan();
   }, [user]);
 
+  // 자동 스트리밍 시작
+  useEffect(() => {
+    if (isConnected && !isStreaming) {
+      // 컴포넌트가 마운트되고 연결되었을 때 자동으로 스트리밍 시작
+      const timer = setTimeout(() => {
+        startStreaming();
+      }, 1000); // 1초 딜레이를 주어 안정적으로 시작
+
+      return () => clearTimeout(timer);
+    }
+  }, [isConnected]); // startStreaming은 의존성에서 제외하여 무한 루프 방지
+
   // ── MQTT 상태 구독 (STATE_TOPIC) ──────────────────────────────────────────────
   useEffect(() => {
     let unsub: (() => Promise<void>) | null = null;
