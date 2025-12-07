@@ -1,10 +1,9 @@
 // 3D 모델 뷰어 담당 컴포넌트
 //
 import { Canvas, useLoader, useThree } from "@react-three/fiber";
-import { OrbitControls, Grid, GizmoHelper, GizmoViewport } from "@react-three/drei";
+import { OrbitControls, Grid, useGLTF, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { Suspense, useMemo, useLayoutEffect, useRef, useState, useEffect } from "react";
 import { Box3, Group, Vector3, Object3D, BufferGeometry, BufferAttribute, Mesh, SkinnedMesh, Matrix4, Euler, PerspectiveCamera } from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { calculateBoundingBox, getBoundingBoxCenter, getBoundingBoxSize, groundModelToZero, fitCameraToModel, logCameraAdjustment, Size3 } from "@shared/utils/modelViewerUtils";
 import {
   CAMERA_CONFIG,
@@ -137,8 +136,9 @@ function GLBModel({ url, scale = 1, version = 0, rotation = [0, 0, 0], onSize, o
   const group = useRef<Group>(null);
   const { camera, controls } = useThree();
 
-  // Public URL을 사용하므로 URL 정리 불필요
-  const gltf = useLoader(GLTFLoader, url);
+  // useGLTF는 항상 호출되어야 함 (React Hooks 규칙)
+  // 유효하지 않은 URL은 에러를 발생시킬 수 있으므로, 상위에서 유효성 검증 후 렌더링해야 함
+  const gltf = useGLTF(url);
   const scene = gltf?.scene;
 
   // URL 변경 감지
