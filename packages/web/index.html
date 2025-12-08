@@ -21,10 +21,22 @@
     <meta name="author" content="FACTOR Team" />
     <meta name="theme-color" content="#000000" />
 
-    <!-- Google Fonts -->
+    <!-- Google Fonts - 비동기 로딩으로 렌더링 차단 방지 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Inter:wght@400;500;600;700&display=swap">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+
+    <!-- Critical CSS - 초기 렌더링에 필요한 최소 스타일 -->
+    <style>
+      :root{--background:0 0% 100%;--foreground:222.2 84% 4.9%}
+      .dark{--background:222.2 84% 4.9%;--foreground:210 40% 98%}
+      *,::after,::before{box-sizing:border-box;border:0 solid}
+      html{line-height:1.5;-webkit-text-size-adjust:100%;font-family:Inter,ui-sans-serif,system-ui,sans-serif}
+      body{margin:0;line-height:inherit;background-color:hsl(var(--background));color:hsl(var(--foreground))}
+      #root{min-height:100vh}
+    </style>
 
     <!-- Open Graph -->
     <meta property="og:title" content="FACTOR Dashboard" />

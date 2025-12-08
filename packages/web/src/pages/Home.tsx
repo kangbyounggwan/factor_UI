@@ -162,11 +162,15 @@ const Home = () => {
 
         {/* Background decoration */}
         <div className="absolute inset-0 -z-10 overflow-hidden">
-          <img
-            src="/images/hero-bg.png"
-            alt="Background"
-            className="absolute inset-0 w-full h-full object-cover opacity-30"
-          />
+          <picture>
+            <source srcSet="/images/hero-bg.webp" type="image/webp" />
+            <img
+              src="/images/hero-bg.png"
+              alt="Background"
+              className="absolute inset-0 w-full h-full object-cover opacity-30"
+              loading="eager"
+            />
+          </picture>
           <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/40 to-background" />
         </div>
       </section>

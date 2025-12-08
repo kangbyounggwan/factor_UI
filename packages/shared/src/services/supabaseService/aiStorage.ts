@@ -4,6 +4,26 @@ const BUCKET_NAME = 'ai-models';
 const GCODE_BUCKET_NAME = 'gcode-files';
 
 /**
+ * Supabase Storage에 사용할 수 있는 안전한 파일명/경로로 변환
+ * - 한글, 특수문자, 공백 등을 제거하고 영문/숫자/하이픈만 남김
+ * - 최대 50자로 제한
+ */
+function sanitizeStoragePath(name: string): string {
+  if (!name) return 'unnamed';
+
+  // 한글을 로마자로 간단 변환 (삭제)하고, 허용 문자만 남김
+  const sanitized = name
+    .replace(/[^\w\s-]/g, '') // 영문, 숫자, 공백, 하이픈, 언더스코어만 남김
+    .replace(/\s+/g, '-')     // 공백을 하이픈으로
+    .replace(/-+/g, '-')      // 연속 하이픈을 하나로
+    .replace(/^-|-$/g, '')    // 앞뒤 하이픈 제거
+    .toLowerCase()
+    .substring(0, 50);        // 최대 50자
+
+  return sanitized || 'unnamed';
+}
+
+/**
  * 파일 경로에서 Public URL 생성 (버킷이 public인 경우)
  * @param supabase - Supabase 클라이언트
  * @param bucketName - 버킷 이름 ('ai-models' | 'gcode-files')
@@ -504,9 +524,9 @@ export async function downloadAndUploadGCode(
   try {
     const GCODE_BUCKET = 'gcode-files';
 
-    // 파일 구조: {userId}/{modelId}/{modelName}/{shortFileName}.gcode
-    // modelName을 폴더로 사용하여 원본 이름 유지, 파일명은 짧게
-    const modelFolder = modelName || modelId;
+    // 파일 구조: {userId}/{modelId}/{sanitizedModelFolder}/{shortFileName}.gcode
+    // modelName을 sanitize하여 폴더명으로 사용 (특수문자, 한글 제거)
+    const modelFolder = sanitizeStoragePath(modelName || '') || modelId.substring(0, 8);
 
     // 짧은 파일명 생성 (MQTT와 일치하도록)
     // "Text-to-3D__3D-printable_snowman_with_inte...." -> "snowman.gcode"
@@ -521,7 +541,8 @@ export async function downloadAndUploadGCode(
         !w.toLowerCase().includes('printable') &&
         w.length > 2
       ) || words[words.length - 1] || modelId.substring(0, 8);
-      shortFileName = `${meaningfulWord}.gcode`;
+      // sanitize하여 안전한 파일명 생성
+      shortFileName = `${sanitizeStoragePath(meaningfulWord)}.gcode`;
     } else {
       shortFileName = `${modelId.substring(0, 8)}.gcode`;
     }

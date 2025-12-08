@@ -42,6 +42,8 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       sourcemap: true,
+      cssCodeSplit: true,
+      cssMinify: true,
       rollupOptions: {
         external: [
           '@capacitor/preferences',
@@ -55,13 +57,17 @@ export default defineConfig(({ mode }) => {
               '@react-three/fiber',
               '@react-three/drei',
             ],
+            // MQTT - 프린터 연결 시에만 필요
+            'mqtt-bundle': [
+              'mqtt',
+            ],
             // Vendor chunk for React
             'vendor': [
               'react',
               'react-dom',
               'react-router-dom',
             ],
-            // UI components
+            // UI components - 필수 컴포넌트만
             'ui': [
               '@radix-ui/react-dialog',
               '@radix-ui/react-dropdown-menu',
@@ -72,6 +78,11 @@ export default defineConfig(({ mode }) => {
             // Supabase
             'supabase': [
               '@supabase/supabase-js',
+            ],
+            // i18n
+            'i18n': [
+              'i18next',
+              'react-i18next',
             ],
           },
         },

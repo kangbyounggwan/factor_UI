@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "printer": {
+      "command": "node",
+      "args": ["C:/Users/USER/FACTOR HIBRID/FACTOR-HIBRID-r1.0/packages/mcp-printer/dist/index.js"],
+      "env": {
+        "MQTT_BROKER_URL": "wss://your-mqtt-broker.com:8084/mqtt",
+        "MQTT_USERNAME": "your-mqtt-username",
+        "MQTT_PASSWORD": "your-mqtt-password"
+      }
+    }
+  }
+}
