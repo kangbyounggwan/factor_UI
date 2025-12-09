@@ -1,0 +1,564 @@
+# Supabase Database Schema
+# Generated: 2025-12-09
+# Total Tables: 27
+
+## 1. ai_generated_models
+-- AI로 생성된 3D 모델 저장 및 관리
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  generation_type: string (character varying) NOT NULL -- 생성 타입: text_to_3d, image_to_3d, text_to_image
+  prompt: string (text) NULL -- 텍스트 프롬프트 (text_to_3d, text_to_image용)
+  source_image_url: string (text) NULL -- 원본 이미지 URL (image_to_3d용)
+  art_style: string (character varying) NULL
+  target_polycount: number (numeric) NULL
+  symmetry_mode: string (character varying) NULL
+  model_name: string (character varying) NOT NULL
+  file_format: string (character varying) NOT NULL DEFAULT "glb"
+  storage_path: string (text) NOT NULL -- GLB 파일의 Supabase Storage 경로
+  download_url: string (text) NULL -- GLB 파일 다운로드 URL
+  file_size: integer (bigint) NULL
+  thumbnail_url: string (text) NULL
+  model_dimensions: unknown (jsonb) NULL -- 모델 크기 (mm): {x: number, y: number, z: number}
+  generation_metadata: unknown (jsonb) NULL -- AI 서버 응답 메타데이터 (전체 응답 저장)
+  status: string (character varying) NULL DEFAULT "completed"
+  tags: array (text[]) NULL -- 검색용 태그 배열
+  is_favorite: boolean (boolean) NULL DEFAULT false
+  is_public: boolean (boolean) NULL DEFAULT false -- 공개 갤러리 표시 여부
+  printed_count: integer (integer) NULL DEFAULT 0
+  last_printed_at: string (timestamp with time zone) NULL
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  gcode_url: string (text) NULL
+  stl_download_url: string (text) NULL -- STL 파일 다운로드 URL
+  stl_storage_path: string (text) NULL -- STL 파일의 Supabase Storage 경로
+
+## 2. api_keys
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  name: string (character varying) NOT NULL
+  key_hash: string (character varying) NOT NULL
+  key_prefix: string (character varying) NOT NULL
+  permissions: unknown (jsonb) NULL
+  last_used_at: string (timestamp with time zone) NULL
+  expires_at: string (timestamp with time zone) NULL
+  is_active: boolean (boolean) NULL DEFAULT true
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NULL DEFAULT "now()"
+
+## 3. background_tasks
+-- 백그라운드 추적,알람내용 트래킹
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  task_type: string (text) NOT NULL
+  status: string (text) NOT NULL DEFAULT "pending"
+  model_id: string (uuid) NULL
+  printer_id: string (text) NULL
+  printer_model_id: string (text) NULL
+  input_url: string (text) NULL
+  input_params: unknown (jsonb) NULL
+  output_url: string (text) NULL
+  output_metadata: unknown (jsonb) NULL
+  error_message: string (text) NULL
+  retry_count: integer (integer) NULL DEFAULT 0
+  max_retries: integer (integer) NULL DEFAULT 3
+  created_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  started_at: string (timestamp with time zone) NULL
+  completed_at: string (timestamp with time zone) NULL
+  updated_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+
+## 4. cameras
+-- 등록 카메라 관리
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  device_uuid: string (text) NOT NULL
+  stream_url: string (text) NULL
+  resolution: string (text) NULL
+  created_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+
+## 5. chat_messages
+-- 채팅 내용 저장
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  session_id: string (uuid) NOT NULL -- Note:
+This is a Foreign Key to `chat_sessions.id`.<fk table='chat_sessions' column='id'/>
+  user_id: string (uuid) NOT NULL
+  type: string (text) NOT NULL
+  content: string (text) NOT NULL
+  created_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+
+## 6. chat_sessions
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  title: string (text) NOT NULL
+  created_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  last_message_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  message_count: integer (integer) NULL DEFAULT 0
+
+## 7. clients
+-- 연결된 옥토프린트 클라이언트
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  display_name: string (text) NULL
+  device_type: string (text) NOT NULL DEFAULT "printer"
+  status: string (text) NOT NULL DEFAULT "disconnected"
+  ip_address: string (text) NULL
+  port: integer (integer) NULL DEFAULT 80
+  client_key: string (text) NULL
+  firmware_version: string (text) NULL DEFAULT "marlin"
+  created_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  last_seen: string (timestamp with time zone) NULL
+  metadata: unknown (jsonb) NULL
+  device_uuid: string (text) NULL
+  firmware: string (text) NULL
+  last_update: string (timestamp with time zone) NULL
+  software_uuid: string (text) NULL
+
+## 8. failure_scenes
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  device_uuid: string (uuid) NOT NULL
+  failure_type: string (character varying) NOT NULL
+  confidence: number (double precision) NOT NULL
+  severity: string (character varying) NOT NULL DEFAULT "medium"
+  detection_model: string (character varying) NULL DEFAULT "spaghetti_detective"
+  original_frame_url: string (text) NOT NULL
+  annotated_frame_url: string (text) NULL
+  before_frames_url: string (text) NULL
+  after_frames_url: string (text) NULL
+  gcode_filename: string (character varying) NULL
+  layer_number: integer (integer) NULL
+  print_progress: number (double precision) NULL
+  nozzle_temp: number (double precision) NULL
+  bed_temp: number (double precision) NULL
+  print_speed: number (double precision) NULL
+  fan_speed: integer (integer) NULL
+  z_height: number (double precision) NULL
+  estimated_time_remaining: integer (integer) NULL
+  detection_bbox: unknown (jsonb) NULL
+  detection_mask_url: string (text) NULL
+  raw_prediction_data: unknown (jsonb) NULL
+  gpt_description: string (text) NULL
+  gpt_root_cause: string (text) NULL
+  gpt_suggested_action: string (text) NULL
+  gpt_prevention_tips: string (text) NULL
+  gpt_raw_response: string (text) NULL
+  is_verified: boolean (boolean) NULL DEFAULT false
+  is_false_positive: boolean (boolean) NULL DEFAULT false
+  verified_by: string (uuid) NULL
+  verified_at: string (timestamp with time zone) NULL
+  verification_notes: string (text) NULL
+  include_in_dataset: boolean (boolean) NULL DEFAULT true
+  dataset_split: string (character varying) NULL
+  dataset_exported_at: string (timestamp with time zone) NULL
+  action_taken: string (character varying) NULL
+  user_notified: boolean (boolean) NULL DEFAULT false
+  notification_sent_at: string (timestamp with time zone) NULL
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NULL DEFAULT "now()"
+
+## 9. gcode_files
+-- GCode 파일 메타데이터 및 슬라이싱 정보 저장
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  model_id: string (uuid) NULL -- AI 생성 모델 ID
+
+Note:
+This is a Foreign Key to `ai_generated_models.id`.<fk table='ai_generated_models' column='id'/>
+  printer_id: string (text) NULL -- Reference printer ID - GCode is shared across all printers for same model
+  filename: string (text) NOT NULL
+  file_path: string (text) NOT NULL
+  file_size: integer (bigint) NOT NULL
+  manufacturer: string (text) NULL
+  series: string (text) NULL
+  printer_model_name: string (text) NULL
+  printer_name: string (text) NULL
+  print_time_formatted: string (text) NULL
+  filament_used_m: number (numeric) NULL
+  filament_weight_g: number (numeric) NULL
+  filament_cost: number (numeric) NULL
+  layer_count: integer (integer) NULL
+  layer_height: number (numeric) NULL
+  bounding_box: unknown (jsonb) NULL -- 모델 바운딩 박스 정보 (JSON)
+  nozzle_temp: number (numeric) NULL
+  bed_temp: number (numeric) NULL
+  status: string (text) NULL DEFAULT "uploaded"
+  upload_date: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  created_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  print_time_seconds: number (numeric) NULL
+  short_filename: string (text) NULL -- Short filename used for MQTT transfer to printer (e.g., snowman.gcode)
+
+## 10. manufacturing_printers
+-- Cura 프린터 정의 및 제조사 프린터 데이터베이스
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  manufacturer: string (text) NOT NULL -- 제조사 이름
+  series: string (text) NOT NULL DEFAULT "unknown" -- 프린터 시리즈
+  model: string (text) NOT NULL -- 프린터 모델명
+  display_name: string (text) NOT NULL -- 표시용 이름
+  filename: string (text) NOT NULL -- Cura DEF 파일명 (고유)
+  version: integer (integer) NULL DEFAULT 2
+  inherits: string (text) NULL -- 상속받는 프린터 정의
+  visible: boolean (boolean) NULL DEFAULT true
+  author: string (text) NULL
+  def_file_url: string (text) NULL -- Supabase Storage에 저장된 DEF 파일 URL
+  def_file_path: string (text) NULL
+  metadata: unknown (jsonb) NULL -- Cura 메타데이터 (JSONB)
+  build_volume: unknown (jsonb) NULL -- 출력 가능 부피 {x, y, z} mm
+  extruder_count: integer (integer) NULL DEFAULT 1 -- 익스트루더(압출기) 개수
+  heated_bed: boolean (boolean) NULL DEFAULT true
+  file_formats: array (text[]) NULL
+  technology: string (text) NULL DEFAULT "FDM" -- 3D 프린팅 기술 타입
+  nozzle_diameter: number (numeric) NULL
+  layer_height_min: number (numeric) NULL
+  layer_height_max: number (numeric) NULL
+  supports_usb_connection: boolean (boolean) NULL DEFAULT false
+  supports_network_connection: boolean (boolean) NULL DEFAULT false
+  supports_material_flow_sensor: boolean (boolean) NULL DEFAULT false
+  tags: array (text[]) NULL
+  category: string (text) NULL
+  usage_count: integer (integer) NULL DEFAULT 0
+  last_used_at: string (timestamp with time zone) NULL
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  cura_engine_support: boolean (boolean) NULL
+
+## 11. model_print_history
+-- AI 생성 모델의 3D 프린터 출력 이력
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  model_id: string (uuid) NOT NULL -- Note:
+This is a Foreign Key to `ai_generated_models.id`.<fk table='ai_generated_models' column='id'/>
+  printer_id: string (uuid) NULL -- Note:
+This is a Foreign Key to `printers.id`.<fk table='printers' column='id'/>
+  user_id: string (uuid) NOT NULL
+  print_status: string (character varying) NULL DEFAULT "queued" -- Print job status: queued, printing, paused, completed, failed, cancelled
+  print_settings: unknown (jsonb) NULL -- 슬라이싱 설정 (JSON): layer_height, infill, support 등
+  gcode_file_id: string (uuid) NULL
+  print_time: string (interval) NULL -- 실제 출력 소요 시간
+  filament_used: number (numeric) NULL -- 사용된 필라멘트 길이 (미터)
+  error_message: string (text) NULL
+  started_at: string (timestamp with time zone) NULL
+  completed_at: string (timestamp with time zone) NULL
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()"
+
+## 12. notifications
+-- 사용자 알림 메시지를 저장하는 테이블
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- 알림 고유 ID
+
+Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL -- 알림을 받는 사용자 ID
+  title: string (text) NOT NULL -- 알림 제목
+  message: string (text) NOT NULL -- 알림 내용
+  type: string (text) NOT NULL -- 알림 타입 (ai_model_complete, print_complete, print_error, payment_success, etc.)
+  read: boolean (boolean) NOT NULL DEFAULT false -- 읽음 여부
+  related_id: string (text) NULL -- 관련 항목 ID (optional)
+  related_type: string (text) NULL -- 관련 항목 타입 (ai_model, print_job, payment, subscription 등)
+  metadata: unknown (jsonb) NULL -- 추가 메타데이터 (JSON)
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()" -- 알림 생성 시간
+  read_at: string (timestamp with time zone) NULL -- 알림 읽은 시간
+  message_en: string (text) NULL
+
+## 13. paddle_customers
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  paddle_customer_id: string (text) NOT NULL
+  email: string (text) NULL
+  name: string (text) NULL
+  locale: string (text) NULL DEFAULT "en"
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NULL DEFAULT "now()"
+
+## 14. paddle_subscriptions
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  paddle_subscription_id: string (text) NOT NULL
+  paddle_customer_id: string (text) NOT NULL
+  status: string (text) NOT NULL DEFAULT "active"
+  plan_name: string (text) NOT NULL DEFAULT "pro"
+  price_id: string (text) NULL
+  currency: string (text) NULL DEFAULT "USD"
+  unit_price: integer (integer) NULL
+  billing_cycle_interval: string (text) NULL
+  current_period_start: string (timestamp with time zone) NULL
+  current_period_end: string (timestamp with time zone) NULL
+  cancel_at_period_end: boolean (boolean) NULL DEFAULT false
+  canceled_at: string (timestamp with time zone) NULL
+  paused_at: string (timestamp with time zone) NULL
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NULL DEFAULT "now()"
+
+## 15. paddle_transactions
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  paddle_transaction_id: string (text) NOT NULL
+  paddle_subscription_id: string (text) NULL
+  paddle_customer_id: string (text) NULL
+  status: string (text) NOT NULL
+  amount: integer (integer) NOT NULL
+  currency: string (text) NULL DEFAULT "USD"
+  payment_method: string (text) NULL
+  receipt_url: string (text) NULL
+  invoice_number: string (text) NULL
+  billed_at: string (timestamp with time zone) NULL
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()"
+
+## 16. payment_history
+-- 결제 내역
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- 결제 내역 고유 ID
+
+Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL -- 사용자 ID
+  subscription_id: string (uuid) NULL -- 구독 ID
+
+Note:
+This is a Foreign Key to `user_subscriptions.id`.<fk table='user_subscriptions' column='id'/>
+  plan_name: string (character varying) NOT NULL -- 플랜명
+  amount: number (numeric) NOT NULL -- 결제 금액
+  currency: string (character varying) NULL DEFAULT "KRW" -- 통화 (KRW, USD 등)
+  status: string (character varying) NOT NULL -- 결제 상태 (success, failed, refunded, pending, canceled)
+  payment_method: string (character varying) NULL -- 결제 수단
+  card_company: string (character varying) NULL -- 카드사
+  card_number: string (character varying) NULL -- 카드 번호 (마스킹)
+  payment_key: string (character varying) NULL -- 결제 키
+  order_id: string (character varying) NULL -- 주문 ID
+  transaction_id: string (character varying) NULL
+  receipt_url: string (text) NULL
+  refund_reason: string (text) NULL
+  refunded_amount: number (numeric) NULL
+  paid_at: string (timestamp with time zone) NULL -- 결제 완료 시간
+  refunded_at: string (timestamp with time zone) NULL
+  canceled_at: string (timestamp with time zone) NULL
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()"
+
+## 17. print_jobs
+-- 3D 프린터 출력 작업 기록 및 추적 테이블
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- 출력 작업 고유 ID
+
+Note:
+This is a Primary Key.<pk/>
+  printer_id: string (uuid) NOT NULL -- 프린터 ID (외래키)
+
+Note:
+This is a Foreign Key to `printers.id`.<fk table='printers' column='id'/>
+  user_id: string (uuid) NOT NULL -- 작업 생성 사용자 ID (외래키)
+  filename: string (text) NOT NULL -- 출력 파일명 (gcode, 3mf 등)
+  file_size: integer (bigint) NULL -- 파일 크기 (바이트)
+  file_path: string (text) NULL -- 파일 저장 경로 (Supabase Storage 등)
+  status: string (text) NOT NULL DEFAULT "pending" -- 작업 상태: pending, in_progress, completed, cancelled, failed
+  progress: number (double precision) NULL DEFAULT 0 -- 출력 진행률 (0-100%)
+  started_at: string (timestamp with time zone) NULL -- 출력 시작 시간
+  completed_at: string (timestamp with time zone) NULL -- 출력 완료/중단/실패 시간
+  estimated_duration: string (interval) NULL -- 예상 소요 시간
+  actual_duration: string (interval) NULL -- 실제 소요 시간 (completed_at - started_at)
+  filament_used: number (double precision) NULL -- 사용된 필라멘트 양 (g)
+  filament_type: string (text) NULL -- 필라멘트 종류 (PLA, ABS, PETG 등)
+  current_layer: integer (integer) NULL -- 현재 레이어 번호
+  total_layers: integer (integer) NULL -- 전체 레이어 수
+  failure_reason: string (text) NULL -- 실패/오류 사유
+  cancelled_by: string (uuid) NULL -- 작업 중단한 사용자 ID
+  created_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+
+## 18. printer_groups
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  name: string (text) NOT NULL
+  description: string (text) NULL
+  color: string (text) NULL DEFAULT "#3b82f6"
+  created_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+
+## 19. printer_position_history
+-- Stores the last 30 position data points (X, Y, Z, E axes) for each printer
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  printer_id: string (uuid) NOT NULL -- Note:
+This is a Foreign Key to `printers.id`.<fk table='printers' column='id'/>
+  user_id: string (uuid) NOT NULL
+  timestamp: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  x_current: number (numeric) NULL
+  y_current: number (numeric) NULL
+  z_current: number (numeric) NULL
+  e_current: number (numeric) NULL
+  x_target: number (numeric) NULL
+  y_target: number (numeric) NULL
+  z_target: number (numeric) NULL
+  e_target: number (numeric) NULL
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()"
+
+## 20. printer_status
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  printer_id: string (uuid) NOT NULL
+  nozzle_avg_30s: number (double precision) NULL
+  bed_avg_30s: number (double precision) NULL
+  updated_at: string (timestamp with time zone) NULL DEFAULT "now()"
+
+## 21. printer_temperature_logs
+-- Real-time temperature logs (max 800 per printer, auto-archived to sessions)
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  printer_id: string (uuid) NOT NULL
+  nozzle_temp: number (double precision) NOT NULL
+  nozzle_target: number (double precision) NULL
+  bed_temp: number (double precision) NOT NULL
+  bed_target: number (double precision) NULL
+  recorded_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  job_id: string (uuid) NULL -- Reference to print job for linking temperature data
+
+Note:
+This is a Foreign Key to `model_print_history.id`.<fk table='model_print_history' column='id'/>
+
+## 22. printers
+-- User printers with Realtime enabled for status monitoring
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  group_id: string (uuid) NULL -- Note:
+This is a Foreign Key to `printer_groups.id`.<fk table='printer_groups' column='id'/>
+  model: string (text) NOT NULL
+  ip_address: string (text) NULL
+  port: integer (integer) NOT NULL DEFAULT 80
+  api_key: string (text) NULL
+  firmware: string (text) NULL DEFAULT "marlin"
+  status: string (text) NOT NULL DEFAULT "disconnected"
+  last_connected: string (timestamp with time zone) NULL
+  created_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  device_uuid: string (text) NULL
+  printer_uuid: string (text) NULL
+  manufacture_id: string (text) NULL
+  name: string (text) NULL
+
+## 23. profiles
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  display_name: string (text) NULL
+  avatar_url: string (text) NULL
+  role: string (text) NULL DEFAULT "user"
+  created_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  phone: string (text) NULL
+
+## 24. stl_files
+-- STL 파일 저장 및 관리 (썸네일 포함)
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  filename: string (text) NOT NULL
+  file_path: string (text) NOT NULL -- Supabase Storage 경로
+  file_size: integer (bigint) NOT NULL
+  storage_url: string (text) NULL
+  thumbnail_path: string (text) NULL -- 썸네일 이미지 Storage 경로
+  thumbnail_url: string (text) NULL
+  triangle_count: integer (integer) NULL -- STL 파일의 삼각형 개수
+  bounding_box: unknown (jsonb) NULL -- 모델 바운딩 박스 크기 (mm): {x: number, y: number, z: number}
+  print_time_estimate: integer (integer) NULL
+  filament_estimate: number (real) NULL
+  status: string (text) NULL DEFAULT "uploaded"
+  tags: array (text[]) NULL
+  description: string (text) NULL
+  is_public: boolean (boolean) NULL DEFAULT false
+  upload_date: string (timestamp with time zone) NOT NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  ai_model_id: string (uuid) NULL -- Note:
+This is a Foreign Key to `ai_generated_models.id`.<fk table='ai_generated_models' column='id'/>
+
+## 25. user_device_tokens
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  device_token: string (text) NOT NULL
+  platform: string (text) NOT NULL
+  is_active: boolean (boolean) NULL DEFAULT true
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NULL DEFAULT "now()"
+
+## 26. user_notification_settings
+-- 사용자별 알림 수신 환경설정
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL
+  push_notifications: boolean (boolean) NULL DEFAULT true -- 브라우저 푸시 알림 수신 여부
+  print_complete_notifications: boolean (boolean) NULL DEFAULT true -- 출력 완료 알림 수신 여부
+  error_notifications: boolean (boolean) NULL DEFAULT true -- 프린터 오류 알림 수신 여부
+  email_notifications: boolean (boolean) NULL DEFAULT false -- 이메일 알림 수신 여부 (Pro 전용)
+  weekly_report: boolean (boolean) NULL DEFAULT false -- 주간 리포트 수신 여부 (Pro 전용)
+  notification_sound: boolean (boolean) NULL DEFAULT true -- 알림 사운드 재생 여부
+  notification_frequency: string (text) NULL DEFAULT "immediate" -- 알림 빈도 (immediate: 즉시, hourly: 1시간마다, daily: 하루 1회)
+  quiet_hours_enabled: boolean (boolean) NULL DEFAULT false -- 방해금지 시간 활성화 여부
+  quiet_hours_start: string (time without time zone) NULL -- 방해금지 시작 시간
+  quiet_hours_end: string (time without time zone) NULL -- 방해금지 종료 시간
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  ai_complete_enabled: boolean (boolean) NULL DEFAULT true -- AI 모델 생성 완료 알림 수신 여부
+  payment_enabled: boolean (boolean) NULL DEFAULT true -- 결제 관련 알림 수신 여부
+  marketing_enabled: boolean (boolean) NULL DEFAULT false -- 마케팅/프로모션 알림 수신 여부 (기본값 false)
+
+## 27. user_subscriptions
+-- 사용자 구독 정보
+
+  id: string (uuid) NOT NULL DEFAULT "gen_random_uuid()" -- 구독 고유 ID
+
+Note:
+This is a Primary Key.<pk/>
+  user_id: string (uuid) NOT NULL -- 사용자 ID (고유)
+  plan_name: string (character varying) NOT NULL -- 플랜명 (basic, pro, enterprise)
+  status: string (character varying) NOT NULL DEFAULT "active" -- 구독 상태 (active, canceled, expired, trial)
+  current_period_start: string (timestamp with time zone) NOT NULL DEFAULT "now()" -- 현재 구독 기간 시작
+  current_period_end: string (timestamp with time zone) NOT NULL DEFAULT "(now() + '1 mon'::interval)" -- 현재 구독 기간 종료
+  cancel_at_period_end: boolean (boolean) NULL DEFAULT false -- 기간 종료 시 취소 여부
+  toss_payment_key: string (character varying) NULL -- 토스페이먼츠 결제 키
+  toss_order_id: string (character varying) NULL -- 토스페이먼츠 주문 ID
+  toss_billing_key: string (character varying) NULL -- 토스페이먼츠 정기결제 키
+  created_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  updated_at: string (timestamp with time zone) NULL DEFAULT "now()"
+  paddle_subscription_id: string (text) NULL
+  paddle_customer_id: string (text) NULL
+  provider: string (text) NULL DEFAULT "toss"
+

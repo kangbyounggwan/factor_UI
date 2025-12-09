@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -8,9 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Lazy load ModelViewer to reduce initial bundle size
-const ModelViewer = lazy(() => import("@/components/ai/ModelViewer"));
-const GCodeViewer = lazy(() => import("@/components/ai/GCodeViewer"));
-const GCodePreview = lazy(() => import("@/components/ai/GCodePreview"));
+const ModelViewer = lazy(() => import("@/components/ModelViewer"));
+const GCodeViewer = lazy(() => import("@/components/GCodeViewer"));
+const GCodePreview = lazy(() => import("@/components/GCodePreview"));
 import TextTo3DForm from "@/components/ai/TextTo3DForm";
 import ImageTo3DForm from "@/components/ai/ImageTo3DForm";
 import ModelPreview from "@/components/ai/ModelPreview";
@@ -130,7 +130,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
-import { onDashStatusMessage, mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit } from "@shared/services/mqttService";
+import { onDashStatusMessage, mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, waitForSdUploadResult, publishGcodePrint } from "@shared/services/mqttService";
 import { buildCommon, postTextTo3D, postImageTo3D, extractGLBUrl, extractSTLUrl, extractMetadata, extractThumbnailUrl, pollTaskUntilComplete, AIModelResponse, uploadSTLAndSlice, SlicingSettings, PrinterDefinition } from "@shared/services/aiService";
 import { createAIModel, updateAIModel, listAIModels, deleteAIModel } from "@shared/services/supabaseService/aiModel";
 import { supabase } from "@shared/integrations/supabase/client";
@@ -140,7 +140,6 @@ import { getManufacturers, getSeriesByManufacturer, getModelsByManufacturerAndSe
 import { createSlicingTask, subscribeToTaskUpdates, processSlicingTask, BackgroundTask } from "@shared/services/backgroundSlicing";
 import { canGenerateAiModel, getAiGenerationLimit, getRemainingAiGenerations } from "@shared/utils/subscription";
 import { SubscriptionPlan } from "@shared/types/subscription";
-import { generateShortFilename } from "@shared/services/claudeService";
 
 const AI = () => {
   const { t } = useTranslation();
@@ -201,7 +200,6 @@ const AI = () => {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const location = useLocation();
-  const navigate = useNavigate();
 
   // 구독 플랜 상태
   const [userPlan, setUserPlan] = useState<SubscriptionPlan>('free');
@@ -587,9 +585,8 @@ const AI = () => {
           setCurrentStlUrl(model.stl_download_url);
           setCurrentGCodeUrl(gcodeUrl);
           // 캐시 무효화를 위해 updated_at 타임스탬프 추가
-          // URL에 이미 쿼리 파라미터가 있으면 &를, 없으면 ?를 사용
           const cacheBustedUrl = model.download_url ?
-            `${model.download_url}${model.download_url.includes('?') ? '&' : '?'}t=${new Date(model.updated_at || model.created_at).getTime()}` :
+            `${model.download_url}?t=${new Date(model.updated_at || model.created_at).getTime()}` :
             model.download_url;
           setModelViewerUrl(cacheBustedUrl);
           setTargetPrinterModelId(printerModelId); // 프린터 모델 ID 저장
@@ -628,6 +625,8 @@ const AI = () => {
 
   // 출력 파일 설정 상태
   const [printFileName, setPrintFileName] = useState<string>('');
+  const [startPrintImmediately, setStartPrintImmediately] = useState<boolean>(true);
+  const [navigateToDashboard, setNavigateToDashboard] = useState<boolean>(true);
 
   // 설정 탭 상태 ('printer' | 'file')
   const [settingsTab, setSettingsTab] = useState<'printer' | 'file'>('printer');
@@ -986,7 +985,6 @@ const AI = () => {
 
       const currentModel = generatedModels.find(m => m.id === currentModelId);
       const modelName = currentModel?.model_name || currentModel?.prompt || currentModelId;
-      const modelPrompt = currentModel?.prompt;  // 사용자의 원본 프롬프트
 
       const taskId = await createSlicingTask(
         supabase,
@@ -1000,7 +998,6 @@ const AI = () => {
           printerName: printerFilename,
           modelName,
           printerInfo: printerInfoForGCode,
-          prompt: modelPrompt,  // Claude로 파일명 생성용
         }
       );
 
@@ -1029,7 +1026,6 @@ const AI = () => {
           printerName: printerFilename,
           modelName,
           printerInfo: printerInfoForGCode,
-          prompt: modelPrompt,  // Claude로 파일명 생성용
         },
         output_url: null,
         output_metadata: null,
@@ -1085,48 +1081,6 @@ const AI = () => {
     }
 
     try {
-      // 0. 사용자가 입력한 printFileName을 우선 사용
-      console.log('[AI][FILENAME] ========================================');
-      console.log('[AI][FILENAME] printFileName (raw):', printFileName);
-
-      // 사용자 입력값을 sanitize (한글, 영문, 숫자, 하이픈, 언더스코어 허용)
-      const sanitizedInput = printFileName.trim().replace(/[^a-zA-Z0-9가-힣\-_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-      console.log('[AI][FILENAME] sanitizedInput:', sanitizedInput);
-
-      let fileName: string;
-
-      // 사용자 입력값이 유효하면 그것을 사용
-      if (sanitizedInput && sanitizedInput.length > 0) {
-        fileName = sanitizedInput.endsWith('.gcode') ? sanitizedInput : `${sanitizedInput}.gcode`;
-        console.log('[AI][FILENAME] Using user input:', fileName);
-      } else {
-        // 사용자 입력이 없으면 DB에서 short_filename 가져오기
-        if (currentModelId) {
-          const { data: gcodeFile, error: gcodeError } = await supabase
-            .from('gcode_files')
-            .select('short_filename')
-            .eq('model_id', currentModelId)
-            .single();
-
-          console.log('[AI][FILENAME] DB query result:', { gcodeFile, gcodeError });
-
-          if (gcodeFile?.short_filename && !gcodeError && gcodeFile.short_filename !== 'unnamed.gcode') {
-            fileName = gcodeFile.short_filename;
-            console.log('[AI][FILENAME] Using short_filename from DB:', fileName);
-          } else {
-            // DB에도 없으면 타임스탬프 기반 파일명 생성
-            fileName = `print_${Date.now()}.gcode`;
-            console.log('[AI][FILENAME] Using timestamp fallback:', fileName);
-          }
-        } else {
-          fileName = `print_${Date.now()}.gcode`;
-          console.log('[AI][FILENAME] No modelId, using timestamp fallback:', fileName);
-        }
-      }
-
-      console.log('[AI][FILENAME] FINAL fileName to send:', fileName);
-      console.log('[AI][FILENAME] ========================================');
-
       // 1. GCode 파일 다운로드
       toast({
         title: t('ai.downloadingGCode'),
@@ -1154,6 +1108,8 @@ const AI = () => {
         for (let i = 0; i < chunk.length; i += 1) binary += String.fromCharCode(chunk[i]);
         return btoa(binary);
       };
+
+      const fileName = `${printFileName.replace(/[^a-zA-Z0-9가-힣-_]/g, '_')}.gcode`;
 
       // 첫 번째 청크 전송
       await publishSdUploadChunkFirst(selectedPrinter.device_uuid, {
@@ -1183,25 +1139,46 @@ const AI = () => {
         index += 1;
       }
 
-      // 업로드 완료 (commit) - end 메시지 전송 후 바로 진행
+      // 업로드 완료 (commit)
       await publishSdUploadCommit(selectedPrinter.device_uuid, uploadId, 'local');
-      console.log('[AI] Upload end message sent, proceeding immediately');
+
+      // 업로드 결과 대기
+      const uploadResult = await waitForSdUploadResult(selectedPrinter.device_uuid, () => {});
+
+      if (!uploadResult.ok) {
+        throw new Error(uploadResult.message || t('ai.uploadFailed'));
+      }
 
       toast({
         title: t('gcode.uploadSuccess'),
         description: t('ai.fileUploadedToPrinter', { fileName }),
       });
 
-      // 4. 모달 닫기
+      // 4. 즉시 프린팅 시작 (옵션이 활성화된 경우)
+      if (startPrintImmediately) {
+        const jobId = fileName.replace(/\.[^/.]+$/, '');
+        await publishGcodePrint(selectedPrinter.device_uuid, {
+          filename: fileName,
+          origin: 'local',
+          job_id: jobId,
+        });
+
+        toast({
+          title: t('ai.printStart'),
+          description: `${selectedPrinter.name}${t('ai.printJobSent')}`,
+        });
+      }
+
+      // 5. 모달 닫기
       setPrintDialogOpen(false);
 
-      // 6. 해당 설비로 이동 확인 모달
-      const shouldNavigate = window.confirm(
-        t('ai.navigateToDashboardConfirm', { printerName: selectedPrinter.name }) ||
-        `${selectedPrinter.name} 대시보드로 이동하시겠습니까?`
-      );
-      if (shouldNavigate) {
-        navigate(`/printer/${selectedPrinter.id}`);
+      // 6. 대시보드로 이동 (옵션이 활성화된 경우)
+      if (navigateToDashboard && startPrintImmediately) {
+        // 사용자에게 선택권 주기
+        const shouldNavigate = window.confirm(t('ai.navigateToDashboardConfirm'));
+        if (shouldNavigate) {
+          navigate(`/dashboard/${selectedPrinter.id}`);
+        }
       }
 
     } catch (error) {
@@ -1469,9 +1446,8 @@ const AI = () => {
         console.log('[AI] 재슬라이싱 - GCode URL을 DB에 저장:', uploadedGcodeUrl);
       }
 
-      // UI 업데이트 (URL에 이미 쿼리 파라미터가 있으면 &를, 없으면 ?를 사용)
-      const gcodeUrlWithTimestamp = uploadedGcodeUrl ?
-        `${uploadedGcodeUrl}${uploadedGcodeUrl.includes('?') ? '&' : '?'}t=${Date.now()}` : null;
+      // UI 업데이트
+      const gcodeUrlWithTimestamp = uploadedGcodeUrl ? `${uploadedGcodeUrl}?t=${Date.now()}` : null;
       setCurrentGCodeUrl(gcodeUrlWithTimestamp);
 
       // 메타데이터를 UI 형식으로 변환하여 설정
@@ -1851,15 +1827,6 @@ const AI = () => {
           // GLB URL을 우선적으로 렌더링에 사용
           const renderUrl = glbUploadResult?.publicUrl || stlUploadResult?.publicUrl;
 
-          // Claude API로 짧은 이름 생성 (프롬프트 기반)
-          let shortName: string | undefined;
-          try {
-            shortName = await generateShortFilename({ prompt: textPrompt });
-            console.log('[AI] Generated short_name:', shortName);
-          } catch (error) {
-            console.warn('[AI] Failed to generate short_name:', error);
-          }
-
           await updateAIModel(supabase, dbModelId, {
             storage_path: glbUploadResult?.path || undefined,           // GLB Supabase Storage 경로
             download_url: glbUploadResult?.publicUrl || undefined,     // GLB Supabase Public URL
@@ -1869,7 +1836,6 @@ const AI = () => {
             status: 'completed',
             generation_metadata: metadata || undefined,
             file_format: stlUploadResult ? 'stl' : 'glb',  // STL이 있으면 STL, 없으면 GLB
-            short_name: shortName,  // Claude가 생성한 짧은 영문 이름
           });
 
           // 5. Supabase Storage URL로 렌더링 (STL 우선)
@@ -2011,18 +1977,6 @@ const AI = () => {
           // GLB URL을 우선적으로 렌더링에 사용
           const renderUrl = glbUploadResult?.publicUrl || stlUploadResult?.publicUrl;
 
-          // Claude Vision API로 짧은 이름 생성 (이미지 기반)
-          let shortName: string | undefined;
-          try {
-            const imageUrlForShortName = selected.url || selected.storagePath;
-            if (imageUrlForShortName) {
-              shortName = await generateShortFilename({ imageUrl: imageUrlForShortName });
-              console.log('[AI] Generated short_name from image:', shortName);
-            }
-          } catch (error) {
-            console.warn('[AI] Failed to generate short_name from image:', error);
-          }
-
           await updateAIModel(supabase, dbModelId, {
             storage_path: glbUploadResult?.path || undefined,           // GLB Supabase Storage 경로
             download_url: glbUploadResult?.publicUrl || undefined,     // GLB Supabase Public URL
@@ -2033,7 +1987,6 @@ const AI = () => {
             generation_metadata: metadata || undefined,
             file_format: stlUploadResult ? 'stl' : 'glb',  // STL이 있으면 STL, 없으면 GLB
             source_image_url: selected.storagePath || metadata?.uploaded_local_path || selected.url,
-            short_name: shortName,  // Claude Vision이 생성한 짧은 영문 이름
           });
 
           // 5. Supabase Storage URL로 렌더링 (STL 우선)
@@ -2530,8 +2483,8 @@ const AI = () => {
                           model => model.source_image_url === file.storagePath || model.source_image_url === file.url
                         );
                         if (linkedModel?.download_url) {
-                          // 캐시 무효화를 위해 updated_at 타임스탬프 추가 (URL에 이미 쿼리 파라미터가 있으면 &를 사용)
-                          const cacheBustedUrl = `${linkedModel.download_url}${linkedModel.download_url.includes('?') ? '&' : '?'}t=${new Date(linkedModel.updated_at || linkedModel.created_at).getTime()}`;
+                          // 캐시 무효화를 위해 updated_at 타임스탬프 추가
+                          const cacheBustedUrl = `${linkedModel.download_url}?t=${new Date(linkedModel.updated_at || linkedModel.created_at).getTime()}`;
                           setModelViewerUrl(cacheBustedUrl);
                           setSelectedImageHasModel(true);
                           toast({ title: t('ai.imageSelected'), description: file.name });
@@ -2648,9 +2601,9 @@ const AI = () => {
 
                       // GLB 우선, STL 폴백으로 뷰어 URL 설정
                       const viewerUrl = model.download_url || model.stl_download_url;
-                      // 캐시 무효화를 위해 updated_at 타임스탬프 추가 (URL에 이미 쿼리 파라미터가 있으면 &를 사용)
+                      // 캐시 무효화를 위해 updated_at 타임스탬프 추가
                       const cacheBustedViewerUrl = viewerUrl ?
-                        `${viewerUrl}${viewerUrl.includes('?') ? '&' : '?'}t=${new Date(model.updated_at || model.created_at).getTime()}` :
+                        `${viewerUrl}?t=${new Date(model.updated_at || model.created_at).getTime()}` :
                         viewerUrl;
                       console.log('[AI] ===== MODEL SELECTION =====');
                       console.log('[AI] Setting modelViewerUrl to:', cacheBustedViewerUrl);
@@ -2947,6 +2900,35 @@ const AI = () => {
                       />
                     </div>
 
+                    {/* 출력 옵션 */}
+                    <div className="flex items-center gap-6 text-xs pt-1">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="start-immediately-tab"
+                          checked={startPrintImmediately}
+                          onChange={(e) => setStartPrintImmediately(e.target.checked)}
+                          className="rounded border-gray-300 w-4 h-4"
+                          disabled={isSlicing}
+                        />
+                        <Label htmlFor="start-immediately-tab" className="text-sm font-normal cursor-pointer">
+                          {t('ai.startPrintingImmediately')}
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="navigate-dashboard-tab"
+                          checked={navigateToDashboard}
+                          onChange={(e) => setNavigateToDashboard(e.target.checked)}
+                          className="rounded border-gray-300 w-4 h-4"
+                          disabled={isSlicing}
+                        />
+                        <Label htmlFor="navigate-dashboard-tab" className="text-sm font-normal cursor-pointer">
+                          {t('ai.navigateToDashboardAfter')}
+                        </Label>
+                      </div>
+                    </div>
                   </div>
                 </TabsContent>
               </Tabs>

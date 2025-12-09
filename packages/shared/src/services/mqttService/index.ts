@@ -129,24 +129,25 @@ export async function publishSdUploadChunkFirst(
 ) {
   // Map to new protocol: send start + first chunk (seq 0)
   const totalChunks = Math.max(1, Math.ceil(params.total_size / Math.max(1, params.size)));
+  // 파일명 검증 - undefined나 빈 문자열이면 경고
+  if (!params.name || params.name.trim() === '') {
+    console.error('[GCODE][ERROR] filename is empty or undefined!', { params_name: params.name });
+  }
+
   const startPayload = {
     action: 'start' as const,
     job_id: params.upload_id,
     filename: params.name,
+    name: params.name, // 하위 호환성을 위해 name 필드도 함께 전송
     total_chunks: totalChunks,
     // include user intention if provided (sd/local)
     ...(params.upload_traget ? { upload_traget: params.upload_traget } : {}),
   };
   const topic = `${TOPIC_GCODE_IN}/${deviceSerial}`;
-  console.log('[GCODE][START]', {
-    device: deviceSerial,
-    job_id: startPayload.job_id,
-    filename: startPayload.filename,
-    total_chunks: startPayload.total_chunks,
-    upload_traget: (startPayload as any).upload_traget ?? 'sd',
-    ts: new Date().toISOString(),
-  });
-  console.log('[MQTT][TX]', topic, startPayload);
+  console.log('[GCODE][START] ========================================');
+  console.log('[GCODE][START] FILENAME:', startPayload.filename);
+  console.log('[GCODE][START] Full payload:', JSON.stringify(startPayload, null, 2));
+  console.log('[GCODE][START] ========================================');
   await mqttPublish(topic, startPayload, 1, false);
 
   const firstChunkPayload = {
@@ -218,7 +219,9 @@ export async function waitForSdUploadResult(
 ): Promise<{ ok: boolean; message?: string }> {
   return new Promise(async (resolve) => {
     const topic = `control_result/${deviceSerial}`;
+    console.log('[MQTT][SD] Subscribing to topic:', topic);
     const handler = (t: string, payload: any) => {
+      console.log('[MQTT][SD] Received message on topic:', t);
       let parsed: any = payload;
       try {
         if (typeof payload === 'string') parsed = JSON.parse(payload);

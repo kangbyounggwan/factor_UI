@@ -38,6 +38,7 @@ export async function createSlicingTask(
     printerName?: string;
     modelName?: string;
     printerInfo?: any;
+    prompt?: string;  // 사용자의 원본 프롬프트 (Claude로 파일명 생성용)
   }
 ): Promise<string> {
   const { data, error } = await supabase.rpc('create_slicing_task', {
@@ -108,7 +109,7 @@ export async function processSlicingTask(
 
     // Get slicing parameters
     const params = task.input_params || {};
-    const { curaSettings, printerDefinition, printerName } = params;
+    const { curaSettings, printerDefinition, printerName, prompt } = params;
 
     console.log('[backgroundSlicing] Starting slicing...');
     console.log('[backgroundSlicing] - File:', fileName);
@@ -130,6 +131,21 @@ export async function processSlicingTask(
     console.log('[backgroundSlicing] Slicing completed');
     console.log('[backgroundSlicing] GCode URL:', slicingResult.data.gcode_url);
 
+    // 모델의 short_name 조회 (이미 생성되어 있으면 사용)
+    let modelShortName: string | undefined;
+    if (task.model_id) {
+      const { data: modelData } = await supabase
+        .from('ai_generated_models')
+        .select('short_name, source_image_url')
+        .eq('id', task.model_id)
+        .single();
+
+      if (modelData?.short_name) {
+        modelShortName = modelData.short_name;
+        console.log('[backgroundSlicing] Using model short_name:', modelShortName);
+      }
+    }
+
     // Upload GCode to Supabase Storage
     const gcodeUrl = slicingResult.data.gcode_url;
     const gcodeUploadResult = await downloadAndUploadGCode(
@@ -140,7 +156,10 @@ export async function processSlicingTask(
       task.printer_model_id!,
       params.modelName || task.model_id,
       params.printerInfo,
-      slicingResult.data.gcode_metadata
+      slicingResult.data.gcode_metadata,
+      prompt,           // Claude로 파일명 생성용 프롬프트 전달
+      undefined,        // imageUrl (모델 조회로 대체)
+      modelShortName    // 모델의 short_name (있으면 우선 사용)
     );
 
     if (!gcodeUploadResult) {

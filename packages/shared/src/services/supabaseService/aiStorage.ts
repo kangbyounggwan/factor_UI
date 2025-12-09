@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { generateShortFilename } from '../claudeService';
 
 const BUCKET_NAME = 'ai-models';
 const GCODE_BUCKET_NAME = 'gcode-files';
@@ -519,35 +520,54 @@ export async function downloadAndUploadGCode(
     model?: string;
     printer_name?: string;
   },
-  metadata?: GCodeMetadata
+  metadata?: GCodeMetadata,
+  prompt?: string,    // 사용자의 원본 프롬프트 (text-to-3D: Claude로 파일명 생성용)
+  imageUrl?: string,  // 원본 이미지 URL (image-to-3D: Claude Vision으로 파일명 생성용)
+  shortName?: string  // 모델에서 이미 생성된 short_name (있으면 우선 사용)
 ): Promise<{ path: string; publicUrl: string; metadata?: GCodeMetadata } | null> {
   try {
     const GCODE_BUCKET = 'gcode-files';
 
+    // modelId가 null/undefined인 경우 fallback
+    const safeModelId = modelId || `model-${Date.now()}`;
+
     // 파일 구조: {userId}/{modelId}/{sanitizedModelFolder}/{shortFileName}.gcode
     // modelName을 sanitize하여 폴더명으로 사용 (특수문자, 한글 제거)
-    const modelFolder = sanitizeStoragePath(modelName || '') || modelId.substring(0, 8);
+    const modelFolder = sanitizeStoragePath(modelName || '') || safeModelId.substring(0, 8);
 
-    // 짧은 파일명 생성 (MQTT와 일치하도록)
-    // "Text-to-3D__3D-printable_snowman_with_inte...." -> "snowman.gcode"
+    // 짧은 파일명 결정 (우선순위: shortName 파라미터 -> Claude API -> fallback)
     let shortFileName: string;
-    if (modelName) {
-      // 모델명에서 의미있는 단어 추출
-      const words = modelName.split(/[_\s-]+/).filter(w => w.length > 0);
-      const meaningfulWord = words.find(w =>
-        !w.toLowerCase().includes('text') &&
-        !w.toLowerCase().includes('image') &&
-        !w.toLowerCase().includes('3d') &&
-        !w.toLowerCase().includes('printable') &&
-        w.length > 2
-      ) || words[words.length - 1] || modelId.substring(0, 8);
-      // sanitize하여 안전한 파일명 생성
-      shortFileName = `${sanitizeStoragePath(meaningfulWord)}.gcode`;
+
+    if (shortName) {
+      // 모델에서 이미 생성된 short_name이 있으면 그것을 사용
+      shortFileName = `${shortName}.gcode`;
+      console.log('[aiStorage] Using existing short_name:', shortFileName);
     } else {
-      shortFileName = `${modelId.substring(0, 8)}.gcode`;
+      // Claude API로 짧은 파일명 생성 (프롬프트 우선 -> 이미지 -> 모델명)
+      try {
+        const generatedName = await generateShortFilename({ prompt, imageUrl, modelName });
+        shortFileName = `${generatedName}.gcode`;
+        console.log('[aiStorage] Claude generated filename:', shortFileName);
+      } catch (error) {
+        console.warn('[aiStorage] Claude filename generation failed, using fallback:', error);
+        // Fallback: 기존 방식으로 파일명 생성
+        if (modelName) {
+          const words = modelName.split(/[_\s-]+/).filter(w => w.length > 0);
+          const meaningfulWord = words.find(w =>
+            !w.toLowerCase().includes('text') &&
+            !w.toLowerCase().includes('image') &&
+            !w.toLowerCase().includes('3d') &&
+            !w.toLowerCase().includes('printable') &&
+            w.length > 2
+          ) || words[words.length - 1] || safeModelId.substring(0, 8);
+          shortFileName = `${sanitizeStoragePath(meaningfulWord)}.gcode`;
+        } else {
+          shortFileName = `${safeModelId.substring(0, 8)}.gcode`;
+        }
+      }
     }
 
-    const path = `${userId}/${modelId}/${modelFolder}/${shortFileName}`;
+    const path = `${userId}/${safeModelId}/${modelFolder}/${shortFileName}`;
     const filename = shortFileName;
 
     console.log('[aiStorage] Downloading GCode from AI server:', gcodeUrl);

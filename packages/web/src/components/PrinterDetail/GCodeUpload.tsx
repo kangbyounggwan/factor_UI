@@ -11,12 +11,15 @@ import {
   Play,
   HardDrive,
   FolderOpen,
-  Loader2
+  Loader2,
+  Eye,
+  Cloud
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, waitForSdUploadResult, onDashStatusMessage, publishGcodePrint } from "@shared/services/mqttService";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 
 interface GCodeFile {
   id: string;
@@ -27,6 +30,16 @@ interface GCodeFile {
   print_time_estimate?: number;
   filament_estimate?: number;
   status: string;
+  storage_url?: string;
+}
+
+interface DbGCodeFile {
+  id: string;
+  filename: string;
+  file_path: string;
+  file_size: number;
+  storage_url?: string;
+  created_at: string;
 }
 
 interface GCodeUploadProps {
@@ -36,7 +49,9 @@ interface GCodeUploadProps {
 
 export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProps) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [files, setFiles] = useState<GCodeFile[]>([]);
+  const [dbFiles, setDbFiles] = useState<DbGCodeFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -46,6 +61,9 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
   const [sdFiles, setSdFiles] = useState<Array<{ name: string; size: number }>>([]);
   const [localMqttFiles, setLocalMqttFiles] = useState<Array<{ name: string; display?: string; size?: number; date?: number | string | null; estimatedPrintTime?: number; user?: string; path?: string }>>([]);
   const [fileSource, setFileSource] = useState<'LOCAL' | 'SDCARD'>('LOCAL');
+
+  // DB에 저장된 파일명 Set (클라우드 아이콘 표시용)
+  const dbFileNames = new Set(dbFiles.map(f => f.filename));
 
   const formatFileSize = (bytes?: number): string => {
     if (!bytes || bytes === 0) return '0 B';
@@ -79,12 +97,66 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
         throw new Error(t('errors.deviceNotSelected'));
       }
 
-      await mqttConnect();
+      // 1. 현재 사용자 확인
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
 
       const uploadId = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`);
       const arrayBuf = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuf);
       const total = bytes.length;
+
+      // 2. Supabase Storage에 파일 업로드 (뷰어용)
+      const filePath = `${user.id}/${uploadId}/${file.name}`;
+      const { error: storageError } = await supabase.storage
+        .from('gcode-files')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (storageError) {
+        console.error('Storage upload error:', storageError);
+        // Storage 실패해도 MQTT 업로드는 계속 진행
+      }
+
+      // 3. Storage URL 가져오기
+      let storageUrl: string | undefined;
+      if (!storageError) {
+        const { data: urlData } = supabase.storage
+          .from('gcode-files')
+          .getPublicUrl(filePath);
+        storageUrl = urlData?.publicUrl;
+      }
+
+      // 4. DB에 메타데이터 저장
+      if (!storageError) {
+        const { error: dbError } = await supabase
+          .from('gcode_files')
+          .insert({
+            user_id: user.id,
+            filename: file.name,
+            file_path: filePath,
+            file_size: total,
+            storage_url: storageUrl,
+            printer_id: deviceUuid,
+          });
+
+        if (dbError) {
+          console.error('DB insert error:', dbError);
+        } else {
+          // DB 파일 목록 새로고침
+          loadDbFiles();
+        }
+      }
+
+      setUploadProgress(30);
+
+      // 5. MQTT로 프린터에 전송
+      await mqttConnect();
+
       const chunkSize = 32 * 1024;
 
       const toB64 = (chunk: Uint8Array) => {
@@ -120,7 +192,8 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
       const resultPromise = waitForSdUploadResult(
         deviceUuid!,
         (progress) => {
-          setUploadProgress(Math.min(99, progress.percent));
+          // 30% ~ 99% 구간에서 MQTT 진행률 표시
+          setUploadProgress(30 + Math.min(69, Math.round(progress.percent * 0.69)));
         }
       );
 
@@ -131,7 +204,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
         await sendChunk(index, sent, next);
         sent = next;
         index += 1;
-        setUploadProgress(Math.min(99, Math.round((sent / total) * 100)));
+        setUploadProgress(30 + Math.min(69, Math.round((sent / total) * 69)));
       }
 
       await publishSdUploadCommit(deviceUuid!, uploadId, fileSource === 'SDCARD' ? 'sd' : 'local');
@@ -175,8 +248,27 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
     }
   };
 
+  const loadDbFiles = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('gcode_files')
+        .select('id, filename, file_path, file_size, storage_url, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setDbFiles(data || []);
+    } catch (error) {
+      console.error('Error loading DB files:', error);
+    }
+  };
+
   useEffect(() => {
     loadFiles();
+    loadDbFiles();
   }, []);
 
   useEffect(() => {
@@ -211,6 +303,15 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
   };
 
   const currentFiles = fileSource === 'LOCAL' ? localMqttFiles : sdFiles;
+
+  // 파일명으로 DB 파일 정보 찾기 (뷰어용)
+  const getDbFileByName = (filename: string) => {
+    return dbFiles.find(f => f.filename === filename);
+  };
+
+  const handleViewGcode = (fileId: string) => {
+    navigate(`/gcode-viewer/${fileId}`);
+  };
 
   return (
     <Card className="h-full flex flex-col border border-border/50 shadow-md bg-card rounded-2xl">
@@ -283,33 +384,59 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
             ) : (
               <div className="space-y-2">
                 {fileSource === 'LOCAL' ? (
-                  localMqttFiles.map((file, idx) => (
-                    <div
-                      key={`${file.name}-${idx}`}
-                      className="group flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="p-2 rounded-lg bg-background">
-                        <FileCode2 className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm truncate">
-                          {file.display || file.name}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {formatFileSize(file.size)}
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handlePrint(file.name || file.display || '', 'local')}
-                        disabled={isPrinting || !isConnected}
-                        className="h-9 w-9 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-emerald-500/10 hover:text-emerald-600"
+                  localMqttFiles.map((file, idx) => {
+                    const fileName = file.name || file.display || '';
+                    const isInCloud = dbFileNames.has(fileName);
+                    const dbFile = isInCloud ? getDbFileByName(fileName) : null;
+
+                    return (
+                      <div
+                        key={`${file.name}-${idx}`}
+                        className="group flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
                       >
-                        <Play className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))
+                        <div className="p-2 rounded-lg bg-background relative">
+                          <FileCode2 className="h-4 w-4 text-muted-foreground" />
+                          {isInCloud && (
+                            <Cloud className="h-3 w-3 text-blue-500 absolute -top-1 -right-1" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate flex items-center gap-1.5">
+                            {file.display || file.name}
+                            {isInCloud && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600">
+                                Cloud
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {formatFileSize(file.size)}
+                          </div>
+                        </div>
+                        {/* 뷰어 버튼 (클라우드에 있을 때만) */}
+                        {isInCloud && dbFile && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleViewGcode(dbFile.id)}
+                            className="h-9 w-9 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-violet-500/10 hover:text-violet-600"
+                            title={t('gcode.viewGcode')}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handlePrint(fileName, 'local')}
+                          disabled={isPrinting || !isConnected}
+                          className="h-9 w-9 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-emerald-500/10 hover:text-emerald-600"
+                        >
+                          <Play className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })
                 ) : (
                   sdFiles.map((file, idx) => (
                     <div

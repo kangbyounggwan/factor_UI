@@ -294,6 +294,12 @@ class PrinterStatusManager {
    * MQTT 페이로드에서 상태값 추출 및 매핑
    */
   extractStatus(parsed: any): string {
+    // state.flags.printing을 우선 확인 (가장 정확한 상태)
+    const flags = parsed?.state?.flags;
+    if (flags?.printing) return 'printing';
+    if (flags?.paused) return 'paused';
+    if (flags?.error) return 'error';
+
     // connection 배열에서 상태 추출: ["Printing", "/dev/ttyUSB0", 115200, {...}]
     const connectionArr = Array.isArray(parsed?.connection) ? parsed.connection : null;
     const connectionState = connectionArr?.[0];
@@ -427,6 +433,12 @@ class PrinterStatusManager {
 
     // 상태가 동일하면 스킵
     if (prevStatus === newStatus) return;
+
+    // 디버그: 상태 변경 감지
+    console.log(`[MQTT] 📊 Status change detected: ${deviceUuid.slice(0, 8)}... ${prevStatus} → ${newStatus}`);
+    if (parsed?.job?.file) {
+      console.log(`[MQTT] 📄 Job file info:`, parsed.job.file);
+    }
 
     try {
       // 프린터 ID 조회

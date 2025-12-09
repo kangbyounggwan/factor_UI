@@ -67,6 +67,7 @@ import { getUserPrintersWithGroup } from "@shared/services/supabaseService/print
 import { uploadSTLAndSlice, type SlicingSettings, type PrinterDefinition as SlicingPrinterDefinition } from "@shared/services/aiService";
 import { createSlicingTask, subscribeToTaskUpdates, processSlicingTask, BackgroundTask } from "@shared/services/backgroundSlicing";
 import type { AIGeneratedModel } from "@shared/types/aiModelType";
+import { generateShortFilename } from "@shared/services/claudeService";
 import type { Database } from "@/integrations/supabase/types";
 
 // 프린터 타입 정의 (데이터베이스 타입 사용)
@@ -639,6 +640,7 @@ const AI = () => {
       console.log('[AI Mobile] - Printer Model ID:', printer.manufacture_id);
 
       const modelName = generatedModel.model_name || generatedModel.prompt || String(generatedModel.id);
+      const modelPrompt = generatedModel.prompt;  // 사용자의 원본 프롬프트
 
       // Get printer info for GCode
       let printerInfoForGCode: { manufacturer?: string; series?: string; model?: string; printer_name?: string } = {};
@@ -671,6 +673,7 @@ const AI = () => {
           printerName: printerFilename,
           modelName,
           printerInfo: printerInfoForGCode,
+          prompt: modelPrompt,  // Claude로 파일명 생성용
         }
       );
 
@@ -699,6 +702,7 @@ const AI = () => {
           printerName: printerFilename,
           modelName,
           printerInfo: printerInfoForGCode,
+          prompt: modelPrompt,  // Claude로 파일명 생성용
         },
         output_url: null,
         output_metadata: null,
@@ -926,6 +930,15 @@ const AI = () => {
             steps: { ...prev.steps, optimization: 'completed' },
           }));
 
+          // Claude API로 짧은 이름 생성 (프롬프트 기반)
+          let shortNameText: string | undefined;
+          try {
+            shortNameText = await generateShortFilename({ prompt: textPrompt });
+            console.log('[AI Mobile] Generated short_name:', shortNameText);
+          } catch (error) {
+            console.warn('[AI Mobile] Failed to generate short_name:', error);
+          }
+
           // 4. DB 업데이트
           await updateAIModel(supabase, dbModelId, {
             storage_path: modelData.path,
@@ -936,6 +949,7 @@ const AI = () => {
             model_dimensions: metadata?.dimensions,
             generation_metadata: metadata,
             status: 'completed',
+            short_name: shortNameText,  // Claude가 생성한 짧은 영문 이름
           });
 
           // 5. 상태 업데이트 (Supabase Storage URL 사용)
@@ -1042,6 +1056,15 @@ const AI = () => {
             steps: { ...prev.steps, optimization: 'completed' },
           }));
 
+          // Claude Vision API로 짧은 이름 생성 (이미지 기반)
+          let shortNameImage: string | undefined;
+          try {
+            shortNameImage = await generateShortFilename({ imageUrl: uploadedFile.url });
+            console.log('[AI Mobile] Generated short_name from image:', shortNameImage);
+          } catch (error) {
+            console.warn('[AI Mobile] Failed to generate short_name from image:', error);
+          }
+
           // 4. DB 업데이트
           await updateAIModel(supabase, dbModelId, {
             storage_path: modelData.path,
@@ -1052,6 +1075,7 @@ const AI = () => {
             model_dimensions: metadata?.dimensions,
             generation_metadata: metadata,
             status: 'completed',
+            short_name: shortNameImage,  // Claude Vision이 생성한 짧은 영문 이름
           });
 
           // 5. 상태 업데이트 (Supabase Storage URL 사용)
