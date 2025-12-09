@@ -41,6 +41,8 @@ export default defineConfig(({ mode }) => {
       proxy: {},
     },
     build: {
+      // Target modern browsers to avoid unnecessary polyfills (saves ~26KB)
+      target: ['es2020', 'edge88', 'firefox78', 'chrome87', 'safari14'],
       sourcemap: true,
       cssCodeSplit: true,
       cssMinify: true,

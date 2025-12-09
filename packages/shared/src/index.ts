@@ -1,6 +1,7 @@
 export * from "./utils/time";
 export * from "./utils/imageValidation";
-export * from "./utils/stlThumbnail";
+// stlThumbnail is NOT exported here to avoid bundling Three.js in the main bundle
+// Import directly from "@shared/utils/stlThumbnail" where needed
 export * from "./utils/printerStatus";
 export * from "./component/websocket";
 

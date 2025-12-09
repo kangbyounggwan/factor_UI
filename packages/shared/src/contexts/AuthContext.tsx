@@ -1,11 +1,19 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../integrations/supabase/client";
-import { startDashStatusSubscriptionsForUser, stopDashStatusSubscriptions, subscribeControlResultForUser, clearMqttClientId, subscribeAIModelCompleted, subscribeAIModelFailed } from "../component/mqtt";
-import { disconnectSharedMqtt } from "../component/mqtt";
-import { createSharedMqttClient } from "../component/mqtt";
-import { sha256 } from 'js-sha256';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+
+// MQTT functions are loaded dynamically to reduce initial bundle size (~266KB savings)
+// These will be imported on-demand when user logs in
+type MqttModule = typeof import("../component/mqtt");
+
+// Web Crypto API based SHA-256 (replaces js-sha256 to save ~26KB)
+async function sha256(message: string): Promise<string> {
+  const msgBuffer = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 // SignInWithApple 플러그인 인터페이스 정의
 interface SignInWithApplePlugin {
@@ -117,8 +125,22 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     }
   };
 
+  // Lazy-loaded MQTT module reference
+  const mqttModuleRef = useRef<MqttModule | null>(null);
+
+  // Dynamically load MQTT module
+  async function getMqttModule(): Promise<MqttModule> {
+    if (!mqttModuleRef.current) {
+      mqttModuleRef.current = await import("../component/mqtt");
+    }
+    return mqttModuleRef.current;
+  }
+
   async function teardownSubscriptions() {
-    try { await stopDashStatusSubscriptions(); } catch {}
+    try {
+      const mqtt = await getMqttModule();
+      await mqtt.stopDashStatusSubscriptions();
+    } catch {}
     try { if (ctrlUnsubRef.current) await ctrlUnsubRef.current(); } catch {}
     try { if (aiCompletedUnsubRef.current) await aiCompletedUnsubRef.current(); } catch {}
     try { if (aiFailedUnsubRef.current) await aiFailedUnsubRef.current(); } catch {}
@@ -131,10 +153,12 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   async function ensureSubscriptions(userId: string) {
     if (!userId) return;
 
+    const mqtt = await getMqttModule();
+
     if (subscribedUserIdRef.current === userId) {
       try {
         // console.log('[ENSURE] enter', { userId, subscribed: subscribedUserIdRef.current });
-        const ok = await createSharedMqttClient().connect().then(() => true).catch(() => false);
+        const ok = await mqtt.createSharedMqttClient().connect().then(() => true).catch(() => false);
         if (ok) {
           // console.log('[ENSURE] done', { userId, connected: true });
           return; // 이미 연결되어 있으면 스킵
@@ -184,14 +208,14 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     }
 
     try {
-      await startDashStatusSubscriptionsForUser(userId);
+      await mqtt.startDashStatusSubscriptionsForUser(userId);
     } catch (e) {
       console.warn("[MQTT] startDashStatusSubscriptionsForUser failed:", e);
       return; // 실패 시 표시 갱신 금지 → 다음 이벤트/포커스 때 재시도
     }
 
     try {
-      const cr = await subscribeControlResultForUser(userId).catch(() => null);
+      const cr = await mqtt.subscribeControlResultForUser(userId).catch(() => null);
       if (cr) ctrlUnsubRef.current = cr;
     } catch (e) {
       console.warn("[MQTT] subscribeControlResultForUser failed:", e);
@@ -199,7 +223,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
     // AI 모델 완료 알림 구독
     try {
-      const aiCompleted = await subscribeAIModelCompleted(
+      const aiCompleted = await mqtt.subscribeAIModelCompleted(
         userId,
         (payload) => {
           console.log('[AI-MODEL] Completed:', payload);
@@ -214,7 +238,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
     // AI 모델 실패 알림 구독
     try {
-      const aiFailed = await subscribeAIModelFailed(
+      const aiFailed = await mqtt.subscribeAIModelFailed(
         userId,
         (payload) => {
           console.log('[AI-MODEL] Failed:', payload);
@@ -229,7 +253,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
     subscribedUserIdRef.current = userId; // 성공했을 때만 표시
     try {
-      const ok2 = await createSharedMqttClient().connect().then(() => true).catch(() => false);
+      const ok2 = await mqtt.createSharedMqttClient().connect().then(() => true).catch(() => false);
       console.log('[ENSURE] done', { userId, connected: ok2 });
     } catch {}
   }
@@ -658,7 +682,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         // 1) raw nonce 생성 (원본)
         const rawNonce = Math.random().toString(36).substring(2, 15);
         // 2) SHA-256 해시 (Apple에 보낼 값)
-        const hashedNonce = sha256(rawNonce);
+        const hashedNonce = await sha256(rawNonce);
 
         console.log('[AuthContext] Nonce generated:', { rawNonce, hashedNonce });
 
@@ -806,10 +830,16 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
       // MQTT client ID 삭제 및 구독 해제
       if (user?.id) {
-        clearMqttClientId(user.id);
+        try {
+          const mqtt = await getMqttModule();
+          mqtt.clearMqttClientId(user.id);
+        } catch {}
       }
       await teardownSubscriptions();
-      try { await disconnectSharedMqtt(); } catch {}
+      try {
+        const mqtt = await getMqttModule();
+        await mqtt.disconnectSharedMqtt();
+      } catch {}
 
       // Supabase 로그아웃 (기본: local - 현재 탭만)
       const scope = options?.global ? 'global' : 'local';

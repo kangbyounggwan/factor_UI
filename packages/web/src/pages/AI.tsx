@@ -585,8 +585,9 @@ const AI = () => {
           setCurrentStlUrl(model.stl_download_url);
           setCurrentGCodeUrl(gcodeUrl);
           // 캐시 무효화를 위해 updated_at 타임스탬프 추가
+          // URL에 이미 쿼리 파라미터가 있으면 &를, 없으면 ?를 사용
           const cacheBustedUrl = model.download_url ?
-            `${model.download_url}?t=${new Date(model.updated_at || model.created_at).getTime()}` :
+            `${model.download_url}${model.download_url.includes('?') ? '&' : '?'}t=${new Date(model.updated_at || model.created_at).getTime()}` :
             model.download_url;
           setModelViewerUrl(cacheBustedUrl);
           setTargetPrinterModelId(printerModelId); // 프린터 모델 ID 저장
@@ -1462,8 +1463,9 @@ const AI = () => {
         console.log('[AI] 재슬라이싱 - GCode URL을 DB에 저장:', uploadedGcodeUrl);
       }
 
-      // UI 업데이트
-      const gcodeUrlWithTimestamp = uploadedGcodeUrl ? `${uploadedGcodeUrl}?t=${Date.now()}` : null;
+      // UI 업데이트 (URL에 이미 쿼리 파라미터가 있으면 &를, 없으면 ?를 사용)
+      const gcodeUrlWithTimestamp = uploadedGcodeUrl ?
+        `${uploadedGcodeUrl}${uploadedGcodeUrl.includes('?') ? '&' : '?'}t=${Date.now()}` : null;
       setCurrentGCodeUrl(gcodeUrlWithTimestamp);
 
       // 메타데이터를 UI 형식으로 변환하여 설정
@@ -2499,8 +2501,8 @@ const AI = () => {
                           model => model.source_image_url === file.storagePath || model.source_image_url === file.url
                         );
                         if (linkedModel?.download_url) {
-                          // 캐시 무효화를 위해 updated_at 타임스탬프 추가
-                          const cacheBustedUrl = `${linkedModel.download_url}?t=${new Date(linkedModel.updated_at || linkedModel.created_at).getTime()}`;
+                          // 캐시 무효화를 위해 updated_at 타임스탬프 추가 (URL에 이미 쿼리 파라미터가 있으면 &를 사용)
+                          const cacheBustedUrl = `${linkedModel.download_url}${linkedModel.download_url.includes('?') ? '&' : '?'}t=${new Date(linkedModel.updated_at || linkedModel.created_at).getTime()}`;
                           setModelViewerUrl(cacheBustedUrl);
                           setSelectedImageHasModel(true);
                           toast({ title: t('ai.imageSelected'), description: file.name });
@@ -2617,9 +2619,9 @@ const AI = () => {
 
                       // GLB 우선, STL 폴백으로 뷰어 URL 설정
                       const viewerUrl = model.download_url || model.stl_download_url;
-                      // 캐시 무효화를 위해 updated_at 타임스탬프 추가
+                      // 캐시 무효화를 위해 updated_at 타임스탬프 추가 (URL에 이미 쿼리 파라미터가 있으면 &를 사용)
                       const cacheBustedViewerUrl = viewerUrl ?
-                        `${viewerUrl}?t=${new Date(model.updated_at || model.created_at).getTime()}` :
+                        `${viewerUrl}${viewerUrl.includes('?') ? '&' : '?'}t=${new Date(model.updated_at || model.created_at).getTime()}` :
                         viewerUrl;
                       console.log('[AI] ===== MODEL SELECTION =====');
                       console.log('[AI] Setting modelViewerUrl to:', cacheBustedViewerUrl);
