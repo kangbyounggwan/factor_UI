@@ -130,7 +130,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
-import { onDashStatusMessage, mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit } from "@shared/services/mqttService";
+import { onDashStatusMessage, mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, waitForGCodeUploadResult } from "@shared/services/mqttService";
 import { buildCommon, buildPrintablePrompt, BASE_3D_PRINT_PROMPT, postTextTo3D, postImageTo3D, extractGLBUrl, extractSTLUrl, extractMetadata, extractThumbnailUrl, pollTaskUntilComplete, AIModelResponse, uploadSTLAndSlice, SlicingSettings, PrinterDefinition } from "@shared/services/aiService";
 import { createAIModel, updateAIModel, listAIModels, deleteAIModel } from "@shared/services/supabaseService/aiModel";
 import { supabase } from "@shared/integrations/supabase/client";
@@ -1183,14 +1183,36 @@ const AI = () => {
         index += 1;
       }
 
-      // 업로드 완료 (commit) - end 메시지 전송 후 바로 진행
+      // 업로드 완료 (commit) - end 메시지 전송
       await publishSdUploadCommit(selectedPrinter.device_uuid, uploadId, 'local');
-      console.log('[AI] Upload end message sent, proceeding immediately');
+      console.log('[AI] Upload end message sent, waiting for result...');
 
-      toast({
-        title: t('gcode.uploadSuccess'),
-        description: t('ai.fileUploadedToPrinter', { fileName }),
-      });
+      // OctoPrint에서 업로드 결과 대기 (60초 타임아웃)
+      try {
+        const uploadResult = await waitForGCodeUploadResult(selectedPrinter.device_uuid, uploadId, 60000);
+        console.log('[AI] Upload result received:', uploadResult);
+
+        if (uploadResult.success) {
+          toast({
+            title: t('gcode.uploadSuccess'),
+            description: `${uploadResult.filename} → ${uploadResult.target === 'sd' ? 'SD Card' : 'Local'}`,
+          });
+        } else {
+          toast({
+            title: t('gcode.uploadFailed'),
+            description: uploadResult.error || t('errors.general'),
+            variant: 'destructive',
+          });
+          return; // 업로드 실패 시 중단
+        }
+      } catch (timeoutError) {
+        // 타임아웃되어도 성공 메시지 표시 (기존 동작 유지)
+        console.warn('[AI] Upload result timeout, assuming success:', timeoutError);
+        toast({
+          title: t('gcode.uploadSuccess'),
+          description: t('ai.fileUploadedToPrinter', { fileName }),
+        });
+      }
 
       // 4. 모달 닫기
       setPrintDialogOpen(false);

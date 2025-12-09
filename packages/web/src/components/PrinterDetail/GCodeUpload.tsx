@@ -16,7 +16,7 @@ import {
   Cloud
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, waitForSdUploadResult, onDashStatusMessage, publishGcodePrint } from "@shared/services/mqttService";
+import { mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, onDashStatusMessage, publishGcodePrint, subscribeGCodeUploadResult, waitForGCodeUploadResult, type GCodeUploadResult } from "@shared/services/mqttService";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -30,7 +30,6 @@ interface GCodeFile {
   print_time_estimate?: number;
   filament_estimate?: number;
   status: string;
-  storage_url?: string;
 }
 
 interface DbGCodeFile {
@@ -38,7 +37,6 @@ interface DbGCodeFile {
   filename: string;
   file_path: string;
   file_size: number;
-  storage_url?: string;
   created_at: string;
 }
 
@@ -103,18 +101,24 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
         throw new Error('User not authenticated');
       }
 
-      const uploadId = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+      // MQTT 업로드용 고유 ID
+      const uploadId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
       const arrayBuf = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuf);
       const total = bytes.length;
 
       // 2. Supabase Storage에 파일 업로드 (뷰어용)
-      const filePath = `${user.id}/${uploadId}/${file.name}`;
+      // 구조: user_id/gcode_file/device_id/filename.gcode
+      const deviceFolder = deviceUuid || 'unknown';
+      const filePath = `${user.id}/gcode_file/${deviceFolder}/${file.name}`;
+      // GCode 파일을 text/plain Blob으로 변환 (MIME 타입 제한 우회)
+      const fileBlob = new Blob([arrayBuf], { type: 'text/plain' });
       const { error: storageError } = await supabase.storage
         .from('gcode-files')
-        .upload(filePath, file, {
+        .upload(filePath, fileBlob, {
           cacheControl: '3600',
-          upsert: false
+          upsert: true, // 같은 파일명이면 덮어쓰기
         });
 
       if (storageError) {
@@ -131,25 +135,22 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
         storageUrl = urlData?.publicUrl;
       }
 
-      // 4. DB에 메타데이터 저장
-      if (!storageError) {
-        const { error: dbError } = await supabase
-          .from('gcode_files')
-          .insert({
-            user_id: user.id,
-            filename: file.name,
-            file_path: filePath,
-            file_size: total,
-            storage_url: storageUrl,
-            printer_id: deviceUuid,
-          });
+      // 4. DB에 메타데이터 저장 (Storage 에러와 무관하게 항상 저장)
+      const { error: dbError } = await supabase
+        .from('gcode_files')
+        .insert({
+          user_id: user.id,
+          filename: file.name,
+          file_path: filePath,
+          file_size: total,
+          printer_id: deviceUuid,
+        });
 
-        if (dbError) {
-          console.error('DB insert error:', dbError);
-        } else {
-          // DB 파일 목록 새로고침
-          loadDbFiles();
-        }
+      if (dbError) {
+        console.error('DB insert error:', dbError);
+      } else {
+        // DB 파일 목록 새로고침
+        loadDbFiles();
       }
 
       setUploadProgress(30);
@@ -189,14 +190,6 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
         }
       };
 
-      const resultPromise = waitForSdUploadResult(
-        deviceUuid!,
-        (progress) => {
-          // 30% ~ 99% 구간에서 MQTT 진행률 표시
-          setUploadProgress(30 + Math.min(69, Math.round(progress.percent * 0.69)));
-        }
-      );
-
       let sent = 0;
       let index = 0;
       while (sent < total) {
@@ -204,17 +197,41 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
         await sendChunk(index, sent, next);
         sent = next;
         index += 1;
-        setUploadProgress(30 + Math.min(69, Math.round((sent / total) * 69)));
+        // 30% ~ 90% 구간에서 청크 전송 진행률 표시
+        setUploadProgress(30 + Math.min(60, Math.round((sent / total) * 60)));
       }
 
+      // 업로드 완료 (commit) - end 메시지 전송
       await publishSdUploadCommit(deviceUuid!, uploadId, fileSource === 'SDCARD' ? 'sd' : 'local');
+      setUploadProgress(95);
+      console.log('[GCODE] Upload end message sent, waiting for result...');
 
-      const result = await resultPromise;
-      setUploadProgress(100);
-      if (result.ok) {
-        toast({ title: t('gcode.uploadSuccess'), description: `${file.name}` });
-      } else {
-        toast({ title: t('gcode.uploadFailed'), description: result.message || t('gcode.uploadFailed'), variant: 'destructive' });
+      // OctoPrint에서 업로드 결과 대기 (60초 타임아웃)
+      try {
+        const uploadResult = await waitForGCodeUploadResult(deviceUuid!, uploadId, 60000);
+        console.log('[GCODE] Upload result received:', uploadResult);
+        setUploadProgress(100);
+
+        if (uploadResult.success) {
+          toast({
+            title: t('gcode.uploadSuccess'),
+            description: `${uploadResult.filename} → ${uploadResult.target === 'sd' ? 'SD Card' : 'Local'}`,
+          });
+        } else {
+          toast({
+            title: t('gcode.uploadFailed'),
+            description: uploadResult.error || t('errors.general'),
+            variant: 'destructive',
+          });
+        }
+      } catch (timeoutError) {
+        // 타임아웃 시 경고 표시
+        console.warn('[GCODE] Upload result timeout:', timeoutError);
+        setUploadProgress(100);
+        toast({
+          title: t('gcode.uploadSuccess'),
+          description: `${file.name} (응답 대기 시간 초과)`,
+        });
       }
 
     } catch (error) {
@@ -255,7 +272,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
 
       const { data, error } = await supabase
         .from('gcode_files')
-        .select('id, filename, file_path, file_size, storage_url, created_at')
+        .select('id, filename, file_path, file_size, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -270,6 +287,46 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
     loadFiles();
     loadDbFiles();
   }, []);
+
+  // GCode 업로드 결과 구독 (OctoPrint에서 업로드 완료 시 알림)
+  useEffect(() => {
+    if (!deviceUuid) return;
+
+    let unsubscribe: (() => Promise<void>) | null = null;
+
+    const setupSubscription = async () => {
+      try {
+        unsubscribe = await subscribeGCodeUploadResult(deviceUuid, (result: GCodeUploadResult) => {
+          console.log('[GCODE][RESULT] Received:', result);
+
+          if (result.success) {
+            toast({
+              title: t('gcode.uploadSuccess'),
+              description: `${result.filename} → ${result.target === 'sd' ? 'SD Card' : 'Local'}`,
+            });
+            // 파일 목록 새로고침
+            loadDbFiles();
+          } else {
+            toast({
+              title: t('gcode.uploadFailed'),
+              description: result.error || t('errors.general'),
+              variant: 'destructive',
+            });
+          }
+        });
+      } catch (err) {
+        console.error('[GCODE][RESULT] Subscription error:', err);
+      }
+    };
+
+    setupSubscription();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe().catch(() => {});
+      }
+    };
+  }, [deviceUuid, t, toast]);
 
   useEffect(() => {
     const off = onDashStatusMessage((uuid, payload) => {

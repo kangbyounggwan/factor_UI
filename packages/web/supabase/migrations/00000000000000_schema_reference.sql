@@ -1,7 +1,7 @@
 -- ============================================================================
 -- FACTOR HIBRID - Supabase Database Schema Reference
 -- Generated: 2025-12-09
--- Total Tables: 27
+-- Total Tables: 25 (9 unused tables removed)
 -- ============================================================================
 -- 이 파일은 참조용 스키마 문서입니다.
 -- 실제 테이블은 이미 Supabase에 존재하므로 이 파일을 실행할 필요가 없습니다.
@@ -18,26 +18,35 @@
  5. chat_messages             - 채팅 메시지
  6. chat_sessions             - 채팅 세션
  7. clients                   - OctoPrint 클라이언트
- 8. failure_scenes            - 출력 실패 감지 데이터
+ 8. edge_devices              - 엣지 디바이스 등록
  9. gcode_files               - GCode 파일 메타데이터
 10. manufacturing_printers    - Cura 프린터 정의
 11. model_print_history       - 모델 출력 이력
 12. notifications             - 사용자 알림
-13. paddle_customers          - Paddle 고객 정보
-14. paddle_subscriptions      - Paddle 구독 정보
-15. paddle_transactions       - Paddle 결제 내역
-16. payment_history           - 결제 내역 (레거시)
-17. print_jobs                - 출력 작업 기록
-18. printer_groups            - 프린터 그룹
-19. printer_position_history  - 프린터 위치 이력
-20. printer_status            - 프린터 상태 (평균 온도)
-21. printer_temperature_logs  - 실시간 온도 로그
-22. printers                  - 사용자 프린터
-23. profiles                  - 사용자 프로필
-24. stl_files                 - STL 파일 관리
-25. user_device_tokens        - 푸시 알림 토큰
-26. user_notification_settings- 알림 설정
-27. user_subscriptions        - 사용자 구독 정보
+13. payment_history           - 결제 내역
+14. payment_methods           - 결제 수단
+15. printer_groups            - 프린터 그룹
+16. printer_temperature_logs  - 실시간 온도 로그
+17. printer_temperature_sessions - 온도 세션 (아카이브)
+18. printers                  - 사용자 프린터
+19. profiles                  - 사용자 프로필
+20. subscription_plans        - 구독 플랜 정의
+21. usage_logs                - 사용량 상세 로그
+22. user_device_tokens        - 푸시 알림 토큰
+23. user_notification_settings- 알림 설정
+24. user_subscriptions        - 사용자 구독 정보
+25. user_usage                - 유저별 사용량 추적
+
+삭제된 테이블 (20251209150000_drop_unused_tables.sql):
+- ai_usage_logs          -> user_usage로 대체
+- failure_scenes         -> 미사용
+- paddle_customers       -> user_subscriptions.paddle_customer_id로 관리
+- paddle_subscriptions   -> user_subscriptions로 통합
+- paddle_transactions    -> payment_history로 관리
+- print_jobs             -> MQTT 실시간 처리
+- printer_position_history -> 미사용
+- printer_status         -> MQTT 실시간 처리
+- stl_files              -> Storage 버킷 직접 저장
 */
 
 -- ============================================================================
@@ -54,7 +63,7 @@ CREATE TABLE public.ai_generated_models (
   target_polycount NUMERIC,
   symmetry_mode VARCHAR,
   model_name VARCHAR(255) NOT NULL,
-  short_name VARCHAR(50),               -- Claude API로 생성된 짧은 영문 이름 (아카이브 표시 및 GCode 파일명용)
+  short_name VARCHAR(50),               -- Claude API로 생성된 짧은 영문 이름
   file_format VARCHAR(20) NOT NULL DEFAULT 'glb',
   storage_path TEXT NOT NULL,           -- GLB 파일 Storage 경로
   download_url TEXT,                    -- GLB 파일 다운로드 URL
@@ -191,49 +200,20 @@ CREATE TABLE public.clients (
 */
 
 -- ============================================================================
--- 8. failure_scenes (출력 실패 감지)
+-- 8. edge_devices (엣지 디바이스)
 -- ============================================================================
 /*
-CREATE TABLE public.failure_scenes (
+CREATE TABLE public.edge_devices (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  device_uuid UUID NOT NULL,
-  failure_type VARCHAR NOT NULL,
-  confidence DOUBLE PRECISION NOT NULL,
-  severity VARCHAR NOT NULL DEFAULT 'medium',
-  detection_model VARCHAR DEFAULT 'spaghetti_detective',
-  original_frame_url TEXT NOT NULL,
-  annotated_frame_url TEXT,
-  before_frames_url TEXT,
-  after_frames_url TEXT,
-  gcode_filename VARCHAR,
-  layer_number INTEGER,
-  print_progress DOUBLE PRECISION,
-  nozzle_temp DOUBLE PRECISION,
-  bed_temp DOUBLE PRECISION,
-  print_speed DOUBLE PRECISION,
-  fan_speed INTEGER,
-  z_height DOUBLE PRECISION,
-  estimated_time_remaining INTEGER,
-  detection_bbox JSONB,
-  detection_mask_url TEXT,
-  raw_prediction_data JSONB,
-  gpt_description TEXT,
-  gpt_root_cause TEXT,
-  gpt_suggested_action TEXT,
-  gpt_prevention_tips TEXT,
-  gpt_raw_response TEXT,
-  is_verified BOOLEAN DEFAULT false,
-  is_false_positive BOOLEAN DEFAULT false,
-  verified_by UUID,
-  verified_at TIMESTAMPTZ,
-  verification_notes TEXT,
-  include_in_dataset BOOLEAN DEFAULT true,
-  dataset_split VARCHAR,
-  dataset_exported_at TIMESTAMPTZ,
-  action_taken VARCHAR,
-  user_notified BOOLEAN DEFAULT false,
-  notification_sent_at TIMESTAMPTZ,
+  device_uuid TEXT NOT NULL UNIQUE,
+  device_name TEXT,
+  device_type TEXT DEFAULT 'raspberry_pi',
+  status TEXT DEFAULT 'pending',
+  ip_address TEXT,
+  mac_address TEXT,
+  firmware_version TEXT,
+  last_seen TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -249,7 +229,7 @@ CREATE TABLE public.gcode_files (
   model_id UUID REFERENCES ai_generated_models(id) ON DELETE CASCADE,
   printer_id TEXT,                      -- 프린터 device_uuid
   filename TEXT NOT NULL,               -- 원본 파일명
-  short_filename TEXT,                  -- MQTT 전송용 짧은 파일명 (e.g., snowman.gcode)
+  short_filename TEXT,                  -- MQTT 전송용 짧은 파일명
   file_path TEXT NOT NULL,              -- Storage 경로
   file_size BIGINT NOT NULL,
   manufacturer TEXT,
@@ -295,7 +275,7 @@ CREATE TABLE public.manufacturing_printers (
   extruder_count INTEGER DEFAULT 1,
   heated_bed BOOLEAN DEFAULT true,
   file_formats TEXT[],
-  technology TEXT DEFAULT 'FDM' CHECK (technology IN ('FDM', 'SLA', 'SLS', 'DLP', 'Binder Jetting', 'Material Jetting', 'Other')),
+  technology TEXT DEFAULT 'FDM',
   nozzle_diameter NUMERIC,
   layer_height_min NUMERIC,
   layer_height_max NUMERIC,
@@ -343,7 +323,7 @@ CREATE TABLE public.notifications (
   title TEXT NOT NULL,
   message TEXT NOT NULL,
   message_en TEXT,                      -- 영문 메시지
-  type TEXT NOT NULL,                   -- 'ai_model_complete', 'print_complete', 'print_error', etc.
+  type TEXT NOT NULL,                   -- 'ai_model_complete', 'print_complete', etc.
   read BOOLEAN NOT NULL DEFAULT false,
   related_id TEXT,
   related_type TEXT,
@@ -354,69 +334,7 @@ CREATE TABLE public.notifications (
 */
 
 -- ============================================================================
--- 13. paddle_customers (Paddle 고객)
--- ============================================================================
-/*
-CREATE TABLE public.paddle_customers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  paddle_customer_id TEXT NOT NULL UNIQUE,
-  email TEXT,
-  name TEXT,
-  locale TEXT DEFAULT 'en',
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-*/
-
--- ============================================================================
--- 14. paddle_subscriptions (Paddle 구독)
--- ============================================================================
-/*
-CREATE TABLE public.paddle_subscriptions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  paddle_subscription_id TEXT NOT NULL UNIQUE,
-  paddle_customer_id TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active',
-  plan_name TEXT NOT NULL DEFAULT 'pro',
-  price_id TEXT,
-  currency TEXT DEFAULT 'USD',
-  unit_price INTEGER,
-  billing_cycle_interval TEXT,
-  current_period_start TIMESTAMPTZ,
-  current_period_end TIMESTAMPTZ,
-  cancel_at_period_end BOOLEAN DEFAULT false,
-  canceled_at TIMESTAMPTZ,
-  paused_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-*/
-
--- ============================================================================
--- 15. paddle_transactions (Paddle 결제 내역)
--- ============================================================================
-/*
-CREATE TABLE public.paddle_transactions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  paddle_transaction_id TEXT NOT NULL UNIQUE,
-  paddle_subscription_id TEXT,
-  paddle_customer_id TEXT,
-  status TEXT NOT NULL,
-  amount INTEGER NOT NULL,
-  currency TEXT DEFAULT 'USD',
-  payment_method TEXT,
-  receipt_url TEXT,
-  invoice_number TEXT,
-  billed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-*/
-
--- ============================================================================
--- 16. payment_history (결제 내역 - 레거시)
+-- 13. payment_history (결제 내역)
 -- ============================================================================
 /*
 CREATE TABLE public.payment_history (
@@ -444,35 +362,23 @@ CREATE TABLE public.payment_history (
 */
 
 -- ============================================================================
--- 17. print_jobs (출력 작업 기록)
+-- 14. payment_methods (결제 수단)
 -- ============================================================================
 /*
-CREATE TABLE public.print_jobs (
+CREATE TABLE public.payment_methods (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  printer_id UUID NOT NULL REFERENCES printers(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  filename TEXT NOT NULL,
-  file_size BIGINT,
-  file_path TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'cancelled', 'failed')),
-  progress DOUBLE PRECISION DEFAULT 0,
-  started_at TIMESTAMPTZ,
-  completed_at TIMESTAMPTZ,
-  estimated_duration INTERVAL,
-  actual_duration INTERVAL,
-  filament_used DOUBLE PRECISION,
-  filament_type TEXT,
-  current_layer INTEGER,
-  total_layers INTEGER,
-  failure_reason TEXT,
-  cancelled_by UUID,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  method_type VARCHAR NOT NULL,         -- 'card', 'bank', etc.
+  card_company VARCHAR,
+  card_number VARCHAR,                  -- 마스킹된 카드번호
+  is_default BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 */
 
 -- ============================================================================
--- 18. printer_groups (프린터 그룹)
+-- 15. printer_groups (프린터 그룹)
 -- ============================================================================
 /*
 CREATE TABLE public.printer_groups (
@@ -487,41 +393,7 @@ CREATE TABLE public.printer_groups (
 */
 
 -- ============================================================================
--- 19. printer_position_history (프린터 위치 이력)
--- ============================================================================
-/*
-CREATE TABLE public.printer_position_history (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  printer_id UUID NOT NULL REFERENCES printers(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  x_current NUMERIC,
-  y_current NUMERIC,
-  z_current NUMERIC,
-  e_current NUMERIC,
-  x_target NUMERIC,
-  y_target NUMERIC,
-  z_target NUMERIC,
-  e_target NUMERIC,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-*/
-
--- ============================================================================
--- 20. printer_status (프린터 상태)
--- ============================================================================
-/*
-CREATE TABLE public.printer_status (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  printer_id UUID NOT NULL REFERENCES printers(id) ON DELETE CASCADE,
-  nozzle_avg_30s DOUBLE PRECISION,
-  bed_avg_30s DOUBLE PRECISION,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-*/
-
--- ============================================================================
--- 21. printer_temperature_logs (실시간 온도 로그)
+-- 16. printer_temperature_logs (실시간 온도 로그)
 -- ============================================================================
 /*
 CREATE TABLE public.printer_temperature_logs (
@@ -538,7 +410,29 @@ CREATE TABLE public.printer_temperature_logs (
 */
 
 -- ============================================================================
--- 22. printers (사용자 프린터)
+-- 17. printer_temperature_sessions (온도 세션 아카이브)
+-- ============================================================================
+/*
+CREATE TABLE public.printer_temperature_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  printer_id UUID NOT NULL REFERENCES printers(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  job_id UUID REFERENCES model_print_history(id) ON DELETE SET NULL,
+  session_start TIMESTAMPTZ NOT NULL,
+  session_end TIMESTAMPTZ,
+  reading_count INTEGER DEFAULT 0,
+  nozzle_avg DOUBLE PRECISION,
+  nozzle_min DOUBLE PRECISION,
+  nozzle_max DOUBLE PRECISION,
+  bed_avg DOUBLE PRECISION,
+  bed_min DOUBLE PRECISION,
+  bed_max DOUBLE PRECISION,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+*/
+
+-- ============================================================================
+-- 18. printers (사용자 프린터)
 -- ============================================================================
 /*
 CREATE TABLE public.printers (
@@ -563,7 +457,7 @@ CREATE TABLE public.printers (
 */
 
 -- ============================================================================
--- 23. profiles (사용자 프로필)
+-- 19. profiles (사용자 프로필)
 -- ============================================================================
 /*
 CREATE TABLE public.profiles (
@@ -579,34 +473,78 @@ CREATE TABLE public.profiles (
 */
 
 -- ============================================================================
--- 24. stl_files (STL 파일 관리)
+-- 20. subscription_plans (구독 플랜 정의)
 -- ============================================================================
 /*
-CREATE TABLE public.stl_files (
+CREATE TABLE public.subscription_plans (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  ai_model_id UUID REFERENCES ai_generated_models(id) ON DELETE SET NULL,
-  filename TEXT NOT NULL,
-  file_path TEXT NOT NULL,
-  file_size BIGINT NOT NULL,
-  storage_url TEXT,
-  thumbnail_path TEXT,
-  thumbnail_url TEXT,
-  triangle_count INTEGER,
-  bounding_box JSONB,
-  print_time_estimate INTEGER,
-  filament_estimate REAL,
-  status TEXT DEFAULT 'uploaded' CHECK (status IN ('uploaded', 'processing', 'ready', 'printing', 'completed', 'failed')),
-  tags TEXT[],
-  description TEXT,
-  is_public BOOLEAN DEFAULT false,
-  upload_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- 플랜 식별
+  plan_code VARCHAR(20) UNIQUE NOT NULL,          -- free, pro, enterprise
+  display_name VARCHAR(50) NOT NULL,              -- Free, Pro, Enterprise
+  display_name_ko VARCHAR(50),                    -- 무료, 프로, 엔터프라이즈
+  description TEXT,                               -- 플랜 설명
+  -- 가격 정보
+  price_monthly INTEGER DEFAULT 0,                -- 월간 가격 (원)
+  price_yearly INTEGER DEFAULT 0,                 -- 연간 가격 (원)
+  paddle_price_id_monthly VARCHAR(100),           -- Paddle 월간 결제 Price ID
+  paddle_price_id_yearly VARCHAR(100),            -- Paddle 연간 결제 Price ID
+  -- 수량 제한 (-1 = 무제한)
+  max_printers INTEGER DEFAULT 1,                 -- 최대 프린터 등록 수
+  ai_generation_limit INTEGER DEFAULT 20,         -- 월간 AI 모델 생성 한도
+  storage_limit_gb INTEGER DEFAULT 1,             -- 스토리지 한도 (GB)
+  webcam_reconnect_interval INTEGER,              -- 웹캠 재연결 간격 (분, NULL = 무제한)
+  -- 기능 플래그
+  has_analytics BOOLEAN DEFAULT false,            -- 분석 기능
+  has_push_notifications BOOLEAN DEFAULT true,    -- 푸시 알림
+  has_api_access BOOLEAN DEFAULT false,           -- API 접근
+  has_ai_assistant BOOLEAN DEFAULT false,         -- AI 어시스턴트
+  has_erp_mes_integration BOOLEAN DEFAULT false,  -- ERP/MES 연동
+  has_community_support BOOLEAN DEFAULT true,     -- 커뮤니티 지원
+  has_priority_support BOOLEAN DEFAULT false,     -- 우선 지원
+  has_dedicated_support BOOLEAN DEFAULT false,    -- 전담 지원
+  -- 관리
+  sort_order INTEGER DEFAULT 0,                   -- 표시 순서
+  is_active BOOLEAN DEFAULT true,                 -- 활성화 여부
+  created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 기본 플랜 데이터:
+-- free:       max_printers=1, ai_generation_limit=20
+-- pro:        max_printers=5, ai_generation_limit=50
+-- enterprise: max_printers=-1 (무제한), ai_generation_limit=-1 (무제한)
 */
 
 -- ============================================================================
--- 25. user_device_tokens (푸시 알림 토큰)
+-- 21. usage_logs (사용량 상세 로그)
+-- ============================================================================
+/*
+CREATE TABLE public.usage_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  usage_type VARCHAR(30) NOT NULL,
+    -- 'ai_model_generation' - AI 3D 모델 생성
+    -- 'ai_image_generation' - AI 이미지 생성
+    -- 'printer_registration' - 프린터 등록
+    -- 'printer_deletion'    - 프린터 삭제
+    -- 'storage_upload'      - 파일 업로드
+    -- 'api_call'            - API 호출
+  action VARCHAR(20) NOT NULL,                    -- create, delete, update
+  resource_id UUID,                               -- 모델 ID, 프린터 ID 등
+  resource_type VARCHAR(30),                      -- ai_model, printer, gcode, storage
+  delta INTEGER DEFAULT 1,                        -- +1 (추가), -1 (삭제)
+  metadata JSONB DEFAULT '{}',
+  ip_address INET,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS: 사용자는 자신의 로그만 조회 가능
+-- 함수: log_usage(), log_ai_generation()
+*/
+
+-- ============================================================================
+-- 22. user_device_tokens (푸시 알림 토큰)
 -- ============================================================================
 /*
 CREATE TABLE public.user_device_tokens (
@@ -622,7 +560,7 @@ CREATE TABLE public.user_device_tokens (
 */
 
 -- ============================================================================
--- 26. user_notification_settings (알림 설정)
+-- 23. user_notification_settings (알림 설정)
 -- ============================================================================
 /*
 CREATE TABLE public.user_notification_settings (
@@ -637,7 +575,7 @@ CREATE TABLE public.user_notification_settings (
   email_notifications BOOLEAN DEFAULT false,
   weekly_report BOOLEAN DEFAULT false,
   notification_sound BOOLEAN DEFAULT true,
-  notification_frequency TEXT DEFAULT 'immediate' CHECK (notification_frequency IN ('immediate', 'hourly', 'daily')),
+  notification_frequency TEXT DEFAULT 'immediate',
   quiet_hours_enabled BOOLEAN DEFAULT false,
   quiet_hours_start TIME,
   quiet_hours_end TIME,
@@ -647,28 +585,63 @@ CREATE TABLE public.user_notification_settings (
 */
 
 -- ============================================================================
--- 27. user_subscriptions (사용자 구독 정보)
+-- 24. user_subscriptions (사용자 구독 정보)
 -- ============================================================================
 /*
 CREATE TABLE public.user_subscriptions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
-  plan_name VARCHAR NOT NULL DEFAULT 'basic',
-  status VARCHAR NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'canceled', 'expired', 'trial')),
-  provider TEXT DEFAULT 'toss',         -- 'toss', 'paddle'
+  plan_id UUID REFERENCES subscription_plans(id), -- 플랜 테이블 참조
+  plan_name VARCHAR NOT NULL DEFAULT 'free',
+  status VARCHAR NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'cancelled', 'expired', 'trialing')),
+  billing_cycle VARCHAR(10) DEFAULT 'monthly',    -- monthly, yearly
+  provider TEXT DEFAULT 'paddle',                 -- 'paddle'
   current_period_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   current_period_end TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '1 month'),
   cancel_at_period_end BOOLEAN DEFAULT false,
-  -- Toss Payments (레거시)
-  toss_payment_key VARCHAR,
-  toss_order_id VARCHAR,
-  toss_billing_key VARCHAR,
+  cancelled_at TIMESTAMPTZ,                       -- 취소 일시
+  trial_start TIMESTAMPTZ,                        -- 체험 시작일
+  trial_end TIMESTAMPTZ,                          -- 체험 종료일
   -- Paddle
   paddle_subscription_id TEXT,
   paddle_customer_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 함수: get_user_plan_info() - 플랜 정보 및 제한 조회
+*/
+
+-- ============================================================================
+-- 25. user_usage (유저별 사용량 추적) - 유저당 1개 row
+-- ============================================================================
+/*
+CREATE TABLE public.user_usage (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+  -- 기간 (월별 리셋용)
+  period_year INTEGER NOT NULL,                   -- 현재 추적 기간 연도
+  period_month INTEGER NOT NULL,                  -- 현재 추적 기간 월
+  -- AI 사용량 (월별 리셋)
+  ai_model_generation INTEGER DEFAULT 0,          -- AI 3D 모델 생성 횟수
+  ai_image_generation INTEGER DEFAULT 0,          -- AI 이미지 생성 횟수
+  -- 프린터 (누적)
+  printer_count INTEGER DEFAULT 0,                -- 현재 등록된 프린터 수
+  -- 스토리지 (누적)
+  storage_bytes BIGINT DEFAULT 0,                 -- 스토리지 사용량 (바이트)
+  -- API (월별 리셋)
+  api_calls INTEGER DEFAULT 0,                    -- API 호출 횟수
+  -- 메타데이터
+  last_used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 월별 리셋: ai_model_generation, ai_image_generation, api_calls
+-- 누적 유지: printer_count, storage_bytes
+-- RLS: 사용자는 자신의 사용량만 조회/수정 가능
+-- 함수: increment_usage(), increment_storage(), get_current_usage(),
+--       get_user_usage(), check_usage_limit()
 */
 
 -- ============================================================================
@@ -677,22 +650,17 @@ CREATE TABLE public.user_subscriptions (
 /*
 1. ai-models           - AI 생성 모델 파일 (GLB, STL, PNG)
                         50MB, public
-                        MIME: model/gltf-binary, application/octet-stream, image/png, image/jpeg, image/webp
 
 2. gcode-files         - GCode 파일
                         50MB, public
-                        MIME: text/plain, text/x-gcode
-                        구조: {userId}/{modelId}/{modelFolder}/{filename}.gcode (AI)
-                              {userId}/{uploadId}/{filename}.gcode (직접 업로드)
 
 3. stl-files           - STL 파일
                         구조: {userId}/stl/{filename}.stl
 
 4. feedback-images     - 피드백 첨부 이미지
                         public
-                        구조: {userId}/{filename}
 
-5. failure-scenes      - 출력 실패 감지 이미지
+5. avatars             - 사용자 아바타 이미지
 */
 
 -- ============================================================================

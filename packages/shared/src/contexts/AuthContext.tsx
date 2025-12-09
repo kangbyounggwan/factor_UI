@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from "r
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../integrations/supabase/client";
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { PLAN_CODES, SUBSCRIPTION_STATUS } from "../types/subscription";
 
 // MQTT functions are loaded dynamically to reduce initial bundle size (~266KB savings)
 // These will be imported on-demand when user logs in
@@ -442,8 +443,8 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
           await supabase.from('user_subscriptions').insert({
             user_id: userId,
-            plan_name: 'free',
-            status: 'trial',
+            plan_name: PLAN_CODES.FREE,
+            status: SUBSCRIPTION_STATUS.TRIALING,
             current_period_start: new Date().toISOString(),
             current_period_end: trialEndDate.toISOString(),
             cancel_at_period_end: false,

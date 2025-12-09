@@ -1,5 +1,7 @@
 export default {
   common: {
+    current: "현재",
+    refresh: "새로고침",
     save: "저장",
     saving: "저장 중...",
     cancel: "취소",
@@ -860,7 +862,16 @@ export default {
     minutes: "분",
     seconds: "초",
     // 스와이프 힌트
-    swipeHint: "스와이프"
+    swipeHint: "스와이프",
+    // 파일 관리
+    fileManagement: "파일 관리",
+    cloudFiles: "클라우드 파일",
+    noCloudFiles: "저장된 G-code 파일이 없습니다",
+    gcodeViewer: "G-code 뷰어",
+    selectFileToView: "파일을 선택하세요",
+    selectFileToViewDesc: "왼쪽 목록에서 파일을 선택하면 여기에 표시됩니다",
+    fileLoadError: "파일 목록을 불러오는데 실패했습니다",
+    fileDownloadError: "파일을 다운로드하는데 실패했습니다"
   },
   camera: {
     title: "실시간 카메라 피드",
@@ -947,7 +958,10 @@ export default {
     temperatureSet: "온도 설정",
     temperatureTo: "온도를",
     print: "프린트를",
-    requestSent: "요청을 보냈습니다"
+    requestSent: "요청을 보냈습니다",
+    feedRate: "이송 속도",
+    feedRateSetting: "이송 속도 설정",
+    feedRateSettingDesc: "이송 속도를 {{value}}%로 설정합니다."
   },
   gcode: {
     // GCode Viewer
@@ -980,7 +994,8 @@ export default {
     deleteSuccess: "파일 삭제 성공",
     deleteFailed: "파일 삭제 실패",
     printStart: "출력 시작",
-    printStartDesc: "{file} 파일을 출력합니다."
+    printStartDesc: "{file} 파일을 출력합니다.",
+    viewGcode: "GCode 보기"
   },
   iot: {
     title: "연결된 IoT 디바이스",
@@ -1204,14 +1219,32 @@ export default {
     upgradeToPro: "프로 플랜으로 업그레이드",
     viewAllPlans: "모든 플랜 보기",
     contactForEnterprise: "엔터프라이즈 문의",
-    // 플랜 이름
-    basic: "Basic",
-    pro: "Pro",
-    enterprise: "Enterprise",
     // 플랜 설명
+    planDesc: {
+      free: "개인 사용자를 위한 기본 플랜",
+      pro: "전문가 및 소규모 팀을 위한 플랜",
+      enterprise: "대규모 팀 및 기업을 위한 플랜",
+    },
+    // 구독 상태
+    status: {
+      active: "활성",
+      cancelled: "취소됨",
+      expired: "만료됨",
+      trialing: "체험 중",
+    },
+    // 결제 주기
+    billingCycle: {
+      monthly: "월간",
+      yearly: "연간",
+    },
+    // 레거시 호환 (deprecated - use plans.* instead)
+    basic: "무료",
+    pro: "프로",
+    enterprise: "엔터프라이즈",
+    // 레거시 플랜 설명 (deprecated - use planDesc.* instead)
     basicDesc: "개인 사용자를 위한 기본 플랜",
-    proDesc: "소규모 팀을 위한 프로 플랜",
-    enterpriseDesc: "대규모 인터넷 스케일 워크로드를 위한 플랜",
+    proDesc: "전문가 및 소규모 팀을 위한 플랜",
+    enterpriseDesc: "대규모 팀 및 기업을 위한 플랜",
     // 기능
     feature: {
       maxPrinters: "최대 {{count}}대 프린터 연결",

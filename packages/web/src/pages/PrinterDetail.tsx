@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Wifi, WifiOff, LayoutGrid, Activity, Thermometer, Camera, Code } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Wifi, WifiOff, LayoutGrid, Activity, Thermometer, Camera, Code, FolderOpen, FileCode, Eye, Loader2 } from "lucide-react";
 import { CameraFeed } from "@/components/PrinterDetail/CameraFeed";
 import { PrinterControlPad } from "@/components/PrinterDetail/PrinterControlPad";
 import { PrinterStatusCard } from "@/components/PrinterDetail/PrinterStatusCard";
@@ -136,15 +137,94 @@ const PrinterDetail = () => {
   // MQTT WebSocket 연결 상태는 사용하지 않음 - 프린터의 connected 상태만 사용
   const [deviceUuid, setDeviceUuid] = useState<string | null>(null);
   const [printerName, setPrinterName] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'all' | 'monitoring'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'monitoring' | 'files'>('all');
   const [temperatureHistory, setTemperatureHistory] = useState<HistoryDataPoint[]>([]);
 
   // 카메라/G-code 뷰어 모드
   const [viewMode, setViewMode] = useState<'camera' | 'gcode'>('camera');
   const [currentGCodeContent, setCurrentGCodeContent] = useState<string | null>(null);
 
+  // 클라우드 GCode 파일 관리
+  interface CloudGCodeFile {
+    id: string;
+    filename: string;
+    file_path: string;
+    file_size: number;
+    created_at: string;
+  }
+  const [cloudGCodeFiles, setCloudGCodeFiles] = useState<CloudGCodeFile[]>([]);
+  const [loadingCloudFiles, setLoadingCloudFiles] = useState(false);
+  const [selectedCloudFile, setSelectedCloudFile] = useState<CloudGCodeFile | null>(null);
+  const [selectedFileContent, setSelectedFileContent] = useState<string | null>(null);
+  const [loadingFileContent, setLoadingFileContent] = useState(false);
+
+  // 클라우드 GCode 파일 목록 로드
+  const loadCloudFiles = async () => {
+    if (!user) return;
+    setLoadingCloudFiles(true);
+    try {
+      const { data: files, error } = await supabase
+        .from('gcode_files')
+        .select('id, filename, file_path, file_size, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('[PrinterDetail] Cloud files load error:', error);
+        toast({
+          title: t('printerDetail.fileLoadError'),
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      setCloudGCodeFiles(files || []);
+      console.log('[PrinterDetail] Cloud GCode files loaded:', files?.length || 0);
+    } catch (err) {
+      console.error('[PrinterDetail] Cloud files load exception:', err);
+    } finally {
+      setLoadingCloudFiles(false);
+    }
+  };
+
+  // 선택한 파일 내용 로드
+  const loadFileContent = async (file: CloudGCodeFile) => {
+    setSelectedCloudFile(file);
+    setLoadingFileContent(true);
+    setSelectedFileContent(null);
+    try {
+      const { data: fileData, error } = await supabase.storage
+        .from('gcode-files')
+        .download(file.file_path);
+
+      if (error) {
+        console.error('[PrinterDetail] File download error:', error);
+        toast({
+          title: t('printerDetail.fileDownloadError'),
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      const content = await fileData.text();
+      setSelectedFileContent(content);
+      console.log(`[PrinterDetail] File content loaded: ${file.filename} (${content.length} bytes)`);
+    } catch (err) {
+      console.error('[PrinterDetail] File content load exception:', err);
+    } finally {
+      setLoadingFileContent(false);
+    }
+  };
+
   // 프린터 연결 상태 (대시보드에서 전달받거나 MQTT로 업데이트됨)
   const printerConnected = data.printerStatus.connected;
+
+  // 파일 탭 활성화 시 클라우드 파일 로드
+  useEffect(() => {
+    if (activeTab === 'files' && cloudGCodeFiles.length === 0) {
+      loadCloudFiles();
+    }
+  }, [activeTab]);
 
   // DB에서 온도 히스토리 로드 + Realtime 구독
   useEffect(() => {
@@ -668,6 +748,17 @@ const PrinterDetail = () => {
                 <Activity className="h-5 w-5" />
                 <span className="font-medium">{t('printerDetail.history')}</span>
               </button>
+              <button
+                onClick={() => setActiveTab('files')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  activeTab === 'files'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-muted'
+                }`}
+              >
+                <FolderOpen className="h-5 w-5" />
+                <span className="font-medium">{t('printerDetail.fileManagement')}</span>
+              </button>
             </div>
           </div>
 
@@ -762,6 +853,8 @@ const PrinterDetail = () => {
                             isConnected={printerConnected}
                             isPrinting={data.printerStatus.printing}
                             deviceUuid={deviceUuid}
+                            temperature={data.temperature}
+                            currentFeedrate={data.settings.feedrate}
                           />
                           {!printerConnected && (() => {
                             console.log('[웹 PrinterDetail] 프린터 원격 제어 오버레이 표시:', {
@@ -803,10 +896,107 @@ const PrinterDetail = () => {
                     </div>
                   </div>
                 </>
-              ) : (
+              ) : activeTab === 'monitoring' ? (
                 /* 히스토리 탭 */
                 <div className="h-[calc(100vh-180px)]">
                   <PrintHistory printerId={id || ''} className="h-full" />
+                </div>
+              ) : (
+                /* 파일 관리 탭 */
+                <div className="h-[calc(100vh-180px)]">
+                  <div className="grid grid-cols-3 gap-6 h-full">
+                    {/* 왼쪽: 파일 목록 */}
+                    <div className="col-span-1 bg-card rounded-xl border border-border/50 shadow-lg overflow-hidden flex flex-col">
+                      <div className="p-4 border-b border-border/50 flex items-center justify-between">
+                        <h3 className="font-semibold flex items-center gap-2">
+                          <FolderOpen className="h-5 w-5" />
+                          {t('printerDetail.cloudFiles')}
+                        </h3>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={loadCloudFiles}
+                          disabled={loadingCloudFiles}
+                        >
+                          {loadingCloudFiles ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            t('common.refresh')
+                          )}
+                        </Button>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-2">
+                        {loadingCloudFiles ? (
+                          <div className="flex items-center justify-center h-32">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : cloudGCodeFiles.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
+                            <FileCode className="h-8 w-8 mb-2" />
+                            <p className="text-sm">{t('printerDetail.noCloudFiles')}</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            {cloudGCodeFiles.map((file) => (
+                              <button
+                                key={file.id}
+                                onClick={() => loadFileContent(file)}
+                                className={`w-full text-left p-3 rounded-lg transition-colors ${
+                                  selectedCloudFile?.id === file.id
+                                    ? 'bg-primary/10 border border-primary/30'
+                                    : 'hover:bg-muted'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <FileCode className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-sm truncate">{file.filename}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {(file.file_size / 1024).toFixed(1)} KB • {new Date(file.created_at).toLocaleDateString()}
+                                    </p>
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 오른쪽: GCode 뷰어 */}
+                    <div className="col-span-2 bg-card rounded-xl border border-border/50 shadow-lg overflow-hidden flex flex-col">
+                      <div className="p-4 border-b border-border/50 flex items-center justify-between">
+                        <h3 className="font-semibold flex items-center gap-2">
+                          <Eye className="h-5 w-5" />
+                          {selectedCloudFile ? selectedCloudFile.filename : t('printerDetail.gcodeViewer')}
+                        </h3>
+                        {selectedCloudFile && (
+                          <Badge variant="outline" className="text-xs">
+                            {(selectedCloudFile.file_size / 1024).toFixed(1)} KB
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex-1 relative min-h-[500px]">
+                        {loadingFileContent ? (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : selectedFileContent ? (
+                          <GCodeViewerCanvas
+                            gcodeContent={selectedFileContent}
+                            bedSize={{ x: 220, y: 220 }}
+                            className="h-full w-full"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
+                            <FileCode className="h-16 w-16 mb-4 opacity-30" />
+                            <p className="text-lg">{t('printerDetail.selectFileToView')}</p>
+                            <p className="text-sm">{t('printerDetail.selectFileToViewDesc')}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

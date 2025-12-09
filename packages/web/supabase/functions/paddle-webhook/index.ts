@@ -99,6 +99,60 @@ async function getUserIdByEmail(
 }
 
 /**
+ * Get plan_id from subscription_plans table by plan_code
+ */
+async function getPlanId(supabase: any, planCode: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("subscription_plans")
+    .select("id")
+    .eq("plan_code", planCode)
+    .single();
+
+  if (error || !data) {
+    console.error("[Paddle] Plan not found:", planCode);
+    return null;
+  }
+
+  return data.id;
+}
+
+/**
+ * Determine plan name from Paddle price/product info
+ */
+function determinePlanName(data: any): string {
+  const items = data.items || [];
+  const priceName = items[0]?.price?.name?.toLowerCase() || "";
+  const productName = items[0]?.price?.product?.name?.toLowerCase() || "";
+
+  // Check for enterprise
+  if (priceName.includes("enterprise") || productName.includes("enterprise")) {
+    return "enterprise";
+  }
+
+  // Check for pro (default paid plan)
+  if (priceName.includes("pro") || productName.includes("pro")) {
+    return "pro";
+  }
+
+  // Default to pro for any paid subscription
+  return "pro";
+}
+
+/**
+ * Determine billing cycle from Paddle data
+ */
+function determineBillingCycle(data: any): string {
+  const items = data.items || [];
+  const interval = items[0]?.price?.billing_cycle?.interval || "";
+
+  if (interval === "year" || items[0]?.price?.name?.toLowerCase().includes("yearly")) {
+    return "yearly";
+  }
+
+  return "monthly";
+}
+
+/**
  * Handle subscription.created event
  */
 async function handleSubscriptionCreated(supabase: any, data: any) {
@@ -122,8 +176,11 @@ async function handleSubscriptionCreated(supabase: any, data: any) {
   }
 
   // Extract plan info
-  const items = data.items || [];
-  const planName = items[0]?.price?.name?.toLowerCase().includes("yearly") ? "pro" : "pro";
+  const planName = determinePlanName(data);
+  const billingCycle = determineBillingCycle(data);
+
+  // Get plan_id from subscription_plans table
+  const planId = await getPlanId(supabase, planName);
 
   // Period dates
   const periodStart = data.current_billing_period?.starts_at
@@ -142,16 +199,34 @@ async function handleSubscriptionCreated(supabase: any, data: any) {
     canceled: "cancelled",
   };
 
+  // Build subscription data with new columns
+  const subscriptionData: Record<string, any> = {
+    user_id: userId,
+    plan_name: planName,
+    status: statusMap[status] || "active",
+    billing_cycle: billingCycle,
+    provider: "paddle",
+    current_period_start: periodStart.toISOString(),
+    current_period_end: periodEnd.toISOString(),
+    cancel_at_period_end: false,
+    paddle_subscription_id: subscriptionId,
+    paddle_customer_id: customerId,
+    updated_at: new Date().toISOString(),
+  };
+
+  // Add plan_id if found
+  if (planId) {
+    subscriptionData.plan_id = planId;
+  }
+
+  // Handle trial dates if trialing
+  if (status === "trialing" && data.trial_dates) {
+    subscriptionData.trial_start = data.trial_dates.starts_at;
+    subscriptionData.trial_end = data.trial_dates.ends_at;
+  }
+
   const { error } = await supabase.from("user_subscriptions").upsert(
-    {
-      user_id: userId,
-      plan_name: planName,
-      status: statusMap[status] || "active",
-      current_period_start: periodStart.toISOString(),
-      current_period_end: periodEnd.toISOString(),
-      cancel_at_period_end: false,
-      updated_at: new Date().toISOString(),
-    },
+    subscriptionData,
     { onConflict: "user_id" }
   );
 
@@ -160,7 +235,7 @@ async function handleSubscriptionCreated(supabase: any, data: any) {
     return { success: false, error: error.message };
   }
 
-  console.log("[Paddle] Subscription created for user:", userId);
+  console.log("[Paddle] Subscription created for user:", userId, "Plan:", planName, "Cycle:", billingCycle);
   return { success: true };
 }
 
@@ -173,6 +248,8 @@ async function handleSubscriptionUpdated(supabase: any, data: any) {
   const customerEmail = data.customer?.email;
   const customData = data.custom_data || {};
   const status = data.status;
+  const subscriptionId = data.id;
+  const customerId = data.customer_id;
 
   // Get user ID
   let userId = customData.user_id;
@@ -184,6 +261,11 @@ async function handleSubscriptionUpdated(supabase: any, data: any) {
     console.error("[Paddle] Cannot find user for subscription update");
     return { success: false, error: "User not found" };
   }
+
+  // Check if plan changed
+  const planName = determinePlanName(data);
+  const billingCycle = determineBillingCycle(data);
+  const planId = await getPlanId(supabase, planName);
 
   // Period dates
   const periodStart = data.current_billing_period?.starts_at
@@ -203,8 +285,17 @@ async function handleSubscriptionUpdated(supabase: any, data: any) {
 
   const updateData: Record<string, any> = {
     status: statusMap[status] || status,
+    plan_name: planName,
+    billing_cycle: billingCycle,
+    paddle_subscription_id: subscriptionId,
+    paddle_customer_id: customerId,
     updated_at: new Date().toISOString(),
   };
+
+  // Add plan_id if found
+  if (planId) {
+    updateData.plan_id = planId;
+  }
 
   if (periodStart) updateData.current_period_start = periodStart.toISOString();
   if (periodEnd) updateData.current_period_end = periodEnd.toISOString();
@@ -224,7 +315,7 @@ async function handleSubscriptionUpdated(supabase: any, data: any) {
     return { success: false, error: error.message };
   }
 
-  console.log("[Paddle] Subscription updated for user:", userId);
+  console.log("[Paddle] Subscription updated for user:", userId, "Plan:", planName);
   return { success: true };
 }
 
@@ -247,13 +338,22 @@ async function handleSubscriptionCanceled(supabase: any, data: any) {
     return { success: false, error: "User not found" };
   }
 
+  // Get free plan ID for downgrade
+  const freePlanId = await getPlanId(supabase, "free");
+
+  const updateData: Record<string, any> = {
+    status: "cancelled",
+    cancel_at_period_end: true,
+    cancelled_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  // Note: We keep the current plan until period_end
+  // A separate cron job should downgrade to free after period ends
+
   const { error } = await supabase
     .from("user_subscriptions")
-    .update({
-      status: "cancelled",
-      cancel_at_period_end: true,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq("user_id", userId);
 
   if (error) {

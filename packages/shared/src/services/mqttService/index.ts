@@ -111,6 +111,29 @@ export async function publishDashboardSetTemperature(
   await mqttPublish(topic, payload, 1, false);
 }
 
+// === Feed Rate 설정 (프린팅 중 이송 속도 조절) ===
+// 플러그인 control.py의 set_feed_rate 함수와 연동
+// M220 S<factor> 명령어 사용, 범위: 10% ~ 500%
+export type SetFeedRatePayload = {
+  type: 'set_feed_rate';
+  factor: number; // percentage (10-500%)
+};
+
+/**
+ * Feed Rate(이송 속도) 설정 - M220 명령어
+ * @param deviceSerial - 디바이스 UUID
+ * @param factor - 백분율 (10-500%, 기본 100%)
+ */
+export async function publishSetFeedRate(
+  deviceSerial: string,
+  factor: number
+) {
+  const topic = `control/${deviceSerial}`;
+  const payload: SetFeedRatePayload = { type: 'set_feed_rate', factor };
+  console.log('[MQTT][TX]', topic, payload);
+  await mqttPublish(topic, payload, 1, false);
+}
+
 // === SD Upload (chunk/commit) ===
 type SdUploadChunkBase = {
   type: 'sd_upload_chunk';
@@ -446,4 +469,166 @@ export async function subscribeCameraState(
       console.warn('[CAM][STATE] unsubscribe error', e);
     }
   };
+}
+
+// === GCode Upload Result (OctoPrint에서 업로드 완료 후 결과 전송) ===
+export type GCodeUploadResult = {
+  type: 'upload_result';
+  job_id: string;
+  success: boolean;
+  filename: string;
+  timestamp: number;
+  target?: 'local' | 'sd';      // 성공 시
+  file_size?: number;           // 성공 시 (바이트)
+  error?: string;               // 실패 시
+};
+
+export type GCodeUploadResultCallback = (result: GCodeUploadResult) => void;
+
+// 전역 리스너 관리 (여러 컴포넌트에서 동시에 수신 가능)
+const gcodeUploadResultListeners = new Map<string, Set<GCodeUploadResultCallback>>();
+const gcodeUploadResultSubscribed = new Set<string>();
+
+/**
+ * GCode 업로드 결과 구독
+ * OctoPrint 플러그인이 octoprint/gcode_out/{device_uuid} 토픽으로 업로드 결과를 전송
+ * @param deviceUuid - 디바이스 UUID
+ * @param onResult - 업로드 결과 수신 시 호출되는 콜백
+ * @returns 구독 해제 함수
+ */
+export async function subscribeGCodeUploadResult(
+  deviceUuid: string,
+  onResult: GCodeUploadResultCallback
+): Promise<() => Promise<void>> {
+  await mqttConnect();
+
+  const topic = `octoprint/gcode_out/${deviceUuid}`;
+
+  // 리스너 등록
+  if (!gcodeUploadResultListeners.has(deviceUuid)) {
+    gcodeUploadResultListeners.set(deviceUuid, new Set());
+  }
+  gcodeUploadResultListeners.get(deviceUuid)!.add(onResult);
+
+  // 이미 구독 중이면 리스너만 추가
+  if (gcodeUploadResultSubscribed.has(topic)) {
+    console.log('[GCODE][RESULT] Already subscribed, adding listener for:', topic);
+    return async () => {
+      gcodeUploadResultListeners.get(deviceUuid)?.delete(onResult);
+    };
+  }
+
+  console.log('[GCODE][RESULT] Subscribing to topic:', topic);
+
+  const handler = (_t: string, payload: any) => {
+    try {
+      console.log('%c[MQTT]%c%c[GCODE]%c%c[RESULT]%c',
+        "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "",
+        "background: #9C27B0; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "",
+        "background: #FF9800; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;",
+        "color: #FF9800; font-weight: bold;", { topic: _t, payload });
+
+      let parsed: any = payload;
+      if (typeof payload === 'string') {
+        parsed = JSON.parse(payload);
+      } else if (payload instanceof Uint8Array) {
+        parsed = JSON.parse(new TextDecoder().decode(payload));
+      }
+
+      // upload_result 타입만 처리
+      if (parsed?.type === 'upload_result') {
+        const result: GCodeUploadResult = {
+          type: 'upload_result',
+          job_id: parsed.job_id,
+          success: Boolean(parsed.success),
+          filename: parsed.filename,
+          timestamp: parsed.timestamp,
+          target: parsed.target,
+          file_size: parsed.file_size,
+          error: parsed.error,
+        };
+
+        // 모든 리스너에게 전달
+        gcodeUploadResultListeners.get(deviceUuid)?.forEach(listener => {
+          try {
+            listener(result);
+          } catch (err) {
+            console.error('[GCODE][RESULT] Listener error:', err);
+          }
+        });
+
+        // 전역 이벤트도 발생 (다른 컴포넌트에서 수신 가능)
+        try {
+          window.dispatchEvent(new CustomEvent('gcode_upload_result', {
+            detail: { deviceUuid, result }
+          }));
+        } catch {}
+      }
+    } catch (e) {
+      console.warn('[GCODE][RESULT] parse error', e);
+    }
+  };
+
+  await mqttSubscribe(topic, handler, 1);
+  gcodeUploadResultSubscribed.add(topic);
+  console.log('[GCODE][RESULT] Subscription established for topic:', topic);
+
+  // 구독 해제 함수 반환
+  return async () => {
+    gcodeUploadResultListeners.get(deviceUuid)?.delete(onResult);
+
+    // 더 이상 리스너가 없으면 구독 해제
+    if (gcodeUploadResultListeners.get(deviceUuid)?.size === 0) {
+      try {
+        console.log('[GCODE][RESULT] Unsubscribing from topic:', topic);
+        await mqttUnsubscribe(topic, handler);
+        gcodeUploadResultSubscribed.delete(topic);
+        gcodeUploadResultListeners.delete(deviceUuid);
+      } catch (e) {
+        console.warn('[GCODE][RESULT] unsubscribe error', e);
+      }
+    }
+  };
+}
+
+/**
+ * 특정 job_id에 대한 업로드 결과 대기 (Promise)
+ * @param deviceUuid - 디바이스 UUID
+ * @param jobId - 대기할 job_id
+ * @param timeoutMs - 타임아웃 (기본 120초)
+ * @returns 업로드 결과
+ */
+export async function waitForGCodeUploadResult(
+  deviceUuid: string,
+  jobId: string,
+  timeoutMs = 120000
+): Promise<GCodeUploadResult> {
+  return new Promise(async (resolve, reject) => {
+    let unsubscribe: (() => Promise<void>) | null = null;
+    let timeoutId: NodeJS.Timeout | null = null;
+
+    const cleanup = async () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (unsubscribe) await unsubscribe();
+    };
+
+    const handler: GCodeUploadResultCallback = (result) => {
+      if (result.job_id === jobId) {
+        cleanup();
+        resolve(result);
+      }
+    };
+
+    try {
+      unsubscribe = await subscribeGCodeUploadResult(deviceUuid, handler);
+
+      timeoutId = setTimeout(async () => {
+        await cleanup();
+        reject(new Error(`GCode upload result timeout for job_id: ${jobId}`));
+      }, timeoutMs);
+    } catch (err) {
+      await cleanup();
+      reject(err);
+    }
+  });
 }

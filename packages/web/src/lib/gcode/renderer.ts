@@ -58,13 +58,14 @@ export class GCodeRenderer {
     moveModel: true,
     zoomInOnModel: false,
     centerViewport: false,
-    colorLine: ['#000000', '#3333cc', '#cc3333', '#33cc33', '#cc33cc'],
-    colorMove: '#00ff00',
-    colorRetract: '#ff0000',
+    // 다크 테마에 맞춘 색상
+    colorLine: ['#00ffff', '#ff6b6b', '#4ecdc4', '#ffe66d', '#c44dff'],
+    colorMove: '#666666',
+    colorRetract: '#ff4444',
     colorHead: '#00ff00',
-    colorGrid: '#bbbbbb',
-    bgColorGrid: '#ffffff',
-    bgColorOffGrid: '#eeeeee',
+    colorGrid: '#444444',
+    bgColorGrid: '#1a1a1a',
+    bgColorOffGrid: '#0d0d0d',
   };
 
   /**
@@ -107,19 +108,47 @@ export class GCodeRenderer {
     this.currentLayer = 0;
     this.currentProgress = { from: 0, to: -1 };
 
-    // 초기 뷰포트 설정
-    if (this.options.zoomInOnModel) {
-      this.zoomToModel();
-    } else if (this.options.centerViewport) {
-      this.centerOnModel();
-    }
+    // 초기 뷰포트 설정 - 항상 베드 크기에 맞게 스케일 조정
+    this.fitToBed();
+  }
+
+  /**
+   * 베드 크기에 맞게 뷰포트 조정
+   */
+  private fitToBed(): void {
+    if (!this.canvas) return;
+
+    const canvasWidth = this.canvas.width / this.pixelRatio;
+    const canvasHeight = this.canvas.height / this.pixelRatio;
+
+    const bedX = this.options.bed.x;
+    const bedY = this.options.bed.y;
+
+    // 베드가 캔버스에 맞도록 스케일 계산 (여백 10% 포함)
+    const scaleX = (canvasWidth * 0.9) / bedX;
+    const scaleY = (canvasHeight * 0.9) / bedY;
+    const scale = Math.min(scaleX, scaleY);
+
+    this.scale.x = scale;
+    this.scale.y = scale;
+
+    // 베드 중앙 정렬
+    this.offset.x = (canvasWidth - bedX * scale) / 2;
+    this.offset.y = (canvasHeight - bedY * scale) / 2;
+
+    this.applyTransform();
   }
 
   /**
    * 렌더링
    */
   render(layer?: number, progress?: { from: number; to: number }): void {
-    if (!this.ctx || !this.model) return;
+    if (!this.ctx || !this.model) {
+      console.log('[GCodeRenderer] render() skipped: ctx=', !!this.ctx, 'model=', !!this.model);
+      return;
+    }
+
+    console.log('[GCodeRenderer] render() called, layers:', this.model.layers.length, 'currentLayer:', this.currentLayer);
 
     if (layer !== undefined) {
       this.currentLayer = Math.max(0, Math.min(layer, this.model.layers.length - 1));
@@ -172,7 +201,9 @@ export class GCodeRenderer {
 
     this.ctx.save();
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    this.ctx.clearRect(0, 0, width, height);
+    // 배경색으로 채우기
+    this.ctx.fillStyle = this.options.bgColorOffGrid;
+    this.ctx.fillRect(0, 0, width, height);
     this.ctx.restore();
   }
 
@@ -468,9 +499,7 @@ export class GCodeRenderer {
    * 뷰포트 리셋
    */
   resetViewport(): void {
-    this.scale = { x: 1, y: 1 };
-    this.offset = { x: 0, y: 0 };
-    this.setupTransform();
+    this.fitToBed();
     this.render();
   }
 
@@ -481,6 +510,8 @@ export class GCodeRenderer {
     if (!this.canvas) return;
 
     const rect = this.canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
     this.canvas.width = rect.width * this.pixelRatio;
     this.canvas.height = rect.height * this.pixelRatio;
 
@@ -488,7 +519,8 @@ export class GCodeRenderer {
       this.ctx.scale(this.pixelRatio, this.pixelRatio);
     }
 
-    this.applyTransform();
+    // 리사이즈 시 베드 크기에 맞게 재조정
+    this.fitToBed();
     this.render();
   }
 

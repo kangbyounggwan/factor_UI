@@ -68,7 +68,7 @@ export const GCodeViewerCanvas = ({
 
   // Reader & Renderer 초기화
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || !containerRef.current) return;
 
     const reader = new GCodeReader({
       bed: bedSize,
@@ -87,15 +87,18 @@ export const GCodeViewerCanvas = ({
     readerRef.current = reader;
     rendererRef.current = renderer;
 
+    // 초기 리사이즈 (마운트 직후 크기 설정)
+    requestAnimationFrame(() => {
+      renderer.resize();
+    });
+
     // 리사이즈 핸들러
     const handleResize = () => {
       renderer.resize();
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
-    }
+    resizeObserver.observe(containerRef.current);
 
     return () => {
       resizeObserver.disconnect();

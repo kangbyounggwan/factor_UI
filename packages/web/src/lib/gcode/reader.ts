@@ -222,8 +222,8 @@ export class GCodeReader {
   ): GCodeCommand | null {
     const { currentX, currentY, currentZ, currentE, absoluteMode, absoluteEMode, currentTool, percentage } = context;
 
-    // G0, G1, G2, G3 명령어만 처리
-    const moveMatch = code.match(/^G([0-3])\s/);
+    // G0, G1, G2, G3 명령어만 처리 (공백 유무 관계없이)
+    const moveMatch = code.match(/^G([0-3])(?:\s|[XYZEFIJ])/i);
     if (!moveMatch) return null;
 
     const gcode = parseInt(moveMatch[1]);

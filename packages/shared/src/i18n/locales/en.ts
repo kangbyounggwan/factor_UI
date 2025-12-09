@@ -1,5 +1,7 @@
 export default {
   common: {
+    current: "Current",
+    refresh: "Refresh",
     save: "Save",
     saving: "Saving...",
     cancel: "Cancel",
@@ -851,7 +853,16 @@ export default {
     minutes: "m",
     seconds: "s",
     // Swipe hint
-    swipeHint: "Swipe"
+    swipeHint: "Swipe",
+    // File Management
+    fileManagement: "File Management",
+    cloudFiles: "Cloud Files",
+    noCloudFiles: "No saved G-code files",
+    gcodeViewer: "G-code Viewer",
+    selectFileToView: "Select a file",
+    selectFileToViewDesc: "Select a file from the list to view it here",
+    fileLoadError: "Failed to load file list",
+    fileDownloadError: "Failed to download file"
   },
   camera: {
     title: "Live Camera Feed",
@@ -938,7 +949,10 @@ export default {
     temperatureSet: "Temperature Setting",
     temperatureTo: "temperature to",
     print: "Print",
-    requestSent: "request sent"
+    requestSent: "request sent",
+    feedRate: "Feed Rate",
+    feedRateSetting: "Feed Rate Setting",
+    feedRateSettingDesc: "Feed rate set to {{value}}%."
   },
   gcode: {
     // GCode Viewer
@@ -971,7 +985,8 @@ export default {
     deleteSuccess: "File deleted successfully",
     deleteFailed: "File deletion failed",
     printStart: "Print Start",
-    printStartDesc: "Printing {file} file."
+    printStartDesc: "Printing {file} file.",
+    viewGcode: "View GCode"
   },
   iot: {
     title: "Connected IoT Devices",
@@ -1176,9 +1191,34 @@ export default {
     compareAllFeatures: "Compare All Features",
     planComparison: "Plan Comparison",
     featuresLabel: "Features",
+    // Plan names (maps to PLAN_CODES constants)
     plans: {
-      basic: {
-        name: "Basic",
+      free: "Free",
+      pro: "Pro",
+      enterprise: "Enterprise",
+    },
+    // Plan descriptions
+    planDesc: {
+      free: "Perfect for individual users and small projects",
+      pro: "For professionals and small teams",
+      enterprise: "For large teams and enterprises",
+    },
+    // Subscription status
+    status: {
+      active: "Active",
+      cancelled: "Cancelled",
+      expired: "Expired",
+      trialing: "Trial",
+    },
+    // Billing cycle
+    billingCycle: {
+      monthly: "Monthly",
+      yearly: "Yearly",
+    },
+    // Plan details (legacy format for backwards compatibility)
+    planDetails: {
+      free: {
+        name: "Free",
         description: "Perfect for individual users and small projects",
         feature1: "Connect up to 1 3D printer",
         feature2: "Unlimited webcam streaming",
