@@ -131,7 +131,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { onDashStatusMessage, mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit } from "@shared/services/mqttService";
-import { buildCommon, postTextTo3D, postImageTo3D, extractGLBUrl, extractSTLUrl, extractMetadata, extractThumbnailUrl, pollTaskUntilComplete, AIModelResponse, uploadSTLAndSlice, SlicingSettings, PrinterDefinition } from "@shared/services/aiService";
+import { buildCommon, buildPrintablePrompt, BASE_3D_PRINT_PROMPT, postTextTo3D, postImageTo3D, extractGLBUrl, extractSTLUrl, extractMetadata, extractThumbnailUrl, pollTaskUntilComplete, AIModelResponse, uploadSTLAndSlice, SlicingSettings, PrinterDefinition } from "@shared/services/aiService";
 import { createAIModel, updateAIModel, listAIModels, deleteAIModel } from "@shared/services/supabaseService/aiModel";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useAIImageUpload } from "@shared/hooks/useAIImageUpload";
@@ -1772,9 +1772,13 @@ const AI = () => {
         dbModelId = dbModel.id;
 
         // 2. 텍스트 → 3D API 호출 (async_mode=true)
+        // 사용자 프롬프트에 3D 프린팅 최적화 제약 조건 추가
+        const printablePrompt = buildPrintablePrompt(textPrompt);
+        console.log('[AI] Sending prompt with 3D printing constraints');
+
         const payload = {
           task: 'text_to_3d',
-          prompt: textPrompt,
+          prompt: printablePrompt,
           ...buildCommon(textSymmetryMode, textArtStyle, textTargetPolycount, user?.id, 'web'),
         };
 
@@ -1931,7 +1935,12 @@ const AI = () => {
         dbModelId = dbModel.id;
 
         // 2. 이미지 → 3D API 호출 (async_mode=true)
-        const common = buildCommon(imageSymmetryMode, imageArtStyle, imageTargetPolycount, user?.id, 'web');
+        // 3D 프린팅 최적화 제약 조건을 common에 추가
+        const common = {
+          ...buildCommon(imageSymmetryMode, imageArtStyle, imageTargetPolycount, user?.id, 'web'),
+          manufacturing_constraints: BASE_3D_PRINT_PROMPT,
+        };
+        console.log('[AI] Sending image-to-3D with 3D printing constraints');
 
         const form = new FormData();
         form.append('task', 'image_to_3d');

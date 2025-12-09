@@ -19,6 +19,49 @@ const REQUEST_TIMEOUT = 600000; // 10분 (초기 요청용)
 const POLL_TIMEOUT = 30000; // 30초 (폴링 요청용)
 const POLL_INTERVAL = 5000; // 5초마다 폴링
 
+/**
+ * 3D 프린팅 최적화를 위한 기본 프롬프트
+ * 사용자 프롬프트와 함께 전송되어 FDM/SLA 프린팅에 적합한 모델 생성을 유도
+ */
+export const BASE_3D_PRINT_PROMPT = `When generating the 3D model, strictly follow these manufacturing constraints to ensure the model is fully 3D-printable (FDM/SLA). The output must be a clean, watertight, solid mesh suitable for real-world printing.
+
+[Mandatory Manufacturing Constraints]
+
+Minimize hollow areas
+- Avoid unnecessary holes, cavities, or inner empty spaces
+- Prefer solid, closed, filled-in structures
+- Avoid thin or floating elements that could create unreachable internal gaps
+
+3D-printing friendly geometry
+- Overhangs must stay below 45° whenever possible
+- Minimize required support structures
+- Provide a stable, wide base surface for printing
+- No extremely thin walls (minimum thickness: 2–3 mm)
+
+Strong, clean external shape
+- Avoid small grooves, micro-details, fragile spikes, or thin extensions
+- Keep surfaces smooth and clean for reliable slicing
+- Reinforce weak parts and joints
+
+Printer size compatibility
+- Aim to fit within 200 × 200 × 200 mm (typical desktop FDM volume)
+- Auto-scale proportionally if needed
+
+Proper mesh quality
+- Watertight / closed mesh
+- No non-manifold edges
+- No self-intersections or mesh noise
+- One unified, printable object`;
+
+/**
+ * 사용자 프롬프트에 3D 프린팅 최적화 프롬프트를 결합
+ * @param userPrompt 사용자가 입력한 원본 프롬프트
+ * @returns 베이스 프롬프트가 추가된 전체 프롬프트
+ */
+export function buildPrintablePrompt(userPrompt: string): string {
+  return `${userPrompt}\n\n${BASE_3D_PRINT_PROMPT}`;
+}
+
 // 공통 설정 빌더
 export function buildCommon(
   symmetryMode: SymmetryMode,

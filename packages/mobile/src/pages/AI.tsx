@@ -865,11 +865,15 @@ const AI = () => {
         dbModelId = dbModel.id;
 
         // 2. 텍스트 → 3D 변환
-        const { postTextTo3D, buildCommon, pollTaskUntilComplete, extractGLBUrl, extractSTLUrl, extractThumbnailUrl, extractMetadata } = await import("@shared/services/aiService");
+        const { postTextTo3D, buildCommon, buildPrintablePrompt, pollTaskUntilComplete, extractGLBUrl, extractSTLUrl, extractThumbnailUrl, extractMetadata } = await import("@shared/services/aiService");
+
+        // 사용자 프롬프트에 3D 프린팅 최적화 제약 조건 추가
+        const printablePrompt = buildPrintablePrompt(textPrompt);
+        console.log('[AI Mobile] Sending prompt with 3D printing constraints');
 
         const payload = {
           task: 'text_to_3d',
-          prompt: textPrompt,
+          prompt: printablePrompt,
           ...buildCommon(symmetryMode, artStyle, targetPolycount, user?.id, 'mobile'),
         };
 
@@ -984,7 +988,7 @@ const AI = () => {
         dbModelId = dbModel.id;
 
         // 2. 이미지 → 3D 변환
-        const { postImageTo3D, buildCommon, pollTaskUntilComplete, extractGLBUrl, extractSTLUrl, extractThumbnailUrl, extractMetadata } = await import("@shared/services/aiService");
+        const { postImageTo3D, buildCommon, BASE_3D_PRINT_PROMPT, pollTaskUntilComplete, extractGLBUrl, extractSTLUrl, extractThumbnailUrl, extractMetadata } = await import("@shared/services/aiService");
 
         const formData = new FormData();
 
@@ -992,7 +996,12 @@ const AI = () => {
         const response = await fetch(uploadedFile.url);
         const blob = await response.blob();
 
-        const common = buildCommon(symmetryMode, artStyle, targetPolycount, user?.id, 'mobile');
+        // 3D 프린팅 최적화 제약 조건을 common에 추가
+        const common = {
+          ...buildCommon(symmetryMode, artStyle, targetPolycount, user?.id, 'mobile'),
+          manufacturing_constraints: BASE_3D_PRINT_PROMPT,
+        };
+        console.log('[AI Mobile] Sending image-to-3D with 3D printing constraints');
 
         console.log('[AI Request] Image-to-3D Common params:', JSON.stringify(common, null, 2));
         console.log('[AI Request] Image file:', uploadedFile.name, 'size:', blob.size, 'bytes');
