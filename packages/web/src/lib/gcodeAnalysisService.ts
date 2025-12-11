@@ -12,9 +12,13 @@ import type {
   AnalysisProgress,
 } from '@shared/types/gcodeAnalysisTypes';
 
-// API Base URL (환경변수에서 가져오거나 기본값 사용)
+// API Base URL (환경변수 필수)
 const getBaseUrl = (): string => {
-  return import.meta.env.VITE_GCODE_API_BASE_URL || 'http://localhost:7000';
+  const url = import.meta.env.VITE_GCODE_API_BASE_URL;
+  if (!url) {
+    throw new Error('VITE_GCODE_API_BASE_URL 환경변수가 설정되지 않았습니다.');
+  }
+  return url;
 };
 
 // 완료 상태 목록

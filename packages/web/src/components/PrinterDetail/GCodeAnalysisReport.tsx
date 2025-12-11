@@ -170,10 +170,10 @@ export interface DetailedIssue {
 }
 
 export interface PatchSuggestion {
-  line: number;
+  line?: number;
   line_index?: number;
   action: 'remove' | 'modify' | 'insert';
-  original: string;
+  original?: string;
   modified?: string | null;
   reason: string;
 }
@@ -184,17 +184,17 @@ export interface IssueStatistics {
   count: number;
   percentage: number;
   color: string;
-  description: string;
+  description?: string;
 }
 
 export interface DiagnosisSummary {
-  keyIssue: {
+  keyIssue?: {
     title: string;
     description: string;
     icon?: string;
   };
   totalIssues: number;
-  severity: 'critical' | 'high' | 'medium' | 'low';
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
   recommendation: string;
 }
 

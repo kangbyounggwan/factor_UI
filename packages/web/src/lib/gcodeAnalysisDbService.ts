@@ -230,8 +230,8 @@ export function convertReportToDbInsert(
     detailed_issues: detailedIssues.map(issue => ({
       issueType: issue.issueType,
       severity: issue.severity,
-      line: issue.line,
-      line_index: issue.line_index,
+      line: issue.line !== undefined ? Number(issue.line) : undefined,
+      line_index: issue.line_index !== undefined ? Number(issue.line_index) : undefined,
       code: issue.code,
       description: issue.description,
       impact: issue.impact,
@@ -261,7 +261,7 @@ export function convertReportToDbInsert(
 
     llm_summary: detailedAnalysis?.llmSummary,
     llm_recommendation: detailedAnalysis?.llmRecommendation,
-    printing_info: detailedAnalysis?.printingInfo,
+    printing_info: detailedAnalysis?.printingInfo as unknown as import('@shared/types/gcodeAnalysisDbTypes').PrintingInfoDb,
 
     // 원본 데이터 백업
     raw_analysis_data: reportData as unknown as Record<string, unknown>,  // UI 변환 데이터
