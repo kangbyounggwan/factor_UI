@@ -47,8 +47,7 @@ export interface AIGeneratedModel {
   symmetry_mode?: string;
 
   // 파일 정보
-  model_name: string;
-  short_name?: string;  // Claude API로 생성된 짧은 영문 이름 (아카이브 표시 및 GCode 파일명용)
+  model_name: string;  // Claude API로 생성된 짧은 영문 이름도 여기에 저장
   file_format: string;
   storage_path: string;
   download_url?: string;

@@ -897,9 +897,9 @@ const AI = () => {
           let shortName: string | undefined;
           try {
             shortName = await generateShortFilename({ prompt: textPrompt });
-            console.log('[AI] Generated short_name:', shortName);
+            console.log('[AI] Generated model_name:', shortName);
           } catch (error) {
-            console.warn('[AI] Failed to generate short_name:', error);
+            console.warn('[AI] Failed to generate model_name:', error);
           }
 
           await updateAIModel(supabase, dbModelId, {
@@ -911,7 +911,7 @@ const AI = () => {
             status: 'completed',
             generation_metadata: metadata || undefined,
             file_format: stlUploadResult ? 'stl' : 'glb',  // STL이 있으면 STL, 없으면 GLB
-            short_name: shortName,  // Claude가 생성한 짧은 영문 이름
+            model_name: shortName || `Text-to-3D: ${textPrompt.substring(0, 30)}`,  // Claude가 생성한 짧은 영문 이름
           });
 
           // 5. Supabase Storage URL로 렌더링 (STL 우선)
@@ -1064,10 +1064,10 @@ const AI = () => {
             const imageUrlForShortName = selected.url || selected.storagePath;
             if (imageUrlForShortName) {
               shortName = await generateShortFilename({ imageUrl: imageUrlForShortName });
-              console.log('[AI] Generated short_name from image:', shortName);
+              console.log('[AI] Generated model_name from image:', shortName);
             }
           } catch (error) {
-            console.warn('[AI] Failed to generate short_name from image:', error);
+            console.warn('[AI] Failed to generate model_name from image:', error);
           }
 
           await updateAIModel(supabase, dbModelId, {
@@ -1080,7 +1080,7 @@ const AI = () => {
             generation_metadata: metadata || undefined,
             file_format: stlUploadResult ? 'stl' : 'glb',  // STL이 있으면 STL, 없으면 GLB
             source_image_url: selected.storagePath || metadata?.uploaded_local_path || selected.url,
-            short_name: shortName,  // Claude Vision이 생성한 짧은 영문 이름
+            model_name: shortName || `Image-to-3D: ${selected.name}`,  // Claude Vision이 생성한 짧은 영문 이름
           });
 
           // 5. Supabase Storage URL로 렌더링 (STL 우선)

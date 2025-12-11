@@ -523,7 +523,7 @@ export async function downloadAndUploadGCode(
   metadata?: GCodeMetadata,
   prompt?: string,    // 사용자의 원본 프롬프트 (text-to-3D: Claude로 파일명 생성용)
   imageUrl?: string,  // 원본 이미지 URL (image-to-3D: Claude Vision으로 파일명 생성용)
-  shortName?: string  // 모델에서 이미 생성된 short_name (있으면 우선 사용)
+  modelNameFromDb?: string  // 모델에서 이미 생성된 model_name (있으면 우선 사용)
 ): Promise<{ path: string; publicUrl: string; metadata?: GCodeMetadata } | null> {
   try {
     const GCODE_BUCKET = 'gcode-files';
@@ -535,13 +535,13 @@ export async function downloadAndUploadGCode(
     // modelName을 sanitize하여 폴더명으로 사용 (특수문자, 한글 제거)
     const modelFolder = sanitizeStoragePath(modelName || '') || safeModelId.substring(0, 8);
 
-    // 짧은 파일명 결정 (우선순위: shortName 파라미터 -> Claude API -> fallback)
+    // 짧은 파일명 결정 (우선순위: modelNameFromDb 파라미터 -> Claude API -> fallback)
     let shortFileName: string;
 
-    if (shortName) {
-      // 모델에서 이미 생성된 short_name이 있으면 그것을 사용
-      shortFileName = `${shortName}.gcode`;
-      console.log('[aiStorage] Using existing short_name:', shortFileName);
+    if (modelNameFromDb) {
+      // 모델에서 이미 생성된 model_name이 있으면 그것을 사용
+      shortFileName = `${modelNameFromDb}.gcode`;
+      console.log('[aiStorage] Using existing model_name:', shortFileName);
     } else {
       // Claude API로 짧은 파일명 생성 (프롬프트 우선 -> 이미지 -> 모델명)
       try {

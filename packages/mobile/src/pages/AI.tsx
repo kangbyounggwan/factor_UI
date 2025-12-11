@@ -938,9 +938,9 @@ const AI = () => {
           let shortNameText: string | undefined;
           try {
             shortNameText = await generateShortFilename({ prompt: textPrompt });
-            console.log('[AI Mobile] Generated short_name:', shortNameText);
+            console.log('[AI Mobile] Generated model_name:', shortNameText);
           } catch (error) {
-            console.warn('[AI Mobile] Failed to generate short_name:', error);
+            console.warn('[AI Mobile] Failed to generate model_name:', error);
           }
 
           // 4. DB 업데이트
@@ -953,7 +953,7 @@ const AI = () => {
             model_dimensions: metadata?.dimensions,
             generation_metadata: metadata,
             status: 'completed',
-            short_name: shortNameText,  // Claude가 생성한 짧은 영문 이름
+            model_name: shortNameText || `Text-to-3D: ${textPrompt.substring(0, 30)}`,  // Claude가 생성한 짧은 영문 이름
           });
 
           // 5. 상태 업데이트 (Supabase Storage URL 사용)
@@ -1069,9 +1069,9 @@ const AI = () => {
           let shortNameImage: string | undefined;
           try {
             shortNameImage = await generateShortFilename({ imageUrl: uploadedFile.url });
-            console.log('[AI Mobile] Generated short_name from image:', shortNameImage);
+            console.log('[AI Mobile] Generated model_name from image:', shortNameImage);
           } catch (error) {
-            console.warn('[AI Mobile] Failed to generate short_name from image:', error);
+            console.warn('[AI Mobile] Failed to generate model_name from image:', error);
           }
 
           // 4. DB 업데이트
@@ -1084,7 +1084,7 @@ const AI = () => {
             model_dimensions: metadata?.dimensions,
             generation_metadata: metadata,
             status: 'completed',
-            short_name: shortNameImage,  // Claude Vision이 생성한 짧은 영문 이름
+            model_name: shortNameImage || `Image-to-3D: ${uploadedFile.name}`,  // Claude Vision이 생성한 짧은 영문 이름
           });
 
           // 5. 상태 업데이트 (Supabase Storage URL 사용)

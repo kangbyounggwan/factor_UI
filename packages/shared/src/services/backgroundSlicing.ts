@@ -131,18 +131,18 @@ export async function processSlicingTask(
     console.log('[backgroundSlicing] Slicing completed');
     console.log('[backgroundSlicing] GCode URL:', slicingResult.data.gcode_url);
 
-    // 모델의 short_name 조회 (이미 생성되어 있으면 사용)
+    // 모델의 model_name 조회 (이미 생성되어 있으면 사용)
     let modelShortName: string | undefined;
     if (task.model_id) {
       const { data: modelData } = await supabase
         .from('ai_generated_models')
-        .select('short_name, source_image_url')
+        .select('model_name, source_image_url')
         .eq('id', task.model_id)
         .single();
 
-      if (modelData?.short_name) {
-        modelShortName = modelData.short_name;
-        console.log('[backgroundSlicing] Using model short_name:', modelShortName);
+      if (modelData?.model_name) {
+        modelShortName = modelData.model_name;
+        console.log('[backgroundSlicing] Using model_name:', modelShortName);
       }
     }
 
