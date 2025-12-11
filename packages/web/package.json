@@ -5,11 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && npm run prerender",
+    "build": "vite build",
     "build:dev": "vite build --mode development",
-    "build:no-prerender": "vite build",
-    "prerender": "concurrently -k -s first \"vite preview --port 4173 --strictPort\" \"wait-on http://localhost:4173 && cross-env PREVIEW_PORT=4173 node scripts/prerender.js\"",
-    "prerender:win": "concurrently -k -s first \"vite preview --port 4173 --strictPort\" \"wait-on http://localhost:4173 && cmd /c \\\"set PREVIEW_PORT=4173 && node scripts/prerender.js\\\"\"",
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "node ../shared/server.js --rest --port 5000",
