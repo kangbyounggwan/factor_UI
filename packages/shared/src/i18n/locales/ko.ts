@@ -1079,7 +1079,9 @@ export default {
     textToImageDesc: "원하는 이미지를 텍스트로 설명하면 AI가 고품질 이미지를 생성합니다.",
     smartGcode: "스마트 G-code 변환",
     smartGcodeDesc: "생성된 3D 모델을 자동으로 최적화하고 프린터에 맞는 G-code로 변환합니다.",
-    tryAIStudio: "AI 스튜디오 체험하기",
+    gcodeAnalysis: "Gcode 분석",
+    gcodeAnalysisDesc: "G-code 파일을 AI로 분석하여 출력 문제를 사전에 진단하고 최적화 방안을 제시합니다.",
+    tryAIStudio: "AI 스튜디오",
     // Additional Features
     detailedAnalytics: "상세 분석",
     detailedAnalyticsDesc: "프린터 성능과 사용 패턴을 분석하여 효율성을 높이세요.",

@@ -1070,6 +1070,8 @@ export default {
     textToImageDesc: "Describe your desired image with text and AI generates high-quality images.",
     smartGcode: "Smart G-code Conversion",
     smartGcodeDesc: "Automatically optimize generated 3D models and convert to printer-compatible G-code.",
+    gcodeAnalysis: "G-code Analysis",
+    gcodeAnalysisDesc: "Analyze G-code files with AI to diagnose print issues in advance and suggest optimizations.",
     tryAIStudio: "Try AI Studio",
     // Additional Features
     detailedAnalytics: "Detailed Analytics",

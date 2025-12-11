@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Monitor, Play, Bell, BarChart3, Settings, Zap, Shield, Smartphone, Code2, Wand2, Image, Box, Layers, Download, Video, Copy, Check } from "lucide-react";
+import { Monitor, Play, Bell, BarChart3, Settings, Zap, Shield, Smartphone, Code2, Wand2, Image, Box, Layers, Download, Video, Copy, Check, FileSearch } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
@@ -93,14 +93,14 @@ const Home = () => {
       description: t('landing.imageTo3DDesc')
     },
     {
-      icon: Layers,
-      title: t('landing.textToImage'),
-      description: t('landing.textToImageDesc')
-    },
-    {
       icon: Box,
       title: t('landing.smartGcode'),
       description: t('landing.smartGcodeDesc')
+    },
+    {
+      icon: FileSearch,
+      title: t('landing.gcodeAnalysis'),
+      description: t('landing.gcodeAnalysisDesc')
     }
   ];
 
@@ -241,11 +241,17 @@ const Home = () => {
             ))}
           </div>
 
-          <div className="text-center">
+          <div className="text-center flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Button asChild size="lg" className="text-lg px-8 py-6">
               <Link to="/create">
                 <Layers className="h-5 w-5 mr-2" />
                 {t('landing.tryAIStudio')}
+              </Link>
+            </Button>
+            <Button asChild size="lg" className="text-lg px-8 py-6">
+              <Link to="/gcode-analytics">
+                <FileSearch className="h-5 w-5 mr-2" />
+                {t('landing.gcodeAnalysis')}
               </Link>
             </Button>
           </div>

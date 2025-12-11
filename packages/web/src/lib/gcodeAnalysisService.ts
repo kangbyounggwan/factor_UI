@@ -14,9 +14,9 @@ import type {
 
 // API Base URL (환경변수 필수)
 const getBaseUrl = (): string => {
-  const url = import.meta.env.VITE_GCODE_API_BASE_URL;
+  const url = import.meta.env.VITE_AI_PYTHON_URL;
   if (!url) {
-    throw new Error('VITE_GCODE_API_BASE_URL 환경변수가 설정되지 않았습니다.');
+    throw new Error('VITE_AI_PYTHON_URL 환경변수가 설정되지 않았습니다.');
   }
   return url;
 };

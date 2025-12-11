@@ -137,7 +137,7 @@ const PrinterCard = ({
 
   return (
     <div onClick={handleClick} className="block cursor-pointer">
-      <Card className="shadow-card hover:shadow-lg hover:scale-105 transition-all duration-200 h-[450px] flex flex-col cursor-pointer">
+      <Card className="shadow-card hover:shadow-lg hover:scale-105 transition-all duration-200 h-[450px] flex flex-col cursor-pointer border-2 border-border">
         {/* 1. 프린터 정보 - 고정 높이 */}
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 flex-shrink-0">
           <div className="space-y-1 min-w-0 flex-1 pr-4">
@@ -648,25 +648,25 @@ const Home = () => {
 
         {/* 통계 요약 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card>
+          <Card className="border-2 border-border">
             <CardContent className="flex flex-col items-center justify-center p-6">
               <div className="text-2xl font-bold text-primary">{summary.total}</div>
               <div className="text-sm text-muted-foreground">{t('dashboard.stats.totalPrinters')}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border-2 border-border">
             <CardContent className="flex flex-col items-center justify-center p-6">
               <div className="text-2xl font-bold text-success">{summary.connected}</div>
               <div className="text-sm text-muted-foreground">{t('dashboard.stats.connected')}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border-2 border-border">
             <CardContent className="flex flex-col items-center justify-center p-6">
               <div className="text-2xl font-bold text-primary">{summary.printing}</div>
               <div className="text-sm text-muted-foreground">{t('dashboard.stats.printing')}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border-2 border-border">
             <CardContent className="flex flex-col items-center justify-center p-6">
               <div className="text-2xl font-bold text-destructive">{summary.error}</div>
               <div className="text-sm text-muted-foreground">{t('dashboard.stats.errors')}</div>
@@ -694,7 +694,7 @@ const Home = () => {
           </div>
           
           {filteredPrinters.length === 0 ? (
-            <Card>
+            <Card className="border-2 border-border">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Monitor className="h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium mb-2">{t('dashboard.noPrinters')}</h3>

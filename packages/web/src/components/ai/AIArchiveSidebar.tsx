@@ -83,7 +83,7 @@ export function AIArchiveSidebar({
     const { t } = useTranslation();
 
     return (
-        <div className="w-[340px] border-l bg-muted/5 flex flex-col overflow-hidden h-full">
+        <div className="w-[340px] border-l-2 border-border bg-muted/5 flex flex-col overflow-hidden h-full">
             {/* 모델 아카이브 영역 (동적 높이) */}
             <div
                 className="flex flex-col p-6 overflow-hidden"

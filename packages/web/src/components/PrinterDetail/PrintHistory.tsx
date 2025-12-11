@@ -192,8 +192,8 @@ export function PrintHistory({ printerId, className }: PrintHistoryProps) {
   }
 
   return (
-    <Card className={`h-full flex flex-col border border-border/50 shadow-card bg-card rounded-2xl ${className}`}>
-      <CardHeader className="pb-4 border-b border-border/50 flex-shrink-0">
+    <Card className={`h-full flex flex-col border-2 border-border shadow-sm bg-card rounded-2xl ${className}`}>
+      <CardHeader className="pb-4 border-b border-border flex-shrink-0">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-semibold flex items-center gap-3">
             <div className="p-2 rounded-lg bg-indigo-500/10">
@@ -231,7 +231,7 @@ export function PrintHistory({ printerId, className }: PrintHistoryProps) {
                 return (
                   <div
                     key={item.id}
-                    className="group p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors border border-transparent hover:border-border/50"
+                    className="group p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors border border-border"
                   >
                     {/* 상단: 파일명 + 상태 */}
                     <div className="flex items-start justify-between gap-3 mb-3">

@@ -165,13 +165,13 @@ export const AIChatSidebar = ({
 
   return (
     <div className={`
-      ${isCollapsed ? "w-12" : "w-80"} 
-      h-[calc(100vh-4rem)] 
-      bg-background 
-      border-r 
-      transition-all 
-      duration-300 
-      flex 
+      ${isCollapsed ? "w-12" : "w-80"}
+      h-[calc(100vh-4rem)]
+      bg-background
+      border-r-2 border-border
+      transition-all
+      duration-300
+      flex
       flex-col
       fixed
       left-0

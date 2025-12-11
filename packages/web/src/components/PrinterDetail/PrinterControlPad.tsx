@@ -127,8 +127,8 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid, tempera
   };
 
   return (
-    <Card className="h-full flex flex-col border border-border/50 shadow-card bg-card rounded-2xl">
-      <CardHeader className="pb-3 flex-shrink-0 border-b border-border/50">
+    <Card className="h-full flex flex-col border-2 border-border shadow-sm bg-card rounded-2xl">
+      <CardHeader className="pb-3 flex-shrink-0 border-b border-border">
         <CardTitle className="text-base font-semibold flex items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
             <Settings className="h-4 w-4 text-primary" />
@@ -139,7 +139,7 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid, tempera
 
       <CardContent className="flex-1 flex flex-col pt-3 overflow-hidden">
         {/* 프린트 제어 - 상단 고정 */}
-        <div className="space-y-2 flex-shrink-0 pb-3 border-b border-border/50">
+        <div className="space-y-2 flex-shrink-0 pb-3 border-b border-border">
           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
             <Play className="h-3.5 w-3.5" />
             <span>{t('control.printControl')}</span>
@@ -289,7 +289,7 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid, tempera
                         size="sm"
                         onClick={() => setFeedRate(val)}
                         disabled={!isConnected}
-                        className="flex-1 h-7 text-xs"
+                        className="flex-1 h-9 text-xs"
                       >
                         {val}%
                       </Button>
@@ -302,7 +302,7 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid, tempera
         ) : (
           <>
             {/* 축 제어 - 프린팅 중이 아닐 때만 표시 */}
-            <div className="py-3 border-b border-border/50 flex-shrink-0">
+            <div className="py-3 border-b border-border flex-shrink-0">
               <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
                 <Move3D className="h-3.5 w-3.5 text-blue-500" />
                 <span>{t('control.axisControl')}</span>

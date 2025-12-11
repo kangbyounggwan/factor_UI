@@ -316,7 +316,7 @@ export const AIAssistantSidebar = ({ isCollapsed, onToggle, width, onWidthChange
 
   return (
     <div
-      className="fixed right-0 top-16 h-[calc(100vh-4rem)] bg-background border-l border-border shadow-lg z-40 flex flex-col"
+      className="fixed right-0 top-16 h-[calc(100vh-4rem)] bg-background border-l-2 border-border shadow-lg z-40 flex flex-col"
       style={{ width: `${width}px` }}
     >
       {/* 리사이즈 핸들 */}

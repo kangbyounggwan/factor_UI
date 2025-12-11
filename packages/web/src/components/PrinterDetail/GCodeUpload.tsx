@@ -558,8 +558,8 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCo
   };
 
   return (
-    <Card className="h-full flex flex-col border border-border/50 shadow-card bg-card rounded-2xl">
-      <CardHeader className="pb-4 border-b border-border/50">
+    <Card className="h-full flex flex-col border-2 border-border bg-card rounded-2xl shadow-sm">
+      <CardHeader className="pb-4 border-b border-border">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-semibold flex items-center gap-3">
             <div className="p-2 rounded-lg bg-violet-500/10">
@@ -568,7 +568,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCo
             {t('gcode.title')}
           </CardTitle>
           {/* 파일 소스 토글 */}
-          <div className="flex rounded-lg bg-muted/50 p-1">
+          <div className="flex rounded-lg bg-muted/50 p-1 border border-border">
             <button
               onClick={async () => {
                 setFileSource('LOCAL');
@@ -610,23 +610,14 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCo
       <CardContent className="flex-1 flex flex-col pt-4 overflow-hidden">
         {/* 파일 목록 */}
         <div className="flex-1 min-h-0">
-          <div className="flex items-center justify-between mb-3">
-            <Label className="text-sm font-medium text-muted-foreground">
-              {t('gcode.uploadGcode')}
-            </Label>
-            <span className="text-xs text-muted-foreground">
-              {currentFiles.length} {currentFiles.length === 1 ? 'file' : 'files'}
-            </span>
-          </div>
-
-          <ScrollArea className="h-[calc(100%-2rem)] pr-3">
+          <ScrollArea className="h-full">
             {currentFiles.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                 <FileCode2 className="h-10 w-10 mb-3 opacity-30" />
                 <p className="text-sm">{t('gcode.noFiles')}</p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 pr-3">
                 {fileSource === 'LOCAL' ? (
                   localMqttFiles.map((file, idx) => {
                     const fileName = file.name || file.display || '';
@@ -636,7 +627,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCo
                     return (
                       <div
                         key={`${file.name}-${idx}`}
-                        className="group flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
+                        className="group flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors border border-border"
                       >
                         <div className="p-2 rounded-lg bg-background relative">
                           <FileCode2 className="h-4 w-4 text-muted-foreground" />
@@ -715,7 +706,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCo
                   sdFiles.map((file, idx) => (
                     <div
                       key={`${file.name}-${idx}`}
-                      className="group flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
+                      className="group flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors border border-border"
                     >
                       <div className="p-2 rounded-lg bg-background">
                         <FileCode2 className="h-4 w-4 text-muted-foreground" />
@@ -746,37 +737,67 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCo
         </div>
 
         {/* 업로드 영역 */}
-        <div className="pt-4 border-t border-border/50 mt-4 space-y-3 flex-shrink-0">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Input
-                ref={fileInputRef}
-                type="file"
-                accept=".gcode,.gco"
-                onChange={handleFileSelect}
+        <div className="pt-4 border-t border-border mt-4 space-y-3 flex-shrink-0">
+          {/* 숨겨진 파일 입력 */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".gcode,.gco"
+            onChange={handleFileSelect}
+            disabled={uploading || !isConnected}
+            className="hidden"
+          />
+
+          {/* 파일 선택 또는 업로드 UI */}
+          {selectedFile ? (
+            // 파일이 선택된 경우: 파일명 표시 + 업로드/취소 버튼
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <FileCode2 className="h-4 w-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm truncate">{selectedFile.name}</div>
+                  <div className="text-xs text-muted-foreground">{formatFileSize(selectedFile.size)}</div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedFile(null);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  disabled={uploading}
+                  className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <Button
+                onClick={() => handleUpload(selectedFile)}
                 disabled={uploading || !isConnected}
-                className="h-10 text-sm file:mr-3 file:h-full file:border-0 file:bg-transparent file:text-sm file:font-medium"
-              />
+                className="w-full h-10 gap-2"
+              >
+                {uploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                {uploading ? t('common.uploading') : t('common.upload')}
+              </Button>
             </div>
+          ) : (
+            // 파일이 선택되지 않은 경우: 파일 선택 버튼
             <Button
-              onClick={() => {
-                if (selectedFile) {
-                  handleUpload(selectedFile);
-                } else {
-                  fileInputRef.current?.click();
-                }
-              }}
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
               disabled={uploading || !isConnected}
-              className="h-10 px-4 gap-2"
+              className="w-full h-12 gap-2 border-dashed border-2 hover:border-primary/50 hover:bg-primary/5"
             >
-              {uploading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="h-4 w-4" />
-              )}
-              {selectedFile ? t('common.upload') : t('common.search')}
+              <Upload className="h-4 w-4" />
+              {t('gcode.selectFile')}
             </Button>
-          </div>
+          )}
 
           {uploading && (
             <div className="space-y-2">

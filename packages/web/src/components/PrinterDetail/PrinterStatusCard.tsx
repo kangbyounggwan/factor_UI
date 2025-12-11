@@ -64,9 +64,9 @@ export function PrinterStatusCard({ isPrinting, isConnected, completion }: Print
 
       {/* 진행률 바 (PRINTING일 때만) */}
       {config.showProgress && (
-        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/20">
+        <div className="absolute bottom-0 left-0 right-0 h-2 bg-black/30">
           <div
-            className="h-full bg-white/90 transition-all duration-500 ease-out"
+            className="h-full bg-white transition-all duration-500 ease-out shadow-[0_0_8px_rgba(255,255,255,0.5)]"
             style={{ width: `${percentage}%` }}
           />
         </div>

@@ -1298,7 +1298,7 @@ const PrinterDetail = () => {
                   <div className="grid grid-cols-3 gap-6">
                     {/* 왼쪽: 카메라 피드 / G-code 뷰어 */}
                     <div className="col-span-2">
-                      <div className="relative h-[640px] rounded-2xl overflow-hidden bg-card border border-border/50 shadow-card">
+                      <div className="relative h-[640px] rounded-2xl overflow-hidden bg-card border-2 border-border shadow-sm">
                         {/* 탭 토글 - 모던 세그먼트 스타일 */}
                         <div className="absolute top-0 left-0 right-0 z-10 px-4 py-3 bg-card/95 backdrop-blur-md border-b border-border/30">
                           <div className="inline-flex rounded-xl bg-muted/50 p-1.5">
@@ -1426,8 +1426,8 @@ const PrinterDetail = () => {
                 <div className="h-[calc(100vh-180px)]">
                   <div className="grid grid-cols-12 gap-4 h-full">
                     {/* 왼쪽: 파일 목록 */}
-                    <div className="col-span-3 bg-card rounded-xl border border-border/50 shadow-card overflow-hidden flex flex-col">
-                      <div className="p-4 border-b border-border/50 flex items-center justify-between">
+                    <div className="col-span-3 bg-card rounded-xl border-2 border-border shadow-sm overflow-hidden flex flex-col">
+                      <div className="p-4 border-b border-border flex items-center justify-between">
                         <h3 className="font-semibold flex items-center gap-2">
                           <FolderOpen className="h-5 w-5" />
                           {t('printerDetail.cloudFiles')}
@@ -1549,8 +1549,8 @@ const PrinterDetail = () => {
                     </div>
 
                     {/* 중앙: GCode 뷰어 */}
-                    <div className="col-span-9 bg-card rounded-xl border border-border/50 shadow-card overflow-hidden flex flex-col">
-                      <div className="p-4 border-b border-border/50 flex items-center justify-between">
+                    <div className="col-span-9 bg-card rounded-xl border-2 border-border shadow-sm overflow-hidden flex flex-col">
+                      <div className="p-4 border-b border-border flex items-center justify-between">
                         <h3 className="font-semibold flex items-center gap-2">
                           <Eye className="h-5 w-5" />
                           {selectedCloudFile ? selectedCloudFile.filename : t('printerDetail.gcodeViewer')}

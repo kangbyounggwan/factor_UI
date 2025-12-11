@@ -65,7 +65,7 @@ export interface IssueStatisticsItem {
 // 상세 이슈
 export interface DetailedIssueItem {
   issueType: string;
-  severity: 'high' | 'medium' | 'low';
+  severity: IssueSeverityLevel;
   line?: number;
   line_index?: number;
   code?: string;
@@ -244,3 +244,56 @@ export interface AnalysisReportSortOption {
   field: AnalysisReportSortField;
   direction: 'asc' | 'desc';
 }
+
+// ============================================================================
+// gcode_issue_edits 테이블 타입
+// ============================================================================
+
+export type IssueEditStatus = 'pending' | 'applied' | 'reverted';
+export type EditAction = 'edit' | 'delete';
+
+// 개별 수정 항목
+export interface IssueEditItem {
+  lineIndex: number;        // 수정된 라인 인덱스 (0-based)
+  lineNumber: number;       // 수정된 라인 번호 (1-based)
+  action: EditAction;
+  originalContent: string;
+  modifiedContent: string | null;  // delete인 경우 null
+  editedAt: string;         // ISO timestamp
+}
+
+// gcode_issue_edits 테이블 전체 타입
+export interface GCodeIssueEdit {
+  id: string;
+  user_id: string;
+  report_id: string;
+
+  // 이슈 식별
+  issue_index: number;
+  issue_type: string;
+  issue_line?: number;
+  issue_line_index?: number;
+
+  // 수정 내역
+  edits: IssueEditItem[];
+
+  // 상태
+  status: IssueEditStatus;
+  applied_at?: string;
+  note?: string;
+
+  // 타임스탬프
+  created_at: string;
+  updated_at: string;
+}
+
+// Insert용 타입
+export type GCodeIssueEditInsert = Omit<
+  GCodeIssueEdit,
+  'id' | 'created_at' | 'updated_at'
+>;
+
+// Update용 타입
+export type GCodeIssueEditUpdate = Partial<
+  Omit<GCodeIssueEdit, 'id' | 'user_id' | 'report_id' | 'created_at'>
+>;

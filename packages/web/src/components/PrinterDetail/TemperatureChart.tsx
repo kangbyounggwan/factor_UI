@@ -32,10 +32,10 @@ const LegendButton = ({
 }) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all duration-200 ${
+    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all duration-200 border ${
       active
-        ? 'bg-muted/80 shadow-sm'
-        : 'opacity-40 hover:opacity-60'
+        ? 'bg-muted/80 shadow-sm border-border'
+        : 'opacity-40 hover:opacity-60 border-border/50'
     }`}
   >
     {dashed ? (
@@ -105,7 +105,7 @@ export function TemperatureChart({ data, className }: TemperatureChartProps) {
   };
 
   return (
-    <div className={`h-[380px] bg-card border border-border/50 shadow-card rounded-2xl p-6 ${className || ''}`}>
+    <div className={`h-[380px] bg-card border-2 border-border shadow-sm rounded-2xl p-6 ${className || ''}`}>
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">

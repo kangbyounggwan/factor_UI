@@ -749,7 +749,10 @@ const GCodeAnalytics = () => {
                 ) : reportData ? (
                   /* 분석 완료 - 상세 보고서 */
                   <GCodeAnalysisReport
-                    data={reportData}
+                    data={{
+                      ...reportData,
+                      gcodeContent: gcodeContent || undefined
+                    }}
                     className="w-full"
                   />
                 ) : null}

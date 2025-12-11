@@ -125,7 +125,7 @@ const IssueDetailsSection = ({ issues }: { issues: Array<{ line_index?: number |
   if (!issues || issues.length === 0) return null;
 
   return (
-    <div className="bg-muted/30 rounded-2xl border border-border/50 overflow-hidden">
+    <div className="bg-muted/30 rounded-2xl border border-border overflow-hidden">
       {/* 헤더 - 클릭하면 펼침/접힘 */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
@@ -144,7 +144,7 @@ const IssueDetailsSection = ({ issues }: { issues: Array<{ line_index?: number |
 
       {/* 이슈 목록 */}
       {isExpanded && (
-        <div className="border-t border-border/50 p-3 space-y-2 max-h-[300px] overflow-y-auto">
+        <div className="border-t border-border p-3 space-y-2 max-h-[300px] overflow-y-auto">
           {issues.map((issue, index) => {
             const style = getIssueStyle(issue.issue_type || '');
             const IconComponent = style.icon;
@@ -1003,9 +1003,9 @@ export const GCodeAnalysisChat = forwardRef<GCodeAnalysisChatHandle, GCodeAnalys
     };
 
     return (
-      <Card className={`h-full flex flex-col border border-border/50 shadow-card bg-card rounded-2xl ${className || ''}`}>
+      <Card className={`h-full flex flex-col border-2 border-border shadow-sm bg-card rounded-2xl ${className || ''}`}>
         {!hideHeader && (
-          <CardHeader className="pb-3 border-b border-border/50 flex-shrink-0">
+          <CardHeader className="pb-3 border-b border-border flex-shrink-0">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-violet-500/10">
@@ -1249,7 +1249,7 @@ export const GCodeAnalysisChat = forwardRef<GCodeAnalysisChatHandle, GCodeAnalys
           </ScrollArea>
 
           {/* 입력 영역 */}
-          <div className="p-4 border-t border-border/50">
+          <div className="p-4 border-t border-border">
             <form onSubmit={handleSubmit} className="flex gap-2">
               <Input
                 ref={inputRef}

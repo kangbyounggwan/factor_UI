@@ -315,7 +315,7 @@ export const Header = () => {
   // 로그인 페이지일 때는 간단한 헤더 표시
   if (isAuthPage) {
     return (
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-50 w-full border-b-2 border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           {/* 로고 */}
           <Link to="/" className="flex items-center space-x-3">
@@ -361,7 +361,7 @@ export const Header = () => {
   }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b-2 border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto relative flex h-16 items-center justify-between px-4">
         {/* 로고 */}
         <Link to="/" className="flex items-center space-x-3">
@@ -477,13 +477,13 @@ export const Header = () => {
         <div className="hidden lg:flex items-center space-x-4 pl-6">
           {!isHomePage && !isSubscriptionPage && (
             <div className="flex items-center space-x-2">
-              <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground text-xs">
+              <div className="inline-flex items-center rounded-full border-2 border-border px-2.5 py-0.5 font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground text-xs">
                 {t('nav.connected')}: {summary.connected}/{summary.total}
               </div>
-              <Badge className="text-xs" variant={summary.printing > 0 ? 'default' : 'secondary'}>
+              <Badge className="text-xs border-2 border-border" variant={summary.printing > 0 ? 'default' : 'secondary'}>
                 {t('nav.printing')}: {summary.printing}
               </Badge>
-              <Badge className="text-xs" variant={summary.error > 0 ? 'destructive' : 'secondary'}>
+              <Badge className="text-xs border-2 border-border" variant={summary.error > 0 ? 'destructive' : 'secondary'}>
                 {t('nav.error')}: {summary.error}
               </Badge>
             </div>

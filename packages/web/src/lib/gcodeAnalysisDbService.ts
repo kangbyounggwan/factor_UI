@@ -15,6 +15,10 @@ import type {
   AnalysisReportFilters,
   AnalysisReportSortOption,
   GCodeIssueType,
+  GCodeIssueEdit,
+  GCodeIssueEditInsert,
+  GCodeIssueEditUpdate,
+  IssueEditItem,
 } from '@shared/types/gcodeAnalysisDbTypes';
 import type { GCodeAnalysisData } from '@/components/PrinterDetail/GCodeAnalysisReport';
 import type { AnalysisResult } from '@shared/types/gcodeAnalysisTypes';
@@ -497,6 +501,7 @@ export function convertDbReportToUiData(report: GCodeAnalysisReport): GCodeAnaly
   // 없으면 DB 필드에서 복원
   return {
     fileName: report.file_name,
+    storagePath: report.file_storage_path,
     analyzedAt: report.analyzed_at,
     metrics: {
       printTime: {
@@ -641,5 +646,254 @@ export async function getActiveIssueTypes(): Promise<{
   } catch (err) {
     console.error('[gcodeAnalysisDbService] Get issue types exception:', err);
     return { data: [], error: err as Error };
+  }
+}
+
+// ============================================================================
+// G-code 파일 다운로드
+// ============================================================================
+
+/**
+ * 스토리지에서 G-code 파일 내용 다운로드
+ */
+export async function downloadGCodeContent(storagePath: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.storage
+      .from(GCODE_BUCKET)
+      .download(storagePath);
+
+    if (error) {
+      console.error('[gcodeAnalysisDbService] Download error:', error);
+      return null;
+    }
+
+    if (!data) return null;
+
+    return await data.text();
+  } catch (err) {
+    console.error('[gcodeAnalysisDbService] Download exception:', err);
+    return null;
+  }
+}
+
+/**
+ * G-code 파일 내용을 업데이트 (덮어쓰기)
+ */
+export async function updateGCodeFileContent(
+  storagePath: string,
+  newContent: string
+): Promise<{ error: Error | null }> {
+  try {
+    const blob = new Blob([newContent], { type: 'text/plain' });
+
+    const { error: uploadError } = await supabase.storage
+      .from(GCODE_BUCKET)
+      .upload(storagePath, blob, {
+        contentType: 'text/plain',
+        cacheControl: '3600',
+        upsert: true, // 덮어쓰기 허용
+      });
+
+    if (uploadError) {
+      console.error('[gcodeAnalysisDbService] Update (upload) error:', uploadError);
+      return { error: new Error(uploadError.message) };
+    }
+
+    return { error: null };
+  } catch (err) {
+    console.error('[gcodeAnalysisDbService] Update exception:', err);
+    return { error: err as Error };
+  }
+}
+
+// ============================================================================
+// 이슈별 수정 내역 관리 (gcode_issue_edits)
+// ============================================================================
+
+/**
+ * 이슈별 수정 내역 저장 또는 업데이트 (upsert)
+ */
+export async function saveIssueEdit(
+  userId: string,
+  reportId: string,
+  issueIndex: number,
+  issueType: string,
+  edits: IssueEditItem[],
+  options?: {
+    issueLine?: number;
+    issueLineIndex?: number;
+    note?: string;
+  }
+): Promise<{ data: GCodeIssueEdit | null; error: Error | null }> {
+  try {
+    console.log('[gcodeAnalysisDbService] saveIssueEdit called:', {
+      userId,
+      reportId,
+      issueIndex,
+      issueType,
+      editsCount: edits.length,
+    });
+
+    const insertData: GCodeIssueEditInsert = {
+      user_id: userId,
+      report_id: reportId,
+      issue_index: issueIndex,
+      issue_type: issueType,
+      issue_line: options?.issueLine,
+      issue_line_index: options?.issueLineIndex,
+      edits,
+      status: 'pending',
+      note: options?.note,
+    };
+
+    // Upsert: report_id + issue_index 조합으로 기존 레코드 있으면 업데이트
+    const { data, error } = await supabase
+      .from('gcode_issue_edits')
+      .upsert(insertData, {
+        onConflict: 'report_id,issue_index',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[gcodeAnalysisDbService] saveIssueEdit error:', error);
+      return { data: null, error: new Error(error.message) };
+    }
+
+    console.log('[gcodeAnalysisDbService] saveIssueEdit success:', data?.id);
+    return { data: data as GCodeIssueEdit, error: null };
+  } catch (err) {
+    console.error('[gcodeAnalysisDbService] saveIssueEdit exception:', err);
+    return { data: null, error: err as Error };
+  }
+}
+
+/**
+ * 특정 보고서의 모든 이슈 수정 내역 조회
+ */
+export async function getIssueEditsByReportId(
+  reportId: string
+): Promise<{ data: GCodeIssueEdit[]; error: Error | null }> {
+  try {
+    const { data, error } = await supabase
+      .from('gcode_issue_edits')
+      .select('*')
+      .eq('report_id', reportId)
+      .order('issue_index', { ascending: true });
+
+    if (error) {
+      console.error('[gcodeAnalysisDbService] getIssueEditsByReportId error:', error);
+      return { data: [], error: new Error(error.message) };
+    }
+
+    return { data: (data || []) as GCodeIssueEdit[], error: null };
+  } catch (err) {
+    console.error('[gcodeAnalysisDbService] getIssueEditsByReportId exception:', err);
+    return { data: [], error: err as Error };
+  }
+}
+
+/**
+ * 특정 이슈의 수정 내역 조회
+ */
+export async function getIssueEdit(
+  reportId: string,
+  issueIndex: number
+): Promise<{ data: GCodeIssueEdit | null; error: Error | null }> {
+  try {
+    const { data, error } = await supabase
+      .from('gcode_issue_edits')
+      .select('*')
+      .eq('report_id', reportId)
+      .eq('issue_index', issueIndex)
+      .single();
+
+    if (error) {
+      // Not found는 에러가 아님
+      if (error.code === 'PGRST116') {
+        return { data: null, error: null };
+      }
+      console.error('[gcodeAnalysisDbService] getIssueEdit error:', error);
+      return { data: null, error: new Error(error.message) };
+    }
+
+    return { data: data as GCodeIssueEdit, error: null };
+  } catch (err) {
+    console.error('[gcodeAnalysisDbService] getIssueEdit exception:', err);
+    return { data: null, error: err as Error };
+  }
+}
+
+/**
+ * 이슈 수정 내역 상태 업데이트 (applied, reverted 등)
+ */
+export async function updateIssueEditStatus(
+  editId: string,
+  status: 'pending' | 'applied' | 'reverted'
+): Promise<{ error: Error | null }> {
+  try {
+    const updateData: GCodeIssueEditUpdate = {
+      status,
+      applied_at: status === 'applied' ? new Date().toISOString() : undefined,
+    };
+
+    const { error } = await supabase
+      .from('gcode_issue_edits')
+      .update(updateData)
+      .eq('id', editId);
+
+    if (error) {
+      console.error('[gcodeAnalysisDbService] updateIssueEditStatus error:', error);
+      return { error: new Error(error.message) };
+    }
+
+    return { error: null };
+  } catch (err) {
+    console.error('[gcodeAnalysisDbService] updateIssueEditStatus exception:', err);
+    return { error: err as Error };
+  }
+}
+
+/**
+ * 이슈 수정 내역 삭제
+ */
+export async function deleteIssueEdit(editId: string): Promise<{ error: Error | null }> {
+  try {
+    const { error } = await supabase
+      .from('gcode_issue_edits')
+      .delete()
+      .eq('id', editId);
+
+    if (error) {
+      console.error('[gcodeAnalysisDbService] deleteIssueEdit error:', error);
+      return { error: new Error(error.message) };
+    }
+
+    return { error: null };
+  } catch (err) {
+    console.error('[gcodeAnalysisDbService] deleteIssueEdit exception:', err);
+    return { error: err as Error };
+  }
+}
+
+/**
+ * 특정 보고서의 모든 이슈 수정 내역 삭제
+ */
+export async function deleteAllIssueEdits(reportId: string): Promise<{ error: Error | null }> {
+  try {
+    const { error } = await supabase
+      .from('gcode_issue_edits')
+      .delete()
+      .eq('report_id', reportId);
+
+    if (error) {
+      console.error('[gcodeAnalysisDbService] deleteAllIssueEdits error:', error);
+      return { error: new Error(error.message) };
+    }
+
+    return { error: null };
+  } catch (err) {
+    console.error('[gcodeAnalysisDbService] deleteAllIssueEdits exception:', err);
+    return { error: err as Error };
   }
 }

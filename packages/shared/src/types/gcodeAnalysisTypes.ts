@@ -125,6 +125,13 @@ export interface ComprehensiveSummary {
     average_speed: number;  // mm/min
     max_speed: number;
   };
+  feed_rate?: {
+    travel_speed_avg: number;
+    print_speed_avg: number;
+    max_speed: number;
+    avg_speed: number;
+    min_speed: number;
+  };
 }
 
 // ========== Final Summary (최종 요약) ==========

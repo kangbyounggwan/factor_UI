@@ -1156,7 +1156,7 @@ const AI = () => {
         {/* 메인 작업 영역 */}
         <div className="flex-1 flex flex-col">
           {/* 헤더 */}
-          <div className="border-b p-4">
+          <div className="border-b-2 border-border p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-primary/10 rounded-lg">
@@ -1179,7 +1179,7 @@ const AI = () => {
             {/* 모델 생성 메인 영역 */}
             <div className="flex-1 min-h-0 overflow-hidden h-full flex flex-col">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col overflow-hidden">
-                <TabsList className="grid w-full grid-cols-3 mb-4 shrink-0">
+                <TabsList className="grid w-full grid-cols-3 mb-4 shrink-0 border-2 border-border">
                   <TabsTrigger value="text-to-3d" className="flex items-center gap-2">
                     <Wand2 className="w-4 h-4" />
                     {t('ai.textTo3D')}

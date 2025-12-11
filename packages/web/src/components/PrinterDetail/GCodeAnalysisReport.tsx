@@ -19,6 +19,8 @@ import {
   FileCode,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
+  X,
   Zap,
   BarChart3,
   ListChecks,
@@ -26,6 +28,7 @@ import {
   FileJson,
   FileSpreadsheet,
 } from 'lucide-react';
+import { GCodeViewerModal } from './GCodeViewerModal';
 
 // ============================================================================
 // G-code 분석 보고서 데이터 타입 정의
@@ -35,7 +38,10 @@ import {
 export interface GCodeAnalysisData {
   // 파일 기본 정보
   fileName?: string;
+  gcodeContent?: string;
+  storagePath?: string;
   analyzedAt?: string;
+  reportId?: string;  // DB 보고서 ID (수정 내역 저장용)
 
   // 주요 메트릭
   metrics: {
@@ -158,7 +164,7 @@ export interface AnalysisItem {
 
 export interface DetailedIssue {
   issueType: string;           // cold_extrusion, early_temp_off, etc.
-  severity: 'high' | 'medium' | 'low';
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
   line?: number | string;       // G-code 라인 번호
   line_index?: number | string; // 백엔드에서 오는 라인 인덱스
   code?: string;               // 발견된 G-code
@@ -408,6 +414,8 @@ interface GCodeAnalysisReportProps {
   className?: string;
 }
 
+import { updateGCodeFileContent } from '@/lib/gcodeAnalysisDbService';
+
 // ============================================================================
 // 보고서 컴포넌트
 // ============================================================================
@@ -420,6 +428,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   const reportRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<'info' | 'issues' | 'optimization'>('info');
   const [expandedIssueIndices, setExpandedIssueIndices] = useState<Set<number>>(new Set([0])); // 첫 번째 이슈는 기본 펼침
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
 
   // JSON 다운로드 함수
   const handleDownloadJSON = () => {
@@ -435,6 +444,33 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  // G-code 저장 핸들러
+  const handleSaveGCode = async (newContent: string) => {
+    if (!data.storagePath) {
+      console.error('No storage path available for saving');
+      alert('저장 경로를 찾을 수 없어 저장할 수 없습니다.');
+      return;
+    }
+
+    try {
+      const { error } = await updateGCodeFileContent(data.storagePath, newContent);
+      if (error) {
+        console.error('Failed to save G-code:', error);
+        alert('저장 중 오류가 발생했습니다: ' + error.message);
+        throw error;
+      }
+
+      // 성공 시 페이지를 새로고침하거나 상태를 업데이트해야 함
+      // 지금은 간단히 알림만 표시
+      alert('G-code가 성공적으로 수정 및 저장되었습니다.');
+
+      // data.gcodeContent를 업데이트 (SWR 등의 갱신이 없으면 로컬 상태 업데이트는 복잡할 수 있음)
+      // 상위 컴포넌트에서 데이터를 다시 불러오는 것이 가장 좋음
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   // CSV 다운로드 함수 (이슈 목록)
@@ -479,11 +515,13 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
 
     // 심각도별 카운트 계산
     const severityCounts = {
+      critical: issues.filter(i => i.severity === 'critical').length,
       high: issues.filter(i => i.severity === 'high').length,
       medium: issues.filter(i => i.severity === 'medium').length,
       low: issues.filter(i => i.severity === 'low').length,
+      info: issues.filter(i => i.severity === 'info').length,
     };
-    const totalIssues = severityCounts.high + severityCounts.medium + severityCounts.low;
+    const totalIssues = severityCounts.critical + severityCounts.high + severityCounts.medium + severityCounts.low + severityCounts.info;
 
     // 등급별 색상
     const getGradeColor = (grade: string) => {
@@ -500,9 +538,11 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
     // 심각도별 색상
     const getSeverityColor = (severity: string) => {
       switch (severity) {
+        case 'critical': return { bg: '#ffe4e6', text: '#be123c', border: '#e11d48' };
         case 'high': return { bg: '#fee2e2', text: '#dc2626', border: '#ef4444' };
         case 'medium': return { bg: '#ffedd5', text: '#ea580c', border: '#f97316' };
         case 'low': return { bg: '#fef9c3', text: '#ca8a04', border: '#eab308' };
+        case 'info': return { bg: '#dbeafe', text: '#2563eb', border: '#3b82f6' };
         default: return { bg: '#f3f4f6', text: '#6b7280', border: '#9ca3af' };
       }
     };
@@ -530,15 +570,23 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
     const generateSeverityPieChart = () => {
       if (totalIssues === 0) return '<p style="color:#64748b;font-size:9pt;text-align:center;">이슈 없음</p>';
 
-      const colors: Record<string, string> = { high: '#ef4444', medium: '#f97316', low: '#eab308' };
+      const colors: Record<string, string> = {
+        critical: '#be123c',
+        high: '#ef4444',
+        medium: '#f97316',
+        low: '#eab308',
+        info: '#3b82f6'
+      };
       const radius = 35;
       let cumulativeAngle = 0;
       const segments: string[] = [];
 
       const severities = [
+        { key: 'critical', count: severityCounts.critical },
         { key: 'high', count: severityCounts.high },
         { key: 'medium', count: severityCounts.medium },
         { key: 'low', count: severityCounts.low },
+        { key: 'info', count: severityCounts.info },
       ];
 
       // 활성 세그먼트가 하나뿐인 경우 (100%) - 원으로 그리기
@@ -1039,7 +1087,33 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
       className
     )}>
       {/* 인쇄 버튼 - 헤더 외부에 고정 (인쇄 시 숨김) */}
-      <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700/50 px-4 py-2 flex justify-end gap-2 no-print">
+      <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700/50 px-4 py-2 flex justify-between gap-2 no-print">
+        {/* 왼쪽: G-code 보기 버튼 */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setIsViewerOpen(true)}
+          className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-white"
+          title="G-code 분석 데이터 보기"
+        >
+          <FileCode className="h-4 w-4 mr-2" />
+          G-code 보기
+        </Button>
+
+        {/* Viewer Modal */}
+        {data.gcodeContent && (
+          <GCodeViewerModal
+            isOpen={isViewerOpen}
+            onClose={() => setIsViewerOpen(false)}
+            fileName={data.fileName || 'Unknown.gcode'}
+            gcodeContent={data.gcodeContent}
+            issues={data.detailedAnalysis?.detailedIssues || []}
+            patches={data.detailedAnalysis?.patchSuggestions || []}
+            reportId={data.reportId}
+          />
+        )}
+
+        {/* 오른쪽: 인쇄 버튼 */}
         <Button
           variant="outline"
           size="sm"
@@ -1082,10 +1156,10 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
               </div>
             )}
           </div>
-        </div>
+        </div >
 
         {/* 탭 네비게이션 */}
-        <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+        < div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50" >
           <button
             onClick={() => setActiveTab('info')}
             className={cn(
@@ -1119,7 +1193,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
           >
             최적화 방안
           </button>
-        </div>
+        </div >
 
         <div className="p-6 space-y-6 min-h-[500px]">
           {/* ================================================================ */}
@@ -1441,6 +1515,12 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                             return newSet;
                           });
                         }}
+                        gcodeContent={data.gcodeContent}
+                        onSaveGCode={handleSaveGCode}
+                        fileName={data.fileName}
+                        allIssues={data.detailedAnalysis?.detailedIssues || []}
+                        patches={data.detailedAnalysis?.patchSuggestions || []}
+                        reportId={data.reportId}
                       />
                     ))}
                   </div>
@@ -1505,8 +1585,8 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 };
 
@@ -1655,9 +1735,12 @@ function AnalysisSection({ title, icon, items, variant }: AnalysisSectionProps) 
 
 interface DetailedAnalysisSectionProps {
   detailedAnalysis: NonNullable<GCodeAnalysisData['detailedAnalysis']>;
+  gcodeContent?: string;
+  onSaveGCode?: (newContent: string) => Promise<void>;
+  fileName?: string;
 }
 
-function DetailedAnalysisSection({ detailedAnalysis }: DetailedAnalysisSectionProps) {
+function DetailedAnalysisSection({ detailedAnalysis, gcodeContent, onSaveGCode, fileName }: DetailedAnalysisSectionProps) {
   const [expandedIssue, setExpandedIssue] = useState<number | null>(null);
   const [showAllIssues, setShowAllIssues] = useState(false);
 
@@ -1756,6 +1839,11 @@ function DetailedAnalysisSection({ detailedAnalysis }: DetailedAnalysisSectionPr
                 index={index}
                 isExpanded={expandedIssue === index}
                 onToggle={() => setExpandedIssue(expandedIssue === index ? null : index)}
+                gcodeContent={gcodeContent}
+                onSaveGCode={onSaveGCode}
+                fileName={fileName}
+                allIssues={detailedIssues}
+                patches={patchSuggestions || []}
               />
             ))}
           </div>
@@ -1888,16 +1976,26 @@ function IssueStatisticsChart({ statistics }: { statistics: IssueStatistics[] })
 }
 
 // 상세 이슈 카드
-function DetailedIssueCard({ issue, index, isExpanded, onToggle }: {
+function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, onSaveGCode, fileName, allIssues, patches, reportId }: {
   issue: DetailedIssue;
   index: number;
   isExpanded: boolean;
   onToggle: () => void;
+  gcodeContent?: string;
+  onSaveGCode?: (newContent: string) => Promise<void>;
+  fileName?: string;
+  allIssues?: DetailedIssue[];
+  patches?: PatchSuggestion[];
+  reportId?: string;
 }) {
+  const [showGCodeModal, setShowGCodeModal] = useState(false);
+
   const severityStyles = {
+    critical: { badge: 'bg-rose-700', border: 'border-rose-600/30', headerBg: 'bg-rose-500/20' },
     high: { badge: 'bg-red-600', border: 'border-red-500/30', headerBg: 'bg-red-500/15' },
     medium: { badge: 'bg-yellow-600', border: 'border-yellow-500/30', headerBg: 'bg-yellow-500/15' },
     low: { badge: 'bg-slate-600', border: 'border-slate-500/30', headerBg: 'bg-slate-500/15' },
+    info: { badge: 'bg-blue-600', border: 'border-blue-500/30', headerBg: 'bg-blue-500/15' },
   };
 
   const style = severityStyles[issue.severity];
@@ -1926,82 +2024,114 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle }: {
   };
 
   return (
-    <div className="hover:bg-slate-100 dark:hover:bg-slate-700/30 transition-colors border-b border-slate-200 dark:border-slate-600/50 last:border-b-0">
-      {/* 헤더 */}
-      <div
-        className={cn("px-5 py-4 flex justify-between items-center cursor-pointer", style.headerBg)}
-        onClick={onToggle}
-      >
-        <div className="flex items-center gap-3">
-          <span className={cn("text-white text-sm px-3 py-1.5 rounded font-warning font-medium", style.badge)}>
-            {issue.severity === 'high' ? '심각' : issue.severity === 'medium' ? '주의' : '정보'}
-          </span>
-          <span className="font-mono text-base text-red-600 dark:text-red-300 font-score font-black">
-            Line {issue.line || issue.line_index || 'N/A'}
-          </span>
-          {issue.layer !== undefined && issue.layer !== null && (
-            <span className="text-sm px-2.5 py-1 rounded bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 font-mono font-medium">
-              Layer {issue.layer.toLocaleString()}
+    <>
+      <div className="hover:bg-slate-100 dark:hover:bg-slate-700/30 transition-colors border-b border-slate-200 dark:border-slate-600/50 last:border-b-0 relative">
+        {/* 헤더 */}
+        <div
+          className={cn("px-5 py-4 flex justify-between items-center cursor-pointer", style.headerBg)}
+          onClick={onToggle}
+        >
+          <div className="flex items-center gap-3">
+            <span className={cn("text-white text-sm px-3 py-1.5 rounded font-warning font-medium", style.badge)}>
+              {issue.severity === 'high' ? '심각' : issue.severity === 'medium' ? '주의' : '정보'}
             </span>
-          )}
-          {issue.section && (
-            <span className="text-sm px-2.5 py-1 rounded bg-slate-200 dark:bg-slate-600/50 text-slate-600 dark:text-slate-300 font-mono">
-              {issue.section}
+            <span className="font-mono text-base text-red-600 dark:text-red-300 font-score font-black">
+              Line {issue.line || issue.line_index || 'N/A'}
             </span>
-          )}
+            {issue.layer !== undefined && issue.layer !== null && (
+              <span className="text-sm px-2.5 py-1 rounded bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 font-mono font-medium">
+                Layer {issue.layer.toLocaleString()}
+              </span>
+            )}
+            {issue.section && (
+              <span className="text-sm px-2.5 py-1 rounded bg-slate-200 dark:bg-slate-600/50 text-slate-600 dark:text-slate-300 font-mono">
+                {issue.section}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-red-600 dark:text-red-400 text-base font-warning font-medium flex items-center gap-1">
+              {getIssueIcon(issue.issueType)}
+              {getIssueTypeLabel(issue.issueType)}
+            </span>
+            {isExpanded ? (
+              <ChevronUp className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-red-600 dark:text-red-400 text-base font-warning font-medium flex items-center gap-1">
-            {getIssueIcon(issue.issueType)}
-            {getIssueTypeLabel(issue.issueType)}
-          </span>
-          {isExpanded ? (
-            <ChevronUp className="h-5 w-5 text-slate-500 dark:text-slate-400" />
-          ) : (
-            <ChevronDown className="h-5 w-5 text-slate-500 dark:text-slate-400" />
-          )}
-        </div>
-      </div>
 
-      {/* 내용 */}
-      <div className={cn("px-5 py-5", !isExpanded && "hidden")}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {issue.code && (
+        {/* 내용 */}
+        <div className={cn("px-5 py-5", !isExpanded && "hidden")}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {issue.code && (
+              <div>
+                <p className="text-sm text-slate-600 dark:text-slate-400 uppercase font-heading font-semibold mb-2">발견된 코드</p>
+                <code className="bg-slate-200 dark:bg-slate-900 text-green-700 dark:text-green-400 px-4 py-2 rounded text-base block w-fit font-mono">
+                  {issue.code}
+                </code>
+              </div>
+            )}
             <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400 uppercase font-heading font-semibold mb-2">발견된 코드</p>
-              <code className="bg-slate-200 dark:bg-slate-900 text-green-700 dark:text-green-400 px-4 py-2 rounded text-base block w-fit font-mono">
-                {issue.code}
-              </code>
+              <p className="text-sm text-slate-600 dark:text-slate-400 uppercase font-heading font-semibold mb-2">분석 내용</p>
+              <p className="text-base font-body text-slate-700 dark:text-slate-300">{issue.description}</p>
+            </div>
+          </div>
+
+          {issue.impact && (
+            <div className="mt-5">
+              <p className="text-sm text-slate-600 dark:text-slate-400 uppercase font-heading font-semibold mb-2">영향</p>
+              <p className="text-base font-body text-slate-600 dark:text-slate-400">{issue.impact}</p>
             </div>
           )}
-          <div>
-            <p className="text-sm text-slate-600 dark:text-slate-400 uppercase font-heading font-semibold mb-2">분석 내용</p>
-            <p className="text-base font-body text-slate-700 dark:text-slate-300">{issue.description}</p>
+
+          {issue.suggestion && (
+            <div className="mt-5 p-4 bg-blue-100 dark:bg-blue-500/10 border border-blue-300 dark:border-blue-500/30 rounded-lg">
+              <p className="text-sm text-blue-600 dark:text-blue-400 uppercase font-heading font-semibold mb-2">제안</p>
+              <p className="text-base font-body text-slate-700 dark:text-slate-300">{issue.suggestion}</p>
+            </div>
+          )}
+
+          <div className="mt-5 flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 border-slate-300 dark:border-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowGCodeModal(true);
+              }}
+            >
+              <FileCode className="h-4 w-4" />
+              G-code 에디터 열기
+            </Button>
           </div>
         </div>
 
-        {issue.impact && (
-          <div className="mt-5">
-            <p className="text-sm text-slate-600 dark:text-slate-400 uppercase font-heading font-semibold mb-2">영향</p>
-            <p className="text-base font-body text-slate-600 dark:text-slate-400">{issue.impact}</p>
-          </div>
-        )}
-
-        {issue.suggestion && (
-          <div className="mt-5 p-4 bg-blue-100 dark:bg-blue-500/10 border border-blue-300 dark:border-blue-500/30 rounded-lg">
-            <p className="text-sm text-blue-600 dark:text-blue-400 uppercase font-heading font-semibold mb-2">제안</p>
-            <p className="text-base font-body text-slate-700 dark:text-slate-300">{issue.suggestion}</p>
+        {/* 축소 상태에서 간단한 설명 표시 */}
+        {!isExpanded && (
+          <div className="px-5 pb-4">
+            <p className="text-base font-body text-slate-600 dark:text-slate-400 line-clamp-2">{issue.description}</p>
           </div>
         )}
       </div>
 
-      {/* 축소 상태에서 간단한 설명 표시 */}
-      {!isExpanded && (
-        <div className="px-5 pb-4">
-          <p className="text-base font-body text-slate-600 dark:text-slate-400 line-clamp-2">{issue.description}</p>
-        </div>
+      {/* G-code Raw 모달 */}
+      {/* G-code 뷰어 모달 (GCodeViewerModal 사용) */}
+      {showGCodeModal && gcodeContent && (
+        <GCodeViewerModal
+          isOpen={showGCodeModal}
+          onClose={() => setShowGCodeModal(false)}
+          fileName={fileName || 'unknown.gcode'}
+          gcodeContent={gcodeContent}
+          issues={allIssues || [issue]}
+          patches={patches || []}
+          onSave={onSaveGCode}
+          reportId={reportId}
+        />
       )}
-    </div>
+    </>
   );
 }
 

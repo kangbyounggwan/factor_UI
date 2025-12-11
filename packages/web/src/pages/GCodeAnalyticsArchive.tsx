@@ -36,6 +36,7 @@ import {
   deleteAnalysisReport,
   deleteMultipleReports,
   convertDbReportToUiData,
+  downloadGCodeContent,
 } from '@/lib/gcodeAnalysisDbService';
 import type {
   GCodeAnalysisReportListItem,
@@ -167,6 +168,26 @@ export default function GCodeAnalyticsArchive() {
       }
 
       const uiData = convertDbReportToUiData(data);
+
+      // G-code 컨텐츠가 없고 스토리지 경로가 있으면 다운로드
+      if (!uiData.gcodeContent && data.file_storage_path) {
+        try {
+          // 토스트 알림 대신 로딩 상태로 처리 (조용히 로드)
+          const content = await downloadGCodeContent(data.file_storage_path);
+          if (content) {
+            uiData.gcodeContent = content;
+          }
+        } catch (downloadErr) {
+          console.error('[GCodeAnalyticsArchive] G-code download error:', downloadErr);
+          // G-code 로드 실패해도 보고서는 보여줌
+          toast({
+            title: 'G-code 원본 로드 실패',
+            description: '분석 결과는 표시되지만 원본 G-code를 볼 수 없습니다.',
+            // variant: 'default', // warning is not a valid variant
+          });
+        }
+      }
+
       setSelectedReport(uiData);
     } catch (err) {
       console.error('[GCodeAnalyticsArchive] View error:', err);
@@ -274,7 +295,6 @@ export default function GCodeAnalyticsArchive() {
         <div className="max-w-6xl mx-auto p-4">
           <GCodeAnalysisReport
             data={selectedReport}
-            onClose={() => setSelectedReport(null)}
           />
         </div>
       </div>
@@ -491,8 +511,8 @@ export default function GCodeAnalyticsArchive() {
                             className={cn(
                               "h-full transition-all",
                               report.overall_score >= 80 ? "bg-green-500" :
-                              report.overall_score >= 60 ? "bg-yellow-500" :
-                              report.overall_score >= 40 ? "bg-orange-500" : "bg-red-500"
+                                report.overall_score >= 60 ? "bg-yellow-500" :
+                                  report.overall_score >= 40 ? "bg-orange-500" : "bg-red-500"
                             )}
                             style={{ width: `${report.overall_score}%` }}
                           />
