@@ -51,7 +51,7 @@ export function PrinterStatusCard({ isPrinting, isConnected, completion }: Print
   const StatusIcon = config.icon;
 
   return (
-    <div className={`relative rounded-2xl overflow-hidden shadow-lg ${config.glowColor}`}>
+    <div className={`relative rounded-2xl overflow-hidden shadow-card ${config.glowColor}`}>
       {/* 배경 그라데이션 */}
       <div className={`absolute inset-0 bg-gradient-to-br ${config.bgGradient}`} />
 

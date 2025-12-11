@@ -454,31 +454,51 @@ class PrinterStatusManager {
       if (newStatus === 'printing' && !activeJob) {
         const jobFile = parsed?.job?.file;
         const fileName = jobFile?.name || jobFile?.display || 'Unknown';
+        const filePath = jobFile?.path || jobFile?.origin || '';
 
-        // model_print_history에 새 레코드 생성
+        // SD 카드/로컬 파일의 경우 gcode_url 구성
+        // origin이 'local'이면 OctoPrint 로컬, 'sdcard'면 SD 카드
+        let gcodeUrl = '';
+        if (filePath) {
+          // 파일 경로에서 URL 생성 가능 여부 확인
+          gcodeUrl = filePath;
+        }
+
+        // model_print_history에 새 레코드 생성 (model_id는 null 허용)
         const { data: newJob, error } = await supabase
           .from('model_print_history')
           .insert({
             user_id: printer.user_id,
             printer_id: printer.id,
+            // model_id는 AI 모델에서 출력할 때만 설정, 일반 출력은 null
+            model_id: null,
             print_status: 'printing',
             started_at: new Date().toISOString(),
+            short_filename: fileName,
+            gcode_url: gcodeUrl || null,
             print_settings: {
               file_name: fileName,
+              file_path: filePath,
               file_size: jobFile?.size,
+              file_origin: jobFile?.origin, // 'local' or 'sdcard'
               estimated_time: parsed?.job?.estimatedPrintTime,
+              estimated_time_formatted: parsed?.job?.estimatedPrintTime
+                ? formatPrintTime(parsed.job.estimatedPrintTime)
+                : null,
             },
           })
           .select('id')
           .single();
 
-        if (!error && newJob) {
+        if (error) {
+          console.error(`[MQTT] ❌ Failed to create print job:`, error);
+        } else if (newJob) {
           this.activeJobs.set(deviceUuid, {
             jobId: newJob.id,
             printerId: printer.id,
             lastStatus: 'printing',
           });
-          console.log(`[MQTT] 🖨️ Print job started: ${newJob.id} for ${deviceUuid}`);
+          console.log(`[MQTT] 🖨️ Print job started: ${newJob.id} for ${deviceUuid}, file: ${fileName}`);
         }
       }
 
@@ -778,6 +798,22 @@ export function regenerateMqttClientId(uid?: string): string {
   
   // 새로운 clientId 생성
   return createMqttClientId(uid);
+}
+
+// === Helper Functions ===
+/**
+ * 출력 시간(초)을 포맷팅된 문자열로 변환
+ * @param seconds 출력 예상 시간 (초)
+ * @returns "Xh Xm" 또는 "Xm" 형식의 문자열
+ */
+function formatPrintTime(seconds: number): string {
+  if (!seconds || seconds <= 0) return '';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
 }
 
 // === User-Device UUID cache & helpers ===

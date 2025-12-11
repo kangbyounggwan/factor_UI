@@ -13,8 +13,29 @@ import {
   FolderOpen,
   Loader2,
   Eye,
-  Cloud
+  Cloud,
+  Trash2,
+  Pencil,
+  MoreVertical,
+  X,
+  Check
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, onDashStatusMessage, publishGcodePrint, subscribeGCodeUploadResult, waitForGCodeUploadResult, type GCodeUploadResult } from "@shared/services/mqttService";
 import { supabase } from "@shared/integrations/supabase/client";
@@ -43,9 +64,10 @@ interface DbGCodeFile {
 interface GCodeUploadProps {
   deviceUuid?: string | null;
   isConnected?: boolean;
+  onViewFile?: (fileId: string) => void; // 눈 버튼 클릭 시 파일관리 탭에서 미리보기
 }
 
-export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProps) => {
+export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCodeUploadProps) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [files, setFiles] = useState<GCodeFile[]>([]);
@@ -59,6 +81,14 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
   const [sdFiles, setSdFiles] = useState<Array<{ name: string; size: number }>>([]);
   const [localMqttFiles, setLocalMqttFiles] = useState<Array<{ name: string; display?: string; size?: number; date?: number | string | null; estimatedPrintTime?: number; user?: string; path?: string }>>([]);
   const [fileSource, setFileSource] = useState<'LOCAL' | 'SDCARD'>('LOCAL');
+
+  // 클라우드 파일 삭제/이름변경 상태
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState<DbGCodeFile | null>(null);
+  const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
+  const [newFileName, setNewFileName] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isRenaming, setIsRenaming] = useState(false);
 
   // DB에 저장된 파일명 Set (클라우드 아이콘 표시용)
   const dbFileNames = new Set(dbFiles.map(f => f.filename));
@@ -112,13 +142,14 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
       // 구조: user_id/gcode_file/device_id/filename.gcode
       const deviceFolder = deviceUuid || 'unknown';
       const filePath = `${user.id}/gcode_file/${deviceFolder}/${file.name}`;
-      // GCode 파일을 text/plain Blob으로 변환 (MIME 타입 제한 우회)
-      const fileBlob = new Blob([arrayBuf], { type: 'text/plain' });
+      // GCode 파일을 text/x-gcode Blob으로 변환 (Supabase Storage에서 허용된 MIME 타입)
+      const fileBlob = new Blob([arrayBuf], { type: 'text/x-gcode' });
       const { error: storageError } = await supabase.storage
         .from('gcode-files')
         .upload(filePath, fileBlob, {
           cacheControl: '3600',
           upsert: true, // 같은 파일명이면 덮어쓰기
+          contentType: 'text/x-gcode', // 명시적으로 MIME 타입 지정
         });
 
       if (storageError) {
@@ -367,11 +398,167 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
   };
 
   const handleViewGcode = (fileId: string) => {
-    navigate(`/gcode-viewer/${fileId}`);
+    // onViewFile 콜백이 있으면 파일관리 탭으로 전환하고 해당 파일 선택
+    if (onViewFile) {
+      onViewFile(fileId);
+    } else {
+      // 콜백이 없으면 기존처럼 별도 페이지로 이동
+      navigate(`/gcode-viewer/${fileId}`);
+    }
+  };
+
+  // 클라우드 파일 삭제
+  const handleDeleteCloudFile = async () => {
+    if (!fileToDelete) return;
+
+    try {
+      setIsDeleting(true);
+
+      // 1. Supabase Storage에서 파일 삭제
+      const { error: storageError } = await supabase.storage
+        .from('gcode-files')
+        .remove([fileToDelete.file_path]);
+
+      if (storageError) {
+        console.error('Storage delete error:', storageError);
+        // Storage 삭제 실패해도 DB 삭제는 진행
+      }
+
+      // 2. DB에서 메타데이터 삭제
+      const { error: dbError } = await supabase
+        .from('gcode_files')
+        .delete()
+        .eq('id', fileToDelete.id);
+
+      if (dbError) {
+        throw dbError;
+      }
+
+      toast({
+        title: t('common.delete'),
+        description: `${fileToDelete.filename} ${t('common.success')}`,
+      });
+
+      // 파일 목록 새로고침
+      loadDbFiles();
+
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast({
+        title: t('errors.general'),
+        description: String(error),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+      setFileToDelete(null);
+    }
+  };
+
+  // 클라우드 파일 이름 변경
+  const handleRenameCloudFile = async (file: DbGCodeFile) => {
+    if (!newFileName.trim() || newFileName === file.filename) {
+      setRenamingFileId(null);
+      setNewFileName('');
+      return;
+    }
+
+    // .gcode 확장자 확인 및 추가
+    let finalName = newFileName.trim();
+    if (!finalName.toLowerCase().endsWith('.gcode') && !finalName.toLowerCase().endsWith('.gco')) {
+      finalName += '.gcode';
+    }
+
+    try {
+      setIsRenaming(true);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // 1. 기존 파일 다운로드
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from('gcode-files')
+        .download(file.file_path);
+
+      if (downloadError) {
+        throw downloadError;
+      }
+
+      // 2. 새 경로로 파일 업로드
+      const deviceFolder = deviceUuid || 'unknown';
+      const newFilePath = `${user.id}/gcode_file/${deviceFolder}/${finalName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('gcode-files')
+        .upload(newFilePath, fileData, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: 'text/x-gcode',
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // 3. 기존 파일 삭제 (새 경로와 다른 경우에만)
+      if (file.file_path !== newFilePath) {
+        await supabase.storage
+          .from('gcode-files')
+          .remove([file.file_path]);
+      }
+
+      // 4. DB 업데이트
+      const { error: dbError } = await supabase
+        .from('gcode_files')
+        .update({
+          filename: finalName,
+          file_path: newFilePath,
+        })
+        .eq('id', file.id);
+
+      if (dbError) {
+        throw dbError;
+      }
+
+      toast({
+        title: t('common.rename'),
+        description: `${file.filename} → ${finalName}`,
+      });
+
+      // 파일 목록 새로고침
+      loadDbFiles();
+
+    } catch (error) {
+      console.error('Rename error:', error);
+      toast({
+        title: t('errors.general'),
+        description: String(error),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRenaming(false);
+      setRenamingFileId(null);
+      setNewFileName('');
+    }
+  };
+
+  // 이름 변경 시작
+  const startRenaming = (file: DbGCodeFile) => {
+    setRenamingFileId(file.id);
+    // 확장자를 제외한 이름으로 설정
+    const nameWithoutExt = file.filename.replace(/\.(gcode|gco)$/i, '');
+    setNewFileName(nameWithoutExt);
+  };
+
+  // 이름 변경 취소
+  const cancelRenaming = () => {
+    setRenamingFileId(null);
+    setNewFileName('');
   };
 
   return (
-    <Card className="h-full flex flex-col border border-border/50 shadow-md bg-card rounded-2xl">
+    <Card className="h-full flex flex-col border border-border/50 shadow-card bg-card rounded-2xl">
       <CardHeader className="pb-4 border-b border-border/50">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-semibold flex items-center gap-3">
@@ -491,6 +678,36 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
                         >
                           <Play className="h-4 w-4" />
                         </Button>
+                        {/* 클라우드 파일 관리 메뉴 */}
+                        {isInCloud && dbFile && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-9 w-9 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => startRenaming(dbFile)}>
+                                <Pencil className="h-4 w-4 mr-2" />
+                                {t('common.rename')}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setFileToDelete(dbFile);
+                                  setDeleteDialogOpen(true);
+                                }}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                {t('common.delete')}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </div>
                     );
                   })
@@ -572,6 +789,84 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false }: GCodeUploadProp
           )}
         </div>
       </CardContent>
+
+      {/* 삭제 확인 다이얼로그 */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('common.delete')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {fileToDelete?.filename} 파일을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteCloudFile}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              {t('common.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 이름 변경 다이얼로그 */}
+      <AlertDialog open={!!renamingFileId} onOpenChange={(open) => !open && cancelRenaming()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('common.rename')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              새로운 파일명을 입력하세요.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <Input
+              value={newFileName}
+              onChange={(e) => setNewFileName(e.target.value)}
+              placeholder="새 파일명"
+              disabled={isRenaming}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !isRenaming) {
+                  const file = dbFiles.find(f => f.id === renamingFileId);
+                  if (file) handleRenameCloudFile(file);
+                }
+                if (e.key === 'Escape') cancelRenaming();
+              }}
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              .gcode 확장자는 자동으로 추가됩니다.
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRenaming} onClick={cancelRenaming}>
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const file = dbFiles.find(f => f.id === renamingFileId);
+                if (file) handleRenameCloudFile(file);
+              }}
+              disabled={isRenaming || !newFileName.trim()}
+            >
+              {isRenaming ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Check className="h-4 w-4 mr-2" />
+              )}
+              {t('common.confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };

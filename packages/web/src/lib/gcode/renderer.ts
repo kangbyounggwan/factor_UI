@@ -28,6 +28,7 @@ export interface RendererOptions {
   colorGrid: string;
   bgColorGrid: string;
   bgColorOffGrid: string;
+  isDarkMode: boolean;
 }
 
 export class GCodeRenderer {
@@ -58,14 +59,14 @@ export class GCodeRenderer {
     moveModel: true,
     zoomInOnModel: false,
     centerViewport: false,
-    // 다크 테마에 맞춘 색상
     colorLine: ['#00ffff', '#ff6b6b', '#4ecdc4', '#ffe66d', '#c44dff'],
     colorMove: '#666666',
     colorRetract: '#ff4444',
     colorHead: '#00ff00',
-    colorGrid: '#444444',
-    bgColorGrid: '#1a1a1a',
-    bgColorOffGrid: '#0d0d0d',
+    colorGrid: '#555555',
+    bgColorGrid: '#2a2a2a',
+    bgColorOffGrid: '#111111',
+    isDarkMode: true,
   };
 
   /**
@@ -116,7 +117,9 @@ export class GCodeRenderer {
    * 베드 크기에 맞게 뷰포트 조정
    */
   private fitToBed(): void {
-    if (!this.canvas) return;
+    if (!this.canvas) {
+      return;
+    }
 
     const canvasWidth = this.canvas.width / this.pixelRatio;
     const canvasHeight = this.canvas.height / this.pixelRatio;
@@ -133,8 +136,20 @@ export class GCodeRenderer {
     this.scale.y = scale;
 
     // 베드 중앙 정렬
-    this.offset.x = (canvasWidth - bedX * scale) / 2;
-    this.offset.y = (canvasHeight - bedY * scale) / 2;
+    // 스케일 적용 후 베드의 실제 픽셀 크기
+    const scaledBedWidth = bedX * scale;
+    const scaledBedHeight = bedY * scale;
+
+    // 베드를 캔버스 중앙에 배치
+    // setTransform에서 Y축이 뒤집히므로 (scaleY가 음수)
+    // Canvas 좌표 (0,0)은 왼쪽 상단, G-code 좌표 (0,0)은 왼쪽 하단
+    // offset.x = 베드 왼쪽이 캔버스 중앙에서 시작하도록
+    // offset.y = 베드 하단(G-code Y=0)이 캔버스 중앙에서 시작하도록
+    this.offset.x = (canvasWidth - scaledBedWidth) / 2;
+    // Y 중앙: 캔버스 하단 여백 + 베드 높이의 절반 -> 캔버스 중앙
+    // setTransform의 translateY는 G-code Y=0이 캔버스의 어디에 매핑되는지 결정
+    // Y축이 뒤집혔으므로 translateY는 G-code Y=0의 캔버스 Y좌표
+    this.offset.y = (canvasHeight + scaledBedHeight) / 2;
 
     this.applyTransform();
   }
@@ -143,12 +158,23 @@ export class GCodeRenderer {
    * 렌더링
    */
   render(layer?: number, progress?: { from: number; to: number }): void {
-    if (!this.ctx || !this.model) {
-      console.log('[GCodeRenderer] render() skipped: ctx=', !!this.ctx, 'model=', !!this.model);
+    if (!this.ctx) {
       return;
     }
 
-    console.log('[GCodeRenderer] render() called, layers:', this.model.layers.length, 'currentLayer:', this.currentLayer);
+    // 캔버스 클리어
+    this.clear();
+
+    // Transform 재적용 (clear에서 리셋되므로)
+    this.applyTransform();
+
+    // 그리드 그리기 (model 없어도 항상 그리기)
+    this.drawGrid();
+
+    // model이 없으면 그리드만 그리고 종료
+    if (!this.model) {
+      return;
+    }
 
     if (layer !== undefined) {
       this.currentLayer = Math.max(0, Math.min(layer, this.model.layers.length - 1));
@@ -157,12 +183,6 @@ export class GCodeRenderer {
     if (progress !== undefined) {
       this.currentProgress = progress;
     }
-
-    // 캔버스 클리어
-    this.clear();
-
-    // 그리드 그리기
-    this.drawGrid();
 
     // 바운딩 박스 그리기
     if (this.options.showBoundingBox || this.options.showFullSize) {
@@ -196,15 +216,16 @@ export class GCodeRenderer {
   private clear(): void {
     if (!this.ctx || !this.canvas) return;
 
-    const width = this.canvas.width / this.pixelRatio;
-    const height = this.canvas.height / this.pixelRatio;
+    // transform 리셋 후에는 실제 캔버스 픽셀 크기로 클리어해야 함
+    const width = this.canvas.width;
+    const height = this.canvas.height;
 
-    this.ctx.save();
+    // transform을 identity로 리셋하고 전체 캔버스 클리어
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     // 배경색으로 채우기
     this.ctx.fillStyle = this.options.bgColorOffGrid;
     this.ctx.fillRect(0, 0, width, height);
-    this.ctx.restore();
+    // transform은 applyTransform()에서 다시 설정됨
   }
 
   /**
@@ -276,8 +297,12 @@ export class GCodeRenderer {
     toSegment: number,
     faded = false
   ): void {
-    if (!this.ctx || !this.model || !this.reader) return;
-    if (layerNum < 0 || layerNum >= this.model.layers.length) return;
+    if (!this.ctx || !this.model || !this.reader) {
+      return;
+    }
+    if (layerNum < 0 || layerNum >= this.model.layers.length) {
+      return;
+    }
 
     const layer = this.reader.decompressLayer(this.model.layers[layerNum]);
     const alpha = faded ? 0.3 : 1.0;
@@ -330,10 +355,9 @@ export class GCodeRenderer {
       return;
     }
 
-    // 압출 라인
-    const tool = cmd.tool || 0;
-    const colorIndex = layerNum % this.options.colorLine.length;
-    this.ctx.strokeStyle = this.options.colorLine[colorIndex];
+    // 압출 라인 - 단일 색상 (다크/라이트 모드에 따라 변경)
+    // 다크모드: 노란색(#ffcc00), 라이트모드: 진한 파란색(#2563eb)
+    this.ctx.strokeStyle = this.options.isDarkMode ? '#ffcc00' : '#2563eb';
     this.ctx.lineWidth = this.options.extrusionWidth;
     this.ctx.lineCap = 'round';
     this.ctx.lineJoin = 'round';
@@ -376,20 +400,20 @@ export class GCodeRenderer {
   }
 
   /**
-   * 모델에 줌
+   * 모델에 줌 (베드 전체가 보이도록 스케일 조정)
    */
   private zoomToModel(): void {
-    if (!this.model || !this.canvas) return;
+    if (!this.canvas) return;
 
-    const bbox = this.model.modelInfo.boundingBox;
     const canvasWidth = this.canvas.width / this.pixelRatio;
     const canvasHeight = this.canvas.height / this.pixelRatio;
 
-    const modelWidth = bbox.maxX - bbox.minX;
-    const modelHeight = bbox.maxY - bbox.minY;
+    // 베드 크기 기준으로 스케일 계산 (여백 10%)
+    const bedWidth = this.options.bed.x;
+    const bedHeight = this.options.bed.y;
 
-    const scaleX = (canvasWidth * 0.9) / modelWidth;
-    const scaleY = (canvasHeight * 0.9) / modelHeight;
+    const scaleX = (canvasWidth * 0.9) / bedWidth;
+    const scaleY = (canvasHeight * 0.9) / bedHeight;
     const scale = Math.min(scaleX, scaleY);
 
     this.scale.x = scale;
@@ -399,20 +423,23 @@ export class GCodeRenderer {
   }
 
   /**
-   * 모델 중앙 정렬
+   * 모델 중앙 정렬 (베드 중심을 캔버스 중심에 배치)
    */
   private centerOnModel(): void {
-    if (!this.model || !this.canvas) return;
+    if (!this.canvas) return;
 
-    const bbox = this.model.modelInfo.boundingBox;
     const canvasWidth = this.canvas.width / this.pixelRatio;
     const canvasHeight = this.canvas.height / this.pixelRatio;
 
-    const modelCenterX = (bbox.minX + bbox.maxX) / 2;
-    const modelCenterY = (bbox.minY + bbox.maxY) / 2;
+    // 베드 중심 좌표
+    const bedCenterX = this.options.bed.x / 2;
+    const bedCenterY = this.options.bed.y / 2;
 
-    this.offset.x = canvasWidth / 2 - modelCenterX * this.scale.x;
-    this.offset.y = canvasHeight / 2 - modelCenterY * this.scale.y;
+    // 캔버스 중심에 베드 중심을 맞춤
+    // X: 캔버스 중심 - (베드 중심 * 스케일)
+    this.offset.x = canvasWidth / 2 - bedCenterX * this.scale.x;
+    // Y: 캔버스 중심 + (베드 중심 * 스케일) - Y축이 뒤집히므로 +
+    this.offset.y = canvasHeight / 2 + bedCenterY * this.scale.y;
 
     this.applyTransform();
   }
@@ -423,15 +450,18 @@ export class GCodeRenderer {
   private applyTransform(): void {
     if (!this.ctx || !this.canvas) return;
 
-    const height = this.canvas.height / this.pixelRatio;
-
+    // Y축 뒤집기 (G-code는 Y가 위로 증가, Canvas는 아래로 증가)
+    // setTransform(a, b, c, d, e, f):
+    // a = scaleX, b = skewY, c = skewX, d = scaleY
+    // e = translateX, f = translateY
+    // 변환된 좌표: x' = a*x + c*y + e, y' = b*x + d*y + f
     this.ctx.setTransform(
       this.scale.x,
       0,
       0,
-      -this.scale.y,
+      -this.scale.y,  // Y축 뒤집기 (음수)
       this.offset.x,
-      height - this.offset.y
+      this.offset.y
     );
   }
 
@@ -462,6 +492,20 @@ export class GCodeRenderer {
    */
   updateOptions(options: Partial<RendererOptions>): void {
     this.options = { ...this.options, ...options };
+
+    // 다크/라이트 모드에 따른 색상 동적 변경
+    if (this.options.isDarkMode) {
+      this.options.colorGrid = '#555555';
+      this.options.bgColorGrid = '#2a2a2a';
+      this.options.bgColorOffGrid = '#111111';
+      this.options.colorMove = '#666666';
+    } else {
+      this.options.colorGrid = '#cccccc';
+      this.options.bgColorGrid = '#e8e8e8';
+      this.options.bgColorOffGrid = '#f5f5f5';
+      this.options.colorMove = '#999999';
+    }
+
     this.render();
   }
 
@@ -487,10 +531,12 @@ export class GCodeRenderer {
 
   /**
    * 이동
+   * 마우스 드래그 방향과 화면 이동 방향 일치시키기
+   * 마우스 아래로 드래그 (dy > 0) → 화면이 아래로 이동 (그림이 위로 올라감)
    */
   pan(dx: number, dy: number): void {
     this.offset.x += dx;
-    this.offset.y += dy;
+    this.offset.y += dy; // Y축도 동일 방향 (자연스러운 드래그)
     this.applyTransform();
     this.render();
   }

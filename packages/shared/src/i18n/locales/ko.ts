@@ -27,7 +27,8 @@ export default {
     user: "사용자",
     rename: "이름 변경",
     copied: "복사됨!",
-    done: "완료"
+    done: "완료",
+    responseTimeout: "응답 대기 시간 초과"
   },
   nav: {
     home: "홈",
@@ -170,6 +171,8 @@ export default {
     openAssistant: "AI 어시스턴트 열기",
     closeAssistant: "AI 어시스턴트 닫기",
     title: "AI 3D 모델링 스튜디오",
+    modelGeneration: "모델 생성",
+    gcodeAnalysis: "G-code 분석",
     description: "텍스트와 이미지를 AI로 3D 모델로 변환하고, 프린터와 연동해 즉시 출력까지 진행하세요.",
     textTo3D: "텍스트 → 3D",
     imageTo3D: "이미지 → 3D",
@@ -867,11 +870,26 @@ export default {
     fileManagement: "파일 관리",
     cloudFiles: "클라우드 파일",
     noCloudFiles: "저장된 G-code 파일이 없습니다",
+    noCompatibleFiles: "호환 가능한 G-code 파일이 없습니다",
     gcodeViewer: "G-code 뷰어",
     selectFileToView: "파일을 선택하세요",
     selectFileToViewDesc: "왼쪽 목록에서 파일을 선택하면 여기에 표시됩니다",
     fileLoadError: "파일 목록을 불러오는데 실패했습니다",
-    fileDownloadError: "파일을 다운로드하는데 실패했습니다"
+    fileDownloadError: "파일을 다운로드하는데 실패했습니다",
+    // 클라우드→프린터 전송
+    transferToPrinter: "프린터로 전송",
+    transferSuccess: "전송 완료",
+    transferFailed: "전송 실패",
+    printerLocal: "프린터 로컬",
+    // 전송된 파일 이름변경 경고
+    transferredFileWarningTitle: "이름 변경 불가",
+    transferredFileWarningDesc: "이 파일은 이미 프린터에 전송되었습니다. 클라우드에서 파일 이름을 변경해도 프린터 로컬의 파일명은 변경되지 않습니다.",
+    transferredFileWarningHint: "파일을 복사하여 새 이름으로 저장할 수 있습니다.",
+    newFileName: "새 파일명",
+    newFileNamePlaceholder: "새 파일명을 입력하세요",
+    extensionAutoAdded: "확장자는 자동으로 추가됩니다",
+    copyAndCreate: "복사하여 생성",
+    fileCopied: "파일 복사 완료"
   },
   camera: {
     title: "실시간 카메라 피드",
@@ -969,6 +987,7 @@ export default {
     support: "서포트",
     travelPath: "이동 경로",
     showTravelPath: "이동 경로 표시",
+    parseComplete: "G-code 파싱 완료",
     parseFailed: "파싱 실패",
     loadFailed: "로드 실패",
     parsing: "파싱 중...",

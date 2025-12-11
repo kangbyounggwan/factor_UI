@@ -105,7 +105,7 @@ export function TemperatureChart({ data, className }: TemperatureChartProps) {
   };
 
   return (
-    <div className={`h-[380px] bg-card border border-border/50 shadow-md rounded-2xl p-6 ${className || ''}`}>
+    <div className={`h-[380px] bg-card border border-border/50 shadow-card rounded-2xl p-6 ${className || ''}`}>
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">

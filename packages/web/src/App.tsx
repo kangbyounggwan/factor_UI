@@ -29,6 +29,8 @@ const UserSettings = lazy(() => import("./pages/UserSettings"));
 const Subscription = lazy(() => import("./pages/Subscription"));
 const SupportedPrinters = lazy(() => import("./pages/SupportedPrinters"));
 const AI = lazy(() => import("./pages/AI"));
+const GCodeAnalytics = lazy(() => import("./pages/GCodeAnalytics"));
+const GCodeAnalyticsArchive = lazy(() => import("./pages/GCodeAnalyticsArchive"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Admin = lazy(() => import("./pages/Admin"));
 const DeviceRegister = lazy(() => import("./pages/DeviceRegister"));
@@ -70,6 +72,7 @@ const AppContent = () => {
     '/dashboard',
     '/printer',
     '/create',
+    '/gcode-analytics',
     '/settings',
     '/user-settings',
     '/admin',
@@ -78,6 +81,10 @@ const AppContent = () => {
 
   // 현재 경로가 Footer를 숨겨야 하는 경로인지 확인
   const shouldHideFooter = hideFooterPaths.some(path => location.pathname.startsWith(path));
+
+  // AI 사이드바를 숨길 페이지 경로들
+  const hideAISidebarPaths = ['/gcode-analytics'];
+  const shouldHideAISidebar = hideAISidebarPaths.some(path => location.pathname.startsWith(path));
 
   return (
     <div className="flex flex-col min-h-screen bg-background transition-colors">
@@ -91,7 +98,7 @@ const AppContent = () => {
       <div
         className="flex-1 transition-all duration-300"
         style={{
-          marginRight: showAISidebar && !aiSidebarCollapsed ? `${aiSidebarWidth}px` : '0px'
+          marginRight: showAISidebar && !aiSidebarCollapsed && !shouldHideAISidebar ? `${aiSidebarWidth}px` : '0px'
         }}
       >
         <Suspense fallback={
@@ -136,6 +143,16 @@ const AppContent = () => {
                 <AI />
               </ProtectedRoute>
             } />
+            <Route path="/gcode-analytics" element={
+              <ProtectedRoute>
+                <GCodeAnalytics />
+              </ProtectedRoute>
+            } />
+            <Route path="/gcode-analytics/archive" element={
+              <ProtectedRoute>
+                <GCodeAnalyticsArchive />
+              </ProtectedRoute>
+            } />
             <Route path="/admin" element={
               <AdminRoute>
                 <Admin />
@@ -162,7 +179,7 @@ const AppContent = () => {
       {/* 풋터를 특정 페이지에만 표시 */}
       {!shouldHideFooter && <Footer />}
 
-      {showAISidebar && (
+      {showAISidebar && !shouldHideAISidebar && (
         <AIAssistantSidebar
           isCollapsed={aiSidebarCollapsed}
           onToggle={() => setAiSidebarCollapsed(!aiSidebarCollapsed)}

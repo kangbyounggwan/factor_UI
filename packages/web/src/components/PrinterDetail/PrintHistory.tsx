@@ -24,10 +24,15 @@ interface PrintHistoryItem {
   print_status: 'printing' | 'completed' | 'failed' | 'cancelled' | 'paused';
   started_at: string;
   completed_at: string | null;
+  short_filename?: string | null;
+  gcode_url?: string | null;
   print_settings: {
     file_name?: string;
+    file_path?: string;
     file_size?: number;
+    file_origin?: string;
     estimated_time?: number;
+    estimated_time_formatted?: string;
   } | null;
   error_message?: string | null;
 }
@@ -50,7 +55,7 @@ export function PrintHistory({ printerId, className }: PrintHistoryProps) {
 
       const { data, error } = await supabase
         .from('model_print_history')
-        .select('id, print_status, started_at, completed_at, print_settings, error_message')
+        .select('id, print_status, started_at, completed_at, print_settings, error_message, short_filename, gcode_url')
         .eq('printer_id', printerId)
         .order('started_at', { ascending: false })
         .limit(50);
@@ -187,7 +192,7 @@ export function PrintHistory({ printerId, className }: PrintHistoryProps) {
   }
 
   return (
-    <Card className={`h-full flex flex-col border border-border/50 shadow-md bg-card rounded-2xl ${className}`}>
+    <Card className={`h-full flex flex-col border border-border/50 shadow-card bg-card rounded-2xl ${className}`}>
       <CardHeader className="pb-4 border-b border-border/50 flex-shrink-0">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-semibold flex items-center gap-3">
@@ -220,7 +225,8 @@ export function PrintHistory({ printerId, className }: PrintHistoryProps) {
               {history.map((item) => {
                 const statusConfig = getStatusConfig(item.print_status);
                 const StatusIcon = statusConfig.icon;
-                const fileName = item.print_settings?.file_name || t('printHistory.unknownFile');
+                // short_filename 우선, 없으면 print_settings.file_name
+                const fileName = item.short_filename || item.print_settings?.file_name || t('printHistory.unknownFile');
 
                 return (
                   <div

@@ -27,7 +27,8 @@ export default {
     user: "User",
     rename: "Rename",
     copied: "Copied!",
-    done: "Done"
+    done: "Done",
+    responseTimeout: "Response timeout"
   },
   nav: {
     home: "Home",
@@ -153,6 +154,8 @@ export default {
   },
   ai: {
     title: "AI 3D Modeling Studio",
+    modelGeneration: "Model Generation",
+    gcodeAnalysis: "G-code Analysis",
     description: "Convert text and images into 3D models using AI, and print them immediately with connected printers.",
     textTo3D: "Text → 3D",
     imageTo3D: "Image → 3D",
@@ -858,11 +861,26 @@ export default {
     fileManagement: "File Management",
     cloudFiles: "Cloud Files",
     noCloudFiles: "No saved G-code files",
+    noCompatibleFiles: "No compatible G-code files",
     gcodeViewer: "G-code Viewer",
     selectFileToView: "Select a file",
     selectFileToViewDesc: "Select a file from the list to view it here",
     fileLoadError: "Failed to load file list",
-    fileDownloadError: "Failed to download file"
+    fileDownloadError: "Failed to download file",
+    // Cloud→Printer transfer
+    transferToPrinter: "Transfer to Printer",
+    transferSuccess: "Transfer Complete",
+    transferFailed: "Transfer Failed",
+    printerLocal: "Printer Local",
+    // Transferred file rename warning
+    transferredFileWarningTitle: "Cannot Rename",
+    transferredFileWarningDesc: "This file has already been transferred to the printer. Renaming the file in the cloud will not change the file name on the printer's local storage.",
+    transferredFileWarningHint: "You can copy the file and save it with a new name.",
+    newFileName: "New File Name",
+    newFileNamePlaceholder: "Enter new file name",
+    extensionAutoAdded: "extension will be added automatically",
+    copyAndCreate: "Copy & Create",
+    fileCopied: "File Copied"
   },
   camera: {
     title: "Live Camera Feed",
@@ -960,6 +978,7 @@ export default {
     support: "Support",
     travelPath: "Travel Path",
     showTravelPath: "Show Travel Path",
+    parseComplete: "G-code parsing complete",
     parseFailed: "Parse Failed",
     loadFailed: "Load Failed",
     parsing: "Parsing...",

@@ -285,7 +285,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
 
 
   return (
-    <Card className={`h-full ${isFullscreen ? "fixed inset-4 z-50 bg-background" : ""}`}>
+    <Card className={`h-full border-0 ${isFullscreen ? "fixed inset-4 z-50 bg-background shadow-card" : ""}`}>
       <CardContent className="h-full p-0">
         <div className="space-y-4 h-full flex flex-col">
           <div className="relative bg-black rounded-lg overflow-hidden flex-1 min-h-0">

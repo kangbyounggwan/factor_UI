@@ -13,6 +13,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { Slider } from "@/components/ui/slider";
 import pako from "pako";
 import { useTranslation } from "react-i18next";
+import { useTheme } from "next-themes";
 
 interface GCodePreviewProps {
   gcodeUrl?: string;
@@ -28,7 +29,7 @@ interface GCodeLayer {
   supportExtrusions: number[][][]; // [ [[x,y,z], [x,y,z], ...], ... ] - 서포트 압출 폴리라인 배열
 }
 
-// G-code를 레이어별로 파싱 ("펜 업/다운" 방식으로 폴리라인 끊기)
+// G-code를 레이어별로 파싱 (개별 선분 방식 - 촘촘한 렌더링)
 function parseGCode(gcode: string): { layers: GCodeLayer[], firstExtrusionPoint: Vector3 | null } {
   const lines = gcode.split("\n");
   const layers: Map<number, GCodeLayer> = new Map();
@@ -37,11 +38,8 @@ function parseGCode(gcode: string): { layers: GCodeLayer[], firstExtrusionPoint:
   let absoluteE = true; // M82: 절대 E 모드 (기본값) / M83: 상대 E 모드
   let absoluteXYZ = true; // G90: 절대 좌표 (기본값) / G91: 상대 좌표
   let hasMovedFromOrigin = false;
-  let penDown = false; // 압출 중인지 여부 (폴리라인 연속성)
-  let currentPolyline: number[][] = []; // 현재 압출 폴리라인
   let firstExtrusionPoint: Vector3 | null = null; // 첫 번째 실제 압출 시작점
   let isSupport = false; // 현재 서포트 출력 중인지 여부
-  let currentTool = 0; // 현재 익스트루더 번호 (T0, T1, ...)
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -63,7 +61,6 @@ function parseGCode(gcode: string): { layers: GCodeLayer[], firstExtrusionPoint:
       const toolMatch = trimmed.match(/T(\d+)/);
       if (toolMatch) {
         const newTool = parseInt(toolMatch[1]);
-        currentTool = newTool;
         // T1을 서포트 익스트루더로 간주 (일반적인 설정)
         if (newTool === 1) {
           isSupport = true;
@@ -111,7 +108,6 @@ function parseGCode(gcode: string): { layers: GCodeLayer[], firstExtrusionPoint:
       if (zMatch) currentZ = parseFloat(zMatch[1]);
       if (eMatch) currentE = parseFloat(eMatch[1]);
 
-      penDown = false; // 위치 재설정 후 폴리라인 끊기
       continue;
     }
 
@@ -153,17 +149,22 @@ function parseGCode(gcode: string): { layers: GCodeLayer[], firstExtrusionPoint:
         continue;
       }
 
-      // E값 증가 여부로 압출 판단 (임계값 0.02mm)
+      // E값 증가 여부로 압출 판단 (더 민감하게 - 0.001mm 이상이면 압출로 판단)
       let isExtruding = false;
-      if (isG1 && eMatch) {
+      if (eMatch) {
         const newE = parseFloat(eMatch[1]);
         if (absoluteE) {
           const deltaE = newE - currentE;
-          isExtruding = deltaE > 0.02; // 노이즈/리트랙트 제거
+          isExtruding = deltaE > 0.001; // 더 민감하게 설정
         } else {
-          isExtruding = newE > 0.02;
+          isExtruding = newE > 0.001;
         }
         currentE = absoluteE ? newE : currentE + newE;
+      }
+
+      // G1 명령어는 E값이 없어도 압출 경로로 간주 (일부 슬라이서 호환)
+      if (isG1 && !eMatch && (xMatch || yMatch)) {
+        isExtruding = true;
       }
 
       // 세그먼트 길이 아웃라이어 컷 (베드 대각선의 1.5배 이상이면 무시)
@@ -173,7 +174,6 @@ function parseGCode(gcode: string): { layers: GCodeLayer[], firstExtrusionPoint:
         Math.pow(currentZ - prevZ, 2)
       );
       if (dist > 500) { // 500mm 이상 점프는 무시
-        penDown = false;
         continue;
       }
 
@@ -184,58 +184,23 @@ function parseGCode(gcode: string): { layers: GCodeLayer[], firstExtrusionPoint:
       }
       const layer = layers.get(layerZ)!;
 
-      // "펜 업/다운" 방식으로 폴리라인 관리
+      // 개별 선분(LineSegments) 방식으로 저장 - 촘촘한 렌더링
       if (isExtruding) {
-        if (!penDown) {
-          // 새 폴리라인 시작
-          if (currentPolyline.length > 0) {
-            // 서포트 여부에 따라 다른 배열에 저장
-            if (isSupport) {
-              layer.supportExtrusions.push([...currentPolyline]);
-            } else {
-              layer.extrusions.push([...currentPolyline]);
-            }
-          }
-          currentPolyline = [[prevX, prevY, prevZ]];
-          penDown = true;
-
-          // 첫 번째 실제 압출 시작점 기록 (일반 출력만, 서포트 제외)
-          if (!firstExtrusionPoint && !isSupport) {
-            firstExtrusionPoint = new Vector3(currentX, currentY, currentZ);
-            console.log('[parseGCode] First extrusion point found:', firstExtrusionPoint);
-          }
+        // 첫 번째 실제 압출 시작점 기록 (일반 출력만, 서포트 제외)
+        if (!firstExtrusionPoint && !isSupport) {
+          firstExtrusionPoint = new Vector3(currentX, currentY, currentZ);
+          console.log('[parseGCode] First extrusion point found:', firstExtrusionPoint);
         }
-        currentPolyline.push([currentX, currentY, currentZ]);
+
+        // 압출 경로: 시작점과 끝점을 개별 선분으로 저장
+        if (isSupport) {
+          layer.supportExtrusions.push([[prevX, prevY, prevZ], [currentX, currentY, currentZ]]);
+        } else {
+          layer.extrusions.push([[prevX, prevY, prevZ], [currentX, currentY, currentZ]]);
+        }
       } else {
-        // 비압출 구간 - 폴리라인 끊기
-        if (penDown && currentPolyline.length > 0) {
-          // 서포트 여부에 따라 다른 배열에 저장
-          if (isSupport) {
-            layer.supportExtrusions.push([...currentPolyline]);
-          } else {
-            layer.extrusions.push([...currentPolyline]);
-          }
-          currentPolyline = [];
-        }
-        penDown = false;
-
-        // Travel 경로 기록
-        if (isG0 || isG1) {
-          layer.moves.push([prevX, prevY, prevZ], [currentX, currentY, currentZ]);
-        }
-      }
-    }
-  }
-
-  // 마지막 폴리라인 저장
-  if (currentPolyline.length > 0) {
-    const lastZ = Math.round(currentZ * 100) / 100;
-    if (layers.has(lastZ)) {
-      // 서포트 여부에 따라 다른 배열에 저장
-      if (isSupport) {
-        layers.get(lastZ)!.supportExtrusions.push([...currentPolyline]);
-      } else {
-        layers.get(lastZ)!.extrusions.push([...currentPolyline]);
+        // Travel 경로 기록 (G0 또는 비압출 G1)
+        layer.moves.push([prevX, prevY, prevZ], [currentX, currentY, currentZ]);
       }
     }
   }
@@ -245,12 +210,13 @@ function parseGCode(gcode: string): { layers: GCodeLayer[], firstExtrusionPoint:
 }
 
 // 레이어를 3D로 렌더링
-function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, firstExtrusionPoint }: {
+function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, firstExtrusionPoint, isDarkMode = true }: {
   layers: GCodeLayer[];
   maxLayer: number;
   onModelInfoCalculated?: (offset: Vector3, size: Vector3) => void;
   showTravels?: boolean;
   firstExtrusionPoint?: Vector3 | null;
+  isDarkMode?: boolean;
 }) {
   const { camera, controls } = useThree();
   const [axesSize, setAxesSize] = useState<number>(50); // 축 크기 상태
@@ -270,12 +236,15 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
   useEffect(() => {
     if (layers.length === 0) return;
 
-    // 모델 크기 계산
+    // 모델 크기 계산 - 개별 선분 방식
     const allPoints: number[] = [];
     layers.forEach(layer => {
       if (layer.extrusions.length > 0) {
-        layer.extrusions.forEach(polyline => {
-          polyline.forEach(point => allPoints.push(...point));
+        layer.extrusions.forEach(segment => {
+          // segment = [[startX, startY, startZ], [endX, endY, endZ]]
+          if (segment.length === 2) {
+            allPoints.push(...segment[0], ...segment[1]);
+          }
         });
       }
     });
@@ -357,25 +326,21 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
         travelPoints.push(...layer.moves.flat());
       }
 
-      // Extrusion 경로 병합 (LineSegments 방식) - 일반 출력물
+      // Extrusion 경로 병합 - 개별 선분 방식 (더 촘촘한 렌더링)
       const extrusionPoints: number[] = [];
-      layer.extrusions.forEach(polyline => {
-        if (polyline.length > 1) {
-          // 폴리라인을 선분(segments)으로 변환
-          for (let i = 0; i < polyline.length - 1; i++) {
-            extrusionPoints.push(...polyline[i], ...polyline[i + 1]);
-          }
+      layer.extrusions.forEach(segment => {
+        // segment = [[startX, startY, startZ], [endX, endY, endZ]]
+        if (segment.length === 2) {
+          extrusionPoints.push(...segment[0], ...segment[1]);
         }
       });
 
-      // Support Extrusion 경로 병합 (LineSegments 방식) - 서포트
+      // Support Extrusion 경로 병합 - 개별 선분 방식
       const supportExtrusionPoints: number[] = [];
-      layer.supportExtrusions.forEach(polyline => {
-        if (polyline.length > 1) {
-          // 폴리라인을 선분(segments)으로 변환
-          for (let i = 0; i < polyline.length - 1; i++) {
-            supportExtrusionPoints.push(...polyline[i], ...polyline[i + 1]);
-          }
+      layer.supportExtrusions.forEach(segment => {
+        // segment = [[startX, startY, startZ], [endX, endY, endZ]]
+        if (segment.length === 2) {
+          supportExtrusionPoints.push(...segment[0], ...segment[1]);
         }
       });
 
@@ -407,7 +372,8 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
                 />
               </lineSegments>
             )}
-            {/* Extrusion 경로 - 하나의 LineSegments로 병합 (일반 출력물 - 청록색) */}
+            {/* Extrusion 경로 - 하나의 LineSegments로 병합 (일반 출력물) */}
+            {/* 다크모드: 노란색(#ffcc00), 라이트모드: 진한 파란색(#2563eb) */}
             {layer.extrusionPoints.length > 0 && (
               <lineSegments>
                 <bufferGeometry>
@@ -418,10 +384,11 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
                     itemSize={3}
                   />
                 </bufferGeometry>
-                <lineBasicMaterial color={0x00ffff} />
+                <lineBasicMaterial color={isDarkMode ? 0xffcc00 : 0x2563eb} />
               </lineSegments>
             )}
-            {/* Support Extrusion 경로 - 하나의 LineSegments로 병합 (서포트 - 주황색) */}
+            {/* Support Extrusion 경로 - 하나의 LineSegments로 병합 (서포트) */}
+            {/* 다크모드: 청록색(#00cccc), 라이트모드: 진한 주황색(#ea580c) */}
             {layer.supportExtrusionPoints.length > 0 && (
               <lineSegments>
                 <bufferGeometry>
@@ -432,7 +399,7 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
                     itemSize={3}
                   />
                 </bufferGeometry>
-                <lineBasicMaterial color={0xff8800} />
+                <lineBasicMaterial color={isDarkMode ? 0x00cccc : 0xea580c} />
               </lineSegments>
             )}
           </group>
@@ -452,6 +419,8 @@ export default function GCodePreview({
   className = "",
 }: GCodePreviewProps) {
   const { t } = useTranslation();
+  const { resolvedTheme } = useTheme();
+  const isDarkMode = resolvedTheme === 'dark';
   const [gcode, setGcode] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [layers, setLayers] = useState<GCodeLayer[]>([]);
@@ -561,9 +530,9 @@ export default function GCodePreview({
             }}
             style={{ width: "100%", height: "100%" }}
           >
-            <color attach="background" args={["#2d2d2d"]} />
-            <ambientLight intensity={1.0} />
-            <directionalLight position={[10, 10, 5]} intensity={1.8} castShadow />
+            <color attach="background" args={[isDarkMode ? "#2d2d2d" : "#f5f5f5"]} />
+            <ambientLight intensity={isDarkMode ? 1.0 : 1.2} />
+            <directionalLight position={[10, 10, 5]} intensity={isDarkMode ? 1.8 : 1.5} castShadow />
             <directionalLight position={[-10, -10, -5]} intensity={0.8} />
             <directionalLight position={[0, 10, 0]} intensity={0.6} />
             <GCodeLayers
@@ -571,6 +540,7 @@ export default function GCodePreview({
               maxLayer={currentLayer}
               showTravels={showTravels}
               firstExtrusionPoint={firstExtrusionPoint}
+              isDarkMode={isDarkMode}
             />
             {/* 그리드를 원점에 배치 - 10mm 간격 */}
             <Grid
@@ -578,10 +548,10 @@ export default function GCodePreview({
               infiniteGrid
               cellSize={10}
               cellThickness={0.5}
-              cellColor="#3a3f47"
+              cellColor={isDarkMode ? "#3a3f47" : "#cccccc"}
               sectionSize={200}
               sectionThickness={1.5}
-              sectionColor="#596273"
+              sectionColor={isDarkMode ? "#596273" : "#aaaaaa"}
               fadeDistance={1000}
               fadeStrength={1}
             />
@@ -612,11 +582,11 @@ export default function GCodePreview({
           {/* 범례 및 컨트롤 - 왼쪽 위 */}
           <div className="absolute left-4 top-4 bg-black/70 backdrop-blur-sm rounded-lg p-3 text-white text-xs space-y-2">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-1 bg-cyan-400"></div>
+              <div className={`w-6 h-1 ${isDarkMode ? 'bg-yellow-400' : 'bg-blue-600'}`}></div>
               <span>{t('gcode.extrusionPath')}</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-1 bg-orange-500"></div>
+              <div className={`w-6 h-1 ${isDarkMode ? 'bg-cyan-400' : 'bg-orange-600'}`}></div>
               <span>{t('gcode.support')}</span>
             </div>
             <div className="flex items-center gap-2">

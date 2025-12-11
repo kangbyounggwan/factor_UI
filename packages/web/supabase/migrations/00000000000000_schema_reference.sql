@@ -295,15 +295,18 @@ CREATE TABLE public.manufacturing_printers (
 -- ============================================================================
 -- 11. model_print_history (모델 출력 이력)
 -- ============================================================================
+-- NOTE: model_id는 nullable (OctoPrint 직접 출력 시 AI 모델 없이 출력 기록 가능)
 /*
 CREATE TABLE public.model_print_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  model_id UUID NOT NULL REFERENCES ai_generated_models(id) ON DELETE CASCADE,
+  model_id UUID REFERENCES ai_generated_models(id) ON DELETE SET NULL,  -- nullable for direct prints
   printer_id UUID REFERENCES printers(id) ON DELETE SET NULL,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   print_status VARCHAR(50) DEFAULT 'queued' CHECK (print_status IN ('queued', 'printing', 'paused', 'completed', 'failed', 'cancelled')),
-  print_settings JSONB,
+  print_settings JSONB,                   -- {file_name, file_path, file_size, file_origin, estimated_time}
   gcode_file_id UUID REFERENCES gcode_files(id) ON DELETE SET NULL,
+  gcode_url TEXT,                         -- GCode file URL from Storage bucket
+  short_filename TEXT,                    -- Short filename for display (from OctoPrint)
   print_time INTERVAL,
   filament_used NUMERIC,
   error_message TEXT,

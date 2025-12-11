@@ -137,7 +137,7 @@ const PrinterCard = ({
 
   return (
     <div onClick={handleClick} className="block cursor-pointer">
-      <Card className="hover:shadow-lg hover:scale-105 transition-all duration-200 h-[450px] flex flex-col cursor-pointer">
+      <Card className="shadow-card hover:shadow-lg hover:scale-105 transition-all duration-200 h-[450px] flex flex-col cursor-pointer">
         {/* 1. 프린터 정보 - 고정 높이 */}
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 flex-shrink-0">
           <div className="space-y-1 min-w-0 flex-1 pr-4">

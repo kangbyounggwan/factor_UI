@@ -134,6 +134,58 @@ All colors MUST be HSL.
   .animate-dynamic-bg {
     animation: dynamic-movement 15s ease-in-out infinite alternate;
   }
+
+  /* 보고서 타이포그래피 - Inter 글꼴 체계 */
+  /* Google Fonts: @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap'); */
+
+  /* 제목: Inter Bold (700) */
+  .font-title {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+
+  /* 섹션 헤더: Inter Semibold (600) */
+  .font-heading {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* 본문: Inter Regular (400) */
+  .font-body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  /* 경고 카드: Inter Medium (500) */
+  .font-warning {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  /* 숫자/Score: Inter Black (900) */
+  .font-score {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+  }
+
+  .font-code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-weight: 500;
+  }
+}
+
+/* 라이트모드에서 상하좌우 균일한 카드 그림자 - @layer 밖에서 정의하여 우선순위 확보 */
+.shadow-card {
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.15) !important;
+}
+
+.dark .shadow-card {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1) !important;
 }
 
 @keyframes dynamic-movement {
@@ -151,5 +203,244 @@ All colors MUST be HSL.
 
   100% {
     transform: scale(1.15) translate(0, 2%);
+  }
+}
+
+/* ============================================================================
+   G-code 분석 보고서 인쇄 스타일
+   브라우저 인쇄 기능 (Ctrl+P) 또는 PDF로 저장 시 적용
+   ============================================================================ */
+@media print {
+  /* 기본 페이지 설정 */
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+
+  /* 전체 배경 및 색상 */
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt !important;
+    line-height: 1.4 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 불필요한 요소 숨김 */
+  nav,
+  header,
+  footer,
+  aside,
+  .sidebar,
+  .navbar,
+  .no-print,
+  button:not(.print-visible),
+  [data-no-print="true"] {
+    display: none !important;
+  }
+
+  /* 보고서 컨테이너 */
+  .gcode-report-print {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: white !important;
+  }
+
+  /* 보고서 헤더 */
+  .gcode-report-print .report-header {
+    background: white !important;
+    border-bottom: 2px solid #333 !important;
+    padding: 10mm 0 !important;
+    margin-bottom: 8mm !important;
+  }
+
+  .gcode-report-print .report-header h1 {
+    font-size: 20pt !important;
+    font-weight: bold !important;
+    color: black !important;
+    margin: 0 !important;
+  }
+
+  .gcode-report-print .report-header p {
+    font-size: 10pt !important;
+    color: #666 !important;
+    margin-top: 2mm !important;
+  }
+
+  /* 점수 배지 */
+  .gcode-report-print .score-badge {
+    background: #f0f0f0 !important;
+    border: 2px solid #333 !important;
+    color: black !important;
+    padding: 3mm !important;
+    font-size: 18pt !important;
+    font-weight: bold !important;
+  }
+
+  .gcode-report-print .grade-badge {
+    width: 12mm !important;
+    height: 12mm !important;
+    font-size: 14pt !important;
+    border-radius: 2mm !important;
+  }
+
+  /* 등급별 색상 (인쇄용) */
+  .gcode-report-print .grade-A { background: #22c55e !important; color: white !important; }
+  .gcode-report-print .grade-B { background: #3b82f6 !important; color: white !important; }
+  .gcode-report-print .grade-C { background: #eab308 !important; color: black !important; }
+  .gcode-report-print .grade-D { background: #f97316 !important; color: white !important; }
+  .gcode-report-print .grade-F { background: #ef4444 !important; color: white !important; }
+
+  /* 섹션 카드 */
+  .gcode-report-print .report-section {
+    background: white !important;
+    border: 1px solid #ddd !important;
+    border-radius: 2mm !important;
+    padding: 5mm !important;
+    margin-bottom: 5mm !important;
+    page-break-inside: avoid !important;
+  }
+
+  .gcode-report-print .report-section h3 {
+    font-size: 12pt !important;
+    font-weight: 600 !important;
+    color: #333 !important;
+    border-bottom: 1px solid #ddd !important;
+    padding-bottom: 2mm !important;
+    margin-bottom: 3mm !important;
+  }
+
+  /* 메트릭 그리드 */
+  .gcode-report-print .metrics-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 3mm !important;
+  }
+
+  .gcode-report-print .metric-card {
+    background: #f8f8f8 !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 2mm !important;
+    padding: 3mm !important;
+    text-align: center !important;
+  }
+
+  .gcode-report-print .metric-card .metric-value {
+    font-size: 14pt !important;
+    font-weight: bold !important;
+    color: black !important;
+  }
+
+  .gcode-report-print .metric-card .metric-label {
+    font-size: 8pt !important;
+    color: #666 !important;
+  }
+
+  /* 이슈 목록 */
+  .gcode-report-print .issue-item {
+    background: white !important;
+    border: 1px solid #ddd !important;
+    border-left: 3px solid #666 !important;
+    padding: 3mm !important;
+    margin-bottom: 2mm !important;
+    page-break-inside: avoid !important;
+  }
+
+  .gcode-report-print .issue-item.severity-high {
+    border-left-color: #ef4444 !important;
+  }
+
+  .gcode-report-print .issue-item.severity-medium {
+    border-left-color: #f97316 !important;
+  }
+
+  .gcode-report-print .issue-item.severity-low {
+    border-left-color: #eab308 !important;
+  }
+
+  /* 심각도 배지 */
+  .gcode-report-print .severity-badge {
+    font-size: 8pt !important;
+    padding: 1mm 2mm !important;
+    border-radius: 1mm !important;
+    font-weight: 600 !important;
+  }
+
+  .gcode-report-print .severity-badge.high {
+    background: #fee2e2 !important;
+    color: #dc2626 !important;
+  }
+
+  .gcode-report-print .severity-badge.medium {
+    background: #ffedd5 !important;
+    color: #ea580c !important;
+  }
+
+  .gcode-report-print .severity-badge.low {
+    background: #fef9c3 !important;
+    color: #ca8a04 !important;
+  }
+
+  /* 진행 바 */
+  .gcode-report-print .progress-bar {
+    background: #e5e7eb !important;
+    height: 4mm !important;
+    border-radius: 1mm !important;
+    overflow: hidden !important;
+  }
+
+  .gcode-report-print .progress-bar-fill {
+    height: 100% !important;
+    background: #3b82f6 !important;
+  }
+
+  /* 텍스트 색상 강제 */
+  .gcode-report-print * {
+    color: inherit !important;
+  }
+
+  .gcode-report-print .text-muted {
+    color: #666 !important;
+  }
+
+  /* 링크 스타일 */
+  .gcode-report-print a {
+    color: black !important;
+    text-decoration: underline !important;
+  }
+
+  /* 페이지 나눔 제어 */
+  .gcode-report-print .page-break-before {
+    page-break-before: always !important;
+  }
+
+  .gcode-report-print .page-break-after {
+    page-break-after: always !important;
+  }
+
+  .gcode-report-print .avoid-page-break {
+    page-break-inside: avoid !important;
+  }
+
+  /* 탭 버튼 숨김 */
+  .gcode-report-print .tab-navigation {
+    display: none !important;
+  }
+
+  /* 모든 탭 내용 표시 */
+  .gcode-report-print .tab-content {
+    display: block !important;
+  }
+
+  /* 다크모드 색상 오버라이드 */
+  .dark .gcode-report-print,
+  .dark .gcode-report-print * {
+    background: white !important;
+    color: black !important;
   }
 }

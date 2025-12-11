@@ -13,6 +13,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { Slider } from "@/components/ui/slider";
 import pako from "pako";
 import { useTranslation } from "react-i18next";
+import { useTheme } from "next-themes";
 
 interface GCodePreviewProps {
   gcodeUrl?: string;
@@ -245,12 +246,13 @@ function parseGCode(gcode: string): { layers: GCodeLayer[], firstExtrusionPoint:
 }
 
 // 레이어를 3D로 렌더링
-function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, firstExtrusionPoint }: {
+function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, firstExtrusionPoint, isDarkMode = true }: {
   layers: GCodeLayer[];
   maxLayer: number;
   onModelInfoCalculated?: (offset: Vector3, size: Vector3) => void;
   showTravels?: boolean;
   firstExtrusionPoint?: Vector3 | null;
+  isDarkMode?: boolean;
 }) {
   const { camera, controls } = useThree();
   const [axesSize, setAxesSize] = useState<number>(50); // 축 크기 상태
@@ -407,7 +409,8 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
                 />
               </lineSegments>
             )}
-            {/* Extrusion 경로 - 하나의 LineSegments로 병합 (일반 출력물 - 청록색) */}
+            {/* Extrusion 경로 - 하나의 LineSegments로 병합 (일반 출력물) */}
+            {/* 다크모드: 노란색(#ffcc00), 라이트모드: 진한 파란색(#2563eb) */}
             {layer.extrusionPoints.length > 0 && (
               <lineSegments>
                 <bufferGeometry>
@@ -418,10 +421,11 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
                     itemSize={3}
                   />
                 </bufferGeometry>
-                <lineBasicMaterial color={0x00ffff} />
+                <lineBasicMaterial color={isDarkMode ? 0xffcc00 : 0x2563eb} />
               </lineSegments>
             )}
-            {/* Support Extrusion 경로 - 하나의 LineSegments로 병합 (서포트 - 주황색) */}
+            {/* Support Extrusion 경로 - 하나의 LineSegments로 병합 (서포트) */}
+            {/* 다크모드: 청록색(#00cccc), 라이트모드: 진한 주황색(#ea580c) */}
             {layer.supportExtrusionPoints.length > 0 && (
               <lineSegments>
                 <bufferGeometry>
@@ -432,7 +436,7 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
                     itemSize={3}
                   />
                 </bufferGeometry>
-                <lineBasicMaterial color={0xff8800} />
+                <lineBasicMaterial color={isDarkMode ? 0x00cccc : 0xea580c} />
               </lineSegments>
             )}
           </group>
@@ -452,6 +456,8 @@ export default function GCodePreview({
   className = "",
 }: GCodePreviewProps) {
   const { t } = useTranslation();
+  const { resolvedTheme } = useTheme();
+  const isDarkMode = resolvedTheme === 'dark';
   const [gcode, setGcode] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [layers, setLayers] = useState<GCodeLayer[]>([]);
@@ -561,9 +567,9 @@ export default function GCodePreview({
             }}
             style={{ width: "100%", height: "100%" }}
           >
-            <color attach="background" args={["#2d2d2d"]} />
-            <ambientLight intensity={1.0} />
-            <directionalLight position={[10, 10, 5]} intensity={1.8} castShadow />
+            <color attach="background" args={[isDarkMode ? "#2d2d2d" : "#f5f5f5"]} />
+            <ambientLight intensity={isDarkMode ? 1.0 : 1.2} />
+            <directionalLight position={[10, 10, 5]} intensity={isDarkMode ? 1.8 : 1.5} castShadow />
             <directionalLight position={[-10, -10, -5]} intensity={0.8} />
             <directionalLight position={[0, 10, 0]} intensity={0.6} />
             <GCodeLayers
@@ -571,6 +577,7 @@ export default function GCodePreview({
               maxLayer={currentLayer}
               showTravels={showTravels}
               firstExtrusionPoint={firstExtrusionPoint}
+              isDarkMode={isDarkMode}
             />
             {/* 그리드를 원점에 배치 - 10mm 간격 */}
             <Grid
@@ -578,10 +585,10 @@ export default function GCodePreview({
               infiniteGrid
               cellSize={10}
               cellThickness={0.5}
-              cellColor="#3a3f47"
+              cellColor={isDarkMode ? "#3a3f47" : "#cccccc"}
               sectionSize={200}
               sectionThickness={1.5}
-              sectionColor="#596273"
+              sectionColor={isDarkMode ? "#596273" : "#aaaaaa"}
               fadeDistance={1000}
               fadeStrength={1}
             />
@@ -612,11 +619,11 @@ export default function GCodePreview({
           {/* 범례 및 컨트롤 - 왼쪽 위 */}
           <div className="absolute left-4 top-4 bg-black/70 backdrop-blur-sm rounded-lg p-3 text-white text-xs space-y-2">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-1 bg-cyan-400"></div>
+              <div className={`w-6 h-1 ${isDarkMode ? 'bg-yellow-400' : 'bg-blue-600'}`}></div>
               <span>{t('gcode.extrusionPath')}</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-1 bg-orange-500"></div>
+              <div className={`w-6 h-1 ${isDarkMode ? 'bg-cyan-400' : 'bg-orange-600'}`}></div>
               <span>{t('gcode.support')}</span>
             </div>
             <div className="flex items-center gap-2">

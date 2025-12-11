@@ -12,6 +12,7 @@ import { Code, FileText, Layers, Download, Eye, EyeOff } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Grid } from "@react-three/drei";
+import { useTheme } from "next-themes";
 
 interface GCodeViewerProps {
   gcodeUrl?: string;
@@ -123,6 +124,8 @@ export default function GCodeViewer({
   filename = "gcode.gcode",
   metadata,
 }: GCodeViewerProps) {
+  const { resolvedTheme } = useTheme();
+  const isDarkMode = resolvedTheme === 'dark';
   const [gcode, setGcode] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [show3D, setShow3D] = useState(true);
@@ -269,17 +272,17 @@ export default function GCodeViewer({
                   }}
                   style={{ width: "100%", height: "100%" }}
                 >
-                  <color attach="background" args={["#2e323a"]} />
-                  <ambientLight intensity={0.8} />
-                  <directionalLight position={[10, 10, 5]} intensity={1.5} castShadow />
+                  <color attach="background" args={[isDarkMode ? "#2e323a" : "#f5f5f5"]} />
+                  <ambientLight intensity={isDarkMode ? 0.8 : 1.0} />
+                  <directionalLight position={[10, 10, 5]} intensity={isDarkMode ? 1.5 : 1.2} castShadow />
                   <directionalLight position={[-10, -10, -5]} intensity={0.6} />
                   <directionalLight position={[0, 10, 0]} intensity={0.4} />
                   <GCodePath gcode={gcode} />
                   <Grid
                     rotation={[Math.PI / 2, 0, 0]}
                     infiniteGrid
-                    cellColor="#3a3f47"
-                    sectionColor="#596273"
+                    cellColor={isDarkMode ? "#3a3f47" : "#cccccc"}
+                    sectionColor={isDarkMode ? "#596273" : "#aaaaaa"}
                     args={[200, 200]}
                   />
                   <axesHelper args={[100]} />

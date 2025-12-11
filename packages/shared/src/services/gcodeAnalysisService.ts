@@ -1,0 +1,271 @@
+/**
+ * G-code Analysis API Service
+ * Python 백엔드와의 통신을 담당하는 서비스
+ */
+
+import type {
+    GCodeAnalysisRequest,
+    GCodeAnalysisResponse,
+    AnalysisStatusResponse,
+    PatchApprovalRequest,
+    PatchApprovalResponse,
+    SSETimelineEvent,
+    SSEProgressEvent,
+    SSECompleteEvent,
+    SSEErrorEvent,
+    GCodeSummaryRequest,
+    GCodeSummaryResponse,
+} from '@shared/types/gcodeAnalysisTypes';
+
+// API Base URL (테스트용 로컬호스트 하드코딩)
+const getBaseUrl = (): string => {
+    // TODO: 배포 시 환경변수로 변경
+    // const envUrl = (import.meta as any).env?.VITE_AI_PYTHON_URL;
+    // return envUrl || 'http://127.0.0.1:7000';
+    return 'http://127.0.0.1:7000';
+};
+
+/**
+ * G-code 분석 시작
+ */
+export async function startGCodeAnalysis(
+    request: GCodeAnalysisRequest
+): Promise<GCodeAnalysisResponse> {
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/v1/gcode/analyze`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Analysis request failed: ${response.status} ${errorText}`);
+    }
+
+    return response.json();
+}
+
+/**
+ * 분석 상태 조회
+ */
+export async function getAnalysisStatus(
+    analysisId: string
+): Promise<AnalysisStatusResponse> {
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/v1/gcode/analysis/${analysisId}`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Status request failed: ${response.status} ${errorText}`);
+    }
+
+    return response.json();
+}
+
+/**
+ * SSE 스트리밍 구독
+ */
+export interface SSECallbacks {
+    onTimeline?: (event: SSETimelineEvent) => void;
+    onProgress?: (event: SSEProgressEvent) => void;
+    onComplete?: (event: SSECompleteEvent) => void;
+    onError?: (event: SSEErrorEvent) => void;
+}
+
+export function subscribeToAnalysisStream(
+    analysisId: string,
+    callbacks: SSECallbacks
+): EventSource {
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/v1/gcode/analysis/${analysisId}/stream`;
+
+    const eventSource = new EventSource(url);
+
+    eventSource.addEventListener('timeline', (e: MessageEvent) => {
+        try {
+            const data = JSON.parse(e.data) as SSETimelineEvent;
+            callbacks.onTimeline?.(data);
+        } catch (err) {
+            console.error('[gcodeAnalysisService] Failed to parse timeline event:', err);
+        }
+    });
+
+    eventSource.addEventListener('progress', (e: MessageEvent) => {
+        try {
+            const data = JSON.parse(e.data) as SSEProgressEvent;
+            callbacks.onProgress?.(data);
+        } catch (err) {
+            console.error('[gcodeAnalysisService] Failed to parse progress event:', err);
+        }
+    });
+
+    eventSource.addEventListener('complete', (e: MessageEvent) => {
+        try {
+            const data = JSON.parse(e.data) as SSECompleteEvent;
+            callbacks.onComplete?.(data);
+            eventSource.close();
+        } catch (err) {
+            console.error('[gcodeAnalysisService] Failed to parse complete event:', err);
+        }
+    });
+
+    eventSource.addEventListener('error', (e: MessageEvent) => {
+        try {
+            const data = JSON.parse(e.data) as SSEErrorEvent;
+            callbacks.onError?.(data);
+            eventSource.close();
+        } catch (err) {
+            // SSE 연결 에러
+            callbacks.onError?.({ error: 'SSE connection error' });
+            eventSource.close();
+        }
+    });
+
+    eventSource.onerror = () => {
+        callbacks.onError?.({ error: 'SSE connection lost' });
+        eventSource.close();
+    };
+
+    return eventSource;
+}
+
+/**
+ * 패치 승인/거부
+ */
+export async function approvePatch(
+    analysisId: string,
+    request: PatchApprovalRequest
+): Promise<PatchApprovalResponse> {
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/v1/gcode/analysis/${analysisId}/approve`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Approval request failed: ${response.status} ${errorText}`);
+    }
+
+    return response.json();
+}
+
+/**
+ * 수정된 G-code 다운로드
+ */
+export async function downloadPatchedGCode(analysisId: string): Promise<Blob> {
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/v1/gcode/analysis/${analysisId}/download`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Download request failed: ${response.status} ${errorText}`);
+    }
+
+    return response.blob();
+}
+
+/**
+ * G-code 파일 다운로드 및 저장
+ */
+export async function downloadAndSaveGCode(
+    analysisId: string,
+    filename?: string
+): Promise<void> {
+    const blob = await downloadPatchedGCode(analysisId);
+    const finalFilename = filename || `patched_${analysisId}.gcode`;
+
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = finalFilename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+}
+
+/**
+ * G-code 요약 분석 (LLM 없이 빠른 분석)
+ * POST /api/v1/gcode/summary
+ */
+export async function getGCodeSummary(
+    request: GCodeSummaryRequest
+): Promise<GCodeSummaryResponse> {
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/v1/gcode/summary`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Summary request failed: ${response.status} ${errorText}`);
+    }
+
+    return response.json();
+}
+
+/**
+ * 분석 ID로 요약 결과 조회
+ * GET /api/v1/gcode/analysis/{id}/summary
+ */
+export async function getAnalysisSummary(
+    analysisId: string
+): Promise<GCodeSummaryResponse> {
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/v1/gcode/analysis/${analysisId}/summary`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Summary fetch failed: ${response.status} ${errorText}`);
+    }
+
+    return response.json();
+}
+
+/**
+ * 에러 분석 별도 실행
+ * POST /api/v1/gcode/analysis/{id}/error-analysis
+ */
+export async function requestErrorAnalysis(
+    analysisId: string
+): Promise<GCodeAnalysisResponse> {
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/v1/gcode/analysis/${analysisId}/error-analysis`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error analysis request failed: ${response.status} ${errorText}`);
+    }
+
+    return response.json();
+}

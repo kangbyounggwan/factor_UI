@@ -127,7 +127,7 @@ export const PrinterControlPad = ({ isConnected, isPrinting, deviceUuid, tempera
   };
 
   return (
-    <Card className="h-full flex flex-col border border-border/50 shadow-md bg-card rounded-2xl">
+    <Card className="h-full flex flex-col border border-border/50 shadow-card bg-card rounded-2xl">
       <CardHeader className="pb-3 flex-shrink-0 border-b border-border/50">
         <CardTitle className="text-base font-semibold flex items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">

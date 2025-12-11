@@ -30,13 +30,13 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Monitor, Settings, Menu, Activity, LogOut, Sun, Moon, BookOpen, CreditCard, Code2, Layers, Shield, User, Globe, Check, Bell, MessageSquare, Lightbulb, AlertTriangle, Upload, X, Image as ImageIcon } from "lucide-react";
+import { Monitor, Settings, Menu, Activity, LogOut, Sun, Moon, BookOpen, CreditCard, Code2, Layers, Shield, User, Globe, Check, Bell, MessageSquare, Lightbulb, AlertTriangle, Upload, X, Image as ImageIcon, Sparkles, ChevronDown, FileCode2 } from "lucide-react";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useDashboardSummary } from "@shared/component/dashboardSummary";
 import { useTheme } from "next-themes";
 import { supabase } from "@shared/integrations/supabase/client";
 import type { Notification } from "@shared/services/supabaseService/notifications";
-import type { PrinterStatusInfo } from "@shared/types/printerType";
+import type { Printer, PrinterStatusInfo } from "@shared/types/printerType";
 import LanguageSwitcher from "./LanguageSwitcher";
 import { submitFeedback } from "@shared/services/supabaseService/feedback";
 import { useToast } from "@/hooks/use-toast";
@@ -66,7 +66,7 @@ export const Header = () => {
   const [feedbackTitle, setFeedbackTitle] = useState('');
   const [feedbackDescription, setFeedbackDescription] = useState('');
   const [selectedPrinter, setSelectedPrinter] = useState<string>('');
-  const [printers, setPrinters] = useState<PrinterStatusInfo[]>([]);
+  const [printers, setPrinters] = useState<Printer[]>([]);
   const [attachedImages, setAttachedImages] = useState<File[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
@@ -82,9 +82,31 @@ export const Header = () => {
   };
 
   // 동적 네비게이션 메뉴
-  const navigation = [
+  type NavigationItem = {
+    name: string;
+    href: string;
+    icon: React.ElementType;
+    hasSubmenu?: boolean;
+    submenu?: {
+      name: string;
+      href: string;
+      icon: React.ElementType;
+      description?: string;
+    }[];
+  };
+
+  const navigation: NavigationItem[] = [
     { name: t('nav.dashboard'), href: "/dashboard", icon: Monitor },
-    { name: t('nav.ai'), href: "/create", icon: Layers },
+    {
+      name: t('nav.ai'),
+      href: "/create",
+      icon: Layers,
+      hasSubmenu: true,
+      submenu: [
+        { name: t('ai.modelGeneration'), href: "/create", icon: Sparkles, description: t('ai.textTo3D') + ', ' + t('ai.imageTo3D') },
+        { name: t('ai.gcodeAnalysis'), href: "/gcode-analytics", icon: FileCode2, description: 'AI 기반 G-code 파일 분석' },
+      ]
+    },
     { name: t('nav.settings'), href: "/settings", icon: Settings },
   ];
 
@@ -115,7 +137,7 @@ export const Header = () => {
           },
           (payload) => {
             console.log('New notification:', payload);
-            setNotifications((prev) => [payload.new, ...prev]);
+            setNotifications((prev) => [payload.new as Notification, ...prev]);
             setUnreadNotifications((prev) => prev + 1);
           }
         )
@@ -378,31 +400,72 @@ export const Header = () => {
               );
             }
 
+            // 서브메뉴가 있는 항목은 드롭다운으로 표시
+            if (item.hasSubmenu && item.submenu) {
+              return (
+                <DropdownMenu key={item.name}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(item.href)
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                        }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span>{item.name}</span>
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center" className="w-72 p-2">
+                    {item.submenu.map((subItem) => {
+                      const SubIcon = subItem.icon;
+                      return (
+                        <DropdownMenuItem key={subItem.name} asChild className="p-0">
+                          <Link
+                            to={subItem.href}
+                            className="flex items-start gap-3 p-3 rounded-md cursor-pointer hover:bg-accent w-full"
+                          >
+                            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 shrink-0">
+                              <SubIcon className="w-5 h-5 text-primary" />
+                            </div>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-medium text-sm">{subItem.name}</span>
+                              {subItem.description && (
+                                <span className="text-xs text-muted-foreground">{subItem.description}</span>
+                              )}
+                            </div>
+                          </Link>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              );
+            }
+
             return (
               <Link
                 key={item.name}
                 to={item.href}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  isActive(item.href)
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                }`}
+                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(item.href)
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                  }`}
               >
                 <Icon className="w-4 h-4" />
                 <span>{item.name}</span>
               </Link>
             );
           })}
-          
+
           {/* 관리자 메뉴 (관리자만 표시) */}
           {user && isAdmin && (
             <Link
               to="/admin"
-              className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isActive("/admin")
-                  ? "bg-warning text-warning-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
-              }`}
+              className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive("/admin")
+                ? "bg-warning text-warning-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                }`}
             >
               <Shield className="w-4 h-4" />
               <span>{t('nav.admin')}</span>
@@ -738,18 +801,16 @@ export const Header = () => {
                             {dateNotifications.map((notification) => (
                               <DropdownMenuItem
                                 key={notification.id}
-                                className={`flex flex-col items-start p-3 cursor-pointer hover:bg-accent ${
-                                  notification.read ? 'opacity-60' : ''
-                                }`}
+                                className={`flex flex-col items-start p-3 cursor-pointer hover:bg-accent ${notification.read ? 'opacity-60' : ''
+                                  }`}
                                 onClick={() => handleNotificationClick(notification)}
                               >
                                 <div className="flex items-start gap-2 w-full">
                                   <div className="flex-1">
-                                    <p className={`text-sm font-medium ${
-                                      notification.read
-                                        ? 'text-muted-foreground'
-                                        : 'text-foreground dark:text-foreground'
-                                    }`}>
+                                    <p className={`text-sm font-medium ${notification.read
+                                      ? 'text-muted-foreground'
+                                      : 'text-foreground dark:text-foreground'
+                                      }`}>
                                       {notification.title}
                                     </p>
                                     <p className="text-xs text-muted-foreground mt-1">
@@ -915,8 +976,8 @@ export const Header = () => {
           <SheetContent side="right" className="w-[300px] sm:w-[400px]">
             <div className="flex flex-col space-y-4">
               {/* 모바일 로고 */}
-              <Link 
-                to="/" 
+              <Link
+                to="/"
                 className="flex items-center space-x-3 pb-4 border-b"
                 onClick={() => setMobileMenuOpen(false)}
               >
@@ -974,94 +1035,132 @@ export const Header = () => {
                     );
                   }
 
+                  // 서브메뉴가 있는 항목은 펼쳐서 표시
+                  if (item.hasSubmenu && item.submenu) {
+                    return (
+                      <div key={item.name} className="space-y-2">
+                        <div
+                          className={`flex items-center space-x-3 px-3 py-3 rounded-md text-sm font-medium transition-colors ${isActive(item.href)
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground"
+                            }`}
+                        >
+                          <Icon className="w-5 h-5" />
+                          <span>{item.name}</span>
+                        </div>
+                        <div className="ml-4 space-y-2 border-l-2 border-primary/20 pl-4">
+                          {item.submenu.map((subItem) => {
+                            const SubIcon = subItem.icon;
+                            return (
+                              <Link
+                                key={subItem.name}
+                                to={subItem.href}
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="flex items-start gap-3 px-3 py-3 rounded-md transition-colors hover:bg-accent"
+                              >
+                                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 shrink-0">
+                                  <SubIcon className="w-4 h-4 text-primary" />
+                                </div>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="font-medium text-sm">{subItem.name}</span>
+                                  {subItem.description && (
+                                    <span className="text-xs text-muted-foreground">{subItem.description}</span>
+                                  )}
+                                </div>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <Link
                       key={item.name}
                       to={item.href}
                       onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center space-x-3 px-3 py-3 rounded-md text-sm font-medium transition-colors ${
-                        isActive(item.href)
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                      }`}
+                      className={`flex items-center space-x-3 px-3 py-3 rounded-md text-sm font-medium transition-colors ${isActive(item.href)
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                        }`}
                     >
                       <Icon className="w-5 h-5" />
                       <span>{item.name}</span>
                     </Link>
                   );
-                  })}
-                  
-                  {/* 관리자 메뉴 (모바일, 관리자만 표시) */}
-                  {user && isAdmin && (
-                    <Link
-                      to="/admin"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center space-x-3 px-3 py-3 rounded-md text-sm font-medium transition-colors ${
-                        isActive("/admin")
-                          ? "bg-warning text-warning-foreground"
-                          : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                      }`}
-                    >
-                      <Shield className="w-5 h-5" />
-                      <span>{t('nav.admin')}</span>
-                    </Link>
-                  )}
-                </nav>
+                })}
 
-                {/* 모바일 사용자 메뉴 */}
-                <div className="pt-4 border-t">
-                  {user ? (
-                    <div className="space-y-3">
-                      <div className="text-sm text-muted-foreground">
-                        {user?.email}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          signOut();
-                          setMobileMenuOpen(false);
-                        }}
-                        className="w-full justify-start"
-                      >
-                        <LogOut className="h-4 w-4 mr-2" />
-                        {t('nav.logout')}
-                      </Button>
+                {/* 관리자 메뉴 (모바일, 관리자만 표시) */}
+                {user && isAdmin && (
+                  <Link
+                    to="/admin"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center space-x-3 px-3 py-3 rounded-md text-sm font-medium transition-colors ${isActive("/admin")
+                      ? "bg-warning text-warning-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                      }`}
+                  >
+                    <Shield className="w-5 h-5" />
+                    <span>{t('nav.admin')}</span>
+                  </Link>
+                )}
+              </nav>
+
+              {/* 모바일 사용자 메뉴 */}
+              <div className="pt-4 border-t">
+                {user ? (
+                  <div className="space-y-3">
+                    <div className="text-sm text-muted-foreground">
+                      {user?.email}
                     </div>
-                  ) : (
                     <Button
-                      asChild
                       variant="outline"
                       size="sm"
-                      onClick={() => setMobileMenuOpen(false)}
+                      onClick={() => {
+                        signOut();
+                        setMobileMenuOpen(false);
+                      }}
                       className="w-full justify-start"
                     >
-                      <Link to="/auth">
-                        <LogOut className="h-4 w-4 mr-2" />
-                        {t('nav.login')}
-                      </Link>
+                      <LogOut className="h-4 w-4 mr-2" />
+                      {t('nav.logout')}
                     </Button>
-                  )}
-                  
-                  {/* 모바일 언어 전환 */}
-                  <div className="pt-2">
-                    <LanguageSwitcher />
                   </div>
-
-                  {/* 모바일 테마 토글 */}
+                ) : (
                   <Button
+                    asChild
                     variant="outline"
                     size="sm"
-                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                    className="w-full justify-start mt-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="w-full justify-start"
                   >
-                    <Sun className="h-4 w-4 mr-2 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                    <Moon className="absolute ml-2 h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                    <span className="ml-2">
-                      {theme === "dark" ? t('nav.lightMode') : t('nav.darkMode')}
-                    </span>
+                    <Link to="/auth">
+                      <LogOut className="h-4 w-4 mr-2" />
+                      {t('nav.login')}
+                    </Link>
                   </Button>
+                )}
+
+                {/* 모바일 언어 전환 */}
+                <div className="pt-2">
+                  <LanguageSwitcher />
                 </div>
+
+                {/* 모바일 테마 토글 */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  className="w-full justify-start mt-2"
+                >
+                  <Sun className="h-4 w-4 mr-2 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                  <Moon className="absolute ml-2 h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                  <span className="ml-2">
+                    {theme === "dark" ? t('nav.lightMode') : t('nav.darkMode')}
+                  </span>
+                </Button>
+              </div>
             </div>
           </SheetContent>
         </Sheet>

@@ -65,3 +65,17 @@ export interface PrinterStatusInfo {
   badgeClass: string;
 }
 
+export interface Printer {
+  id: string;
+  created_at: string;
+  name: string;
+  model: string;
+  status: string;
+  user_id: string;
+  metadata?: any;
+  location?: string;
+  description?: string;
+  ip_address?: string;
+  image_url?: string;
+}
+
