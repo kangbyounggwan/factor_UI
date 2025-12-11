@@ -504,7 +504,7 @@ export default function GCodeAnalyticsArchive() {
                       <div className="mb-3">
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className="text-muted-foreground">품질 점수</span>
-                          <span className="font-medium">{report.overall_score}/100</span>
+                          <span className="font-semibold">{report.overall_score}/100</span>
                         </div>
                         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                           <div

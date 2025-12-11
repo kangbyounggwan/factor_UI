@@ -392,7 +392,7 @@ export const Header = () => {
                 <Link
                   key={item.name}
                   to={linkHref}
-                  className="flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-accent"
+                  className="flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors text-muted-foreground hover:bg-accent"
                 >
                   <Icon className="w-4 h-4" />
                   <span>{item.name}</span>
@@ -408,7 +408,7 @@ export const Header = () => {
                     <button
                       className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(item.href)
                         ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                        : "text-muted-foreground hover:bg-accent"
                         }`}
                     >
                       <Icon className="w-4 h-4" />
@@ -447,9 +447,9 @@ export const Header = () => {
               <Link
                 key={item.name}
                 to={item.href}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(item.href)
+                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-bold transition-colors ${isActive(item.href)
                   ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                  : "text-foreground hover:bg-accent"
                   }`}
               >
                 <Icon className="w-4 h-4" />
@@ -464,7 +464,7 @@ export const Header = () => {
               to="/admin"
               className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive("/admin")
                 ? "bg-warning text-warning-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                : "text-muted-foreground hover:bg-accent"
                 }`}
             >
               <Shield className="w-4 h-4" />
