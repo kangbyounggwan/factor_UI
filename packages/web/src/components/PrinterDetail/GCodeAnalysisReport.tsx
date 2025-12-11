@@ -2035,7 +2035,7 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
             <span className={cn("text-white text-sm px-3 py-1.5 rounded font-warning font-medium", style.badge)}>
               {issue.severity === 'high' ? '심각' : issue.severity === 'medium' ? '주의' : '정보'}
             </span>
-            <span className="font-mono text-base text-red-600 dark:text-red-300 font-score font-black">
+            <span className="font-mono text-base text-red-600 dark:text-red-300 font-semibold">
               Line {issue.line || issue.line_index || 'N/A'}
             </span>
             {issue.layer !== undefined && issue.layer !== null && (
