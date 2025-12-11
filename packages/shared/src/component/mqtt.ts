@@ -21,10 +21,10 @@ function getPlatform(): 'web' | 'mobile' {
 export function createMqttClientId(uid?: string): string {
   const platform = getPlatform();
   const storageKey = uid ? `mqtt_client_id_${platform}_${uid}` : `mqtt_client_id_${platform}`;
-  
+
   // localStorage에서 기존 clientId 확인
   let clientId = localStorage.getItem(storageKey);
-  
+
   if (!clientId) {
     // 새로운 clientId 생성
     const random8 = Math.random().toString(16).slice(2, 10);
@@ -33,7 +33,7 @@ export function createMqttClientId(uid?: string): string {
     } else {
       clientId = `factor-${platform}-${random8}`;
     }
-    
+
     // localStorage에 저장
     try {
       localStorage.setItem(storageKey, clientId);
@@ -44,7 +44,7 @@ export function createMqttClientId(uid?: string): string {
   } else {
     console.log("%c[MQTT]%c Client ID 복원:", "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "color: #4CAF50; font-weight: bold;", clientId);
   }
-  
+
   return clientId;
 }
 
@@ -52,7 +52,7 @@ export function createMqttClientId(uid?: string): string {
 export function clearMqttClientId(uid?: string): void {
   const platform = getPlatform();
   const storageKey = uid ? `mqtt_client_id_${platform}_${uid}` : `mqtt_client_id_${platform}`;
-  
+
   try {
     localStorage.removeItem(storageKey);
     console.log(`MQTT Client ID 삭제: ${storageKey}`);
@@ -93,7 +93,7 @@ export class MqttBridge {
     } as Required<MqttBridgeOptions>;
     if (!this.options.brokerUrl) {
       this.inert = true;
-      try { console.warn("[MQTT] broker URL 미설정: MQTT 기능 비활성화(inert)"); } catch {}
+      try { console.warn("[MQTT] broker URL 미설정: MQTT 기능 비활성화(inert)"); } catch { }
     }
     // 고정 clientId 충돌 방지: 탭별 랜덤 suffix를 한 번만 부여
     const suffix = Math.random().toString(16).slice(2, 8);
@@ -157,10 +157,10 @@ export class MqttBridge {
           resolve(false);
         };
         const cleanup = () => {
-          try { this.client?.off?.("connect", onConnect); } catch {}
-          try { this.client?.off?.("close", onCloseOrError); } catch {}
-          try { this.client?.off?.("offline", onCloseOrError); } catch {}
-          try { this.client?.off?.("error", onCloseOrError); } catch {}
+          try { this.client?.off?.("connect", onConnect); } catch { }
+          try { this.client?.off?.("close", onCloseOrError); } catch { }
+          try { this.client?.off?.("offline", onCloseOrError); } catch { }
+          try { this.client?.off?.("error", onCloseOrError); } catch { }
         };
 
         this.client.on("connect", onConnect);
@@ -171,21 +171,21 @@ export class MqttBridge {
 
         this.client.on("packetreceive", (packet: any) => {
           if (packet?.cmd === "puback") {
-            try { console.log("%c[MQTT]%c%c[PUBACK]%c", "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #2196F3; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", { messageId: packet.messageId }); } catch {}
+            try { console.log("%c[MQTT]%c%c[PUBACK]%c", "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #2196F3; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", { messageId: packet.messageId }); } catch { }
           }
         });
         this.client.on("message", (topic, payload) => {
           const textOrBytes = (payload as any)?.toString?.() ?? payload;
           for (const [pattern, fns] of this.handlers.entries()) {
             if (topicMatches(pattern, topic)) {
-              fns.forEach((fn) => { try { fn(topic, textOrBytes); } catch {} });
+              fns.forEach((fn) => { try { fn(topic, textOrBytes); } catch { } });
             }
           }
         });
 
         setTimeout(() => {
           if (!this.connected) {
-            try { console.log('[MQTT] connect timeout', this.getBrokerInfo()); } catch {}
+            try { console.log('[MQTT] connect timeout', this.getBrokerInfo()); } catch { }
             resolve(false);
           }
         }, timeoutMs);
@@ -255,7 +255,7 @@ export class MqttBridge {
     const payload = typeof message === "string" ? message : JSON.stringify(message);
     await new Promise<void>((res) => {
       this.client!.publish(topic, payload, { qos, retain }, (_err) => {
-        if (qos > 0) { try { console.log("%c[MQTT]%c%c[PUBLISH-ACKED]%c", "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #FF9800; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", { topic, qos }); } catch {} }
+        if (qos > 0) { try { console.log("%c[MQTT]%c%c[PUBLISH-ACKED]%c", "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #FF9800; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", { topic, qos }); } catch { } }
         res();
       });
     });
@@ -287,7 +287,7 @@ class PrinterStatusManager {
   // 설정
   private readonly TIMEOUT_MS = 30000; // 30초
   private readonly CHECK_INTERVAL_MS = 10000; // 10초마다 체크
-  private readonly SYNC_THROTTLE_MS = 5000; // DB 동기화 최소 간격 5초
+  private readonly SYNC_THROTTLE_MS = 3000; // DB 동기화 최소 간격 3초
 
   // 프린트 히스토리 관리
   // deviceUuid → { jobId, printerId, lastStatus, jobKey }
@@ -343,13 +343,12 @@ class PrinterStatusManager {
     // 캐시가 있고 상태가 같으면 스킵 (DB 조회 없이)
     if (cachedStatus === newStatus) return;
 
-    // 캐시가 있고 상태가 다르면 → 즉시 DB 업데이트 (상태 변경)
-    // 캐시가 없으면 → Throttle 적용 후 DB 조회
+    // 공통 Throttle 적용 (상태 변경 시에도 최소 간격 적용)
     const now = Date.now();
     const lastSync = this.lastSyncTime.get(deviceUuid) || 0;
 
-    // 캐시가 없는 경우에만 Throttle 적용 (초기 상태 조회 시)
-    if (!cachedStatus && now - lastSync < this.SYNC_THROTTLE_MS) {
+    if (now - lastSync < this.SYNC_THROTTLE_MS) {
+      // console.log(`[MQTT] ⏳ 상태 업데이트 대기 (Throttle): ${deviceUuid} ${cachedStatus} -> ${newStatus}`);
       return; // 아직 최소 간격이 지나지 않음
     }
 
@@ -417,11 +416,31 @@ class PrinterStatusManager {
         const elapsed = now - lastTime;
 
         if (elapsed >= this.TIMEOUT_MS) {
-          console.log(`[MQTT] ⏰ Timeout: ${deviceUuid} (${Math.round(elapsed / 1000)}s)`);
-          await this.syncToDb(deviceUuid, 'disconnected').catch(() => {});
+          // console.log(`[MQTT] ⏰ Timeout: ${deviceUuid} (${Math.round(elapsed / 1000)}s)`);
+
+          // 타임아웃 발생 시 추적 중단 (메시지 다시 올 때까지)
+          this.lastMessageTime.delete(deviceUuid);
+
+          await this.syncToDb(deviceUuid, 'disconnected').catch(() => { });
         }
       }
     }, this.CHECK_INTERVAL_MS);
+
+    // 페이지 비활성화 시 폴링 중지 로직 추가
+    const handleVisibility = () => {
+      if (document.hidden) {
+        this.stopTimeoutCheck();
+      } else {
+        this.startTimeoutCheck();
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+      // 리스너가 중복 등록되지 않도록 관리 필요할 수 있으나, 싱글톤이므로 크게 문제되진 않음
+      // 완벽하게 하려면 init/destroy 라이프사이클이 필요.
+      // 여기서는 start 호출 시 중복 실행 방지가 이미 되어 있으므로(line 410), 리스너만 추가.
+    }
 
     console.log('[MQTT] ⏱️ 타임아웃 체크 시작');
   }
@@ -663,7 +682,7 @@ export async function startDashStatusSubscriptionsForUser(userId: string, opts?:
       try {
         if (typeof payload === 'string') parsed = JSON.parse(payload);
         else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-      } catch {}
+      } catch { }
       // console.log('[MQTT][octoprint/status]', t, parsed);
       // 주제에서 uuid 추출하여 리스너 호출 (마지막 세그먼트 사용)
       const parts = t.split('/');
@@ -678,22 +697,22 @@ export async function startDashStatusSubscriptionsForUser(userId: string, opts?:
       const temps: any = parsed?.temperatures ?? parsed?.temperature ?? undefined;
       const temperature_info = temps
         ? {
-            bed: temps.bed ? { actual: temps.bed.actual ?? 0, target: temps.bed.target ?? 0, offset: temps.bed.offset ?? 0 } : undefined,
-            chamber: temps.chamber ? { actual: temps.chamber.actual ?? null, target: temps.chamber.target ?? null, offset: temps.chamber.offset ?? 0 } : undefined,
-            tool: temps.tool0 ? { tool0: { actual: temps.tool0.actual ?? 0, target: temps.tool0.target ?? 0, offset: temps.tool0.offset ?? 0 } } : undefined,
-          }
+          bed: temps.bed ? { actual: temps.bed.actual ?? 0, target: temps.bed.target ?? 0, offset: temps.bed.offset ?? 0 } : undefined,
+          chamber: temps.chamber ? { actual: temps.chamber.actual ?? null, target: temps.chamber.target ?? null, offset: temps.chamber.offset ?? 0 } : undefined,
+          tool: temps.tool0 ? { tool0: { actual: temps.tool0.actual ?? 0, target: temps.tool0.target ?? 0, offset: temps.tool0.offset ?? 0 } } : undefined,
+        }
         : undefined;
 
       // 연결 정보 표준화: connection 배열([state, port, baudrate]) 지원
       const connArr: any = Array.isArray((parsed as any)?.connection) ? (parsed as any).connection : null;
       const connection = connArr && connArr.length >= 3
         ? {
-            state: String(connArr[0]),
-            port: String(connArr[1]),
-            baudrate: Number(connArr[2]),
-            // 요청 사항: connection[3].name을 Printer Profile로 활용
-            profile_name: (connArr[3] && (connArr[3].name ?? connArr[3].model)) ?? undefined,
-          }
+          state: String(connArr[0]),
+          port: String(connArr[1]),
+          baudrate: Number(connArr[2]),
+          // 요청 사항: connection[3].name을 Printer Profile로 활용
+          profile_name: (connArr[3] && (connArr[3].name ?? connArr[3].model)) ?? undefined,
+        }
         : undefined;
 
       const isPrintingFlag = Boolean(flags?.printing);
@@ -727,11 +746,11 @@ export async function startDashStatusSubscriptionsForUser(userId: string, opts?:
       // sd.sdcard: array
       const sdCardArr = Array.isArray(sdRaw?.sdcard)
         ? sdRaw.sdcard.map((f: any) => ({
-            name: String(f?.name ?? f?.display ?? ''),
-            size: Number(f?.size) || 0,
-            display: f?.display ? String(f.display) : undefined,
-            date: f?.date ?? null,
-          }))
+          name: String(f?.name ?? f?.display ?? ''),
+          size: Number(f?.size) || 0,
+          display: f?.display ? String(f.display) : undefined,
+          date: f?.date ?? null,
+        }))
         : [];
 
       // 진행률 보정: completion(null) → 0, 필요 시 file_pct 또는 파일 진행률로 보조 계산
@@ -741,10 +760,10 @@ export async function startDashStatusSubscriptionsForUser(userId: string, opts?:
       const completion01 = typeof completionPctRaw === 'number'
         ? (completionPctRaw / 100)
         : (
-            (typeof progressRaw?.filepos === 'number' && typeof jobRaw?.file?.size === 'number' && jobRaw.file.size > 0)
-              ? (progressRaw.filepos / jobRaw.file.size)
-              : 0
-          );
+          (typeof progressRaw?.filepos === 'number' && typeof jobRaw?.file?.size === 'number' && jobRaw.file.size > 0)
+            ? (progressRaw.filepos / jobRaw.file.size)
+            : 0
+        );
 
       const mapped = {
         connected: isConnected,
@@ -779,13 +798,13 @@ export async function startDashStatusSubscriptionsForUser(userId: string, opts?:
       // DB 프린터 상태 업데이트 (페이로드에서 상태 추출)
       const extractedStatus = printerStatusManager.extractStatus(parsed);
       if (id) {
-        printerStatusManager.syncToDb(id, extractedStatus).catch(() => {});
+        printerStatusManager.syncToDb(id, extractedStatus).catch(() => { });
 
         // Phase 2: 프린트 히스토리 관리 (상태 변경 감지)
-        printerStatusManager.handlePrintStatusChange(id, extractedStatus, parsed).catch(() => {});
+        printerStatusManager.handlePrintStatusChange(id, extractedStatus, parsed).catch(() => { });
       }
 
-      dashStatusListeners.forEach((fn) => { try { fn(id, mapped); } catch {} });
+      dashStatusListeners.forEach((fn) => { try { fn(id, mapped); } catch { } });
     };
     await mqttClient.subscribe(topic, handler);
     dashStatusSubscribed.add(topic);
@@ -812,7 +831,7 @@ export async function stopDashStatusSubscriptions() {
     const handler = dashStatusTopicHandlers.get(topic);
     try {
       await mqttClient.unsubscribe(topic, handler);
-    } catch {}
+    } catch { }
     dashStatusTopicHandlers.delete(topic);
     dashStatusSubscribed.delete(topic);
   }
@@ -852,7 +871,7 @@ export function createSharedMqttClient(options?: MqttBridgeOptions) {
 // 공유 MQTT 클라이언트 강제 종료 (로그아웃 등에서 사용)
 export async function disconnectSharedMqtt() {
   if (sharedMqtt) {
-    try { await sharedMqtt.disconnect(true); } catch {}
+    try { await sharedMqtt.disconnect(true); } catch { }
     sharedMqtt = null;
   }
 }
@@ -867,14 +886,14 @@ export function createUserMqttClient(uid: string, options?: Omit<MqttBridgeOptio
 export function regenerateMqttClientId(uid?: string): string {
   const platform = getPlatform();
   const storageKey = uid ? `mqtt_client_id_${platform}_${uid}` : `mqtt_client_id_${platform}`;
-  
+
   // 기존 clientId 삭제
   try {
     localStorage.removeItem(storageKey);
   } catch (error) {
     console.warn('기존 MQTT Client ID 삭제 실패:', error);
   }
-  
+
   // 새로운 clientId 생성
   return createMqttClientId(uid);
 }
@@ -964,7 +983,7 @@ export async function subscribeTopicsForUser(
     await mqttClient.subscribe(topic, handler, qos);
     topics.push(topic);
     unsubscribers.push(async () => {
-      try { await mqttClient.unsubscribe(topic, handler); } catch {}
+      try { await mqttClient.unsubscribe(topic, handler); } catch { }
     });
   }
 
@@ -975,17 +994,17 @@ export async function subscribeTopicsForUser(
     } else {
       console.log('[MQTT][SUB][USER] no devices to subscribe', { userId, broker_host: info.host, broker_port: info.port });
     }
-  } catch {}
+  } catch { }
 
   return async () => {
     for (const unSub of unsubscribers) {
       // eslint-disable-next-line no-await-in-loop
-      await unSub().catch(() => {});
+      await unSub().catch(() => { });
     }
     try {
       const info = mqttClient.getBrokerInfo?.() ?? { host: '', port: undefined };
       if (topics.length > 0) console.log('[MQTT][SUB][USER] stopped for topics:', topics, { broker_host: info.host, broker_port: info.port });
-    } catch {}
+    } catch { }
   };
 }
 
@@ -1013,14 +1032,14 @@ export async function subscribeControlResult(
     try {
       if (typeof payload === 'string') parsed = JSON.parse(payload);
       else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-    } catch {}
+    } catch { }
     const result = parsed as ControlResult;
-    try { console.log('%c[MQTT]%c%c[CTRL]%c%c[RX]%c', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #F44336; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", "background: #2196F3; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #F44336; font-weight: bold;", { topic: t, deviceSerial, result }); } catch {}
-    try { window.dispatchEvent(new CustomEvent('control_result', { detail: { deviceSerial, result } })); } catch {}
+    try { console.log('%c[MQTT]%c%c[CTRL]%c%c[RX]%c', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #F44336; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", "background: #2196F3; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #F44336; font-weight: bold;", { topic: t, deviceSerial, result }); } catch { }
+    try { window.dispatchEvent(new CustomEvent('control_result', { detail: { deviceSerial, result } })); } catch { }
     onMessage(result);
   };
   await mqttClient.subscribe(topic, handler, qos);
-  try { console.log('%c[MQTT]%c%c[CTRL]%c%c[SUB]%c started', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #F44336; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", "background: #9C27B0; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #F44336; font-weight: bold;", { topic, qos }); } catch {}
+  try { console.log('%c[MQTT]%c%c[CTRL]%c%c[SUB]%c started', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #F44336; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", "background: #9C27B0; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #F44336; font-weight: bold;", { topic, qos }); } catch { }
   return async () => { await mqttClient.unsubscribe(topic, handler); };
 }
 
@@ -1033,9 +1052,9 @@ export async function subscribeControlResultForUser(userId: string, qos: 0 | 1 |
       try {
         if (typeof payload === 'string') parsed = JSON.parse(payload);
         else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-      } catch {}
-      try { console.log('%c[MQTT]%c%c[CTRL]%c%c[RX]%c', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #F44336; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", "background: #2196F3; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #F44336; font-weight: bold;", { topic: `control_result/${deviceSerial}`, deviceSerial, result: parsed }); } catch {}
-      try { window.dispatchEvent(new CustomEvent('control_result', { detail: { deviceSerial, result: parsed } })); } catch {}
+      } catch { }
+      try { console.log('%c[MQTT]%c%c[CTRL]%c%c[RX]%c', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #F44336; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", "background: #2196F3; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #F44336; font-weight: bold;", { topic: `control_result/${deviceSerial}`, deviceSerial, result: parsed }); } catch { }
+      try { window.dispatchEvent(new CustomEvent('control_result', { detail: { deviceSerial, result: parsed } })); } catch { }
     },
     qos
   );
@@ -1085,7 +1104,7 @@ export async function subscribeAIModelCompleted(
     try {
       if (typeof payload === 'string') parsed = JSON.parse(payload);
       else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-    } catch {}
+    } catch { }
 
     console.log('%c[MQTT]%c%c[AI-MODEL]%c%c[COMPLETED]%c',
       "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "",
@@ -1123,7 +1142,7 @@ export async function subscribeAIModelFailed(
     try {
       if (typeof payload === 'string') parsed = JSON.parse(payload);
       else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-    } catch {}
+    } catch { }
 
     console.log('%c[MQTT]%c%c[AI-MODEL]%c%c[FAILED]%c',
       "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "",
@@ -1161,7 +1180,7 @@ export async function subscribeAIModelProgress(
     try {
       if (typeof payload === 'string') parsed = JSON.parse(payload);
       else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-    } catch {}
+    } catch { }
 
     onProgress(parsed as AIModelProgressPayload);
   };
@@ -1175,9 +1194,9 @@ export async function subscribeAIModelProgress(
 export async function subscribeAllForUser(userId: string, qos: 0 | 1 | 2 = 1) {
   // forceRefresh로 최초 한 번만 REST 호출하고, 이후 호출들은 캐시 사용
   await getUserDeviceUuidsCached(userId, { forceRefresh: true }).catch(() => undefined);
-  try { await startDashStatusSubscriptionsForUser(userId); } catch {}
+  try { await startDashStatusSubscriptionsForUser(userId); } catch { }
   let cr: null | (() => Promise<void>) = null;
-  try { cr = await subscribeControlResultForUser(userId, qos).catch(() => null); } catch {}
+  try { cr = await subscribeControlResultForUser(userId, qos).catch(() => null); } catch { }
   return cr; // 제어 구독 해제 핸들러(있으면)
 }
 

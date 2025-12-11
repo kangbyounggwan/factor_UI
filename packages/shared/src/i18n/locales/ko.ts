@@ -1032,6 +1032,266 @@ export default {
     vibration: "진동",
     pressure: "압력"
   },
+  gcodeAnalytics: {
+    // 페이지 제목 및 헤더
+    title: "G-code 품질 분석기",
+    subtitle: "AI가 당신의 G-code를 분석합니다",
+    archive: "아카이브",
+    archiveTitle: "분석 아카이브",
+    archiveCount: "{{count}}개의 분석 보고서",
+    newFile: "새 파일",
+    newAnalysis: "새 분석",
+
+    // 업로드 영역
+    dragDropTitle: "G-code 파일을 드래그하세요",
+    clickToSelect: "또는 클릭하여 파일 선택",
+    supportedFormats: "지원 형식: .gcode, .gc, .g, .nc, .ngc",
+    aiAnalysis: "AI 분석",
+    realtimeProgress: "실시간 진행률",
+    detailedReport: "상세 보고서",
+
+    // 분석 상태
+    analyzing: "G-code AI 분석 중...",
+    analysisRequest: "분석 요청 중...",
+    analysisComplete: "분석 완료!",
+    analysisFailed: "분석 실패",
+    analysisError: "분석 중 오류가 발생했습니다.",
+
+    // 저장 관련
+    save: "저장",
+    saving: "저장 중...",
+    saved: "저장됨",
+    saveSuccess: "저장 완료",
+    saveFailed: "저장 실패",
+    reportSaved: "분석 보고서가 아카이브에 저장되었습니다.",
+    autoSaveFailed: "자동 저장 실패",
+    autoSaveSuccess: "보고서 저장됨",
+    autoSaveDesc: "분석 보고서가 자동으로 저장되었습니다.",
+    loginRequired: "로그인이 필요하거나 분석 결과가 없습니다.",
+
+    // 보고서
+    reportTitle: "G-code 분석 보고서",
+    analysisResult: "분석 결과",
+    overallScore: "Overall Score",
+    qualityScore: "품질 점수",
+    grade: "등급",
+
+    // 탭
+    tabInfo: "출력 정보",
+    tabIssues: "문제점",
+    tabOptimization: "최적화",
+
+    // 메트릭
+    printTime: "예상 출력 시간",
+    filament: "필라멘트",
+    layer: "레이어",
+    layers: "레이어",
+    retraction: "리트렉션",
+    retractionCount: "회",
+
+    // 온도
+    temperatureSettings: "온도 설정",
+    nozzle: "노즐",
+    bed: "베드",
+
+    // 서포트
+    supportRatio: "서포트 비율",
+    supportInterpretation: {
+      minimal: "서포트가 거의 없거나 최소화되어 있습니다. 후처리가 쉽고 재료 소모가 적습니다.",
+      appropriate: "적절한 서포트 비율입니다. 구조 안정성과 재료 효율의 균형이 잘 맞습니다.",
+      moderate: "서포트 비율이 다소 높습니다. 모델 방향 조정으로 줄일 수 있는지 검토해보세요.",
+      high: "서포트 비율이 높은 편입니다. 출력 후 제거 작업이 많이 필요하며 재료 소모가 큽니다."
+    },
+
+    // 속도
+    speedDistribution: "속도 분포",
+    travel: "이동",
+    infill: "내부 채움",
+    perimeter: "외벽",
+    support: "서포트",
+    speedInterpretation: {
+      perimeterFast: "외벽 속도가 매우 빠릅니다. 정밀한 표면 품질이 필요하다면 속도를 낮춰보세요.",
+      travelSlow: "이동 속도가 출력 속도보다 느립니다. 이동 속도를 높이면 출력 시간을 크게 단축할 수 있습니다.",
+      infillSlow: "내부 채움 속도가 외벽보다 느립니다. 내부는 보이지 않으므로 속도를 높여도 됩니다.",
+      perimeterSlow: "외벽 속도가 매우 느립니다. 일반적인 품질이라면 속도를 높여도 됩니다.",
+      ideal: "속도 설정이 이상적입니다. 외벽은 품질 우선, 내부는 속도 우선으로 잘 설정되었습니다.",
+      appropriate: "전반적으로 적절한 속도 설정입니다. 출력 품질과 시간의 균형이 맞습니다."
+    },
+
+    // 온도 해석
+    temperatureInterpretation: {
+      pla: "PLA에 적합한 온도입니다. 안정적인 출력이 가능합니다.",
+      petg: "PETG에 적합한 온도입니다. 레이어 접착력이 좋을 것입니다.",
+      abs: "ABS에 적합한 온도입니다. 밀폐된 환경에서 출력하면 뒤틀림을 방지할 수 있습니다.",
+      highTemp: "노즐 온도가 높습니다. 고온 필라멘트(나일론, PC)가 아니라면 확인이 필요합니다.",
+      lowBed: "베드 온도가 낮습니다. 첫 레이어 접착에 문제가 있을 수 있습니다.",
+      general: "일반적인 온도 범위입니다. 사용하는 필라멘트 권장 온도를 확인해보세요."
+    },
+    materialGuess: {
+      pla: "PLA",
+      petg: "PETG",
+      abs: "ABS",
+      highTemp: "고온 필라멘트",
+      unknown: "알 수 없음",
+      general: "범용"
+    },
+    estimatedMaterial: "추정 재료",
+
+    // 이슈 관련
+    issueSeverity: "이슈 심각도",
+    noIssues: "이슈 없음",
+    issuesFound: "문제점 및 이상 상황",
+    issueCount: "{{count}}개 이슈",
+    issueType: "이슈 유형",
+    severity: "심각도",
+    lineNumber: "라인 번호",
+    description: "설명",
+    impact: "영향",
+    suggestion: "해결방안",
+
+    // 심각도 레벨
+    severityCritical: "치명적",
+    severityHigh: "높음",
+    severityMedium: "중간",
+    severityLow: "낮음",
+    severityInfo: "정보",
+
+    // 패치 관련
+    patchSuggestions: "G-code 패치 제안",
+    patchCount: "{{count}}건",
+    patchAction: {
+      remove: "삭제",
+      modify: "수정",
+      insert: "추가"
+    },
+    original: "원본",
+    modified: "수정",
+    collapse: "접기",
+    showAll: "모두 보기 ({{count}})",
+
+    // 분석 결과
+    diagnosisSummary: "진단 요약",
+    criticalIssues: "치명적인 문제 감지",
+    analysisCompleted: "분석 완료",
+    recommendation: "권장사항",
+    recommendReslice: "재슬라이싱 권장",
+    canProceed: "출력 진행 가능",
+
+    // 서브 컴포넌트 텍스트
+    totalIssues: "총 이슈",
+    issueCountUnit: "{{count}}건",
+    issueStatsByType: "문제 유형별 통계",
+
+    // 이슈 타입 라벨
+    issueTypeLabels: {
+      cold_extrusion: "저온 압출",
+      early_temp_off: "조기 온도 해제",
+      extreme_cold: "극저온",
+      early_bed_off: "조기 베드 해제"
+    },
+
+    // 상세 이슈 카드
+    severityBadge: {
+      critical: "치명적",
+      high: "심각",
+      medium: "주의",
+      low: "낮음",
+      info: "정보"
+    },
+    foundCode: "발견된 코드",
+    analysisContent: "분석 내용",
+    openGcodeEditor: "G-code 에디터 열기",
+
+    // 출력 버튼
+    viewGcode: "G-code 보기",
+    printPdf: "인쇄/PDF",
+    downloadJson: "JSON 다운로드",
+    downloadCsv: "CSV 내보내기",
+
+    // 아카이브 페이지
+    backToList: "목록으로",
+    searchPlaceholder: "파일명 검색...",
+    gradeFilter: "등급",
+    sortBy: "정렬",
+    sortNewest: "최신순",
+    sortOldest: "오래된순",
+    sortScoreHigh: "점수 높은순",
+    sortScoreLow: "점수 낮은순",
+    sortIssuesHigh: "이슈 많은순",
+    sortFileName: "파일명순",
+    select: "선택",
+    deleteSelected: "{{count}}개 삭제",
+    cancel: "취소",
+    all: "전체",
+    gradeA: "A 등급",
+    gradeB: "B 등급",
+    gradeC: "C 등급",
+    gradeD: "D 등급",
+    gradeF: "F 등급",
+    gradeAll: "전체",
+    sort: "정렬",
+
+    // 상태 메시지
+    noReports: "분석 기록이 없습니다",
+    noReportsDesc: "새로운 G-code 파일을 분석해보세요",
+    noName: "이름 없음",
+    layerCount: "{{count}} 레이어",
+    loadingReport: "보고서 로딩 중...",
+    deleteReportTitle: "보고서 삭제",
+    deleteReportDesc: "이 분석 보고서를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+    delete: "삭제",
+    startNewAnalysis: "새 분석 시작",
+
+    // 삭제 관련
+    deleteSuccess: "삭제 완료",
+    deleteSuccessDesc: "보고서가 삭제되었습니다.",
+    deleteSuccessBulk: "{{count}}개의 보고서가 삭제되었습니다.",
+    deleteFailed: "삭제 실패",
+
+    // 로드 관련
+    loadFailed: "목록 로드 실패",
+    reportLoadFailed: "보고서 로드 실패",
+    reportNotFound: "보고서를 찾을 수 없습니다.",
+    gcodeLoadFailed: "G-code 원본 로드 실패",
+    gcodeLoadFailedDesc: "분석 결과는 표시되지만 원본 G-code를 볼 수 없습니다.",
+
+    // 파일 관련
+    unsupportedFormat: "지원하지 않는 파일 형식",
+    unsupportedFormatDesc: "G-code 파일(.gcode, .gc, .g, .nc, .ngc)만 업로드할 수 있습니다.",
+    noStoragePath: "저장 경로를 찾을 수 없어 저장할 수 없습니다.",
+    saveError: "저장 중 오류가 발생했습니다",
+    gcodeModified: "G-code가 성공적으로 수정 및 저장되었습니다.",
+    noIssuesToExport: "내보낼 이슈가 없습니다.",
+    popupBlocked: "팝업이 차단되었습니다. 팝업 차단을 해제하고 다시 시도해 주세요.",
+
+    // 3D Preview
+    preview3d: "3D Preview",
+
+    // 분석 상세
+    printingInfo: "프린팅 정보",
+    overview: "개요",
+    warningNote: "주의 필요",
+    recommendedActions: "권장 조치 사항",
+    recommendedActionsDesc: "분석 결과를 기반으로 한 최우선 해결 방안입니다.",
+    highQuality: "고품질 설정",
+    highQualityDesc: "슬라이서 설정이 고품질 출력에 최적화되어 있습니다.",
+    slicerInfo: "슬라이서 정보",
+    unknown: "알 수 없음",
+
+    // 추가 분석 UI
+    temperatureAnalysis: "온도 분석",
+    speedAnalysis: "속도 분석",
+    materialUsage: "재료 사용",
+    recommendations: "권장사항",
+    dangerWarning: "위험 경고",
+    cautions: "주의사항",
+    detailedIssueAnalysis: "상세 문제 분석",
+    issueStats: "이슈 유형별 분포",
+    patchSuggestionsTitle: "G-code 패치 제안",
+    llmRecommendation: "권장사항",
+    recommendedAction: "권장 조치",
+    firstLayerSettings: "첫 레이어 설정"
+  },
   errors: {
     general: "오류가 발생했습니다.",
     networkError: "네트워크 오류가 발생했습니다.",

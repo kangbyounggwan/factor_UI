@@ -1427,7 +1427,7 @@ const AI = () => {
           printingCount={printingCount}
           printerAreaHeight={printerAreaHeight}
           handleResizeStart={handleResizeStart}
-          openPrinterSettings={() => setPrintDialogOpen(true)}
+          openPrinterSettings={openPrinterSettings}
           targetPrinterModelId={targetPrinterModelId}
           currentGCodeUrl={currentGCodeUrl}
           handleModelDelete={handleModelDelete}

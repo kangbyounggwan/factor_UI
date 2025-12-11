@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@shared/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,7 +28,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GCodeAnalysisReport, type GCodeAnalysisData } from '@/components/PrinterDetail/GCodeAnalysisReport';
 import {
@@ -60,18 +60,21 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
-  X,
   Plus,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { ko } from 'date-fns/locale';
+import { ko, enUS } from 'date-fns/locale';
 
 const PAGE_SIZE = 12;
 
 export default function GCodeAnalyticsArchive() {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // 현재 언어에 따른 date-fns locale
+  const dateLocale = i18n.language === 'ko' ? ko : enUS;
 
   // 목록 상태
   const [reports, setReports] = useState<GCodeAnalysisReportListItem[]>([]);
@@ -125,7 +128,7 @@ export default function GCodeAnalyticsArchive() {
 
       if (error) {
         toast({
-          title: '목록 로드 실패',
+          title: t('gcodeAnalytics.loadFailed'),
           description: error.message,
           variant: 'destructive',
         });
@@ -144,7 +147,7 @@ export default function GCodeAnalyticsArchive() {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, currentPage, gradeFilter, sortOption, searchQuery, toast]);
+  }, [user?.id, currentPage, gradeFilter, sortOption, searchQuery, toast, t]);
 
   useEffect(() => {
     loadReports();
@@ -153,15 +156,15 @@ export default function GCodeAnalyticsArchive() {
   // 상세 보기
   const handleViewReport = async (reportId: string, fileName?: string) => {
     setIsLoadingDetail(true);
-    setSelectedReportName(fileName || 'G-code 분석 보고서');
+    setSelectedReportName(fileName || t('gcodeAnalytics.reportTitle'));
 
     try {
       const { data, error } = await getAnalysisReportById(reportId);
 
       if (error || !data) {
         toast({
-          title: '보고서 로드 실패',
-          description: error?.message || '보고서를 찾을 수 없습니다.',
+          title: t('gcodeAnalytics.reportLoadFailed'),
+          description: error?.message || t('gcodeAnalytics.reportNotFound'),
           variant: 'destructive',
         });
         return;
@@ -181,8 +184,8 @@ export default function GCodeAnalyticsArchive() {
           console.error('[GCodeAnalyticsArchive] G-code download error:', downloadErr);
           // G-code 로드 실패해도 보고서는 보여줌
           toast({
-            title: 'G-code 원본 로드 실패',
-            description: '분석 결과는 표시되지만 원본 G-code를 볼 수 없습니다.',
+            title: t('gcodeAnalytics.gcodeLoadFailed'),
+            description: t('gcodeAnalytics.gcodeLoadFailedDesc'),
             // variant: 'default', // warning is not a valid variant
           });
         }
@@ -205,7 +208,7 @@ export default function GCodeAnalyticsArchive() {
 
       if (error) {
         toast({
-          title: '삭제 실패',
+          title: t('gcodeAnalytics.deleteFailed'),
           description: error.message,
           variant: 'destructive',
         });
@@ -213,8 +216,8 @@ export default function GCodeAnalyticsArchive() {
       }
 
       toast({
-        title: '삭제 완료',
-        description: '보고서가 삭제되었습니다.',
+        title: t('gcodeAnalytics.deleteSuccess'),
+        description: t('gcodeAnalytics.deleteSuccessDesc'),
       });
 
       loadReports();
@@ -235,7 +238,7 @@ export default function GCodeAnalyticsArchive() {
 
       if (error) {
         toast({
-          title: '삭제 실패',
+          title: t('gcodeAnalytics.deleteFailed'),
           description: error.message,
           variant: 'destructive',
         });
@@ -243,8 +246,8 @@ export default function GCodeAnalyticsArchive() {
       }
 
       toast({
-        title: '삭제 완료',
-        description: `${selectedIds.size}개의 보고서가 삭제되었습니다.`,
+        title: t('gcodeAnalytics.deleteSuccess'),
+        description: t('gcodeAnalytics.deleteSuccessBulk', { count: selectedIds.size }),
       });
 
       setSelectedIds(new Set());
@@ -283,7 +286,7 @@ export default function GCodeAnalyticsArchive() {
               className="gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
-              목록으로
+              {t('gcodeAnalytics.backToList')}
             </Button>
             <span className="text-sm text-muted-foreground truncate">
               {selectedReportName}
@@ -316,9 +319,9 @@ export default function GCodeAnalyticsArchive() {
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <div>
-                <h1 className="text-xl font-bold">분석 아카이브</h1>
+                <h1 className="text-xl font-bold">{t('gcodeAnalytics.archiveTitle')}</h1>
                 <p className="text-sm text-muted-foreground">
-                  {totalCount}개의 분석 보고서
+                  {t('gcodeAnalytics.archiveCount', { count: totalCount })}
                 </p>
               </div>
             </div>
@@ -331,7 +334,7 @@ export default function GCodeAnalyticsArchive() {
                 className="gap-2"
               >
                 <Plus className="h-4 w-4" />
-                새 분석
+                {t('gcodeAnalytics.newAnalysis')}
               </Button>
 
               {selectMode ? (
@@ -343,7 +346,7 @@ export default function GCodeAnalyticsArchive() {
                     disabled={selectedIds.size === 0}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
-                    {selectedIds.size}개 삭제
+                    {t('gcodeAnalytics.deleteSelected', { count: selectedIds.size })}
                   </Button>
                   <Button
                     variant="outline"
@@ -353,7 +356,7 @@ export default function GCodeAnalyticsArchive() {
                       setSelectedIds(new Set());
                     }}
                   >
-                    취소
+                    {t('gcodeAnalytics.cancel')}
                   </Button>
                 </>
               ) : (
@@ -362,7 +365,7 @@ export default function GCodeAnalyticsArchive() {
                   size="sm"
                   onClick={() => setSelectMode(true)}
                 >
-                  선택
+                  {t('gcodeAnalytics.select')}
                 </Button>
               )}
             </div>
@@ -374,7 +377,7 @@ export default function GCodeAnalyticsArchive() {
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="파일명 검색..."
+                placeholder={t('gcodeAnalytics.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -388,15 +391,15 @@ export default function GCodeAnalyticsArchive() {
             >
               <SelectTrigger className="w-[120px]">
                 <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="등급" />
+                <SelectValue placeholder={t('gcodeAnalytics.grade')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">전체</SelectItem>
-                <SelectItem value="A">A 등급</SelectItem>
-                <SelectItem value="B">B 등급</SelectItem>
-                <SelectItem value="C">C 등급</SelectItem>
-                <SelectItem value="D">D 등급</SelectItem>
-                <SelectItem value="F">F 등급</SelectItem>
+                <SelectItem value="all">{t('gcodeAnalytics.gradeAll')}</SelectItem>
+                <SelectItem value="A">{t('gcodeAnalytics.gradeA')}</SelectItem>
+                <SelectItem value="B">{t('gcodeAnalytics.gradeB')}</SelectItem>
+                <SelectItem value="C">{t('gcodeAnalytics.gradeC')}</SelectItem>
+                <SelectItem value="D">{t('gcodeAnalytics.gradeD')}</SelectItem>
+                <SelectItem value="F">{t('gcodeAnalytics.gradeF')}</SelectItem>
               </SelectContent>
             </Select>
 
@@ -410,15 +413,15 @@ export default function GCodeAnalyticsArchive() {
             >
               <SelectTrigger className="w-[160px]">
                 <SortDesc className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="정렬" />
+                <SelectValue placeholder={t('gcodeAnalytics.sort')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="created_at-desc">최신순</SelectItem>
-                <SelectItem value="created_at-asc">오래된순</SelectItem>
-                <SelectItem value="overall_score-desc">점수 높은순</SelectItem>
-                <SelectItem value="overall_score-asc">점수 낮은순</SelectItem>
-                <SelectItem value="total_issues_count-desc">이슈 많은순</SelectItem>
-                <SelectItem value="file_name-asc">파일명순</SelectItem>
+                <SelectItem value="created_at-desc">{t('gcodeAnalytics.sortNewest')}</SelectItem>
+                <SelectItem value="created_at-asc">{t('gcodeAnalytics.sortOldest')}</SelectItem>
+                <SelectItem value="overall_score-desc">{t('gcodeAnalytics.sortScoreHigh')}</SelectItem>
+                <SelectItem value="overall_score-asc">{t('gcodeAnalytics.sortScoreLow')}</SelectItem>
+                <SelectItem value="total_issues_count-desc">{t('gcodeAnalytics.sortIssuesHigh')}</SelectItem>
+                <SelectItem value="file_name-asc">{t('gcodeAnalytics.sortFileName')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -444,13 +447,13 @@ export default function GCodeAnalyticsArchive() {
         ) : reports.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <FileCode2 className="h-16 w-16 text-muted-foreground/50 mb-4" />
-            <h3 className="text-lg font-medium">분석 기록이 없습니다</h3>
+            <h3 className="text-lg font-medium">{t('gcodeAnalytics.noReports')}</h3>
             <p className="text-sm text-muted-foreground mt-1 mb-4">
-              새로운 G-code 파일을 분석해보세요
+              {t('gcodeAnalytics.noReportsDesc')}
             </p>
             <Button onClick={() => navigate('/gcode-analytics')}>
               <Plus className="h-4 w-4 mr-2" />
-              새 분석 시작
+              {t('gcodeAnalytics.startNewAnalysis')}
             </Button>
           </div>
         ) : (
@@ -481,12 +484,12 @@ export default function GCodeAnalyticsArchive() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <CardTitle className="text-sm font-medium truncate">
-                          {report.file_name || '이름 없음'}
+                          {report.file_name || t('gcodeAnalytics.noName')}
                         </CardTitle>
                         <p className="text-xs text-muted-foreground mt-1">
                           {formatDistanceToNow(new Date(report.created_at), {
                             addSuffix: true,
-                            locale: ko,
+                            locale: dateLocale,
                           })}
                         </p>
                       </div>
@@ -503,7 +506,7 @@ export default function GCodeAnalyticsArchive() {
                     {report.overall_score !== undefined && (
                       <div className="mb-3">
                         <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="text-muted-foreground">품질 점수</span>
+                          <span className="text-muted-foreground">{t('gcodeAnalytics.qualityScore')}</span>
                           <span className="font-semibold">{report.overall_score}/100</span>
                         </div>
                         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -531,18 +534,18 @@ export default function GCodeAnalyticsArchive() {
                       {report.layer_count && (
                         <div className="flex items-center gap-1.5 text-muted-foreground">
                           <Layers className="h-3.5 w-3.5" />
-                          <span>{report.layer_count} 레이어</span>
+                          <span>{t('gcodeAnalytics.layerCount', { count: report.layer_count })}</span>
                         </div>
                       )}
                       {report.total_issues_count > 0 ? (
                         <div className="flex items-center gap-1.5 text-orange-500">
                           <AlertTriangle className="h-3.5 w-3.5" />
-                          <span>{report.total_issues_count}개 이슈</span>
+                          <span>{t('gcodeAnalytics.issueCount', { count: report.total_issues_count })}</span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5 text-green-500">
                           <CheckCircle className="h-3.5 w-3.5" />
-                          <span>이슈 없음</span>
+                          <span>{t('gcodeAnalytics.noIssues')}</span>
                         </div>
                       )}
                       {report.filament_weight_g && (
@@ -565,7 +568,7 @@ export default function GCodeAnalyticsArchive() {
                         }}
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
-                        삭제
+                        {t('gcodeAnalytics.delete')}
                       </Button>
                     )}
                   </CardContent>
@@ -606,7 +609,7 @@ export default function GCodeAnalyticsArchive() {
         <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">보고서 로딩 중...</p>
+            <p className="text-sm text-muted-foreground">{t('gcodeAnalytics.loadingReport')}</p>
           </div>
         </div>
       )}
@@ -615,18 +618,18 @@ export default function GCodeAnalyticsArchive() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>보고서 삭제</AlertDialogTitle>
+            <AlertDialogTitle>{t('gcodeAnalytics.deleteReportTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              이 분석 보고서를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+              {t('gcodeAnalytics.deleteReportDesc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogCancel>{t('gcodeAnalytics.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              삭제
+              {t('gcodeAnalytics.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -942,6 +942,7 @@ const PrinterDetail = () => {
         setStreamUrl(camWithUrl?.stream_url ?? null);
       } catch (e) {
         console.warn('[CAM][DB] stream_url 재조회 예외:', e);
+        console.warn('[CAM][DB] stream_url 재조회 예외:', e);
       }
     })();
   }, [deviceUuid]);
@@ -952,6 +953,7 @@ const PrinterDetail = () => {
     const off = onDashStatusMessage((uuid, payload) => {
       if (uuid !== deviceUuid) return;
 
+      /*
       console.log('[웹 PrinterDetail] MQTT dash_status 수신:', {
         uuid,
         printerStatus: payload?.printer_status,
@@ -961,6 +963,7 @@ const PrinterDetail = () => {
         progress: payload?.progress,
         fullPayload: payload
       });
+      */
 
       // 온도 히스토리 수집 및 세션 기반 배치 저장
       const bed = payload?.temperature_info?.bed;
@@ -1006,6 +1009,7 @@ const PrinterDetail = () => {
         // DB 상태 기준으로 printing 여부 판단
         const isPrinting = prev.printerStatus.state === 'printing' || Boolean(flags?.printing);
 
+        /*
         console.log('[웹 PrinterDetail] MQTT 업데이트 (DB 상태 기준):', {
           dbState: prev.printerStatus.state,
           isConnected,
@@ -1013,6 +1017,7 @@ const PrinterDetail = () => {
           flags,
           progress: payload?.progress?.completion
         });
+        */
 
         return {
           ...prev,

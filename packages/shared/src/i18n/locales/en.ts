@@ -1023,6 +1023,266 @@ export default {
     vibration: "Vibration",
     pressure: "Pressure"
   },
+  gcodeAnalytics: {
+    // Page titles and headers
+    title: "G-code Quality Analyzer",
+    subtitle: "AI analyzes your G-code",
+    archive: "Archive",
+    archiveTitle: "Analysis Archive",
+    archiveCount: "{{count}} analysis reports",
+    newFile: "New File",
+    newAnalysis: "New Analysis",
+
+    // Upload area
+    dragDropTitle: "Drag and drop G-code file",
+    clickToSelect: "or click to select file",
+    supportedFormats: "Supported formats: .gcode, .gc, .g, .nc, .ngc",
+    aiAnalysis: "AI Analysis",
+    realtimeProgress: "Real-time Progress",
+    detailedReport: "Detailed Report",
+
+    // Analysis status
+    analyzing: "Analyzing G-code with AI...",
+    analysisRequest: "Requesting analysis...",
+    analysisComplete: "Analysis complete!",
+    analysisFailed: "Analysis failed",
+    analysisError: "An error occurred during analysis.",
+
+    // Save related
+    save: "Save",
+    saving: "Saving...",
+    saved: "Saved",
+    saveSuccess: "Save complete",
+    saveFailed: "Save failed",
+    reportSaved: "Analysis report has been saved to archive.",
+    autoSaveFailed: "Auto-save failed",
+    autoSaveSuccess: "Report saved",
+    autoSaveDesc: "Analysis report has been automatically saved.",
+    loginRequired: "Login required or no analysis results available.",
+
+    // Report
+    reportTitle: "G-code Analysis Report",
+    analysisResult: "Analysis Result",
+    overallScore: "Overall Score",
+    qualityScore: "Quality Score",
+    grade: "Grade",
+
+    // Tabs
+    tabInfo: "Print Info",
+    tabIssues: "Issues",
+    tabOptimization: "Optimization",
+
+    // Metrics
+    printTime: "Estimated Print Time",
+    filament: "Filament",
+    layer: "Layer",
+    layers: "Layers",
+    retraction: "Retraction",
+    retractionCount: "times",
+
+    // Temperature
+    temperatureSettings: "Temperature Settings",
+    nozzle: "Nozzle",
+    bed: "Bed",
+
+    // Support
+    supportRatio: "Support Ratio",
+    supportInterpretation: {
+      minimal: "Minimal or no support. Easy post-processing and low material consumption.",
+      appropriate: "Appropriate support ratio. Good balance between structural stability and material efficiency.",
+      moderate: "Support ratio is moderately high. Consider adjusting model orientation to reduce it.",
+      high: "Support ratio is high. Significant post-processing needed and high material consumption."
+    },
+
+    // Speed
+    speedDistribution: "Speed Distribution",
+    travel: "Travel",
+    infill: "Infill",
+    perimeter: "Perimeter",
+    support: "Support",
+    speedInterpretation: {
+      perimeterFast: "Perimeter speed is very fast. Consider lowering it if precise surface quality is needed.",
+      travelSlow: "Travel speed is slower than print speed. Increasing travel speed can significantly reduce print time.",
+      infillSlow: "Infill speed is slower than perimeter. Since infill is not visible, you can increase its speed.",
+      perimeterSlow: "Perimeter speed is very slow. You can increase it for standard quality prints.",
+      ideal: "Speed settings are ideal. Perimeter prioritizes quality, infill prioritizes speed.",
+      appropriate: "Overall appropriate speed settings. Good balance between print quality and time."
+    },
+
+    // Temperature interpretation
+    temperatureInterpretation: {
+      pla: "Temperature suitable for PLA. Stable printing possible.",
+      petg: "Temperature suitable for PETG. Good layer adhesion expected.",
+      abs: "Temperature suitable for ABS. Print in enclosed environment to prevent warping.",
+      highTemp: "Nozzle temperature is high. Check if not using high-temp filament (Nylon, PC).",
+      lowBed: "Bed temperature is low. May have first layer adhesion issues.",
+      general: "General temperature range. Check the recommended temperature for your filament."
+    },
+    materialGuess: {
+      pla: "PLA",
+      petg: "PETG",
+      abs: "ABS",
+      highTemp: "High-temp Filament",
+      unknown: "Unknown",
+      general: "General"
+    },
+    estimatedMaterial: "Estimated Material",
+
+    // Issues related
+    issueSeverity: "Issue Severity",
+    noIssues: "No Issues",
+    issuesFound: "Issues and Anomalies",
+    issueCount: "{{count}} issues",
+    issueType: "Issue Type",
+    severity: "Severity",
+    lineNumber: "Line Number",
+    description: "Description",
+    impact: "Impact",
+    suggestion: "Solution",
+
+    // Severity levels
+    severityCritical: "Critical",
+    severityHigh: "High",
+    severityMedium: "Medium",
+    severityLow: "Low",
+    severityInfo: "Info",
+
+    // Patch related
+    patchSuggestions: "G-code Patch Suggestions",
+    patchCount: "{{count}} patches",
+    patchAction: {
+      remove: "Remove",
+      modify: "Modify",
+      insert: "Insert"
+    },
+    original: "Original",
+    modified: "Modified",
+    collapse: "Collapse",
+    showAll: "Show all ({{count}})",
+
+    // Analysis results
+    diagnosisSummary: "Diagnosis Summary",
+    criticalIssues: "Critical Issues Detected",
+    analysisCompleted: "Analysis Completed",
+    recommendation: "Recommendation",
+    recommendReslice: "Re-slicing recommended",
+    canProceed: "Can proceed with printing",
+
+    // Sub-component texts
+    totalIssues: "Total Issues",
+    issueCountUnit: "{{count}}",
+    issueStatsByType: "Issue Statistics by Type",
+
+    // Issue type labels
+    issueTypeLabels: {
+      cold_extrusion: "Cold Extrusion",
+      early_temp_off: "Early Temp Off",
+      extreme_cold: "Extreme Cold",
+      early_bed_off: "Early Bed Off"
+    },
+
+    // Detailed issue card
+    severityBadge: {
+      critical: "Critical",
+      high: "High",
+      medium: "Medium",
+      low: "Low",
+      info: "Info"
+    },
+    foundCode: "Found Code",
+    analysisContent: "Analysis Content",
+    openGcodeEditor: "Open G-code Editor",
+
+    // Export buttons
+    viewGcode: "View G-code",
+    printPdf: "Print/PDF",
+    downloadJson: "Download JSON",
+    downloadCsv: "Export CSV",
+
+    // Archive page
+    backToList: "Back to List",
+    searchPlaceholder: "Search file name...",
+    gradeFilter: "Grade",
+    sortBy: "Sort",
+    sortNewest: "Newest",
+    sortOldest: "Oldest",
+    sortScoreHigh: "Highest Score",
+    sortScoreLow: "Lowest Score",
+    sortIssuesHigh: "Most Issues",
+    sortFileName: "File Name",
+    select: "Select",
+    deleteSelected: "Delete {{count}}",
+    cancel: "Cancel",
+    all: "All",
+    gradeA: "Grade A",
+    gradeB: "Grade B",
+    gradeC: "Grade C",
+    gradeD: "Grade D",
+    gradeF: "Grade F",
+    gradeAll: "All",
+    sort: "Sort",
+
+    // Status messages
+    noReports: "No analysis records",
+    noReportsDesc: "Try analyzing a new G-code file",
+    noName: "Unnamed",
+    layerCount: "{{count}} layers",
+    loadingReport: "Loading report...",
+    deleteReportTitle: "Delete Report",
+    deleteReportDesc: "Are you sure you want to delete this report? This action cannot be undone.",
+    delete: "Delete",
+    startNewAnalysis: "Start New Analysis",
+
+    // Delete related
+    deleteSuccess: "Delete complete",
+    deleteSuccessDesc: "Report has been deleted.",
+    deleteSuccessBulk: "{{count}} reports have been deleted.",
+    deleteFailed: "Delete failed",
+
+    // Load related
+    loadFailed: "Failed to load list",
+    reportLoadFailed: "Failed to load report",
+    reportNotFound: "Report not found.",
+    gcodeLoadFailed: "Failed to load G-code source",
+    gcodeLoadFailedDesc: "Analysis results are shown but original G-code is not available.",
+
+    // File related
+    unsupportedFormat: "Unsupported file format",
+    unsupportedFormatDesc: "Only G-code files (.gcode, .gc, .g, .nc, .ngc) can be uploaded.",
+    noStoragePath: "Cannot save: storage path not found.",
+    saveError: "Error occurred while saving",
+    gcodeModified: "G-code has been successfully modified and saved.",
+    noIssuesToExport: "No issues to export.",
+    popupBlocked: "Popup blocked. Please disable popup blocker and try again.",
+
+    // 3D Preview
+    preview3d: "3D Preview",
+
+    // Analysis details
+    printingInfo: "Printing Info",
+    overview: "Overview",
+    warningNote: "Warning",
+    recommendedActions: "Recommended Actions",
+    recommendedActionsDesc: "Priority solutions based on analysis results.",
+    highQuality: "High Quality Settings",
+    highQualityDesc: "Slicer settings are optimized for high-quality printing.",
+    slicerInfo: "Slicer Info",
+    unknown: "Unknown",
+
+    // Additional analysis UI
+    temperatureAnalysis: "Temperature Analysis",
+    speedAnalysis: "Speed Analysis",
+    materialUsage: "Material Usage",
+    recommendations: "Recommendations",
+    dangerWarning: "Danger Warning",
+    cautions: "Cautions",
+    detailedIssueAnalysis: "Detailed Issue Analysis",
+    issueStats: "Issue Distribution by Type",
+    patchSuggestionsTitle: "G-code Patch Suggestions",
+    llmRecommendation: "Recommendation",
+    recommendedAction: "Recommended Action",
+    firstLayerSettings: "First Layer Settings"
+  },
   errors: {
     general: "An error occurred.",
     networkError: "A network error occurred.",

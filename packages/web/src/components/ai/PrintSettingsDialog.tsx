@@ -232,7 +232,7 @@ export function PrintSettingsDialog({
                         <Card className="overflow-hidden h-full min-h-0">
                             <CardContent className="p-0 h-full">
                                 <Suspense fallback={<div className="w-full h-full flex items-center justify-center">Loading...</div>}>
-                                    <GCodePreview gcodeUrl={currentGCodeUrl ?? modelViewerUrl ?? undefined} />
+                                    <GCodePreview gcodeUrl={currentGCodeUrl ?? undefined} />
                                 </Suspense>
                             </CardContent>
                         </Card>

@@ -239,7 +239,7 @@ export function AIArchiveSidebar({
                                     // 다운로드 버튼용 URL 설정
                                     setCurrentGlbUrl(model.download_url || null);
                                     setCurrentStlUrl(model.stl_download_url || null);
-                                    setCurrentGCodeUrl(null);
+                                    setCurrentGCodeUrl(model.gcode_url || null);
 
                                     // 탭 전환 등
                                     if (model.generation_type === 'image_to_3d') {
@@ -366,7 +366,8 @@ export function AIArchiveSidebar({
                                         progress={printer.completion}
                                         onClick={() => openPrinterSettings(printer)}
                                         isAvailable={
-                                            !!currentGCodeUrl &&
+                                            // G-code URL이 있거나, 모델 URL(GLB/STL)이 있으면 슬라이싱 가능
+                                            (!!currentGCodeUrl || !!modelViewerUrl) &&
                                             (printer.state === 'idle' || printer.state === 'disconnected') &&
                                             (!targetPrinterModelId || printer.manufacture_id === targetPrinterModelId)
                                         }

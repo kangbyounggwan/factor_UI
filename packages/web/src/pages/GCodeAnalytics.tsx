@@ -5,6 +5,7 @@
 
 import { useState, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -244,6 +245,7 @@ function convertApiResultToReportData(
 // ============================================================================
 
 const GCodeAnalytics = () => {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -277,8 +279,8 @@ const GCodeAnalytics = () => {
   const handleSaveReport = useCallback(async () => {
     if (!user?.id || !reportData || !fileName) {
       toast({
-        title: "저장 실패",
-        description: "로그인이 필요하거나 분석 결과가 없습니다.",
+        title: t('gcodeAnalytics.saveFailed'),
+        description: t('gcodeAnalytics.loginRequired'),
         variant: "destructive",
       });
       return;
@@ -295,7 +297,7 @@ const GCodeAnalytics = () => {
 
       if (error) {
         toast({
-          title: "저장 실패",
+          title: t('gcodeAnalytics.saveFailed'),
           description: error.message,
           variant: "destructive",
         });
@@ -304,20 +306,20 @@ const GCodeAnalytics = () => {
 
       setIsSaved(true);
       toast({
-        title: "저장 완료",
-        description: "분석 보고서가 아카이브에 저장되었습니다.",
+        title: t('gcodeAnalytics.saveSuccess'),
+        description: t('gcodeAnalytics.reportSaved'),
       });
     } catch (err) {
       console.error('[GCodeAnalytics] Save error:', err);
       toast({
-        title: "저장 실패",
-        description: "알 수 없는 오류가 발생했습니다.",
+        title: t('gcodeAnalytics.saveFailed'),
+        description: t('gcodeAnalytics.analysisError'),
         variant: "destructive",
       });
     } finally {
       setIsSaving(false);
     }
-  }, [user?.id, reportData, fileName, uploadedFileInfo, apiResult, toast]);
+  }, [user?.id, reportData, fileName, uploadedFileInfo, apiResult, toast, t]);
 
   // 분석 실행 - 실제 API 호출
   const runAnalysis = useCallback(async (file: File) => {
@@ -327,7 +329,7 @@ const GCodeAnalytics = () => {
     setAnalysisProgress({
       status: 'pending',
       progress: 0,
-      message: '분석 요청 중...',
+      message: t('gcodeAnalytics.analysisRequest'),
     });
 
     try {
@@ -345,12 +347,12 @@ const GCodeAnalytics = () => {
       setAnalysisProgress({
         status: 'done',
         progress: 100,
-        message: '분석 완료!',
+        message: t('gcodeAnalytics.analysisComplete'),
       });
 
       toast({
-        title: "분석 완료",
-        description: `품질 점수: ${report.overallScore?.value || 0}점 (${report.overallScore?.grade || 'N/A'} 등급)`,
+        title: t('gcodeAnalytics.analysisComplete'),
+        description: `${t('gcodeAnalytics.qualityScore')}: ${report.overallScore?.value || 0} (${report.overallScore?.grade || 'N/A'} ${t('gcodeAnalytics.grade')})`,
       });
 
       // 분석 완료 후 자동 저장 (report와 result를 반환)
@@ -361,7 +363,7 @@ const GCodeAnalytics = () => {
 
       const errorMessage = error instanceof GCodeAnalysisError
         ? error.message
-        : '분석 중 오류가 발생했습니다.';
+        : t('gcodeAnalytics.analysisError');
 
       setAnalysisError(errorMessage);
       setAnalysisProgress({
@@ -371,14 +373,14 @@ const GCodeAnalytics = () => {
       });
 
       toast({
-        title: "분석 실패",
+        title: t('gcodeAnalytics.analysisFailed'),
         description: errorMessage,
         variant: "destructive",
       });
 
       return null;
     }
-  }, [toast]);
+  }, [toast, t]);
 
   // 파일 처리 (스토리지 업로드 + 분석)
   const processFile = useCallback(async (file: File) => {
@@ -386,8 +388,8 @@ const GCodeAnalytics = () => {
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (!['gcode', 'gc', 'g', 'nc', 'ngc'].includes(ext || '')) {
       toast({
-        title: "지원하지 않는 파일 형식",
-        description: "G-code 파일(.gcode, .gc, .g, .nc, .ngc)만 업로드할 수 있습니다.",
+        title: t('gcodeAnalytics.unsupportedFormat'),
+        description: t('gcodeAnalytics.unsupportedFormatDesc'),
         variant: "destructive",
       });
       return;
@@ -441,7 +443,7 @@ const GCodeAnalytics = () => {
         if (error) {
           console.error('[GCodeAnalytics] Auto-save failed:', error);
           toast({
-            title: "자동 저장 실패",
+            title: t('gcodeAnalytics.autoSaveFailed'),
             description: error.message,
             variant: "destructive",
           });
@@ -449,14 +451,14 @@ const GCodeAnalytics = () => {
           console.log('[GCodeAnalytics] Auto-save success:', data?.id);
           setIsSaved(true);
           toast({
-            title: "보고서 저장됨",
-            description: "분석 보고서가 자동으로 저장되었습니다.",
+            title: t('gcodeAnalytics.autoSaveSuccess'),
+            description: t('gcodeAnalytics.autoSaveDesc'),
           });
         }
       }
     };
     reader.readAsText(file);
-  }, [toast, runAnalysis, user?.id]);
+  }, [toast, runAnalysis, user?.id, t]);
 
   // 드래그 앤 드롭 핸들러
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -531,9 +533,9 @@ const GCodeAnalytics = () => {
               <Sparkles className="h-5 w-5 text-foreground" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">G-code 품질 분석기</h1>
+              <h1 className="text-xl font-bold tracking-tight">{t('gcodeAnalytics.title')}</h1>
               <p className="text-sm text-muted-foreground">
-                AI가 당신의 G-code를 분석합니다
+                {t('gcodeAnalytics.subtitle')}
               </p>
             </div>
           </div>
@@ -546,14 +548,14 @@ const GCodeAnalytics = () => {
               onClick={() => navigate('/gcode-analytics/archive')}
             >
               <Archive className="h-4 w-4 mr-2" />
-              아카이브
+              {t('gcodeAnalytics.archive')}
             </Button>
 
             {fileName && (
               <>
                 <Button variant="outline" size="sm" onClick={handleNewFile}>
                   <Upload className="h-4 w-4 mr-2" />
-                  새 파일
+                  {t('gcodeAnalytics.newFile')}
                 </Button>
 
                 {/* 저장 버튼 (분석 완료 시) */}
@@ -569,7 +571,7 @@ const GCodeAnalytics = () => {
                     ) : (
                       <Save className="h-4 w-4 mr-2" />
                     )}
-                    {isSaving ? '저장 중...' : '저장'}
+                    {isSaving ? t('gcodeAnalytics.saving') : t('gcodeAnalytics.save')}
                   </Button>
                 )}
 
@@ -577,7 +579,7 @@ const GCodeAnalytics = () => {
                 {isSaved && (
                   <Badge variant="secondary" className="gap-1">
                     <CheckCircle className="h-3 w-3" />
-                    저장됨
+                    {t('gcodeAnalytics.saved')}
                   </Badge>
                 )}
               </>
@@ -617,27 +619,27 @@ const GCodeAnalytics = () => {
               </div>
 
               <div className="text-center space-y-2">
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-foreground">G-code 파일을 드래그하세요</h2>
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-foreground">{t('gcodeAnalytics.dragDropTitle')}</h2>
                 <p className="text-slate-500 dark:text-muted-foreground font-medium">
-                  또는 클릭하여 파일 선택
+                  {t('gcodeAnalytics.clickToSelect')}
                 </p>
                 <p className="text-xs text-slate-400 dark:text-muted-foreground">
-                  지원 형식: .gcode, .gc, .g, .nc, .ngc
+                  {t('gcodeAnalytics.supportedFormats')}
                 </p>
               </div>
 
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <div className="flex items-center gap-1.5">
                   <CheckCircle className="h-4 w-4 text-green-500" />
-                  AI 분석
+                  {t('gcodeAnalytics.aiAnalysis')}
                 </div>
                 <div className="flex items-center gap-1.5">
                   <CheckCircle className="h-4 w-4 text-green-500" />
-                  실시간 진행률
+                  {t('gcodeAnalytics.realtimeProgress')}
                 </div>
                 <div className="flex items-center gap-1.5">
                   <CheckCircle className="h-4 w-4 text-green-500" />
-                  상세 보고서
+                  {t('gcodeAnalytics.detailedReport')}
                 </div>
               </div>
             </div>
@@ -651,7 +653,7 @@ const GCodeAnalytics = () => {
               <div className="p-4 border-b border-border/50 flex items-center justify-between bg-muted/20">
                 <h3 className="font-semibold flex items-center gap-2">
                   <FileCode2 className="h-5 w-5 text-primary" />
-                  3D Preview
+                  {t('gcodeAnalytics.preview3d')}
                 </h3>
                 <Badge variant="outline" className="bg-background font-mono text-xs">
                   {fileName}
@@ -676,7 +678,7 @@ const GCodeAnalytics = () => {
                     </div>
 
                     <div className="text-center space-y-4 w-full max-w-md">
-                      <p className="text-lg font-semibold">G-code AI 분석 중...</p>
+                      <p className="text-lg font-semibold">{t('gcodeAnalytics.analyzing')}</p>
 
                       {/* 진행률 바 */}
                       <div className="space-y-2">

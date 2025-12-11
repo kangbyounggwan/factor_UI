@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -221,34 +222,34 @@ export interface ExpectedImprovement {
 // ============================================================================
 
 /**
- * 서포트 비율 해석
+ * 서포트 비율 해석 - 번역 키 반환
  */
-function getSupportInterpretation(percentage: number): { text: string; status: 'good' | 'warning' | 'bad' } {
+function getSupportInterpretation(percentage: number): { textKey: string; status: 'good' | 'warning' | 'bad' } {
   if (percentage <= 15) {
     return {
-      text: '서포트가 거의 없거나 최소화되어 있습니다. 후처리가 쉽고 재료 소모가 적습니다.',
+      textKey: 'gcodeAnalytics.supportInterpretation.minimal',
       status: 'good'
     };
   } else if (percentage <= 30) {
     return {
-      text: '적절한 서포트 비율입니다. 구조 안정성과 재료 효율의 균형이 잘 맞습니다.',
+      textKey: 'gcodeAnalytics.supportInterpretation.appropriate',
       status: 'good'
     };
   } else if (percentage <= 50) {
     return {
-      text: '서포트 비율이 다소 높습니다. 모델 방향 조정으로 줄일 수 있는지 검토해보세요.',
+      textKey: 'gcodeAnalytics.supportInterpretation.moderate',
       status: 'warning'
     };
   } else {
     return {
-      text: '서포트 비율이 높은 편입니다. 출력 후 제거 작업이 많이 필요하며 재료 소모가 큽니다.',
+      textKey: 'gcodeAnalytics.supportInterpretation.high',
       status: 'bad'
     };
   }
 }
 
 /**
- * 속도 분포 해석
+ * 속도 분포 해석 - 번역 키 반환
  * 주의: API에서 반환하는 속도 값은 mm/min 단위임
  * - 60 mm/s = 3600 mm/min
  * - 80 mm/s = 4800 mm/min
@@ -260,13 +261,13 @@ function getSpeedInterpretation(speedDistribution: {
   infill: number;
   perimeter: number;
   support?: number;
-}): { text: string; status: 'good' | 'warning' | 'bad' } {
+}): { textKey: string; status: 'good' | 'warning' | 'bad' } {
   const { travel, infill, perimeter } = speedDistribution;
 
   // 외벽 속도가 너무 빠르면 품질 저하 (120mm/s = 7200mm/min 이상은 고속)
   if (perimeter > 7200) {
     return {
-      text: '외벽 속도가 매우 빠릅니다. 정밀한 표면 품질이 필요하다면 속도를 낮춰보세요.',
+      textKey: 'gcodeAnalytics.speedInterpretation.perimeterFast',
       status: 'warning'
     };
   }
@@ -274,7 +275,7 @@ function getSpeedInterpretation(speedDistribution: {
   // 이동 속도가 출력 속도보다 느리면 비효율적
   if (travel < infill) {
     return {
-      text: '이동 속도가 출력 속도보다 느립니다. 이동 속도를 높이면 출력 시간을 크게 단축할 수 있습니다.',
+      textKey: 'gcodeAnalytics.speedInterpretation.travelSlow',
       status: 'warning'
     };
   }
@@ -282,7 +283,7 @@ function getSpeedInterpretation(speedDistribution: {
   // 내부 채움이 외벽보다 느리면 비효율적 (내부는 빨라도 됨)
   if (infill < perimeter * 0.8) {
     return {
-      text: '내부 채움 속도가 외벽보다 느립니다. 내부는 보이지 않으므로 속도를 높여도 됩니다.',
+      textKey: 'gcodeAnalytics.speedInterpretation.infillSlow',
       status: 'warning'
     };
   }
@@ -290,7 +291,7 @@ function getSpeedInterpretation(speedDistribution: {
   // 외벽 속도가 너무 느리면 시간 낭비 (20mm/s = 1200mm/min 미만)
   if (perimeter < 1200) {
     return {
-      text: '외벽 속도가 매우 느립니다. 일반적인 품질이라면 속도를 높여도 됩니다.',
+      textKey: 'gcodeAnalytics.speedInterpretation.perimeterSlow',
       status: 'warning'
     };
   }
@@ -299,32 +300,32 @@ function getSpeedInterpretation(speedDistribution: {
   // 외벽 <= 80mm/s (4800mm/min), 내부 >= 80mm/s (4800mm/min), 이동 >= 150mm/s (9000mm/min)
   if (perimeter <= 4800 && infill >= 4800 && travel >= 9000) {
     return {
-      text: '속도 설정이 이상적입니다. 외벽은 품질 우선, 내부는 속도 우선으로 잘 설정되었습니다.',
+      textKey: 'gcodeAnalytics.speedInterpretation.ideal',
       status: 'good'
     };
   }
 
   return {
-    text: '전반적으로 적절한 속도 설정입니다. 출력 품질과 시간의 균형이 맞습니다.',
+    textKey: 'gcodeAnalytics.speedInterpretation.appropriate',
     status: 'good'
   };
 }
 
 /**
- * 온도 설정 해석
+ * 온도 설정 해석 - 번역 키 반환
  */
 function getTemperatureInterpretation(temperature: {
   nozzle: number;
   bed: number;
   firstLayer?: { nozzle?: number; bed?: number };
-}): { text: string; materialGuess: string; status: 'good' | 'warning' | 'bad' } {
+}): { textKey: string; materialGuessKey: string; status: 'good' | 'warning' | 'bad' } {
   const { nozzle, bed } = temperature;
 
   // PLA 범위 (180-220°C 노즐, 50-70°C 베드)
   if (nozzle >= 180 && nozzle <= 220 && bed >= 40 && bed <= 70) {
     return {
-      text: 'PLA에 적합한 온도입니다. 안정적인 출력이 가능합니다.',
-      materialGuess: 'PLA',
+      textKey: 'gcodeAnalytics.temperatureInterpretation.pla',
+      materialGuessKey: 'gcodeAnalytics.materialGuess.pla',
       status: 'good'
     };
   }
@@ -332,8 +333,8 @@ function getTemperatureInterpretation(temperature: {
   // PETG 범위 (220-250°C 노즐, 70-90°C 베드)
   if (nozzle >= 220 && nozzle <= 260 && bed >= 70 && bed <= 90) {
     return {
-      text: 'PETG에 적합한 온도입니다. 레이어 접착력이 좋을 것입니다.',
-      materialGuess: 'PETG',
+      textKey: 'gcodeAnalytics.temperatureInterpretation.petg',
+      materialGuessKey: 'gcodeAnalytics.materialGuess.petg',
       status: 'good'
     };
   }
@@ -341,8 +342,8 @@ function getTemperatureInterpretation(temperature: {
   // ABS 범위 (220-260°C 노즐, 90-110°C 베드)
   if (nozzle >= 220 && nozzle <= 260 && bed >= 90 && bed <= 110) {
     return {
-      text: 'ABS에 적합한 온도입니다. 밀폐된 환경에서 출력하면 뒤틀림을 방지할 수 있습니다.',
-      materialGuess: 'ABS',
+      textKey: 'gcodeAnalytics.temperatureInterpretation.abs',
+      materialGuessKey: 'gcodeAnalytics.materialGuess.abs',
       status: 'good'
     };
   }
@@ -350,8 +351,8 @@ function getTemperatureInterpretation(temperature: {
   // 노즐 온도가 너무 높음
   if (nozzle > 260) {
     return {
-      text: '노즐 온도가 높습니다. 고온 필라멘트(나일론, PC)가 아니라면 확인이 필요합니다.',
-      materialGuess: '고온 필라멘트',
+      textKey: 'gcodeAnalytics.temperatureInterpretation.highTemp',
+      materialGuessKey: 'gcodeAnalytics.materialGuess.highTemp',
       status: 'warning'
     };
   }
@@ -359,15 +360,15 @@ function getTemperatureInterpretation(temperature: {
   // 베드 온도가 너무 낮음
   if (bed < 40 && nozzle > 200) {
     return {
-      text: '베드 온도가 낮습니다. 첫 레이어 접착에 문제가 있을 수 있습니다.',
-      materialGuess: '알 수 없음',
+      textKey: 'gcodeAnalytics.temperatureInterpretation.lowBed',
+      materialGuessKey: 'gcodeAnalytics.materialGuess.unknown',
       status: 'warning'
     };
   }
 
   return {
-    text: '일반적인 온도 범위입니다. 사용하는 필라멘트 권장 온도를 확인해보세요.',
-    materialGuess: '범용',
+    textKey: 'gcodeAnalytics.temperatureInterpretation.general',
+    materialGuessKey: 'gcodeAnalytics.materialGuess.general',
     status: 'good'
   };
 }
@@ -377,11 +378,13 @@ function getTemperatureInterpretation(temperature: {
 // ============================================================================
 
 interface InterpretationBadgeProps {
-  text: string;
+  textKey: string;
   status: 'good' | 'warning' | 'bad';
 }
 
-const InterpretationBadge: React.FC<InterpretationBadgeProps> = ({ text, status }) => {
+const InterpretationBadge: React.FC<InterpretationBadgeProps> = ({ textKey, status }) => {
+  const { t } = useTranslation();
+
   const statusStyles = {
     good: 'bg-emerald-50 dark:bg-emerald-500/20 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300',
     warning: 'bg-yellow-50 dark:bg-yellow-500/20 border-yellow-200 dark:border-yellow-500/30 text-yellow-700 dark:text-yellow-300',
@@ -400,7 +403,7 @@ const InterpretationBadge: React.FC<InterpretationBadgeProps> = ({ text, status 
       statusStyles[status]
     )}>
       {statusIcons[status]}
-      <span>{text}</span>
+      <span>{t(textKey)}</span>
     </div>
   );
 };
@@ -424,6 +427,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   data,
   className,
 }) => {
+  const { t } = useTranslation();
   const { metrics, support, speedDistribution, temperature, analysis, overallScore } = data;
   const reportRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<'info' | 'issues' | 'optimization'>('info');
@@ -450,7 +454,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   const handleSaveGCode = async (newContent: string) => {
     if (!data.storagePath) {
       console.error('No storage path available for saving');
-      alert('저장 경로를 찾을 수 없어 저장할 수 없습니다.');
+      alert(t('gcodeAnalytics.noStoragePath'));
       return;
     }
 
@@ -458,13 +462,13 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
       const { error } = await updateGCodeFileContent(data.storagePath, newContent);
       if (error) {
         console.error('Failed to save G-code:', error);
-        alert('저장 중 오류가 발생했습니다: ' + error.message);
+        alert(t('gcodeAnalytics.saveError') + ': ' + error.message);
         throw error;
       }
 
       // 성공 시 페이지를 새로고침하거나 상태를 업데이트해야 함
       // 지금은 간단히 알림만 표시
-      alert('G-code가 성공적으로 수정 및 저장되었습니다.');
+      alert(t('gcodeAnalytics.gcodeModified'));
 
       // data.gcodeContent를 업데이트 (SWR 등의 갱신이 없으면 로컬 상태 업데이트는 복잡할 수 있음)
       // 상위 컴포넌트에서 데이터를 다시 불러오는 것이 가장 좋음
@@ -477,11 +481,11 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   const handleDownloadCSV = () => {
     const issues = data.detailedAnalysis?.detailedIssues || [];
     if (issues.length === 0) {
-      alert('내보낼 이슈가 없습니다.');
+      alert(t('gcodeAnalytics.noIssuesToExport'));
       return;
     }
 
-    const headers = ['이슈유형', '심각도', '라인번호', '설명', '영향', '해결방안'];
+    const headers = [t('gcodeAnalytics.issueType'), t('gcodeAnalytics.severity'), t('gcodeAnalytics.lineNumber'), t('gcodeAnalytics.description'), t('gcodeAnalytics.impact'), t('gcodeAnalytics.suggestion')];
     const rows = issues.map(issue => [
       issue.issueType,
       issue.severity,
@@ -549,19 +553,19 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
 
     // SVG 도넛 차트 생성 (서포트 비율)
     const generateDonutChart = (percentage: number) => {
-      const radius = 35;
+      const radius = 40;
       const circumference = 2 * Math.PI * radius;
       const strokeDasharray = (percentage / 100) * circumference;
 
       return `
-        <svg width="90" height="90" viewBox="0 0 100 100" style="display:block;margin:0 auto;">
-          <circle cx="50" cy="50" r="${radius}" fill="none" stroke="#e2e8f0" stroke-width="10"/>
-          <circle cx="50" cy="50" r="${radius}" fill="none" stroke="#8b5cf6" stroke-width="10"
+        <svg width="110" height="110" viewBox="0 0 100 100" style="display:block;margin:0 auto;">
+          <circle cx="50" cy="50" r="${radius}" fill="none" stroke="#e2e8f0" stroke-width="12"/>
+          <circle cx="50" cy="50" r="${radius}" fill="none" stroke="#8b5cf6" stroke-width="12"
             stroke-dasharray="${strokeDasharray} ${circumference}"
             stroke-linecap="round"
             transform="rotate(-90 50 50)"/>
-          <text x="50" y="50" text-anchor="middle" dominant-baseline="middle" 
-            font-size="14" font-weight="900" fill="#0f172a">${percentage.toFixed(1)}%</text>
+          <text x="50" y="50" text-anchor="middle" dominant-baseline="middle"
+            font-size="18" font-weight="900" fill="#0f172a">${percentage.toFixed(1)}%</text>
         </svg>
       `;
     };
@@ -624,28 +628,32 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
       `;
     };
 
-    // SVG 가로 바 차트 생성 (이슈 유형별 통계)
+    // SVG 세로 바 차트 생성 (이슈 유형별 통계)
     const generateIssueStatsChart = () => {
       if (issueStats.length === 0) return '';
 
       const maxCount = Math.max(...issueStats.map(s => s.count));
-      const barHeight = 16;
-      const gap = 6;
       const topStats = issueStats.slice(0, 5); // 상위 5개만
-      const chartHeight = topStats.length * (barHeight + gap);
+      const barWidth = 36;
+      const gap = 12;
+      const chartWidth = topStats.length * (barWidth + gap);
+      const chartHeight = 120;
+      const maxBarHeight = 70;
 
       return `
-        <svg width="100%" height="${chartHeight}" viewBox="0 0 280 ${chartHeight}" style="display:block;">
+        <svg width="100%" height="${chartHeight}" viewBox="0 0 ${chartWidth} ${chartHeight}" style="display:block;margin:0 auto;">
           ${topStats.map((stat, index) => {
-        const y = index * (barHeight + gap);
-        const barWidth = maxCount > 0 ? (stat.count / maxCount) * 140 : 0;
-        const label = stat.label.length > 12 ? stat.label.substring(0, 12) + '...' : stat.label;
+        const x = index * (barWidth + gap) + gap / 2;
+        const barHeight = maxCount > 0 ? (stat.count / maxCount) * maxBarHeight : 0;
+        const barY = chartHeight - 35 - barHeight;
+        const label = stat.label.length > 8 ? stat.label.substring(0, 8) + '..' : stat.label;
         return `
-              <text x="0" y="${y + 12}" font-size="9" fill="#475569">${label}</text>
-              <rect x="90" y="${y}" width="${barWidth}" height="${barHeight}" rx="2" fill="${stat.color || '#8b5cf6'}"/>
-              <text x="${95 + barWidth}" y="${y + 12}" font-size="9" font-weight="700" fill="#0f172a">${stat.count}</text>
+              <rect x="${x}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="3" fill="${stat.color || '#8b5cf6'}"/>
+              <text x="${x + barWidth / 2}" y="${barY - 5}" text-anchor="middle" font-size="10" font-weight="700" fill="#0f172a">${stat.count}</text>
+              <text x="${x + barWidth / 2}" y="${chartHeight - 20}" text-anchor="middle" font-size="8" fill="#475569">${label}</text>
             `;
       }).join('')}
+          <line x1="0" y1="${chartHeight - 35}" x2="${chartWidth}" y2="${chartHeight - 35}" stroke="#e2e8f0" stroke-width="1"/>
         </svg>
       `;
     };
@@ -683,7 +691,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
     .header {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
+      align-items: center;
       border-bottom: 2px solid #334155;
       padding-bottom: 15px;
       margin-bottom: 20px;
@@ -699,33 +707,45 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
       color: #64748b;
       margin-top: 5px;
     }
+    .header .file-name {
+      font-weight: 600;
+      color: #334155;
+    }
+    .header .file-date {
+      display: block;
+      margin-top: 3px;
+    }
     .score-box {
-      display:flex;
+      display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
     }
     .score-value {
-      text-align: right;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
     .score-value .label {
-      font-size: 8pt;
+      font-size: 9pt;
       color: #64748b;
       text-transform: uppercase;
       letter-spacing: 0.05em;
+      white-space: nowrap;
     }
     .score-value .number {
-      font-size: 28pt;
+      font-size: 32pt;
       font-weight: 900;
       color: #0f172a;
+      line-height: 1;
     }
     .grade-badge {
-      width: 40px;
-      height: 40px;
+      width: 44px;
+      height: 44px;
       border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20pt;
+      font-size: 22pt;
       font-weight: 900;
       color: white;
     }
@@ -926,13 +946,16 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
     <div class="header">
       <div>
         <h1>G-code 분석 보고서</h1>
-        <p class="file-info">${data.fileName || '분석 결과'} • ${data.analyzedAt || new Date().toLocaleString('ko-KR')}</p>
+        <p class="file-info">
+          <span class="file-name">${data.fileName || '분석 결과'}</span>
+          <span class="file-date">${data.analyzedAt || new Date().toLocaleString('ko-KR')}</span>
+        </p>
       </div>
       ${overallScore ? `
       <div class="score-box">
         <div class="score-value">
-          <p class="label">Overall Score</p>
-          <p class="number">${overallScore.value}</p>
+          <span class="label">OVERALL SCORE</span>
+          <span class="number">${overallScore.value}</span>
         </div>
         <div class="grade-badge" style="background-color: ${getGradeColor(overallScore.grade)}">${overallScore.grade}</div>
       </div>
@@ -1077,7 +1100,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
       printWindow.document.close();
     } else {
       // 팝업이 차단된 경우 대체 방법
-      alert('팝업이 차단되었습니다. 팝업 차단을 해제하고 다시 시도해 주세요.');
+      alert(t('gcodeAnalytics.popupBlocked'));
     }
   };
 
@@ -1094,10 +1117,10 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
           size="sm"
           onClick={() => setIsViewerOpen(true)}
           className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-white"
-          title="G-code 분석 데이터 보기"
+          title={t('gcodeAnalytics.viewGcode')}
         >
           <FileCode className="h-4 w-4 mr-2" />
-          G-code 보기
+          {t('gcodeAnalytics.viewGcode')}
         </Button>
 
         {/* Viewer Modal */}
@@ -1119,10 +1142,10 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
           size="sm"
           onClick={handlePrint}
           className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-white"
-          title="인쇄 또는 PDF로 저장 (Ctrl+P)"
+          title={t('gcodeAnalytics.printPdf')}
         >
           <Printer className="h-4 w-4 mr-2" />
-          인쇄/PDF
+          {t('gcodeAnalytics.printPdf')}
         </Button>
       </div>
 
@@ -1132,15 +1155,15 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
         <div className="bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 px-6 py-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-title font-bold tracking-tight text-slate-900 dark:text-white">G-code 분석 보고서</h1>
+              <h1 className="text-3xl font-title font-bold tracking-tight text-slate-900 dark:text-white">{t('gcodeAnalytics.reportTitle')}</h1>
               <p className="text-slate-500 dark:text-white/70 text-sm mt-2 font-body">
-                {data.fileName || '분석 결과'} • {data.analyzedAt || new Date().toLocaleString('ko-KR')}
+                {data.fileName || t('gcodeAnalytics.analysisResult')} • {data.analyzedAt || new Date().toLocaleString()}
               </p>
             </div>
             {overallScore && (
               <div className="flex items-center gap-3">
                 <div className="text-right">
-                  <p className="text-xs text-slate-500 dark:text-white/60 uppercase tracking-wide font-heading font-semibold">Overall Score</p>
+                  <p className="text-xs text-slate-500 dark:text-white/60 uppercase tracking-wide font-heading font-semibold">{t('gcodeAnalytics.overallScore')}</p>
                   <p className="text-4xl font-score font-black text-slate-900 dark:text-white">{overallScore.value}</p>
                 </div>
                 <div className={cn(
@@ -1169,7 +1192,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                 : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50"
             )}
           >
-            출력 정보
+            {t('gcodeAnalytics.tabInfo')}
           </button>
           <button
             onClick={() => setActiveTab('issues')}
@@ -1180,7 +1203,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                 : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50"
             )}
           >
-            문제점 및 이상상황 ({analysis.warnings.length + (data.detailedAnalysis?.issueStatistics?.reduce((acc, curr) => acc + curr.count, 0) || 0)})
+            {t('gcodeAnalytics.tabIssues')} ({analysis.warnings.length + (data.detailedAnalysis?.issueStatistics?.reduce((acc, curr) => acc + curr.count, 0) || 0)})
           </button>
           <button
             onClick={() => setActiveTab('optimization')}
@@ -1191,7 +1214,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                 : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50"
             )}
           >
-            최적화 방안
+            {t('gcodeAnalytics.tabOptimization')}
           </button>
         </div >
 
@@ -1206,7 +1229,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                 {/* 출력 시간 */}
                 <MetricCard
                   icon={<Clock className="h-5 w-5" />}
-                  label="예상 출력 시간"
+                  label={t('gcodeAnalytics.printTime')}
                   value={metrics.printTime.value}
                   color="blue"
                 />
@@ -1214,7 +1237,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                 {/* 필라멘트 사용량 */}
                 <MetricCard
                   icon={<Box className="h-5 w-5" />}
-                  label="필라멘트"
+                  label={t('gcodeAnalytics.filament')}
                   value={metrics.filamentUsage.length}
                   subValue={metrics.filamentUsage.weight}
                   color="green"
@@ -1223,7 +1246,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                 {/* 레이어 수 */}
                 <MetricCard
                   icon={<Layers className="h-5 w-5" />}
-                  label="레이어"
+                  label={t('gcodeAnalytics.layer')}
                   value={metrics.layerCount.value.toLocaleString()}
                   subValue={metrics.layerCount.layerHeight ? `${metrics.layerCount.layerHeight}mm` : undefined}
                   color="purple"
@@ -1232,9 +1255,9 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                 {/* 리트렉션 횟수 */}
                 <MetricCard
                   icon={<Repeat2 className="h-5 w-5" />}
-                  label="리트렉션"
+                  label={t('gcodeAnalytics.retraction')}
                   value={metrics.retractionCount.value.toLocaleString()}
-                  subValue="회"
+                  subValue={t('gcodeAnalytics.retractionCount')}
                   color="orange"
                 />
               </div>
@@ -1245,7 +1268,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                 <div className="bg-slate-50 dark:bg-slate-800/35 backdrop-blur rounded-xl p-5 border border-slate-200 dark:border-slate-700/65 flex flex-col">
                   <h3 className="text-base font-heading font-semibold text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
                     <Target className="h-5 w-5" />
-                    서포트 비율
+                    {t('gcodeAnalytics.supportRatio')}
                   </h3>
                   <div className="flex-grow flex items-center justify-center">
                     <div className="relative w-32 h-32">
@@ -1293,7 +1316,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                   <div className="bg-slate-50 dark:bg-slate-800/35 backdrop-blur rounded-xl p-5 border border-slate-200 dark:border-slate-700/65 flex flex-col">
                     <h3 className="text-base font-heading font-semibold text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
                       <Activity className="h-5 w-5" />
-                      속도 분포
+                      {t('gcodeAnalytics.speedDistribution')}
                     </h3>
                     <div className="flex-grow space-y-3">
                       {(() => {
@@ -1308,11 +1331,11 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
 
                         return (
                           <>
-                            <SpeedBar label="이동" value={speedDistribution.travel} maxValue={maxSpeed} color="blue" />
-                            <SpeedBar label="내부 채움" value={speedDistribution.infill} maxValue={maxSpeed} color="green" />
-                            <SpeedBar label="외벽" value={speedDistribution.perimeter} maxValue={maxSpeed} color="purple" />
+                            <SpeedBar label={t('gcodeAnalytics.travel')} value={speedDistribution.travel} maxValue={maxSpeed} color="blue" />
+                            <SpeedBar label={t('gcodeAnalytics.infill')} value={speedDistribution.infill} maxValue={maxSpeed} color="green" />
+                            <SpeedBar label={t('gcodeAnalytics.perimeter')} value={speedDistribution.perimeter} maxValue={maxSpeed} color="purple" />
                             {speedDistribution.support !== undefined && (
-                              <SpeedBar label="서포트" value={speedDistribution.support} maxValue={maxSpeed} color="orange" />
+                              <SpeedBar label={t('gcodeAnalytics.support')} value={speedDistribution.support} maxValue={maxSpeed} color="orange" />
                             )}
                           </>
                         );
@@ -1329,32 +1352,32 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                 <div className="bg-slate-50 dark:bg-slate-800/35 backdrop-blur rounded-xl p-5 border border-slate-200 dark:border-slate-700/65 flex flex-col">
                   <h3 className="text-base font-heading font-semibold text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
                     <Thermometer className="h-5 w-5" />
-                    온도 설정
+                    {t('gcodeAnalytics.temperatureSettings')}
                   </h3>
                   <div className="flex-grow space-y-4">
                     <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-700/30 rounded-lg">
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-red-500" />
-                        <span className="text-base font-body text-slate-700 dark:text-white">노즐</span>
+                        <span className="text-base font-body text-slate-700 dark:text-white">{t('gcodeAnalytics.nozzle')}</span>
                       </div>
                       <span className="text-xl font-score font-black text-slate-900 dark:text-white">{temperature.nozzle}°C</span>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-700/30 rounded-lg">
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-orange-500" />
-                        <span className="text-base font-body text-slate-700 dark:text-white">베드</span>
+                        <span className="text-base font-body text-slate-700 dark:text-white">{t('gcodeAnalytics.bed')}</span>
                       </div>
                       <span className="text-xl font-score font-black text-slate-900 dark:text-white">{temperature.bed}°C</span>
                     </div>
                     {temperature.firstLayer && (
                       <div className="pt-2 border-t border-slate-200 dark:border-slate-700/50">
-                        <p className="text-sm text-slate-500 mb-2">첫 레이어 설정</p>
+                        <p className="text-sm text-slate-500 mb-2">{t('gcodeAnalytics.firstLayerSettings')}</p>
                         <div className="grid grid-cols-2 gap-2 text-sm text-slate-700 dark:text-white">
                           {temperature.firstLayer.nozzle && (
-                            <span>노즐: {temperature.firstLayer.nozzle}°C</span>
+                            <span>{t('gcodeAnalytics.nozzle')}: {temperature.firstLayer.nozzle}°C</span>
                           )}
                           {temperature.firstLayer.bed && (
-                            <span>베드: {temperature.firstLayer.bed}°C</span>
+                            <span>{t('gcodeAnalytics.bed')}: {temperature.firstLayer.bed}°C</span>
                           )}
                         </div>
                       </div>
@@ -1378,9 +1401,9 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                               <AlertTriangle className="h-3 w-3 flex-shrink-0 mt-0.5" />
                             )}
                             <div>
-                              <span className="block">{tempInterpretation.text}</span>
+                              <span className="block">{t(tempInterpretation.textKey)}</span>
                               <span className="block mt-1 text-slate-500 dark:text-slate-400">
-                                추정 재료: <span className="text-slate-900 dark:text-white font-medium">{tempInterpretation.materialGuess}</span>
+                                {t('gcodeAnalytics.estimatedMaterial')}: <span className="text-slate-900 dark:text-white font-medium">{t(tempInterpretation.materialGuessKey)}</span>
                               </span>
                             </div>
                           </div>
@@ -1394,7 +1417,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
               {/* 양호 항목 (출력 정보 탭에 포함) */}
               {analysis.goodPoints.length > 0 && (
                 <AnalysisSection
-                  title="양호 항목"
+                  title={t('gcodeAnalytics.highQuality')}
                   icon={<CheckCircle2 className="h-5 w-5" />}
                   items={analysis.goodPoints}
                   variant="success"
@@ -1406,7 +1429,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                 <div className="bg-slate-100 dark:bg-slate-800/30 rounded-xl p-5 border border-slate-200 dark:border-slate-700/65">
                   <h3 className="text-base font-heading font-semibold text-slate-600 dark:text-slate-400 mb-3 flex items-center gap-2">
                     <Info className="h-5 w-5" />
-                    분석 요약
+                    {t('gcodeAnalytics.diagnosisSummary')}
                   </h3>
                   {/* Overview / Summary Text */}
                   {(data.detailedAnalysis.printingInfo.overview || data.detailedAnalysis.printingInfo.summary_text) && (
@@ -1418,7 +1441,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                   {/* 온도 분석 */}
                   {data.detailedAnalysis.printingInfo.temperature_analysis && (
                     <div className="mb-3">
-                      <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">온도 분석: </span>
+                      <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">{t('gcodeAnalytics.temperatureAnalysis')}: </span>
                       <span className="text-sm text-slate-600 dark:text-slate-300">{data.detailedAnalysis.printingInfo.temperature_analysis}</span>
                     </div>
                   )}
@@ -1426,7 +1449,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                   {/* 속도 분석 */}
                   {data.detailedAnalysis.printingInfo.speed_analysis && (
                     <div className="mb-3">
-                      <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">속도 분석: </span>
+                      <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">{t('gcodeAnalytics.speedAnalysis')}: </span>
                       <span className="text-sm text-slate-600 dark:text-slate-300">{data.detailedAnalysis.printingInfo.speed_analysis}</span>
                     </div>
                   )}
@@ -1434,7 +1457,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                   {/* 재료 사용 */}
                   {data.detailedAnalysis.printingInfo.material_usage && (
                     <div className="mb-3">
-                      <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">재료 사용: </span>
+                      <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">{t('gcodeAnalytics.materialUsage')}: </span>
                       <span className="text-sm text-slate-600 dark:text-slate-300">{data.detailedAnalysis.printingInfo.material_usage}</span>
                     </div>
                   )}
@@ -1442,7 +1465,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                   {/* 권장사항 */}
                   {data.detailedAnalysis.printingInfo.recommendations && data.detailedAnalysis.printingInfo.recommendations.length > 0 && (
                     <div className="mt-4">
-                      <span className="text-sm font-semibold text-slate-600 dark:text-slate-400 block mb-2">권장사항:</span>
+                      <span className="text-sm font-semibold text-slate-600 dark:text-slate-400 block mb-2">{t('gcodeAnalytics.recommendations')}:</span>
                       <ul className="list-disc list-inside space-y-1">
                         {data.detailedAnalysis.printingInfo.recommendations.map((rec, idx) => (
                           <li key={idx} className="text-sm text-slate-600 dark:text-slate-300">{rec}</li>
@@ -1468,7 +1491,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
               {/* 위험 경고 */}
               {analysis.warnings.length > 0 && (
                 <AnalysisSection
-                  title="위험 경고"
+                  title={t('gcodeAnalytics.dangerWarning')}
                   icon={<AlertTriangle className="h-5 w-5" />}
                   items={analysis.warnings}
                   variant="danger"
@@ -1478,7 +1501,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
               {/* 주의사항 */}
               {analysis.cautions.length > 0 && (
                 <AnalysisSection
-                  title="주의사항"
+                  title={t('gcodeAnalytics.cautions')}
                   icon={<Info className="h-5 w-5" />}
                   items={analysis.cautions}
                   variant="warning"
@@ -1495,7 +1518,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 text-slate-900 dark:text-white font-heading font-semibold">
                     <ListChecks className="h-5 w-5 text-slate-500 dark:text-slate-400" />
-                    상세 문제 분석
+                    {t('gcodeAnalytics.detailedIssueAnalysis')}
                   </div>
                   <div className="divide-y divide-slate-200 dark:divide-slate-600/60 rounded-xl border border-slate-200 dark:border-slate-600/65 overflow-hidden bg-slate-50 dark:bg-slate-800/35">
                     {data.detailedAnalysis.detailedIssues.map((issue, index) => (
@@ -1882,11 +1905,21 @@ function DetailedAnalysisSection({ detailedAnalysis, gcodeContent, onSaveGCode, 
 
 // 진단 요약 카드
 function DiagnosisSummaryCard({ summary }: { summary: DiagnosisSummary }) {
+  const { t } = useTranslation();
+
   const severityStyles = {
     critical: { bg: 'bg-red-50 dark:bg-red-900/40', border: 'border-red-200 dark:border-red-500/50', text: 'text-red-600 dark:text-red-400', badge: 'bg-red-600' },
     high: { bg: 'bg-red-50 dark:bg-red-900/40', border: 'border-red-200 dark:border-red-500/50', text: 'text-red-600 dark:text-red-400', badge: 'bg-red-600' },
     medium: { bg: 'bg-orange-50 dark:bg-orange-900/40', border: 'border-orange-200 dark:border-orange-500/50', text: 'text-orange-600 dark:text-orange-400', badge: 'bg-orange-600' },
     low: { bg: 'bg-green-50 dark:bg-green-900/40', border: 'border-green-200 dark:border-green-500/50', text: 'text-green-600 dark:text-green-400', badge: 'bg-green-600' },
+  };
+
+  const severityLabels: Record<string, string> = {
+    critical: t('gcodeAnalytics.severityCritical'),
+    high: t('gcodeAnalytics.severityHigh'),
+    medium: t('gcodeAnalytics.severityMedium'),
+    low: t('gcodeAnalytics.severityLow'),
+    info: t('gcodeAnalytics.severityInfo'),
   };
 
   const style = severityStyles[summary.severity];
@@ -1898,21 +1931,21 @@ function DiagnosisSummaryCard({ summary }: { summary: DiagnosisSummary }) {
           <Thermometer className={cn("h-7 w-7", style.text)} />
         </div>
         <div className="flex-1">
-          <h3 className="text-xl font-title font-bold text-slate-900 dark:text-white mb-1">{summary.keyIssue.title}</h3>
-          <p className="text-base font-body text-slate-600 dark:text-slate-300 leading-relaxed">{summary.keyIssue.description}</p>
+          <h3 className="text-xl font-title font-bold text-slate-900 dark:text-white mb-1">{summary.keyIssue?.title}</h3>
+          <p className="text-base font-body text-slate-600 dark:text-slate-300 leading-relaxed">{summary.keyIssue?.description}</p>
         </div>
       </div>
       <div className="grid grid-cols-3 gap-4 mt-6 pt-5 border-t border-slate-200 dark:border-slate-700/50">
         <div className="text-center">
-          <p className="text-xs font-heading font-semibold text-slate-500 dark:text-slate-400">총 이슈</p>
-          <p className="text-xl font-score font-black text-slate-900 dark:text-white">{summary.totalIssues}건</p>
+          <p className="text-xs font-heading font-semibold text-slate-500 dark:text-slate-400">{t('gcodeAnalytics.totalIssues')}</p>
+          <p className="text-xl font-score font-black text-slate-900 dark:text-white">{t('gcodeAnalytics.issueCountUnit', { count: summary.totalIssues })}</p>
         </div>
         <div className="text-center">
-          <p className="text-xs font-heading font-semibold text-slate-500 dark:text-slate-400">심각도</p>
-          <p className={cn("text-xl font-score font-black capitalize", style.text)}>{summary.severity}</p>
+          <p className="text-xs font-heading font-semibold text-slate-500 dark:text-slate-400">{t('gcodeAnalytics.severity')}</p>
+          <p className={cn("text-xl font-score font-black capitalize", style.text)}>{severityLabels[summary.severity] || summary.severity}</p>
         </div>
         <div className="text-center">
-          <p className="text-xs font-heading font-semibold text-slate-500 dark:text-slate-400">권장 조치</p>
+          <p className="text-xs font-heading font-semibold text-slate-500 dark:text-slate-400">{t('gcodeAnalytics.recommendedAction')}</p>
           <p className="text-xl font-score font-black text-blue-600 dark:text-blue-400">{summary.recommendation}</p>
         </div>
       </div>
@@ -1922,6 +1955,8 @@ function DiagnosisSummaryCard({ summary }: { summary: DiagnosisSummary }) {
 
 // 문제 유형별 통계 차트
 function IssueStatisticsChart({ statistics }: { statistics: IssueStatistics[] }) {
+  const { t } = useTranslation();
+
   const getIcon = (type: string) => {
     switch (type) {
       case 'cold_extrusion':
@@ -1937,7 +1972,7 @@ function IssueStatisticsChart({ statistics }: { statistics: IssueStatistics[] })
     <div className="bg-slate-50 dark:bg-slate-800/35 rounded-xl p-6 border border-slate-200 dark:border-slate-600/65">
       <h3 className="text-base font-heading font-semibold text-slate-600 dark:text-slate-400 mb-5 flex items-center gap-2">
         <BarChart3 className="h-5 w-5" />
-        문제 유형별 통계
+        {t('gcodeAnalytics.issueStatsByType')}
       </h3>
       <div className="space-y-5">
         {statistics.map((stat, index) => (
@@ -1953,7 +1988,7 @@ function IssueStatisticsChart({ statistics }: { statistics: IssueStatistics[] })
                 "text-base font-score font-black",
                 stat.color === 'red' ? 'text-red-500' : 'text-orange-500'
               )}>
-                {stat.count}건
+                {t('gcodeAnalytics.issueCountUnit', { count: stat.count })}
               </span>
             </div>
             <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-6 overflow-hidden relative">
@@ -1988,6 +2023,7 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
   patches?: PatchSuggestion[];
   reportId?: string;
 }) {
+  const { t } = useTranslation();
   const [showGCodeModal, setShowGCodeModal] = useState(false);
 
   const severityStyles = {
@@ -2001,13 +2037,13 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
   const style = severityStyles[issue.severity];
 
   const getIssueTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      cold_extrusion: 'Cold Extrusion',
-      early_temp_off: 'Early Temp Off',
-      extreme_cold: 'Extreme Cold',
-      early_bed_off: 'Early Bed Off',
-    };
-    return labels[type] || type;
+    const key = `gcodeAnalytics.issueTypeLabels.${type}`;
+    const translated = t(key);
+    return translated !== key ? translated : type;
+  };
+
+  const getSeverityLabel = (severity: string) => {
+    return t(`gcodeAnalytics.severityBadge.${severity}`);
   };
 
   const getIssueIcon = (type: string) => {
@@ -2033,7 +2069,7 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
         >
           <div className="flex items-center gap-3">
             <span className={cn("text-white text-sm px-3 py-1.5 rounded font-warning font-medium", style.badge)}>
-              {issue.severity === 'high' ? '심각' : issue.severity === 'medium' ? '주의' : '정보'}
+              {getSeverityLabel(issue.severity)}
             </span>
             <span className="font-mono text-base text-red-600 dark:text-red-300 font-semibold">
               Line {issue.line || issue.line_index || 'N/A'}
@@ -2067,28 +2103,28 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {issue.code && (
               <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400 uppercase font-heading font-semibold mb-2">발견된 코드</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400 uppercase font-heading font-semibold mb-2">{t('gcodeAnalytics.foundCode')}</p>
                 <code className="bg-slate-200 dark:bg-slate-900 text-green-700 dark:text-green-400 px-4 py-2 rounded text-base block w-fit font-mono">
                   {issue.code}
                 </code>
               </div>
             )}
             <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400 uppercase font-heading font-semibold mb-2">분석 내용</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400 uppercase font-heading font-semibold mb-2">{t('gcodeAnalytics.analysisContent')}</p>
               <p className="text-base font-body text-slate-700 dark:text-slate-300">{issue.description}</p>
             </div>
           </div>
 
           {issue.impact && (
             <div className="mt-5">
-              <p className="text-sm text-slate-600 dark:text-slate-400 uppercase font-heading font-semibold mb-2">영향</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400 uppercase font-heading font-semibold mb-2">{t('gcodeAnalytics.impact')}</p>
               <p className="text-base font-body text-slate-600 dark:text-slate-400">{issue.impact}</p>
             </div>
           )}
 
           {issue.suggestion && (
             <div className="mt-5 p-4 bg-blue-100 dark:bg-blue-500/10 border border-blue-300 dark:border-blue-500/30 rounded-lg">
-              <p className="text-sm text-blue-600 dark:text-blue-400 uppercase font-heading font-semibold mb-2">제안</p>
+              <p className="text-sm text-blue-600 dark:text-blue-400 uppercase font-heading font-semibold mb-2">{t('gcodeAnalytics.suggestion')}</p>
               <p className="text-base font-body text-slate-700 dark:text-slate-300">{issue.suggestion}</p>
             </div>
           )}
@@ -2104,7 +2140,7 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
               }}
             >
               <FileCode className="h-4 w-4" />
-              G-code 에디터 열기
+              {t('gcodeAnalytics.openGcodeEditor')}
             </Button>
           </div>
         </div>
@@ -2137,13 +2173,18 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
 
 // 패치 제안 섹션
 function PatchSuggestionsSection({ patches }: { patches: PatchSuggestion[] }) {
+  const { t } = useTranslation();
   const [showAll, setShowAll] = useState(false);
   const displayedPatches = showAll ? patches : patches.slice(0, 3);
 
-  const actionLabels: Record<string, { label: string; color: string }> = {
-    remove: { label: '삭제', color: 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-500/20' },
-    modify: { label: '수정', color: 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-500/20' },
-    insert: { label: '추가', color: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-500/20' },
+  const getActionLabel = (action: string) => {
+    return t(`gcodeAnalytics.patchAction.${action}`);
+  };
+
+  const actionColors: Record<string, string> = {
+    remove: 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-500/20',
+    modify: 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-500/20',
+    insert: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-500/20',
   };
 
   return (
@@ -2151,9 +2192,9 @@ function PatchSuggestionsSection({ patches }: { patches: PatchSuggestion[] }) {
       <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-600/60 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <FileCode className="h-6 w-6 text-slate-500 dark:text-slate-400" />
-          <h3 className="text-lg font-heading font-semibold text-slate-900 dark:text-white">패치 제안</h3>
+          <h3 className="text-lg font-heading font-semibold text-slate-900 dark:text-white">{t('gcodeAnalytics.patchSuggestions')}</h3>
           <span className="text-sm font-score font-black bg-violet-100 dark:bg-violet-500/20 text-violet-600 dark:text-violet-300 px-3 py-1 rounded-full">
-            {patches.length}개
+            {t('gcodeAnalytics.patchCount', { count: patches.length })}
           </span>
         </div>
         {patches.length > 3 && (
@@ -2163,31 +2204,31 @@ function PatchSuggestionsSection({ patches }: { patches: PatchSuggestion[] }) {
             onClick={() => setShowAll(!showAll)}
             className="text-base font-body text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
           >
-            {showAll ? '접기' : `모두 보기 (${patches.length})`}
+            {showAll ? t('gcodeAnalytics.collapse') : t('gcodeAnalytics.showAll', { count: patches.length })}
           </Button>
         )}
       </div>
       <div className="divide-y divide-slate-200 dark:divide-slate-600/60">
         {displayedPatches.map((patch, index) => {
-          const actionStyle = actionLabels[patch.action] || actionLabels.modify;
+          const actionColor = actionColors[patch.action] || actionColors.modify;
           return (
             <div key={index} className="p-5 border-b border-slate-200 dark:border-slate-600/50 last:border-b-0">
               <div className="flex items-center gap-3 mb-3">
                 <span className="font-mono text-sm font-score font-black text-slate-600 dark:text-slate-400">Line {patch.line || patch.line_index || 'N/A'}</span>
-                <span className={cn("text-sm px-3 py-1 rounded font-warning font-medium", actionStyle.color)}>
-                  {actionStyle.label}
+                <span className={cn("text-sm px-3 py-1 rounded font-warning font-medium", actionColor)}>
+                  {getActionLabel(patch.action)}
                 </span>
               </div>
               <div className="space-y-3">
                 <div>
-                  <span className="text-sm font-heading font-semibold text-slate-600 dark:text-slate-400">원본:</span>
+                  <span className="text-sm font-heading font-semibold text-slate-600 dark:text-slate-400">{t('gcodeAnalytics.original')}:</span>
                   <code className="block mt-2 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-200 px-4 py-2 rounded text-sm font-mono border border-transparent dark:border-red-700/50">
                     {patch.original}
                   </code>
                 </div>
                 {patch.modified && (
                   <div>
-                    <span className="text-sm font-heading font-semibold text-slate-600 dark:text-slate-400">수정:</span>
+                    <span className="text-sm font-heading font-semibold text-slate-600 dark:text-slate-400">{t('gcodeAnalytics.modified')}:</span>
                     <code className="block mt-2 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-200 px-4 py-2 rounded text-sm font-mono border border-transparent dark:border-green-700/50">
                       {patch.modified}
                     </code>

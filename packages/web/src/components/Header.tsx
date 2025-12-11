@@ -447,9 +447,9 @@ export const Header = () => {
               <Link
                 key={item.name}
                 to={item.href}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-bold transition-colors ${isActive(item.href)
+                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(item.href)
                   ? "bg-primary text-primary-foreground"
-                  : "text-foreground hover:bg-accent"
+                  : "text-muted-foreground hover:bg-accent"
                   }`}
               >
                 <Icon className="w-4 h-4" />
