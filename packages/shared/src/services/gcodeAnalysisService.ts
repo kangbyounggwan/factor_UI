@@ -17,12 +17,13 @@ import type {
     GCodeSummaryResponse,
 } from '@shared/types/gcodeAnalysisTypes';
 
-// API Base URL (테스트용 로컬호스트 하드코딩)
+// API Base URL (환경변수 사용)
 const getBaseUrl = (): string => {
-    // TODO: 배포 시 환경변수로 변경
-    // const envUrl = (import.meta as any).env?.VITE_AI_PYTHON_URL;
-    // return envUrl || 'http://127.0.0.1:7000';
-    return 'http://127.0.0.1:7000';
+    const envUrl = (import.meta as any).env?.VITE_AI_PYTHON_URL;
+    if (!envUrl) {
+        throw new Error('VITE_AI_PYTHON_URL 환경변수가 설정되지 않았습니다.');
+    }
+    return envUrl;
 };
 
 /**
