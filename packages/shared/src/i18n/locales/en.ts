@@ -298,6 +298,8 @@ export default {
     missingFileOrPrinter: "GCode file or printer information is missing.",
     printerUuidMissing: "Printer UUID is missing.",
     downloadingGCode: "Downloading GCode...",
+    downloadGCode: "Download G-code",
+    download: "Download",
     preparingPrint: "Preparing to print...",
     gcodeDownloadFailed: "Failed to download GCode file",
     fileUploadedToPrinter: "{{fileName}} has been uploaded to the printer.",

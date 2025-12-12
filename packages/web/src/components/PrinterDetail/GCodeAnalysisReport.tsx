@@ -1297,7 +1297,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                       </svg>
                       {/* 중앙 텍스트 */}
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-2xl font-score font-black text-slate-900 dark:text-white">{support.percentage.toFixed(1)}%</span>
+                        <span className="text-2xl font-bold text-slate-900 dark:text-white">{support.percentage.toFixed(1)}%</span>
                         {support.volume && (
                           <span className="text-xs font-body text-slate-500 dark:text-slate-400">{support.volume}</span>
                         )}
@@ -1360,14 +1360,14 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                         <div className="w-3 h-3 rounded-full bg-red-500" />
                         <span className="text-base font-body text-slate-700 dark:text-white">{t('gcodeAnalytics.nozzle')}</span>
                       </div>
-                      <span className="text-xl font-score font-black text-slate-900 dark:text-white">{temperature.nozzle}°C</span>
+                      <span className="text-xl font-bold text-slate-900 dark:text-white">{temperature.nozzle}°C</span>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-700/30 rounded-lg">
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-orange-500" />
                         <span className="text-base font-body text-slate-700 dark:text-white">{t('gcodeAnalytics.bed')}</span>
                       </div>
-                      <span className="text-xl font-score font-black text-slate-900 dark:text-white">{temperature.bed}°C</span>
+                      <span className="text-xl font-bold text-slate-900 dark:text-white">{temperature.bed}°C</span>
                     </div>
                     {temperature.firstLayer && (
                       <div className="pt-2 border-t border-slate-200 dark:border-slate-700/50">
@@ -1643,7 +1643,7 @@ function MetricCard({ icon, label, value, subValue, color }: MetricCardProps) {
         <span className="text-sm font-heading font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</span>
       </div>
       <div className="flex items-baseline gap-1">
-        <span className="text-3xl font-score font-black text-slate-900 dark:text-white">{value}</span>
+        <span className="text-3xl font-bold text-slate-900 dark:text-white">{value}</span>
         {subValue && <span className="text-base font-body text-slate-500 dark:text-slate-400">{subValue}</span>}
       </div>
     </div>
@@ -1672,7 +1672,7 @@ function SpeedBar({ label, value, maxValue, color }: SpeedBarProps) {
     <div>
       <div className="flex justify-between text-sm mb-1">
         <span className="font-body text-slate-500 dark:text-slate-400">{label}</span>
-        <span className="font-score font-black text-slate-900 dark:text-white">{displayValue} mm/s</span>
+        <span className="font-bold text-slate-900 dark:text-white">{displayValue} mm/s</span>
       </div>
       <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
         <div

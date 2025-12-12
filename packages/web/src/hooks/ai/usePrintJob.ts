@@ -205,6 +205,15 @@ export function usePrintJob({
     const openPrinterSettings = (printer: Printer) => {
         setPrinterToConfirm(printer);
         setPrinterConfirmDialogOpen(true);
+
+        // 현재 모델의 이름으로 기본 파일명 설정
+        const currentModel = currentModelId ? generatedModels.find(m => m.id === currentModelId) : null;
+        if (currentModel) {
+            const modelName = currentModel.model_name || currentModel.prompt || 'model';
+            // 파일명에서 특수문자 제거
+            const safeName = modelName.replace(/[^a-zA-Z0-9가-힣\s-]/g, '').trim().replace(/\s+/g, '_');
+            setPrintFileName(safeName || 'model');
+        }
     };
 
     const confirmPrinterSelection = async () => {
@@ -286,7 +295,7 @@ export function usePrintJob({
                     .from('gcode_files')
                     .select('*')
                     .eq('model_id', currentModelId)
-                    .single();
+                    .maybeSingle();
 
                 if (existingGcode && !gcodeError) {
                     const { data: urlData, error: urlError } = await supabase.storage

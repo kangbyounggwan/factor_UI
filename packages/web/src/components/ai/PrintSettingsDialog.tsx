@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Printer, RefreshCw, File as FileIcon } from "lucide-react";
+import { Printer, RefreshCw, File as FileIcon, Download } from "lucide-react";
 import { Suspense, lazy } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -201,14 +201,49 @@ export function PrintSettingsDialog({
                                 <div className="space-y-3">
                                     <div className="space-y-1.5">
                                         <Label htmlFor="print-filename-tab" className="text-xs text-muted-foreground">{t('ai.fileName')}</Label>
-                                        <Input
-                                            id="print-filename-tab"
-                                            value={printFileName}
-                                            onChange={(e) => setPrintFileName(e.target.value)}
-                                            placeholder="my-model-2025-01-17"
-                                            className="text-sm h-9"
-                                            disabled={isSlicing}
-                                        />
+                                        <div className="flex items-center gap-2">
+                                            <Input
+                                                id="print-filename-tab"
+                                                value={printFileName}
+                                                onChange={(e) => setPrintFileName(e.target.value)}
+                                                placeholder="my-model-2025-01-17"
+                                                className="text-sm h-9 flex-1"
+                                                disabled={isSlicing}
+                                            />
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-9 px-3"
+                                                disabled={!currentGCodeUrl || isSlicing}
+                                                onClick={async () => {
+                                                    if (currentGCodeUrl) {
+                                                        try {
+                                                            const response = await fetch(currentGCodeUrl);
+                                                            const blob = await response.blob();
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            const link = document.createElement('a');
+                                                            link.href = url;
+                                                            // 파일명에 .gcode 확장자가 없으면 추가
+                                                            let fileName = printFileName || 'model';
+                                                            if (!fileName.toLowerCase().endsWith('.gcode')) {
+                                                                fileName = `${fileName}.gcode`;
+                                                            }
+                                                            link.download = fileName;
+                                                            document.body.appendChild(link);
+                                                            link.click();
+                                                            document.body.removeChild(link);
+                                                            window.URL.revokeObjectURL(url);
+                                                        } catch (error) {
+                                                            console.error('G-code download failed:', error);
+                                                        }
+                                                    }
+                                                }}
+                                                title={t('ai.downloadGCode')}
+                                            >
+                                                <Download className="h-4 w-4 mr-1.5" />
+                                                {t('ai.download')}
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             </TabsContent>

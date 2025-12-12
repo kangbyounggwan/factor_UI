@@ -314,6 +314,8 @@ export default {
     missingFileOrPrinter: "GCode 파일이나 프린터 정보가 없습니다.",
     printerUuidMissing: "프린터 UUID가 없습니다.",
     downloadingGCode: "GCode 다운로드 중...",
+    downloadGCode: "G-code 다운로드",
+    download: "다운로드",
     preparingPrint: "출력 준비 중...",
     gcodeDownloadFailed: "GCode 파일 다운로드 실패",
     fileUploadedToPrinter: "{{fileName}} 파일이 프린터에 업로드되었습니다.",
