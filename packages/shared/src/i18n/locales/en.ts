@@ -1473,6 +1473,7 @@ export default {
     perMonth: "/ month",
     perYear: "/ year",
     popular: "Popular",
+    premium: "Premium",
     currentPlanBadge: "Current Plan",
     startFree: "Start Free",
     getStarted: "Get Started",
@@ -1566,7 +1567,7 @@ export default {
     webOnlyDesc: "Subscriptions are only available on PC web browser. Please visit our website.",
     subscribeOnWeb: "Subscribe on Web",
     supportType: "Support Type",
-    dedicatedManager: "24/7 Dedicated Manager",
+    dedicatedManager: "Dedicated Account Manager",
     // Plan names
     basic: "Basic",
     pro: "Pro",
@@ -1584,7 +1585,7 @@ export default {
       aiModel: "AI model generation",
       analytics: "Advanced analytics & statistics",
       apiAccess: "API access",
-      support: "24/7 dedicated manager",
+      support: "Dedicated account manager",
       slack: "Dedicated Slack channel",
       sla: "SLA guarantee",
     },
@@ -1648,8 +1649,8 @@ export default {
       supportType: "Support Type",
       community: "Community",
       email24h: "Email (within 24 hours)",
-      dedicatedManager: "24/7 Dedicated Manager",
-      dedicated247: "24/7 Dedicated Manager",
+      dedicatedManager: "Dedicated Account Manager",
+      dedicated247: "Dedicated Account Manager",
       slackChannel: "Dedicated Slack Channel",
       slaGuarantee: "SLA Guarantee"
     },
@@ -1688,7 +1689,7 @@ export default {
       supportType: "Support Type",
       community: "Community",
       email24h: "Email (within 24 hours)",
-      dedicated247: "24/7 Dedicated Manager",
+      dedicated247: "Dedicated Account Manager",
       slackChannel: "Dedicated Slack Channel",
       slaGuarantee: "SLA Guarantee"
     }

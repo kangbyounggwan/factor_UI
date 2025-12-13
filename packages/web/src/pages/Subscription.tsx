@@ -380,19 +380,19 @@ const Subscription = () => {
               onValueChange={(value) => setIsYearly(value === "yearly")}
               className="inline-flex"
             >
-              <TabsList className="grid grid-cols-2 h-10 lg:h-11 bg-muted p-1 rounded-lg w-fit">
+              <TabsList className="grid grid-cols-2 h-12 lg:h-14 bg-muted/60 p-1.5 rounded-full w-fit border-2 border-border/40 shadow-inner">
                 <TabsTrigger
                   value="monthly"
-                  className="min-w-[100px] lg:min-w-[120px] px-4 lg:px-6 py-2 text-xs lg:text-sm font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm rounded-md transition-all"
+                  className="min-w-[110px] lg:min-w-[140px] px-5 lg:px-8 py-2.5 text-xs lg:text-sm font-semibold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-lg rounded-full transition-all duration-200 hover:text-foreground"
                 >
                   {t('subscription.monthly')}
                 </TabsTrigger>
                 <TabsTrigger
                   value="yearly"
-                  className="min-w-[100px] lg:min-w-[120px] px-4 lg:px-6 py-2 text-xs lg:text-sm font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm rounded-md transition-all"
+                  className="min-w-[110px] lg:min-w-[140px] px-5 lg:px-8 py-2.5 text-xs lg:text-sm font-semibold text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-lg rounded-full transition-all duration-200 hover:text-foreground"
                 >
                   {t('subscription.yearly')}
-                  <Badge variant="secondary" className="ml-1 lg:ml-2 bg-primary/10 text-primary hover:bg-primary/20 text-[10px] lg:text-xs px-1 lg:px-1.5 py-0">
+                  <Badge variant="secondary" className="ml-1.5 lg:ml-2 bg-gradient-to-r from-emerald-500/20 to-green-500/20 text-emerald-600 dark:text-emerald-400 hover:from-emerald-500/30 hover:to-green-500/30 text-[10px] lg:text-xs px-1.5 lg:px-2 py-0.5 font-bold border border-emerald-500/30 rounded-full">
                     {t('subscription.yearlyDiscount')}
                   </Badge>
                 </TabsTrigger>
@@ -401,24 +401,37 @@ const Subscription = () => {
           </div>
 
           {/* 플랜 카드 */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-8">
             {subscriptionPlans.map((plan) => (
               <Card
                 key={plan.id}
-                className={`relative flex flex-col overflow-hidden rounded-2xl lg:rounded-3xl min-h-[500px] lg:min-h-[38.25rem] ${
+                className={`relative flex flex-col overflow-hidden rounded-2xl lg:rounded-3xl min-h-[500px] lg:min-h-[38.25rem] transition-all duration-300 ${
                   plan.popular
-                    ? "border-2 border-blue-500/50 bg-gradient-to-br from-slate-200 via-blue-100/80 to-slate-300 dark:from-blue-950 dark:via-blue-900/60 dark:to-blue-950"
-                    : "border border-border bg-card"
+                    ? "border-2 border-blue-500/60 bg-gradient-to-br from-blue-50 via-blue-100/90 to-indigo-100 dark:from-blue-950/90 dark:via-blue-900/70 dark:to-indigo-950/80 ring-4 ring-blue-500/10 scale-[1.02] lg:scale-105"
+                    : plan.id === 'enterprise'
+                    ? "border-2 border-purple-400/40 bg-gradient-to-br from-slate-50 via-purple-50/50 to-slate-100 dark:from-slate-900 dark:via-purple-950/30 dark:to-slate-900 hover:border-purple-400/60 hover:shadow-lg hover:shadow-purple-500/10"
+                    : "border-2 border-border/60 bg-gradient-to-br from-card via-card to-muted/20 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5"
                 }`}
                 style={plan.popular ? {
-                  boxShadow: '0 0 20px rgba(37, 99, 235, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.6)'
+                  boxShadow: '0 8px 40px rgba(37, 99, 235, 0.25), 0 0 0 1px rgba(37, 99, 235, 0.1), inset 0 1px 2px rgba(255, 255, 255, 0.8)'
+                } : plan.id === 'enterprise' ? {
+                  boxShadow: '0 4px 20px rgba(147, 51, 234, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.5)'
                 } : undefined}
               >
                 {/* Popular Badge */}
                 {plan.popular && (
                   <div className="absolute top-4 right-4">
-                    <Badge className="bg-primary text-primary-foreground px-2.5 py-0.5 text-xs font-medium rounded-md shadow-sm">
+                    <Badge className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3 py-1 text-xs font-semibold rounded-full shadow-lg shadow-blue-500/30 border border-blue-400/30">
                       {t('subscription.popular')}
+                    </Badge>
+                  </div>
+                )}
+
+                {/* Enterprise Badge */}
+                {plan.id === 'enterprise' && (
+                  <div className="absolute top-4 right-4">
+                    <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-3 py-1 text-xs font-semibold rounded-full shadow-lg shadow-purple-500/30 border border-purple-400/30">
+                      {t('subscription.premium') || 'Premium'}
                     </Badge>
                   </div>
                 )}
@@ -475,14 +488,14 @@ const Subscription = () => {
                   {/* CTA Button - 하단 정렬 */}
                   <div className="mt-auto w-full">
                     <Button
-                      className={`w-full h-11 lg:h-9 text-sm lg:text-sm font-semibold rounded-full transition-colors ${
+                      className={`w-full h-12 lg:h-11 text-sm lg:text-sm font-semibold rounded-full transition-all duration-200 ${
                         plan.popular
-                          ? "bg-blue-600 hover:bg-blue-700 text-white"
+                          ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 border border-blue-400/20"
                           : plan.current
-                          ? "opacity-50 cursor-not-allowed bg-muted text-foreground"
+                          ? "opacity-50 cursor-not-allowed bg-muted text-foreground border-2 border-border"
                           : plan.price === -1
-                          ? "bg-foreground hover:bg-foreground/90 text-background"
-                          : "bg-muted hover:bg-muted/80 text-foreground"
+                          ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg shadow-purple-500/25 hover:shadow-xl hover:shadow-purple-500/30 border border-purple-400/20"
+                          : "bg-foreground hover:bg-foreground/90 text-background border-2 border-foreground/10 hover:scale-[1.02]"
                       }`}
                       disabled={plan.current || isLoading === plan.id}
                       onClick={() => handleUpgrade(plan.id)}
@@ -540,84 +553,84 @@ const Subscription = () => {
             </div>
 
             {/* 비교 테이블 */}
-            <div className="w-full overflow-x-auto -mx-4 lg:mx-0">
+            <div className="w-full overflow-x-auto -mx-4 lg:mx-0 rounded-2xl border-2 border-border/60 bg-card/50 backdrop-blur-sm shadow-lg">
               <table className="w-full border-collapse min-w-[600px]">
                 <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-3 lg:py-4 px-3 lg:px-6 font-semibold text-xs lg:text-sm min-w-[140px] lg:min-w-[200px]"></th>
-                    <th className="text-center py-3 lg:py-4 px-2 lg:px-6 font-semibold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px]">{t('subscription.plans.basic.name')}</th>
-                    <th className="text-center py-3 lg:py-4 px-2 lg:px-6 font-semibold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px] bg-primary/5">{t('subscription.plans.pro.name')}</th>
-                    <th className="text-center py-3 lg:py-4 px-2 lg:px-6 font-semibold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px]">{t('subscription.plans.enterprise.name')}</th>
+                  <tr className="border-b-2 border-border/60 bg-muted/40">
+                    <th className="text-left py-4 lg:py-5 px-4 lg:px-6 font-bold text-xs lg:text-sm min-w-[140px] lg:min-w-[200px] text-foreground"></th>
+                    <th className="text-center py-4 lg:py-5 px-2 lg:px-6 font-bold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px] text-foreground">{t('subscription.plans.basic.name')}</th>
+                    <th className="text-center py-4 lg:py-5 px-2 lg:px-6 font-bold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px] bg-blue-500/10 text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{t('subscription.plans.pro.name')}</th>
+                    <th className="text-center py-4 lg:py-5 px-2 lg:px-6 font-bold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px] text-purple-700 dark:text-purple-300">{t('subscription.plans.enterprise.name')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {/* 프린터 관리 섹션 */}
-                  <tr className="border-b border-border bg-muted/30">
-                    <td colSpan={4} className="py-2 lg:py-3 px-3 lg:px-6 font-semibold text-xs lg:text-sm">{t('subscription.comparison.printerManagement')}</td>
+                  <tr className="border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/30">
+                    <td colSpan={4} className="py-3 lg:py-4 px-4 lg:px-6 font-bold text-xs lg:text-sm text-foreground">{t('subscription.comparison.printerManagement')}</td>
                   </tr>
-                  <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.maxPrinters')}</td>
-                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.printersCount', { count: 1 })}</td>
-                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center bg-primary/5 text-xs lg:text-sm">{t('subscription.comparison.printersCount', { count: 5 })}</td>
-                    <td className="py-3 lg:py-4 px-2 lg:px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.unlimited')}</td>
+                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.maxPrinters')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-6 text-center text-xs lg:text-sm text-muted-foreground">{t('subscription.comparison.printersCount', { count: 1 })}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-6 text-center bg-blue-500/5 text-xs lg:text-sm font-semibold text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{t('subscription.comparison.printersCount', { count: 5 })}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-6 text-center text-xs lg:text-sm font-semibold text-purple-700 dark:text-purple-300">{t('subscription.comparison.unlimited')}</td>
                   </tr>
-                  <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.realtimeMonitoring')}</td>
-                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
-                    <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
-                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.realtimeMonitoring')}</td>
+                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
+                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 border-x-2 border-blue-500/20"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
+                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
                   </tr>
-                  <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.remoteControl')}</td>
-                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
-                    <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
-                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.remoteControl')}</td>
+                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
+                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 border-x-2 border-blue-500/20"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
+                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
                   </tr>
 
                   {/* 기능 섹션 */}
-                  <tr className="border-b border-border bg-muted/30">
-                    <td colSpan={4} className="py-2 lg:py-3 px-3 lg:px-6 font-semibold text-xs lg:text-sm">{t('subscription.comparison.keyFeatures')}</td>
+                  <tr className="border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/30">
+                    <td colSpan={4} className="py-3 lg:py-4 px-4 lg:px-6 font-bold text-xs lg:text-sm text-foreground">{t('subscription.comparison.keyFeatures')}</td>
                   </tr>
-                  <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.aiModelGeneration')}</td>
-                    <td className="py-4 px-6 text-center text-xs lg:text-sm">-</td>
-                    <td className="py-4 px-6 text-center bg-primary/5 text-xs lg:text-sm">{t('subscription.comparison.modelsPerMonth', { count: 50 })}</td>
-                    <td className="py-4 px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.unlimited')}</td>
+                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.aiModelGeneration')}</td>
+                    <td className="py-4 lg:py-5 px-6 text-center text-xs lg:text-sm text-muted-foreground/60">-</td>
+                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 text-xs lg:text-sm font-semibold text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{t('subscription.comparison.modelsPerMonth', { count: 50 })}</td>
+                    <td className="py-4 lg:py-5 px-6 text-center text-xs lg:text-sm font-semibold text-purple-700 dark:text-purple-300">{t('subscription.comparison.unlimited')}</td>
                   </tr>
-                  <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.advancedAnalytics')}</td>
-                    <td className="py-4 px-6 text-center">-</td>
-                    <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
-                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.advancedAnalytics')}</td>
+                    <td className="py-4 lg:py-5 px-6 text-center text-muted-foreground/60">-</td>
+                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 border-x-2 border-blue-500/20"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
+                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
                   </tr>
-                  <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.apiAccess')}</td>
-                    <td className="py-4 px-6 text-center">-</td>
-                    <td className="py-4 px-6 text-center bg-primary/5"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
-                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.apiAccess')}</td>
+                    <td className="py-4 lg:py-5 px-6 text-center text-muted-foreground/60">-</td>
+                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 border-x-2 border-blue-500/20"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
+                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
                   </tr>
 
                   {/* 지원 섹션 */}
-                  <tr className="border-b border-border bg-muted/30">
-                    <td colSpan={4} className="py-2 lg:py-3 px-3 lg:px-6 font-semibold text-xs lg:text-sm">{t('subscription.comparison.customerSupport')}</td>
+                  <tr className="border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/30">
+                    <td colSpan={4} className="py-3 lg:py-4 px-4 lg:px-6 font-bold text-xs lg:text-sm text-foreground">{t('subscription.comparison.customerSupport')}</td>
                   </tr>
-                  <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.supportType')}</td>
-                    <td className="py-4 px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.community')}</td>
-                    <td className="py-4 px-6 text-center bg-primary/5 text-xs lg:text-sm">{t('subscription.comparison.email24h')}</td>
-                    <td className="py-4 px-6 text-center text-xs lg:text-sm">{t('subscription.comparison.dedicatedManager')}</td>
+                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.supportType')}</td>
+                    <td className="py-4 lg:py-5 px-6 text-center text-xs lg:text-sm text-muted-foreground">{t('subscription.comparison.community')}</td>
+                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 text-xs lg:text-sm font-medium text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{t('subscription.comparison.email24h')}</td>
+                    <td className="py-4 lg:py-5 px-6 text-center text-xs lg:text-sm font-medium text-purple-700 dark:text-purple-300">{t('subscription.comparison.dedicatedManager')}</td>
                   </tr>
-                  <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.slackChannel')}</td>
-                    <td className="py-4 px-6 text-center">-</td>
-                    <td className="py-4 px-6 text-center bg-primary/5">-</td>
-                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.slackChannel')}</td>
+                    <td className="py-4 lg:py-5 px-6 text-center text-muted-foreground/60">-</td>
+                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 text-muted-foreground/60 border-x-2 border-blue-500/20">-</td>
+                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
                   </tr>
-                  <tr className="border-b border-border hover:bg-muted/20">
-                    <td className="py-3 lg:py-4 px-3 lg:px-6 text-xs lg:text-sm">{t('subscription.comparison.slaGuarantee')}</td>
-                    <td className="py-4 px-6 text-center">-</td>
-                    <td className="py-4 px-6 text-center bg-primary/5">-</td>
-                    <td className="py-4 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-success" /></td>
+                  <tr className="hover:bg-muted/30 transition-colors">
+                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.slaGuarantee')}</td>
+                    <td className="py-4 lg:py-5 px-6 text-center text-muted-foreground/60">-</td>
+                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 text-muted-foreground/60 border-x-2 border-blue-500/20">-</td>
+                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
                   </tr>
                 </tbody>
               </table>
