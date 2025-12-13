@@ -18,14 +18,14 @@ export function TextToImageTab({ prompt, setPrompt, isProcessing, generateImage,
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] gap-6 h-full">
-            <Card className="lg:sticky top-4 max-h-[calc(85vh-4rem-2rem)] overflow-auto">
+            <Card className="lg:sticky top-4 max-h-[calc(85vh-4rem-2rem)] flex flex-col">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Camera className="w-5 h-5" />
                         {t('ai.imageGeneration')}
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 flex-1 overflow-auto">
                     <div className="space-y-2">
                         <label className="text-sm font-medium">{t('ai.imageDescription')}</label>
                         <Textarea
@@ -56,8 +56,10 @@ export function TextToImageTab({ prompt, setPrompt, isProcessing, generateImage,
                             </div>
                         </div>
                     </div>
-
-                    <Button onClick={generateImage} className="w-full" size="lg" disabled={isProcessing}>
+                </CardContent>
+                {/* 하단 고정 버튼 */}
+                <div className="p-6 pt-0 mt-auto">
+                    <Button onClick={generateImage} className="w-full" size="lg" disabled={isProcessing || !prompt.trim()}>
                         {isProcessing ? (
                             <>
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -70,7 +72,7 @@ export function TextToImageTab({ prompt, setPrompt, isProcessing, generateImage,
                             </>
                         )}
                     </Button>
-                </CardContent>
+                </div>
             </Card>
 
             <Card className="h-fit lg:sticky top-4">

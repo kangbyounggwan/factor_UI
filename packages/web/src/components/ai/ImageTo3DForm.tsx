@@ -34,7 +34,7 @@ export default function ImageTo3DForm(props: ImageTo3DFormProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const active = selectedId != null ? files.find(f => f.id === selectedId) : (files.length > 0 ? files[files.length - 1] : null);
   return (
-    <Card className="lg:sticky top-4 max-h-[calc(85vh-4rem-2rem)] overflow-auto lg:w-[420px]">
+    <Card className="lg:sticky top-4 max-h-[calc(85vh-4rem-2rem)] flex flex-col lg:w-[420px]">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Upload className="w-5 h-5" />
@@ -42,8 +42,8 @@ export default function ImageTo3DForm(props: ImageTo3DFormProps) {
         </CardTitle>
         <CardDescription>{t('ai.imageUploadDescription')}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <div 
+      <CardContent className="flex-1 overflow-auto">
+        <div
           className="border-2 border-dashed border-muted-foreground/25 rounded-lg px-12 py-10 text-center hover:border-primary/50 transition-colors cursor-pointer"
           onDragOver={onDragOver}
           onDrop={onDrop}
@@ -149,11 +149,13 @@ export default function ImageTo3DForm(props: ImageTo3DFormProps) {
             </div>
           </div>
         </div>
-
-        <Button onClick={onSubmit} className="w-full mt-4" size="lg" disabled={isProcessing || !active}>
+      </CardContent>
+      {/* 하단 고정 버튼 */}
+      <div className="p-6 pt-0 mt-auto">
+        <Button onClick={onSubmit} className="w-full" size="lg" disabled={isProcessing || !active}>
           {hasExistingModel ? t('ai.regenerate3D') : t('ai.convertTo3D')}
         </Button>
-      </CardContent>
+      </div>
     </Card>
   );
 }

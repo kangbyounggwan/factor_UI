@@ -33,6 +33,7 @@ import { AIPageHeader } from "@/components/ai/AIPageHeader";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
 
 // ============================================================================
 // API 분석 결과 → UI 보고서 데이터 변환
@@ -272,6 +273,9 @@ const GCodeAnalytics = () => {
     storagePath: string;
   } | null>(null);
 
+  // 로그인 프롬프트 모달 상태
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const currentFileRef = useRef<File | null>(null);
 
@@ -384,6 +388,12 @@ const GCodeAnalytics = () => {
 
   // 파일 처리 (스토리지 업로드 + 분석)
   const processFile = useCallback(async (file: File) => {
+    // 비로그인 사용자는 로그인 모달 표시
+    if (!user?.id) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
     // G-code 파일인지 확인
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (!['gcode', 'gc', 'g', 'nc', 'ngc'].includes(ext || '')) {
@@ -536,7 +546,14 @@ const GCodeAnalytics = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate('/gcode-analytics/archive')}
+              onClick={() => {
+                // 비로그인 사용자는 로그인 모달 표시
+                if (!user?.id) {
+                  setShowLoginPrompt(true);
+                  return;
+                }
+                navigate('/gcode-analytics/archive');
+              }}
             >
               <Archive className="h-4 w-4 mr-2" />
               {t('gcodeAnalytics.archive')}
@@ -754,6 +771,14 @@ const GCodeAnalytics = () => {
           </div>
         )}
       </div>
+
+      {/* 로그인 프롬프트 모달 */}
+      <LoginPromptModal
+        open={showLoginPrompt}
+        onOpenChange={setShowLoginPrompt}
+        title={t('auth.loginRequired', '로그인이 필요합니다')}
+        description={t('gcodeAnalytics.loginToAnalyze', 'G-code 분석 기능을 이용하려면 로그인이 필요합니다.')}
+      />
     </div>
   );
 };

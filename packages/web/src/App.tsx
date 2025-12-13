@@ -9,9 +9,7 @@ import { Footer } from "@/components/Footer";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
-import { AIAssistantSidebar } from "@/components/AIAssistantSidebar";
-import { AISidebarProvider } from "@/contexts/AISidebarContext";
-import { useState, lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
@@ -49,8 +47,6 @@ const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const queryClient = new QueryClient();
 
 const AppContent = () => {
-  const [aiSidebarCollapsed, setAiSidebarCollapsed] = useState(true);
-  const [aiSidebarWidth, setAiSidebarWidth] = useState(384);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -63,9 +59,6 @@ const AppContent = () => {
       navigate(`/auth/callback${hash}`, { replace: true });
     }
   }, [navigate]);
-
-  // AI 어시스턴트/작업공간 활성화
-  const showAISidebar = true;
 
   // Footer를 표시하지 않을 페이지 경로들
   const hideFooterPaths = [
@@ -82,10 +75,6 @@ const AppContent = () => {
   // 현재 경로가 Footer를 숨겨야 하는 경로인지 확인
   const shouldHideFooter = hideFooterPaths.some(path => location.pathname.startsWith(path));
 
-  // AI 사이드바를 숨길 페이지 경로들
-  const hideAISidebarPaths = ['/gcode-analytics'];
-  const shouldHideAISidebar = hideAISidebarPaths.some(path => location.pathname.startsWith(path));
-
   return (
     <div className="flex flex-col min-h-screen bg-background transition-colors">
       {/* 페이지 이동 시 스크롤 최상단으로 */}
@@ -95,12 +84,7 @@ const AppContent = () => {
       <Header />
 
       {/* 메인 컨텐츠 영역 */}
-      <div
-        className="flex-1 transition-all duration-300"
-        style={{
-          marginRight: showAISidebar && !aiSidebarCollapsed && !shouldHideAISidebar ? `${aiSidebarWidth}px` : '0px'
-        }}
-      >
+      <div className="flex-1">
         <Suspense fallback={
           <div className="flex items-center justify-center min-h-screen">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -138,16 +122,8 @@ const AppContent = () => {
             } />
             <Route path="/subscription" element={<Subscription />} />
             <Route path="/supported-printers" element={<SupportedPrinters />} />
-            <Route path="/create" element={
-              <ProtectedRoute>
-                <AI />
-              </ProtectedRoute>
-            } />
-            <Route path="/gcode-analytics" element={
-              <ProtectedRoute>
-                <GCodeAnalytics />
-              </ProtectedRoute>
-            } />
+            <Route path="/create" element={<AI />} />
+            <Route path="/gcode-analytics" element={<GCodeAnalytics />} />
             <Route path="/gcode-analytics/archive" element={
               <ProtectedRoute>
                 <GCodeAnalyticsArchive />
@@ -178,15 +154,6 @@ const AppContent = () => {
 
       {/* 풋터를 특정 페이지에만 표시 */}
       {!shouldHideFooter && <Footer />}
-
-      {showAISidebar && !shouldHideAISidebar && (
-        <AIAssistantSidebar
-          isCollapsed={aiSidebarCollapsed}
-          onToggle={() => setAiSidebarCollapsed(!aiSidebarCollapsed)}
-          width={aiSidebarWidth}
-          onWidthChange={setAiSidebarWidth}
-        />
-      )}
     </div>
   );
 };
@@ -200,13 +167,11 @@ const App = () => (
       disableTransitionOnChange
     >
       <TooltipProvider>
-        <AISidebarProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AppContent />
-          </BrowserRouter>
-        </AISidebarProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>

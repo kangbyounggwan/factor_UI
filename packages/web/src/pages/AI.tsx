@@ -92,6 +92,7 @@ import { subscribeToTaskUpdates, BackgroundTask } from "@shared/services/backgro
 import { canGenerateAiModel, getAiGenerationLimit, getRemainingAiGenerations } from "@shared/utils/subscription";
 import { SubscriptionPlan } from "@shared/types/subscription";
 import { generateShortFilename } from "@shared/services/geminiService";
+import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
 
 
 const AI = () => {
@@ -172,6 +173,9 @@ const AI = () => {
   const [userPlan, setUserPlan] = useState<SubscriptionPlan>('free');
   const [monthlyAiUsage, setMonthlyAiUsage] = useState<number>(0);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState<boolean>(false);
+
+  // 로그인 프롬프트 모달 상태
+  const [showLoginPrompt, setShowLoginPrompt] = useState<boolean>(false);
 
 
 
@@ -758,7 +762,8 @@ const AI = () => {
     }
 
     if (!user?.id) {
-      toast({ title: t('ai.authRequired'), description: t('auth.loginRequired'), variant: "destructive" });
+      // 로그인 모달 표시
+      setShowLoginPrompt(true);
       return;
     }
 
@@ -1478,6 +1483,14 @@ const AI = () => {
         onOpenChange={setDeleteImageDialogOpen}
         linkedModelsCount={linkedModelsCount}
         onConfirm={confirmImageDelete}
+      />
+
+      {/* 로그인 프롬프트 모달 */}
+      <LoginPromptModal
+        open={showLoginPrompt}
+        onOpenChange={setShowLoginPrompt}
+        title={t('auth.loginRequired', '로그인이 필요합니다')}
+        description={t('ai.loginToGenerate', 'AI 모델을 생성하려면 로그인이 필요합니다. 로그인하시면 더 많은 기능을 이용하실 수 있습니다.')}
       />
     </div >
   );

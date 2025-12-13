@@ -37,7 +37,7 @@ export default function TextTo3DForm(props: TextTo3DFormProps) {
   } = props;
 
   return (
-    <Card className="lg:sticky top-4 max-h-[calc(85vh-4rem-2rem)] overflow-auto">
+    <Card className="lg:sticky top-4 max-h-[calc(85vh-4rem-2rem)] flex flex-col">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Wand2 className="w-5 h-5" />
@@ -45,7 +45,7 @@ export default function TextTo3DForm(props: TextTo3DFormProps) {
         </CardTitle>
         <CardDescription>{t('ai.textTo3DDescription')}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 flex-1 overflow-auto">
         <div className="space-y-2">
           <label className="text-sm font-medium">{t('ai.textPrompt')}</label>
           <Textarea
@@ -126,7 +126,9 @@ export default function TextTo3DForm(props: TextTo3DFormProps) {
             </div>
           </div>
         </div>
-
+      </CardContent>
+      {/* 하단 고정 버튼 */}
+      <div className="p-6 pt-0 mt-auto">
         <Button
           onClick={onSubmit}
           disabled={isProcessing || !prompt.trim()}
@@ -135,7 +137,7 @@ export default function TextTo3DForm(props: TextTo3DFormProps) {
         >
           {t('ai.generate')}
         </Button>
-      </CardContent>
+      </div>
     </Card>
   );
 }
