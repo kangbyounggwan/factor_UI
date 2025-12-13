@@ -42,7 +42,6 @@ import type { PrinterData as Printer, PrinterGroup, GCodeInfo, PrintSettings } f
 type SymmetryMode = 'off' | 'auto' | 'on';
 type ArtStyle = 'realistic' | 'sculpture';
 import {
-  Layers,
   Upload,
   Download,
   Play,
@@ -76,6 +75,7 @@ import {
   Shapes,
   Type
 } from "lucide-react";
+import { AIPageHeader } from "@/components/ai/AIPageHeader";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
@@ -124,6 +124,8 @@ const AI = () => {
     printFileName, setPrintFileName,
     settingsTab, setSettingsTab,
     targetPrinterModelId, setTargetPrinterModelId,
+    isSendingGCode,
+    sendProgress,
     resliceManufacturer, setResliceManufacturer,
     resliceSeries, setResliceSeries,
     resliceModelId, setResliceModelId,
@@ -1156,23 +1158,19 @@ const AI = () => {
         {/* 메인 작업 영역 */}
         <div className="flex-1 flex flex-col">
           {/* 헤더 */}
-          <div className="border-b-2 border-border p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <Layers className="w-6 h-6 text-primary" />
-                </div>
-                <h1 className="text-2xl font-bold">{t('ai.title')}</h1>
-              </div>
-              {/* AI 사용량 표시 */}
+          <AIPageHeader
+            icon={Sparkles}
+            title={t('ai.title')}
+            subtitle={t('ai.description')}
+            rightContent={
               <div className="text-sm text-muted-foreground">
                 {t('ai.usageInfo', {
                   used: monthlyAiUsage,
                   limit: aiLimit === 'unlimited' ? '∞' : aiLimit
                 })}
               </div>
-            </div>
-          </div>
+            }
+          />
 
           {/* 탭 및 작업 영역 */}
           <div className="flex-1 p-4 overflow-hidden">
@@ -1450,6 +1448,8 @@ const AI = () => {
         printFileName={printFileName}
         setPrintFileName={setPrintFileName}
         startPrint={startPrint}
+        isSendingGCode={isSendingGCode}
+        sendProgress={sendProgress}
         resliceManufacturer={resliceManufacturer}
         setResliceManufacturer={setResliceManufacturer}
         resliceSeries={resliceSeries}

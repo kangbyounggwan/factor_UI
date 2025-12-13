@@ -69,6 +69,10 @@ export function usePrintJob({
     const [gcodeInfo, setGcodeInfo] = useState<GCodeInfo | null>(null);
     const [targetPrinterModelId, setTargetPrinterModelId] = useState<string | null>(null);
 
+    // G-code 전송 진행률 상태
+    const [isSendingGCode, setIsSendingGCode] = useState<boolean>(false);
+    const [sendProgress, setSendProgress] = useState<number>(0);
+
     // Reslice States
     const [resliceManufacturer, setResliceManufacturer] = useState<string>('');
     const [resliceSeries, setResliceSeries] = useState<string>('');
@@ -505,6 +509,9 @@ export function usePrintJob({
         }
 
         try {
+            setIsSendingGCode(true);
+            setSendProgress(0);
+
             const sanitizedInput = printFileName.trim().replace(/[^a-zA-Z0-9가-힣\-_]/g, '_').replace(/^_|_$/g, '');
             let fileName = sanitizedInput.length > 0
                 ? (sanitizedInput.endsWith('.gcode') ? sanitizedInput : `${sanitizedInput}.gcode`)
@@ -516,13 +523,17 @@ export function usePrintJob({
             if (!gcodeResponse.ok) throw new Error(t('ai.gcodeDownloadFailed'));
             const gcodeBlob = await gcodeResponse.blob();
 
+            setSendProgress(5); // G-code 다운로드 완료
+
             await mqttConnect();
+            setSendProgress(10); // MQTT 연결 완료
 
             const uploadId = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`);
             const arrayBuf = await gcodeBlob.arrayBuffer();
             const bytes = new Uint8Array(arrayBuf);
             const total = bytes.length;
             const chunkSize = 32 * 1024;
+            const totalChunks = Math.ceil(total / chunkSize);
 
             const toB64 = (chunk: Uint8Array) => {
                 let binary = '';
@@ -530,6 +541,7 @@ export function usePrintJob({
                 return btoa(binary);
             };
 
+            // 첫 번째 청크 전송
             await publishSdUploadChunkFirst(selectedPrinter.device_uuid, {
                 type: 'sd_upload_chunk',
                 upload_id: uploadId,
@@ -543,6 +555,10 @@ export function usePrintJob({
 
             let sent = Math.min(chunkSize, total);
             let index = 1;
+
+            // 진행률 계산: 10% (연결) ~ 90% (전송 완료)
+            setSendProgress(10 + Math.round((1 / totalChunks) * 80));
+
             while (sent < total) {
                 const next = Math.min(sent + chunkSize, total);
                 await publishSdUploadChunk(selectedPrinter.device_uuid, {
@@ -552,30 +568,46 @@ export function usePrintJob({
                 });
                 sent = next;
                 index += 1;
+
+                // 청크별 진행률 업데이트
+                const chunkProgress = Math.round((index / totalChunks) * 80);
+                setSendProgress(10 + chunkProgress);
             }
+
+            setSendProgress(92); // 전송 완료, 커밋 중
 
             await publishSdUploadCommit(selectedPrinter.device_uuid, uploadId, 'local');
 
+            setSendProgress(95); // 커밋 완료, 결과 대기 중
+
             try {
                 const uploadResult = await waitForGCodeUploadResult(selectedPrinter.device_uuid, uploadId, 60000);
+                setSendProgress(100);
                 if (uploadResult.success) {
                     toast({ title: t('gcode.uploadSuccess'), description: `${uploadResult.filename} -> Local` });
                 } else {
                     toast({ title: t('gcode.uploadFailed'), description: uploadResult.error, variant: 'destructive' });
+                    setIsSendingGCode(false);
+                    setSendProgress(0);
                     return;
                 }
             } catch (timeoutError) {
                 console.warn(timeoutError);
+                setSendProgress(100);
                 toast({ title: t('gcode.uploadSuccess'), description: t('ai.fileUploadedToPrinter', { fileName }) });
             }
 
+            setIsSendingGCode(false);
+            setSendProgress(0);
             setPrintDialogOpen(false);
-            if (window.confirm(`${selectedPrinter.name} 대시보드로 이동하시겠습니까?`)) {
+            if (window.confirm(t('ai.navigateToDashboard', { printerName: selectedPrinter.name }))) {
                 navigate(`/printer/${selectedPrinter.id}`);
             }
 
         } catch (error: any) {
             console.error(error);
+            setIsSendingGCode(false);
+            setSendProgress(0);
             toast({ title: t('ai.printStartFailed'), description: error.message, variant: 'destructive' });
         }
     };
@@ -601,6 +633,10 @@ export function usePrintJob({
         setSettingsTab,
         targetPrinterModelId,
         setTargetPrinterModelId,
+
+        // G-code 전송 진행률
+        isSendingGCode,
+        sendProgress,
 
         resliceManufacturer,
         setResliceManufacturer,

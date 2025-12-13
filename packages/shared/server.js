@@ -550,78 +550,182 @@ function setupMqttSubscriber() {
       // octoprint 상태 토픽 구독 (모든 디바이스)
       mqttClient.subscribe('octoprint/status/#', (err) => {
         if (err) {
-          console.error('[MQTT] Subscribe error:', err);
+          console.error('[MQTT] Subscribe error (octoprint/status):', err);
         } else {
           console.log('[MQTT] Subscribed to octoprint/status/#');
         }
       });
+      // dash_status 토픽도 구독 (프린터 상태 브로드캐스트)
+      mqttClient.subscribe('dash_status/#', (err) => {
+        if (err) {
+          console.error('[MQTT] Subscribe error (dash_status):', err);
+        } else {
+          console.log('[MQTT] Subscribed to dash_status/#');
+        }
+      });
+      // control_result 토픽 구독 (제어 명령 응답)
+      mqttClient.subscribe('control_result/#', (err) => {
+        if (err) {
+          console.error('[MQTT] Subscribe error (control_result):', err);
+        } else {
+          console.log('[MQTT] Subscribed to control_result/#');
+        }
+      });
     });
+
+    // 제어 명령 응답 대기를 위한 콜백 저장소
+    // key: `${deviceUuid}:${commandId}`, value: { resolve, reject, timeout }
+    const controlResultCallbacks = new Map();
 
     mqttClient.on('message', (topic, message) => {
       try {
-        // 토픽에서 device UUID 추출: octoprint/status/{deviceUuid}
-        const match = topic.match(/^octoprint\/status\/(.+)$/);
-        if (!match) return;
+        let deviceUuid = null;
+        let payload = null;
 
-        const deviceUuid = match[1];
-        const payload = JSON.parse(message.toString());
+        // octoprint/status/{deviceUuid} 토픽 처리
+        const octoprintMatch = topic.match(/^octoprint\/status\/(.+)$/);
+        // dash_status/{deviceUuid} 토픽 처리
+        const dashMatch = topic.match(/^dash_status\/(.+)$/);
+        // control_result/{deviceUuid} 토픽 처리
+        const controlResultMatch = topic.match(/^control_result\/(.+)$/);
+
+        // control_result 메시지 처리 (제어 명령 응답)
+        if (controlResultMatch) {
+          deviceUuid = controlResultMatch[1];
+          payload = JSON.parse(message.toString());
+          console.log(`[MQTT] Control result received for ${deviceUuid}:`, payload);
+
+          // 대기 중인 콜백이 있으면 호출
+          const callbackKey = `${deviceUuid}:${payload.command_id || payload.action || 'unknown'}`;
+          // 범용 키로도 확인 (command_id 없는 경우)
+          const genericKey = `${deviceUuid}:*`;
+
+          let callback = controlResultCallbacks.get(callbackKey);
+          if (!callback) {
+            callback = controlResultCallbacks.get(genericKey);
+          }
+
+          if (callback) {
+            clearTimeout(callback.timeout);
+            controlResultCallbacks.delete(callbackKey);
+            controlResultCallbacks.delete(genericKey);
+            callback.resolve(payload);
+          }
+          return;
+        }
+
+        if (octoprintMatch) {
+          deviceUuid = octoprintMatch[1];
+          payload = JSON.parse(message.toString());
+        } else if (dashMatch) {
+          deviceUuid = dashMatch[1];
+          payload = JSON.parse(message.toString());
+        } else {
+          return;
+        }
+
+        if (!deviceUuid || !payload) return;
 
         // realtimeDataStore에 데이터 저장
         const deviceData = getDeviceData(deviceUuid);
 
-        // OctoPrint 데이터 구조에 맞게 파싱
-        if (payload.state) {
-          deviceData.status = payload.state.flags?.printing ? 'printing' :
-                              payload.state.flags?.operational ? 'idle' : 'disconnected';
-          deviceData.connected = payload.state.flags?.operational || false;
-          deviceData.printing = payload.state.flags?.printing || false;
-          deviceData.error_message = payload.state.flags?.error ? payload.state.text : null;
-        }
-
-        // temperatures (복수형) 처리
-        if (payload.temperatures) {
-          // tool0 온도
-          if (payload.temperatures.tool0) {
-            deviceData.temperature.tool = {
-              current: payload.temperatures.tool0.actual || 0,
-              target: payload.temperatures.tool0.target || 0,
+        // dash_status 토픽 처리 (기존 앱에서 사용하는 데이터 구조)
+        // payload 구조: { connected, printer_status: { state, flags, printing, error_message }, temperature_info: { tool, bed }, position, progress }
+        if (dashMatch) {
+          // connected 상태
+          if (payload.connected !== undefined) {
+            deviceData.connected = Boolean(payload.connected);
+          }
+          // printer_status
+          if (payload.printer_status) {
+            deviceData.status = payload.printer_status.state ?? 'idle';
+            deviceData.printing = Boolean(payload.printer_status.printing);
+            deviceData.error_message = payload.printer_status.error_message ?? null;
+          }
+          // temperature_info
+          if (payload.temperature_info) {
+            const tInfo = payload.temperature_info;
+            const toolAny = tInfo.tool;
+            const tool = toolAny?.tool0 ?? toolAny;
+            if (tool) {
+              deviceData.temperature.tool = {
+                current: Number(tool.actual) || 0,
+                target: Number(tool.target) || 0,
+              };
+            }
+            if (tInfo.bed) {
+              deviceData.temperature.bed = {
+                current: Number(tInfo.bed.actual) || 0,
+                target: Number(tInfo.bed.target) || 0,
+              };
+            }
+          }
+          // position
+          if (payload.position) {
+            deviceData.position = payload.position;
+          }
+          // progress
+          if (payload.progress) {
+            const p = payload.progress;
+            deviceData.printProgress = {
+              completion: typeof p.completion === 'number' ? p.completion : 0,
+              file_position: p.file_position ?? 0,
+              file_size: p.file_size ?? 0,
+              print_time: p.print_time ?? 0,
+              print_time_left: p.print_time_left ?? 0,
+              filament_used: p.filament_used ?? 0,
             };
           }
-          // bed 온도
-          if (payload.temperatures.bed) {
-            deviceData.temperature.bed = {
-              current: payload.temperatures.bed.actual || 0,
-              target: payload.temperatures.bed.target || 0,
+        }
+
+        // octoprint/status 토픽 처리 (OctoPrint 데이터 구조)
+        if (octoprintMatch) {
+          if (payload.state) {
+            deviceData.status = payload.state.flags?.printing ? 'printing' :
+                                payload.state.flags?.operational ? 'idle' : 'disconnected';
+            deviceData.connected = payload.state.flags?.operational || false;
+            deviceData.printing = payload.state.flags?.printing || false;
+            deviceData.error_message = payload.state.flags?.error ? payload.state.text : null;
+          }
+          if (payload.temperatures) {
+            if (payload.temperatures.tool0) {
+              deviceData.temperature.tool = {
+                current: payload.temperatures.tool0.actual || 0,
+                target: payload.temperatures.tool0.target || 0,
+              };
+            }
+            if (payload.temperatures.bed) {
+              deviceData.temperature.bed = {
+                current: payload.temperatures.bed.actual || 0,
+                target: payload.temperatures.bed.target || 0,
+              };
+            }
+          }
+          if (payload.progress && typeof payload.progress === 'object') {
+            deviceData.printProgress = {
+              completion: payload.progress.completion || 0,
+              file_position: payload.progress.filepos || 0,
+              file_size: payload.progress.file_size || 0,
+              print_time: payload.progress.print_time || 0,
+              print_time_left: payload.progress.time_left || 0,
+              filament_used: payload.job?.filament?.length || 0,
             };
           }
-        }
-
-        if (payload.progress) {
-          deviceData.printProgress = {
-            completion: payload.progress.completion || 0,
-            file_position: payload.progress.filepos || 0,
-            file_size: payload.progress.file_size || 0,
-            print_time: payload.progress.print_time || 0,
-            print_time_left: payload.progress.time_left || 0,
-            filament_used: payload.job?.filament?.length || 0,
-          };
-        }
-
-        // axes 위치 데이터
-        if (payload.axes?.current) {
-          deviceData.position = {
-            x: payload.axes.current.x || 0,
-            y: payload.axes.current.y || 0,
-            z: payload.axes.current.z || 0,
-            e: payload.axes.current.e || 0,
-          };
+          if (payload.axes?.current) {
+            deviceData.position = {
+              x: payload.axes.current.x || 0,
+              y: payload.axes.current.y || 0,
+              z: payload.axes.current.z || 0,
+              e: payload.axes.current.e || 0,
+            };
+          }
         }
 
         deviceData.lastUpdated = new Date().toISOString();
 
         // 디버그 로그 (최초 수신 시에만)
         if (!deviceData._logged) {
-          console.log(`[MQTT] First data received for device: ${deviceUuid}`);
+          console.log(`[MQTT] First data received for device: ${deviceUuid} (topic: ${topic})`);
           deviceData._logged = true;
         }
       } catch (err) {
@@ -1085,6 +1189,392 @@ function mountRest(app) {
     } catch (error) {
       console.error('[API] Realtime data error:', error);
       res.status(500).json({ success: false, error: 'Failed to get realtime data' });
+    }
+  });
+
+  // ============================================
+  // 프린터 제어 API (MQTT를 통한 제어 명령 전송)
+  // ============================================
+
+  // MQTT 명령 전송 헬퍼 함수
+  // 기존 mqttService에서 사용하는 토픽: control/${deviceSerial}
+  // 페이로드 형식: { type: 'command_type', ...params }
+  // waitForResult: true면 control_result 응답을 대기 (기본 10초 타임아웃)
+  const sendMqttCommand = (deviceUuid, commandType, payload = {}, options = {}) => {
+    const { waitForResult = true, timeout = 10000 } = options;
+
+    return new Promise((resolve, reject) => {
+      if (!mqttClient || !mqttClient.connected) {
+        reject(new Error('MQTT client not connected'));
+        return;
+      }
+
+      // 기존 프론트엔드와 동일한 토픽 사용: control/{deviceUuid}
+      const topic = `control/${deviceUuid}`;
+      // mqttService와 동일한 페이로드 형식: { type: 'command', ...params }
+      const message = JSON.stringify({ type: commandType, ...payload });
+
+      // 응답 대기 설정
+      if (waitForResult) {
+        const callbackKey = `${deviceUuid}:*`;  // 범용 키 사용
+
+        const timeoutId = setTimeout(() => {
+          controlResultCallbacks.delete(callbackKey);
+          // 타임아웃 시 요청 실패 처리
+          reject(new Error(`프린터 응답 타임아웃 (${timeout / 1000}초). 프린터가 오프라인이거나 응답을 지원하지 않습니다.`));
+        }, timeout);
+
+        controlResultCallbacks.set(callbackKey, {
+          resolve: (resultPayload) => {
+            resolve({
+              sent: true,
+              result: resultPayload,
+              message: '명령 전송 및 응답 수신 완료'
+            });
+          },
+          reject,
+          timeout: timeoutId
+        });
+      }
+
+      mqttClient.publish(topic, message, { qos: 1 }, (err) => {
+        if (err) {
+          console.error(`[MQTT] Publish error to ${topic}:`, err);
+          if (waitForResult) {
+            const callbackKey = `${deviceUuid}:*`;
+            const cb = controlResultCallbacks.get(callbackKey);
+            if (cb) {
+              clearTimeout(cb.timeout);
+              controlResultCallbacks.delete(callbackKey);
+            }
+          }
+          reject(err);
+        } else {
+          console.log(`[MQTT] Command sent to ${topic}:`, { type: commandType, ...payload });
+          // 응답 대기하지 않으면 바로 resolve
+          if (!waitForResult) {
+            resolve({
+              sent: true,
+              result: null,
+              message: '명령 전송 완료 (응답 대기 없음)'
+            });
+          }
+        }
+      });
+    });
+  };
+
+  // POST /api/printer/:deviceUuid/temperature - 온도 설정 (노즐 + 베드)
+  // mqttService 페이로드 형식: { type: 'set_temperature', tool: number, temperature: number }
+  // tool: -1 = bed, 0 = nozzle0, 1 = nozzle1, ...
+  // query param: wait=false 로 응답 대기 없이 바로 리턴 가능
+  app.post('/api/printer/:deviceUuid/temperature', async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const { nozzle, bed } = req.body;
+      const waitForResult = req.query.wait !== 'false';
+
+      if (nozzle === undefined && bed === undefined) {
+        return res.status(400).json({ success: false, error: 'nozzle 또는 bed 온도가 필요합니다.' });
+      }
+
+      const results = [];
+      let lastMqttResult = null;
+      if (nozzle !== undefined) {
+        const nozzleTemp = Math.max(0, Math.min(300, Number(nozzle)));
+        lastMqttResult = await sendMqttCommand(deviceUuid, 'set_temperature', { tool: 0, temperature: nozzleTemp }, { waitForResult });
+        results.push({ tool: 0, temperature: nozzleTemp });
+      }
+      if (bed !== undefined) {
+        const bedTemp = Math.max(0, Math.min(120, Number(bed)));
+        lastMqttResult = await sendMqttCommand(deviceUuid, 'set_temperature', { tool: -1, temperature: bedTemp }, { waitForResult });
+        results.push({ tool: -1, temperature: bedTemp });
+      }
+
+      res.json({
+        success: true,
+        message: lastMqttResult?.message || '온도 설정 명령 전송 완료',
+        settings: results,
+        mqtt_result: lastMqttResult?.result || null
+      });
+    } catch (error) {
+      console.error('[API] Temperature control error:', error);
+      res.status(500).json({ success: false, error: error.message || '온도 설정 실패' });
+    }
+  });
+
+  // POST /api/printer/:deviceUuid/nozzle-temp - 노즐 온도 설정
+  app.post('/api/printer/:deviceUuid/nozzle-temp', async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const { temperature } = req.body;
+      const waitForResult = req.query.wait !== 'false';
+
+      if (temperature === undefined) {
+        return res.status(400).json({ success: false, error: 'temperature가 필요합니다.' });
+      }
+
+      const temp = Math.max(0, Math.min(300, Number(temperature)));
+      const mqttResult = await sendMqttCommand(deviceUuid, 'set_temperature', { tool: 0, temperature: temp }, { waitForResult });
+
+      res.json({
+        success: true,
+        message: mqttResult.message,
+        temperature: temp,
+        mqtt_result: mqttResult.result
+      });
+    } catch (error) {
+      console.error('[API] Nozzle temp error:', error);
+      res.status(500).json({ success: false, error: error.message || '노즐 온도 설정 실패' });
+    }
+  });
+
+  // POST /api/printer/:deviceUuid/bed-temp - 베드 온도 설정
+  app.post('/api/printer/:deviceUuid/bed-temp', async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const { temperature } = req.body;
+      const waitForResult = req.query.wait !== 'false';
+
+      if (temperature === undefined) {
+        return res.status(400).json({ success: false, error: 'temperature가 필요합니다.' });
+      }
+
+      const temp = Math.max(0, Math.min(120, Number(temperature)));
+      const mqttResult = await sendMqttCommand(deviceUuid, 'set_temperature', { tool: -1, temperature: temp }, { waitForResult });
+
+      res.json({
+        success: true,
+        message: mqttResult.message,
+        temperature: temp,
+        mqtt_result: mqttResult.result
+      });
+    } catch (error) {
+      console.error('[API] Bed temp error:', error);
+      res.status(500).json({ success: false, error: error.message || '베드 온도 설정 실패' });
+    }
+  });
+
+  // POST /api/printer/:deviceUuid/feed-rate - 피드 레이트 설정 (10-500%)
+  app.post('/api/printer/:deviceUuid/feed-rate', async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const { rate } = req.body;
+      const waitForResult = req.query.wait !== 'false';
+
+      if (rate === undefined) {
+        return res.status(400).json({ success: false, error: 'rate가 필요합니다. (10-500)' });
+      }
+
+      const feedRate = Math.max(10, Math.min(500, Number(rate)));
+      const mqttResult = await sendMqttCommand(deviceUuid, 'set_feed_rate', { factor: feedRate }, { waitForResult });
+
+      res.json({
+        success: true,
+        message: mqttResult.message,
+        rate: feedRate,
+        mqtt_result: mqttResult.result
+      });
+    } catch (error) {
+      console.error('[API] Feed rate error:', error);
+      res.status(500).json({ success: false, error: error.message || '피드 레이트 설정 실패' });
+    }
+  });
+
+  // POST /api/printer/:deviceUuid/flow-rate - 플로우 레이트 설정 (10-200%)
+  app.post('/api/printer/:deviceUuid/flow-rate', async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const { rate } = req.body;
+      const waitForResult = req.query.wait !== 'false';
+
+      if (rate === undefined) {
+        return res.status(400).json({ success: false, error: 'rate가 필요합니다. (10-200)' });
+      }
+
+      const flowRate = Math.max(10, Math.min(200, Number(rate)));
+      const mqttResult = await sendMqttCommand(deviceUuid, 'set_flow_rate', { factor: flowRate }, { waitForResult });
+
+      res.json({
+        success: true,
+        message: mqttResult.message,
+        rate: flowRate,
+        mqtt_result: mqttResult.result
+      });
+    } catch (error) {
+      console.error('[API] Flow rate error:', error);
+      res.status(500).json({ success: false, error: error.message || '플로우 레이트 설정 실패' });
+    }
+  });
+
+  // POST /api/printer/:deviceUuid/pause - 출력 일시정지
+  app.post('/api/printer/:deviceUuid/pause', async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const waitForResult = req.query.wait !== 'false';
+      const mqttResult = await sendMqttCommand(deviceUuid, 'pause', {}, { waitForResult });
+
+      res.json({
+        success: true,
+        message: mqttResult.message,
+        mqtt_result: mqttResult.result
+      });
+    } catch (error) {
+      console.error('[API] Pause error:', error);
+      res.status(500).json({ success: false, error: error.message || '일시정지 실패' });
+    }
+  });
+
+  // POST /api/printer/:deviceUuid/resume - 출력 재개
+  app.post('/api/printer/:deviceUuid/resume', async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const waitForResult = req.query.wait !== 'false';
+      const mqttResult = await sendMqttCommand(deviceUuid, 'resume', {}, { waitForResult });
+
+      res.json({
+        success: true,
+        message: mqttResult.message,
+        mqtt_result: mqttResult.result
+      });
+    } catch (error) {
+      console.error('[API] Resume error:', error);
+      res.status(500).json({ success: false, error: error.message || '재개 실패' });
+    }
+  });
+
+  // POST /api/printer/:deviceUuid/cancel - 출력 취소
+  app.post('/api/printer/:deviceUuid/cancel', async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const waitForResult = req.query.wait !== 'false';
+      const mqttResult = await sendMqttCommand(deviceUuid, 'cancel', {}, { waitForResult });
+
+      res.json({
+        success: true,
+        message: mqttResult.message,
+        mqtt_result: mqttResult.result
+      });
+    } catch (error) {
+      console.error('[API] Cancel error:', error);
+      res.status(500).json({ success: false, error: error.message || '취소 실패' });
+    }
+  });
+
+  // POST /api/printer/:deviceUuid/home - 홈 이동
+  // mqttService 형식: { type: 'home', axes: 'XYZ' }
+  app.post('/api/printer/:deviceUuid/home', async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const { axes } = req.body; // 'XYZ', 'X', 'Y', 'Z', 'XY' 등 또는 undefined (전체)
+      const waitForResult = req.query.wait !== 'false';
+
+      // mqttService는 문자열 형식 ('XYZ')을 사용
+      const axesStr = Array.isArray(axes) ? axes.join('').toUpperCase() : (axes || 'XYZ').toUpperCase();
+      const mqttResult = await sendMqttCommand(deviceUuid, 'home', { axes: axesStr }, { waitForResult });
+
+      res.json({
+        success: true,
+        message: mqttResult.message,
+        axes: axesStr,
+        mqtt_result: mqttResult.result
+      });
+    } catch (error) {
+      console.error('[API] Home error:', error);
+      res.status(500).json({ success: false, error: error.message || '홈 이동 실패' });
+    }
+  });
+
+  // GET /api/printer/:deviceUuid/status - 프린터 상태 조회 (캐시된 MQTT 데이터)
+  app.get('/api/printer/:deviceUuid/status', async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const realtimeData = realtimeDataStore.get(deviceUuid);
+
+      if (!realtimeData) {
+        return res.json({
+          success: true,
+          data: {
+            device_uuid: deviceUuid,
+            status: 'unknown',
+            connected: false,
+            message: '해당 디바이스의 실시간 데이터가 없습니다.',
+          },
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          device_uuid: deviceUuid,
+          ...realtimeData,
+        },
+      });
+    } catch (error) {
+      console.error('[API] Status error:', error);
+      res.status(500).json({ success: false, error: error.message || '상태 조회 실패' });
+    }
+  });
+
+  // POST /api/printer/:deviceUuid/gcode - G-code 명령 전송
+  app.post('/api/printer/:deviceUuid/gcode', async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const { commands } = req.body; // string 또는 string[]
+      const waitForResult = req.query.wait !== 'false';
+
+      if (!commands) {
+        return res.status(400).json({ success: false, error: 'commands가 필요합니다.' });
+      }
+
+      const gcodeCommands = Array.isArray(commands) ? commands : [commands];
+      const mqttResult = await sendMqttCommand(deviceUuid, 'gcode', { commands: gcodeCommands }, { waitForResult });
+
+      res.json({
+        success: true,
+        message: mqttResult.message,
+        commands: gcodeCommands,
+        mqtt_result: mqttResult.result
+      });
+    } catch (error) {
+      console.error('[API] Gcode error:', error);
+      res.status(500).json({ success: false, error: error.message || 'G-code 전송 실패' });
+    }
+  });
+
+  // POST /api/printer/:deviceUuid/move - 축 이동
+  // mqttService 형식: { type: 'move', mode: 'relative'|'absolute', x?, y?, z?, e?, feedrate? }
+  app.post('/api/printer/:deviceUuid/move', async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const { x, y, z, e, feedrate, mode } = req.body;
+      const waitForResult = req.query.wait !== 'false';
+
+      if (x === undefined && y === undefined && z === undefined && e === undefined) {
+        return res.status(400).json({ success: false, error: 'x, y, z, e 중 하나 이상 필요합니다.' });
+      }
+
+      // mqttService의 publishDashboardMove 형식과 일치
+      const moveData = {
+        mode: mode || 'relative', // 기본값 relative
+      };
+      if (x !== undefined) moveData.x = Number(x);
+      if (y !== undefined) moveData.y = Number(y);
+      if (z !== undefined) moveData.z = Number(z);
+      if (e !== undefined) moveData.e = Number(e);
+      if (feedrate !== undefined) moveData.feedrate = Number(feedrate);
+
+      const mqttResult = await sendMqttCommand(deviceUuid, 'move', moveData, { waitForResult });
+
+      res.json({
+        success: true,
+        message: mqttResult.message,
+        move: moveData,
+        mqtt_result: mqttResult.result
+      });
+    } catch (error) {
+      console.error('[API] Move error:', error);
+      res.status(500).json({ success: false, error: error.message || '이동 실패' });
     }
   });
 }

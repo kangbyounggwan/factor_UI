@@ -54,6 +54,10 @@ interface PrintSettingsDialogProps {
     setPrintFileName: (name: string) => void;
     startPrint: () => void;
 
+    // G-code 전송 진행률
+    isSendingGCode?: boolean;
+    sendProgress?: number;
+
     // Reslice Related Props
     resliceManufacturer: string;
     setResliceManufacturer: (val: string) => void;
@@ -82,6 +86,8 @@ export function PrintSettingsDialog({
     printFileName,
     setPrintFileName,
     startPrint,
+    isSendingGCode = false,
+    sendProgress = 0,
     resliceManufacturer,
     setResliceManufacturer,
     resliceSeries,
@@ -405,16 +411,47 @@ export function PrintSettingsDialog({
                             </div>
                         )}
 
+                        {/* G-code 전송 진행률 표시 */}
+                        {isSendingGCode && (
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">{t('ai.sendingGCode')}</span>
+                                    <span className="font-semibold">{sendProgress}%</span>
+                                </div>
+                                <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                                    <div
+                                        className="bg-primary h-full rounded-full transition-all duration-300 ease-out"
+                                        style={{ width: `${sendProgress}%` }}
+                                    />
+                                </div>
+                                <p className="text-xs text-muted-foreground text-center">
+                                    {sendProgress < 10 && t('ai.sendProgressPreparing')}
+                                    {sendProgress >= 10 && sendProgress < 90 && t('ai.sendProgressUploading')}
+                                    {sendProgress >= 90 && sendProgress < 100 && t('ai.sendProgressFinalizing')}
+                                    {sendProgress === 100 && t('ai.sendProgressComplete')}
+                                </p>
+                            </div>
+                        )}
+
                         <div className="flex items-center justify-end gap-2">
-                            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSlicing}>
+                            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSlicing || isSendingGCode}>
                                 {t('common.cancel')}
                             </Button>
                             <Button
                                 onClick={startPrint}
-                                disabled={isSlicing || !currentGCodeUrl || !selectedPrinter?.connected || !printFileName.trim()}
+                                disabled={isSlicing || isSendingGCode || !currentGCodeUrl || !selectedPrinter?.connected || !printFileName.trim()}
                             >
-                                <Printer className="w-4 h-4 mr-2" />
-                                {t('ai.startPrint')}
+                                {isSendingGCode ? (
+                                    <>
+                                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                        {t('ai.sending')} {sendProgress}%
+                                    </>
+                                ) : (
+                                    <>
+                                        <Printer className="w-4 h-4 mr-2" />
+                                        {t('ai.startPrint')}
+                                    </>
+                                )}
                             </Button>
                         </div>
                     </div>

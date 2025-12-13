@@ -25,11 +25,11 @@ import {
   FileCode2,
   Loader2,
   Upload,
-  Sparkles,
   CheckCircle,
   Archive,
   Save,
 } from "lucide-react";
+import { AIPageHeader } from "@/components/ai/AIPageHeader";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -526,20 +526,11 @@ const GCodeAnalytics = () => {
       {/* 배경 장식 제거됨 - 깔끔한 배경 유지 */}
 
       {/* 헤더 */}
-      <div className="border-b bg-background/80 backdrop-blur-md px-6 py-4 flex-shrink-0 z-10 sticky top-0">
-        <div className="flex items-center justify-between max-w-[1920px] mx-auto">
-          <div className="flex items-center gap-4">
-            <div className="p-2.5 rounded-xl bg-muted ring-1 ring-border">
-              <Sparkles className="h-5 w-5 text-foreground" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">{t('gcodeAnalytics.title')}</h1>
-              <p className="text-sm text-muted-foreground">
-                {t('gcodeAnalytics.subtitle')}
-              </p>
-            </div>
-          </div>
-
+      <AIPageHeader
+        icon={FileCode2}
+        title={t('gcodeAnalytics.title')}
+        subtitle={t('gcodeAnalytics.subtitle')}
+        rightContent={
           <div className="flex items-center gap-2">
             {/* 아카이브 버튼 */}
             <Button
@@ -585,8 +576,8 @@ const GCodeAnalytics = () => {
               </>
             )}
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* 메인 컨텐츠 */}
       <div className="flex-1 p-4 lg:p-6 overflow-hidden max-w-[1920px] mx-auto w-full">

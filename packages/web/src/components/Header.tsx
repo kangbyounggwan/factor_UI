@@ -87,6 +87,7 @@ export const Header = () => {
     href: string;
     icon: React.ElementType;
     hasSubmenu?: boolean;
+    menuType?: 'default' | 'mega';
     submenu?: {
       name: string;
       href: string;
@@ -102,9 +103,10 @@ export const Header = () => {
       href: "/create",
       icon: Layers,
       hasSubmenu: true,
+      menuType: 'mega',
       submenu: [
-        { name: t('ai.modelGeneration'), href: "/create", icon: Sparkles, description: t('ai.textTo3D') + ', ' + t('ai.imageTo3D') },
-        { name: t('ai.gcodeAnalysis'), href: "/gcode-analytics", icon: FileCode2, description: 'AI 기반 G-code 파일 분석' },
+        { name: t('ai.modelGeneration'), href: "/create", icon: Sparkles, description: "텍스트나 이미지로 새로운 3D 모델을 만들어보세요" },
+        { name: t('ai.gcodeAnalysis'), href: "/gcode-analytics", icon: FileCode2, description: "AI 기반 코드 분석으로 위험요소를 찾고 시뮬레이션하세요" },
       ]
     },
     { name: t('nav.settings'), href: "/settings", icon: Settings },
@@ -400,13 +402,73 @@ export const Header = () => {
               );
             }
 
-            // 서브메뉴가 있는 항목은 드롭다운으로 표시
+            // 서브메뉴가 있는 항목은 드롭다운으로 표시 (카드 형식)
             if (item.hasSubmenu && item.submenu) {
+              const isAnySubActive = item.submenu.some((sub: { href: string }) => location.pathname === sub.href);
+
+              if (item.menuType === 'mega') {
+                return (
+                  <DropdownMenu key={item.name}>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isAnySubActive
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-accent"
+                          }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>{item.name}</span>
+                        <ChevronDown className="w-3 h-3" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="center" className="w-[700px] p-6 bg-popover/95 backdrop-blur-xl border-border/50 shadow-2xl">
+                      <div className="mb-4 px-1 text-sm font-bold text-muted-foreground uppercase tracking-wider">
+                        {item.name}
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        {item.submenu.map((subItem) => {
+                          const SubIcon = subItem.icon;
+                          const isSubActive = location.pathname === subItem.href;
+                          return (
+                            <DropdownMenuItem key={subItem.name} asChild className="h-auto p-0 focus:bg-transparent cursor-pointer">
+                              <Link
+                                to={subItem.href}
+                                className={`group flex items-start gap-4 rounded-xl p-4 leading-none no-underline outline-none transition-all duration-300 h-full w-full ${isSubActive
+                                    ? "bg-primary/5 ring-1 ring-primary/20"
+                                    : "hover:bg-accent hover:text-accent-foreground hover:translate-y-[-2px] hover:shadow-lg hover:shadow-primary/5"
+                                  }`}
+                              >
+                                <div className={`flex items-center justify-center w-12 h-12 rounded-xl shrink-0 transition-all duration-300 ${isSubActive
+                                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                                  : "bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground group-hover:shadow-md group-hover:shadow-primary/20"
+                                  }`}>
+                                  <SubIcon className="w-6 h-6" />
+                                </div>
+                                <div className="flex flex-col gap-1.5 pt-0.5">
+                                  <div className="text-base font-bold leading-none group-hover:text-primary transition-colors">
+                                    {subItem.name}
+                                  </div>
+                                  {subItem.description && (
+                                    <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground group-hover:text-muted-foreground/80">
+                                      {subItem.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </Link>
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                );
+              }
+
               return (
                 <DropdownMenu key={item.name}>
                   <DropdownMenuTrigger asChild>
                     <button
-                      className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive(item.href)
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isAnySubActive
                         ? "bg-primary text-primary-foreground"
                         : "text-muted-foreground hover:bg-accent"
                         }`}
@@ -416,28 +478,39 @@ export const Header = () => {
                       <ChevronDown className="w-3 h-3" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="center" className="w-72 p-2">
-                    {item.submenu.map((subItem) => {
-                      const SubIcon = subItem.icon;
-                      return (
-                        <DropdownMenuItem key={subItem.name} asChild className="p-0">
+                  <DropdownMenuContent align="center" className="p-4">
+                    <div className="flex gap-6">
+                      {item.submenu.map((subItem: { name: string; href: string; icon: React.ElementType; description?: string }) => {
+                        const SubIcon = subItem.icon;
+                        const isSubActive = location.pathname === subItem.href;
+                        return (
                           <Link
+                            key={subItem.name}
                             to={subItem.href}
-                            className="flex items-start gap-3 p-3 rounded-md cursor-pointer hover:bg-accent w-full"
+                            className={`relative flex flex-col items-start gap-3 p-4 rounded-xl min-w-[180px] max-w-[200px] transition-all duration-200 group ${isSubActive
+                              ? "bg-accent border border-primary/30"
+                              : "hover:bg-accent/60"
+                              }`}
                           >
-                            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 shrink-0">
-                              <SubIcon className="w-5 h-5 text-primary" />
+                            {isSubActive && (
+                              <div className="absolute top-2 left-2 w-2 h-2 rounded-full bg-primary" />
+                            )}
+                            <div className={`flex items-center justify-center w-11 h-11 rounded-lg transition-colors ${isSubActive
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-primary/10 text-primary group-hover:bg-primary/20"
+                              }`}>
+                              <SubIcon className="w-5 h-5" />
                             </div>
-                            <div className="flex flex-col gap-0.5">
-                              <span className="font-medium text-sm">{subItem.name}</span>
+                            <div className="flex flex-col gap-1">
+                              <span className="font-semibold text-sm text-foreground">{subItem.name}</span>
                               {subItem.description && (
-                                <span className="text-xs text-muted-foreground">{subItem.description}</span>
+                                <span className="text-xs text-muted-foreground leading-relaxed">{subItem.description}</span>
                               )}
                             </div>
                           </Link>
-                        </DropdownMenuItem>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </DropdownMenuContent>
                 </DropdownMenu>
               );
