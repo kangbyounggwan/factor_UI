@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { computeDashboardSummary, publishDashboardSummary, useDashboardSummary } from "@shared/component/dashboardSummary";
-import { PrinterSetupModal } from "@/components/Dashboard/PrinterSetupModal";
+
+// Lazy load heavy components
+const PrinterSetupModal = lazy(() => import("@/components/Dashboard/PrinterSetupModal").then(m => ({ default: m.PrinterSetupModal })));
 
 // 로컬 스냅샷 퍼시스턴스 훅
 function usePersistentState<T>(key: string, fallback: T) {
@@ -733,13 +735,15 @@ const Home = () => {
 
       {/* 프린터 설정 모달 */}
       {selectedPrinterForSetup && (
-        <PrinterSetupModal
-          open={showSetupModal}
-          onOpenChange={setShowSetupModal}
-          printerId={selectedPrinterForSetup.id}
-          printerName={selectedPrinterForSetup.name}
-          onSuccess={handleSetupSuccess}
-        />
+        <Suspense fallback={<div className="flex items-center justify-center p-4"><Loader2 className="w-6 h-6 animate-spin" /></div>}>
+          <PrinterSetupModal
+            open={showSetupModal}
+            onOpenChange={setShowSetupModal}
+            printerId={selectedPrinterForSetup.id}
+            printerName={selectedPrinterForSetup.name}
+            onSuccess={handleSetupSuccess}
+          />
+        </Suspense>
       )}
     </div>
   );

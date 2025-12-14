@@ -124,6 +124,13 @@ export default {
     privacyPolicy: "개인정보처리방침",
     userAlreadyRegistered: "이미 등록된 이메일입니다.",
     welcome: "환영합니다!",
+    // 소셜 로그인 버튼
+    continueWithGoogle: "Google로 계속하기",
+    continueWithApple: "Apple로 계속하기",
+    continueWithMicrosoft: "Microsoft로 계속하기",
+    continueWithPhone: "폰으로 계속하기",
+    or: "또는",
+    continue: "계속",
     signupFailed: "회원가입 실패",
     // 계정 통합 모달
     accountExists: "이미 가입된 계정이 있습니다",
@@ -468,7 +475,20 @@ export default {
     upgradeRequired: "플랜 업그레이드 필요",
     upgradeDescription: "{{plan}} 플랜의 이번 달 AI 모델 생성 한도({{limit}}회)를 모두 사용하셨습니다. (사용: {{used}}회) 더 많은 모델을 생성하려면 플랜을 업그레이드하세요.",
     upgradePlan: "플랜 업그레이드",
-    usageInfo: "이번 달 AI 사용량: {{used}}/{{limit}}회"
+    usageInfo: "이번 달 AI 사용량: {{used}}/{{limit}}회",
+    // AI 고장 해결
+    aiTroubleshooting: "AI 고장 해결",
+    troubleshootingTitle: "AI 고장 해결 도구",
+    troubleshootingDescription: "프린터 문제를 이미지로 분석하고 해결책을 제시합니다",
+    uploadIssueImage: "문제 이미지 업로드",
+    uploadIssueImageDesc: "프린터나 출력물의 문제 부분을 촬영하여 업로드하세요",
+    analyzeIssue: "문제 분석",
+    analyzing: "AI 분석 중...",
+    analysisComplete: "분석 완료",
+    analysisResult: "분석 결과",
+    suggestedSolutions: "해결 방안",
+    noIssueDetected: "특별한 문제가 감지되지 않았습니다",
+    uploadImageFirst: "먼저 이미지를 업로드해주세요"
   },
   profile: {
     // UserSettings 페이지
@@ -1068,6 +1088,7 @@ export default {
     analysisComplete: "분석 완료!",
     analysisFailed: "분석 실패",
     analysisError: "분석 중 오류가 발생했습니다.",
+    loginToAnalyze: "G-code 분석 기능을 이용하려면 로그인이 필요합니다.",
 
     // 저장 관련
     save: "저장",

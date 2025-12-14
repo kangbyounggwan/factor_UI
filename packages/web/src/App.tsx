@@ -27,6 +27,8 @@ const UserSettings = lazy(() => import("./pages/UserSettings"));
 const Subscription = lazy(() => import("./pages/Subscription"));
 const SupportedPrinters = lazy(() => import("./pages/SupportedPrinters"));
 const AI = lazy(() => import("./pages/AI"));
+// TODO: AI 고장 해결 - 개발 중
+// const AITroubleshooting = lazy(() => import("./pages/AITroubleshooting"));
 const GCodeAnalytics = lazy(() => import("./pages/GCodeAnalytics"));
 const GCodeAnalyticsArchive = lazy(() => import("./pages/GCodeAnalyticsArchive"));
 const Auth = lazy(() => import("./pages/Auth"));
@@ -65,6 +67,7 @@ const AppContent = () => {
     '/dashboard',
     '/printer',
     '/create',
+    // '/ai-troubleshooting', // TODO: AI 고장 해결 - 개발 중
     '/gcode-analytics',
     '/settings',
     '/user-settings',
@@ -123,6 +126,8 @@ const AppContent = () => {
             <Route path="/subscription" element={<Subscription />} />
             <Route path="/supported-printers" element={<SupportedPrinters />} />
             <Route path="/create" element={<AI />} />
+            {/* TODO: AI 고장 해결 - 개발 중 */}
+            {/* <Route path="/ai-troubleshooting" element={<AITroubleshooting />} /> */}
             <Route path="/gcode-analytics" element={<GCodeAnalytics />} />
             <Route path="/gcode-analytics/archive" element={
               <ProtectedRoute>

@@ -1,7 +1,29 @@
+# https://www.robotstxt.org/robotstxt.html
+# FACTOR - 3D Printer Smart Factory Solution
+
+User-agent: *
+Allow: /
+
+# 크롤링 제외할 경로
+Disallow: /api/
+Disallow: /admin/
+Disallow: /*.json$
+Disallow: /private/
+
+# Sitemap 위치
+Sitemap: https://factor.io.kr/sitemap.xml
+
+# 주요 검색엔진별 설정
 User-agent: Googlebot
 Allow: /
 
+User-agent: Googlebot-Image
+Allow: /
+
 User-agent: Bingbot
+Allow: /
+
+User-agent: Yeti
 Allow: /
 
 User-agent: Twitterbot
@@ -10,8 +32,8 @@ Allow: /
 User-agent: facebookexternalhit
 Allow: /
 
-User-agent: *
-Allow: /
-
-
+# Daum 웹마스터 도구 인증
 #DaumWebMasterTool:6d0e89b57fec517e5caa3f4ccc5f8f052415c3b8c13b7f0f2e61fae3508d789e:ccfRm00Cg+mmcVqRks67/w==
+
+# 크롤 속도 제한 (초당 요청 수)
+Crawl-delay: 1

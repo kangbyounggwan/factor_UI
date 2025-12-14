@@ -7,13 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-// Lazy load ModelViewer to reduce initial bundle size
+// Lazy load heavy components to reduce initial bundle size
 const ModelViewer = lazy(() => import("@/components/ai/ModelViewer"));
 const GCodeViewer = lazy(() => import("@/components/ai/GCodeViewer"));
 const GCodePreview = lazy(() => import("@/components/ai/GCodePreview"));
-import TextTo3DForm from "@/components/ai/TextTo3DForm";
-import ImageTo3DForm from "@/components/ai/ImageTo3DForm";
-import ModelPreview from "@/components/ai/ModelPreview";
+const TextTo3DForm = lazy(() => import("@/components/ai/TextTo3DForm"));
+const ImageTo3DForm = lazy(() => import("@/components/ai/ImageTo3DForm"));
+const ModelPreview = lazy(() => import("@/components/ai/ModelPreview"));
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,10 +24,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Refactored Components
-import { PrintSettingsDialog } from "@/components/ai/PrintSettingsDialog";
-import { AIArchiveSidebar } from "@/components/ai/AIArchiveSidebar";
-import { TextToImageTab } from "@/components/ai/TextToImageTab";
+// Lazy load refactored components
+const PrintSettingsDialog = lazy(() => import("@/components/ai/PrintSettingsDialog").then(m => ({ default: m.PrintSettingsDialog })));
+const AIArchiveSidebar = lazy(() => import("@/components/ai/AIArchiveSidebar").then(m => ({ default: m.AIArchiveSidebar })));
+const TextToImageTab = lazy(() => import("@/components/ai/TextToImageTab").then(m => ({ default: m.TextToImageTab })));
+
+// Load dialog components lazily
 import {
   UpgradePromptDialog,
   PrinterConfirmDialog,
@@ -1199,39 +1201,42 @@ const AI = () => {
 
                 {/* 텍스트 → 3D 탭 */}
                 <TabsContent value="text-to-3d" className="flex-1 min-h-0 overflow-hidden">
-                  <div className="grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] gap-6 h-full">
-                    {/* 입력 영역 → TextTo3DForm */}
-                    <TextTo3DForm
-                      prompt={textPrompt}
-                      symmetryMode={textSymmetryMode}
-                      artStyle={textArtStyle}
-                      targetPolycount={textTargetPolycount}
-                      isProcessing={isProcessing}
-                      onChangePrompt={setTextPrompt}
-                      onChangeSymmetryMode={setTextSymmetryMode}
-                      onChangeArtStyle={setTextArtStyle}
-                      onChangeTargetPolycount={setTextTargetPolycount}
-                      onSubmit={generateModel}
-                    />
+                  <Suspense fallback={<div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}>
+                    <div className="grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] gap-6 h-full">
+                      {/* 입력 영역 → TextTo3DForm */}
+                      <TextTo3DForm
+                        prompt={textPrompt}
+                        symmetryMode={textSymmetryMode}
+                        artStyle={textArtStyle}
+                        targetPolycount={textTargetPolycount}
+                        isProcessing={isProcessing}
+                        onChangePrompt={setTextPrompt}
+                        onChangeSymmetryMode={setTextSymmetryMode}
+                        onChangeArtStyle={setTextArtStyle}
+                        onChangeTargetPolycount={setTextTargetPolycount}
+                        onSubmit={generateModel}
+                      />
 
-                    {/* 프리뷰 영역 → ModelPreview */}
-                    <ModelPreview
-                      isProcessing={isProcessing}
-                      modelUrl={modelViewerUrl ?? undefined}
-                      glbDownloadUrl={currentGlbUrl ?? undefined}
-                      stlDownloadUrl={currentStlUrl ?? undefined}
-                      progress={progress}
-                      progressStatus={progressStatus}
-                      modelId={currentModelId ?? undefined}
-                      onSave={handleModelSave}
-                    />
-                  </div>
+                      {/* 프리뷰 영역 → ModelPreview */}
+                      <ModelPreview
+                        isProcessing={isProcessing}
+                        modelUrl={modelViewerUrl ?? undefined}
+                        glbDownloadUrl={currentGlbUrl ?? undefined}
+                        stlDownloadUrl={currentStlUrl ?? undefined}
+                        progress={progress}
+                        progressStatus={progressStatus}
+                        modelId={currentModelId ?? undefined}
+                        onSave={handleModelSave}
+                      />
+                    </div>
+                  </Suspense>
                 </TabsContent>
 
                 {/* 이미지 → 3D 탭 */}
                 <TabsContent value="image-to-3d" className="flex-1 min-h-0 overflow-hidden">
-                  <div className="grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] gap-6 h-full">
-                    <ImageTo3DForm
+                  <Suspense fallback={<div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}>
+                    <div className="grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] gap-6 h-full">
+                      <ImageTo3DForm
                       files={uploadedFiles}
                       selectedId={selectedImageId}
                       symmetryMode={imageSymmetryMode}
@@ -1386,61 +1391,67 @@ const AI = () => {
                         </div>
                       </CardContent>
                     </Card>
-                  </div>
+                    </div>
+                  </Suspense>
                 </TabsContent>
 
                 {/* 텍스트 → 이미지 탭 */}
                 <TabsContent value="text-to-image" className="flex-1 min-h-0 overflow-hidden">
-                  <TextToImageTab
+                  <Suspense fallback={<div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}>
+                    <TextToImageTab
                     prompt={textPrompt}
                     setPrompt={setTextPrompt}
                     isProcessing={isProcessing}
                     generateImage={generateModel}
                     generatedImageUrl={generatedImageUrl}
-                  />
+                    />
+                  </Suspense>
                 </TabsContent>
 
               </Tabs>
             </div>
           </div>
         </div>
-        <AIArchiveSidebar
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          archiveViewMode={archiveViewMode}
-          setArchiveViewMode={setArchiveViewMode}
-          archiveFilter={archiveFilter}
-          setArchiveFilter={setArchiveFilter}
-          uploadedFiles={uploadedFiles}
-          generatedModels={generatedModels}
-          selectedImageId={selectedImageId}
-          selectImage={selectImage}
-          setModelViewerUrl={setModelViewerUrl}
-          setSelectedImageHasModel={setSelectedImageHasModel}
-          setCurrentModelId={setCurrentModelId}
-          setCurrentGlbUrl={setCurrentGlbUrl}
-          setCurrentStlUrl={setCurrentStlUrl}
-          setCurrentGCodeUrl={setCurrentGCodeUrl}
-          setTextPrompt={setTextPrompt}
-          reloadModels={reloadModels}
+        <Suspense fallback={<div className="w-96 bg-muted animate-pulse" />}>
+          <AIArchiveSidebar
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            archiveViewMode={archiveViewMode}
+            setArchiveViewMode={setArchiveViewMode}
+            archiveFilter={archiveFilter}
+            setArchiveFilter={setArchiveFilter}
+            uploadedFiles={uploadedFiles}
+            generatedModels={generatedModels}
+            selectedImageId={selectedImageId}
+            selectImage={selectImage}
+            setModelViewerUrl={setModelViewerUrl}
+            setSelectedImageHasModel={setSelectedImageHasModel}
+            setCurrentModelId={setCurrentModelId}
+            setCurrentGlbUrl={setCurrentGlbUrl}
+            setCurrentStlUrl={setCurrentStlUrl}
+            setCurrentGCodeUrl={setCurrentGCodeUrl}
+            setTextPrompt={setTextPrompt}
+            reloadModels={reloadModels}
 
-          printers={printers}
-          connectedCount={connectedCount}
-          totalPrinters={totalPrinters}
-          printingCount={printingCount}
-          printerAreaHeight={printerAreaHeight}
-          handleResizeStart={handleResizeStart}
-          openPrinterSettings={openPrinterSettings}
-          targetPrinterModelId={targetPrinterModelId}
-          currentGCodeUrl={currentGCodeUrl}
-          handleModelDelete={handleModelDelete}
-          modelViewerUrl={modelViewerUrl}
-        />
+            printers={printers}
+            connectedCount={connectedCount}
+            totalPrinters={totalPrinters}
+            printingCount={printingCount}
+            printerAreaHeight={printerAreaHeight}
+            handleResizeStart={handleResizeStart}
+            openPrinterSettings={openPrinterSettings}
+            targetPrinterModelId={targetPrinterModelId}
+            currentGCodeUrl={currentGCodeUrl}
+            handleModelDelete={handleModelDelete}
+            modelViewerUrl={modelViewerUrl}
+          />
+        </Suspense>
       </div>
 
 
       {/* 출력 설정 다이얼로그 */}
-      <PrintSettingsDialog
+      <Suspense fallback={null}>
+        <PrintSettingsDialog
         open={printDialogOpen}
         onOpenChange={setPrintDialogOpen}
         selectedPrinter={selectedPrinter}
@@ -1467,7 +1478,8 @@ const AI = () => {
         handleReslice={handleReslice}
         loadDefaultPrinterSettings={loadDefaultPrinterSettings}
         targetPrinterModelId={targetPrinterModelId}
-      />
+        />
+      </Suspense>
 
       {/* 프린터 선택 확인 모달 */}
       <PrinterConfirmDialog

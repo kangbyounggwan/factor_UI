@@ -505,6 +505,42 @@ export async function listUserSourceImages(
 }
 
 /**
+ * AI 고장 해결 이미지를 Supabase Storage에 업로드
+ * 경로: ai-models/{userId}/troubleshooting/{timestamp}_{filename}
+ */
+export async function uploadTroubleshootingImage(
+  supabase: SupabaseClient,
+  userId: string,
+  imageBlob: Blob,
+  filename: string
+): Promise<{ path: string; url: string; publicUrl: string }> {
+  const timestamp = Date.now();
+  const sanitizedName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `${userId}/troubleshooting/${timestamp}_${sanitizedName}`;
+
+  const { data, error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .upload(path, imageBlob, {
+      contentType: imageBlob.type,
+      cacheControl: '3600',
+      upsert: false
+    });
+
+  if (error) throw error;
+
+  // Public URL 생성
+  const { data: urlData } = supabase.storage
+    .from(BUCKET_NAME)
+    .getPublicUrl(path);
+
+  return {
+    path: path,
+    url: urlData.publicUrl,
+    publicUrl: urlData.publicUrl
+  };
+}
+
+/**
  * Python AI 서버의 GCode URL에서 GCode를 다운로드하고 Supabase Storage에 업로드
  */
 export async function downloadAndUploadGCode(

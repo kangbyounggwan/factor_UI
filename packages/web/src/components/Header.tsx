@@ -30,7 +30,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Monitor, Settings, Menu, Activity, LogOut, Sun, Moon, BookOpen, CreditCard, Code2, Layers, Shield, User, Globe, Check, Bell, MessageSquare, Lightbulb, AlertTriangle, Upload, X, Image as ImageIcon, Sparkles, ChevronDown, FileCode2 } from "lucide-react";
+import { Monitor, Settings, Menu, Activity, LogOut, Sun, Moon, BookOpen, CreditCard, Code2, Layers, Shield, User, Globe, Check, Bell, MessageSquare, Lightbulb, AlertTriangle, Upload, X, Image as ImageIcon, Sparkles, ChevronDown, FileCode2, Wrench } from "lucide-react";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useDashboardSummary } from "@shared/component/dashboardSummary";
 import { useTheme } from "next-themes";
@@ -105,8 +105,10 @@ export const Header = () => {
       hasSubmenu: true,
       menuType: 'mega',
       submenu: [
-        { name: t('ai.modelGeneration'), href: "/create", icon: Sparkles, description: "텍스트나 이미지로 새로운 3D 모델을 만들어보세요" },
-        { name: t('ai.gcodeAnalysis'), href: "/gcode-analytics", icon: FileCode2, description: "AI 기반 코드 분석으로 위험요소를 찾고 시뮬레이션하세요" },
+        { name: t('ai.modelGeneration'), href: "/create", icon: Sparkles, description: t('ai.modelGenerationDesc') },
+        { name: t('ai.gcodeAnalysis'), href: "/gcode-analytics", icon: FileCode2, description: t('ai.gcodeAnalysisDesc') },
+        // TODO: AI 고장 해결 - 개발 중
+        // { name: t('ai.aiTroubleshooting'), href: "/ai-troubleshooting", icon: Wrench, description: t('ai.troubleshootingDescription') },
       ]
     },
     { name: t('nav.settings'), href: "/settings", icon: Settings },

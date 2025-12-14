@@ -37,13 +37,20 @@ function parseGCodeMetadata(gcode: string) {
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // Layer count (주석에서 추출)
+    // Layer count (여러 형식 지원)
+    // Cura: ;LAYER_COUNT:
+    // BambuStudio: ; total layer number:
     if (trimmed.includes(';LAYER_COUNT:')) {
       const match = trimmed.match(/;LAYER_COUNT:(\d+)/);
       if (match) layerCount = parseInt(match[1]);
+    } else if (trimmed.includes('; total layer number:')) {
+      const match = trimmed.match(/; total layer number:\s*(\d+)/);
+      if (match) layerCount = parseInt(match[1]);
     }
 
-    // Print time (주석에서 추출)
+    // Print time (여러 형식 지원)
+    // Cura: ;TIME:
+    // BambuStudio: ; model printing time: 2h 10m 43s
     if (trimmed.includes(';TIME:')) {
       const match = trimmed.match(/;TIME:(\d+)/);
       if (match) {
@@ -52,17 +59,34 @@ function parseGCodeMetadata(gcode: string) {
         const minutes = Math.floor((seconds % 3600) / 60);
         estimatedTime = hours > 0 ? `${hours}시간 ${minutes}분` : `${minutes}분`;
       }
+    } else if (trimmed.includes('; model printing time:')) {
+      const match = trimmed.match(/; model printing time:\s*(?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s)?/);
+      if (match) {
+        const hours = match[1] ? parseInt(match[1]) : 0;
+        const minutes = match[2] ? parseInt(match[2]) : 0;
+        estimatedTime = hours > 0 ? `${hours}시간 ${minutes}분` : `${minutes}분`;
+      }
     }
 
-    // Filament length
+    // Filament length (여러 형식 지원)
+    // Cura: ;Filament used: 123.45m
+    // BambuStudio: ; total filament length [mm] : 8194.80
     if (trimmed.includes(';Filament used:')) {
       const match = trimmed.match(/;Filament used:\s*([\d.]+)m/);
       if (match) filamentLength = parseFloat(match[1]);
+    } else if (trimmed.includes('; total filament length [mm]')) {
+      const match = trimmed.match(/; total filament length \[mm\]\s*:\s*([\d.]+)/);
+      if (match) filamentLength = parseFloat(match[1]) / 1000; // mm를 m로 변환
     }
 
-    // Layer height
-    if (trimmed.includes(';Layer height:')) {
+    // Layer height (여러 형식 지원)
+    // Cura: ;Layer height: 0.2
+    // BambuStudio: 레이어마다 다를 수 있으므로 첫 번째 LAYER_HEIGHT 사용
+    if (!layerHeight && trimmed.includes(';Layer height:')) {
       const match = trimmed.match(/;Layer height:\s*([\d.]+)/);
+      if (match) layerHeight = parseFloat(match[1]);
+    } else if (!layerHeight && trimmed.includes('; LAYER_HEIGHT:')) {
+      const match = trimmed.match(/; LAYER_HEIGHT:\s*([\d.]+)/);
       if (match) layerHeight = parseFloat(match[1]);
     }
   }

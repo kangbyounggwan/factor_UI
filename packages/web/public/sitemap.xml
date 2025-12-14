@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
+        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+
+  <!-- 홈페이지 -->
+  <url>
+    <loc>https://factor.io.kr/</loc>
+    <lastmod>2025-12-15</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- 대시보드 -->
+  <url>
+    <loc>https://factor.io.kr/dashboard</loc>
+    <lastmod>2025-12-15</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- AI 스튜디오 -->
+  <url>
+    <loc>https://factor.io.kr/ai</loc>
+    <lastmod>2025-12-15</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- TODO: AI 고장 해결 - 개발 중 -->
+  <!--
+  <url>
+    <loc>https://factor.io.kr/ai/troubleshooting</loc>
+    <lastmod>2025-12-15</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  -->
+
+  <!-- G-code 분석 -->
+  <url>
+    <loc>https://factor.io.kr/gcode-analytics</loc>
+    <lastmod>2025-12-15</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- 프린터 관리 -->
+  <url>
+    <loc>https://factor.io.kr/printers</loc>
+    <lastmod>2025-12-15</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- 로그인/회원가입 -->
+  <url>
+    <loc>https://factor.io.kr/login</loc>
+    <lastmod>2025-12-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+</urlset>
