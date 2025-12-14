@@ -170,8 +170,8 @@ export async function upsertSubscription(params: {
   status: 'active' | 'cancelled' | 'expired' | 'trialing';
   periodStart: Date;
   periodEnd: Date;
-  tossPaymentKey?: string;
-  tossOrderId?: string;
+  paddleSubscriptionId?: string;
+  paddleCustomerId?: string;
 }): Promise<{ success: boolean; subscription?: UserSubscription; error?: string }> {
   try {
     const { data, error } = await supabase

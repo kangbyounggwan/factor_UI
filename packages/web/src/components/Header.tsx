@@ -126,9 +126,10 @@ export const Header = () => {
       loadUserPlan();
       loadNotifications();
 
-      // 실시간 알림 구독
+      // 실시간 알림 구독 (고유 채널명 사용)
+      const channelName = `notifications_${user.id}_${Date.now()}`;
       const notificationSubscription = supabase
-        .channel('notifications')
+        .channel(channelName)
         .on(
           'postgres_changes',
           {
@@ -138,14 +139,27 @@ export const Header = () => {
             filter: `user_id=eq.${user.id}`,
           },
           (payload) => {
-            console.log('New notification:', payload);
-            setNotifications((prev) => [payload.new as Notification, ...prev]);
+            console.log('[Header] New notification received:', payload);
+            const newNotification = payload.new as Notification;
+            setNotifications((prev) => {
+              // 중복 방지
+              if (prev.some(n => n.id === newNotification.id)) {
+                return prev;
+              }
+              return [newNotification, ...prev];
+            });
             setUnreadNotifications((prev) => prev + 1);
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log('[Header] Notification subscription status:', status);
+          if (status === 'CHANNEL_ERROR') {
+            console.error('[Header] Notification channel error');
+          }
+        });
 
       return () => {
+        console.log('[Header] Unsubscribing from notifications');
         notificationSubscription.unsubscribe();
       };
     }

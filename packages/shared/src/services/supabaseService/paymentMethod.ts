@@ -1,42 +1,46 @@
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabase } from '../../integrations/supabase/client';
 
 export interface PaymentMethod {
   id: string;
-  user_id: string;
-  card_company: string | null;
-  card_number: string;
-  card_expiry: string;
-  is_default: boolean;
-  is_active: boolean;
-  toss_billing_key: string | null;
-  toss_customer_key: string | null;
-  created_at: string;
-  updated_at: string;
+  type: 'card' | 'paypal' | 'google_pay' | 'apple_pay' | 'alipay' | 'wire_transfer';
+  saved_at: string;
+  origin: 'saved_during_purchase' | 'subscription';
+  // Card specific
+  card_type?: string;
+  last4?: string;
+  expiry_month?: number;
+  expiry_year?: number;
+  cardholder_name?: string;
+  // PayPal specific
+  email?: string;
+  // Display
+  display_name: string;
 }
 
 /**
- * Get user's payment methods
+ * Get user's payment methods from Paddle via Edge Function
  */
-export async function getUserPaymentMethods(userId: string): Promise<PaymentMethod[]> {
+export async function getUserPaymentMethods(): Promise<PaymentMethod[]> {
   try {
-    const { data, error } = await supabase
-      .from('payment_methods')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('is_active', true)
-      .order('is_default', { ascending: false })
-      .order('created_at', { ascending: false });
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      console.log('[paymentMethod] No session, returning empty');
+      return [];
+    }
+
+    const { data, error } = await supabase.functions.invoke('get-payment-methods', {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
 
     if (error) {
       console.error('[paymentMethod] Error fetching payment methods:', error);
       return [];
     }
 
-    return data as PaymentMethod[];
+    return data?.data || [];
   } catch (error) {
     console.error('[paymentMethod] Error fetching payment methods:', error);
     return [];
@@ -44,135 +48,73 @@ export async function getUserPaymentMethods(userId: string): Promise<PaymentMeth
 }
 
 /**
- * Get user's default payment method
+ * Get user's default/primary payment method
  */
-export async function getDefaultPaymentMethod(userId: string): Promise<PaymentMethod | null> {
-  try {
-    const { data, error } = await supabase
-      .from('payment_methods')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('is_default', true)
-      .eq('is_active', true)
-      .single();
+export async function getDefaultPaymentMethod(): Promise<PaymentMethod | null> {
+  const methods = await getUserPaymentMethods();
 
-    if (error) {
-      console.error('[paymentMethod] Error fetching default payment method:', error);
-      return null;
-    }
-
-    return data as PaymentMethod;
-  } catch (error) {
-    console.error('[paymentMethod] Error fetching default payment method:', error);
-    return null;
-  }
+  // Return the first one (most recently saved) or null
+  return methods.length > 0 ? methods[0] : null;
 }
 
 /**
- * Add new payment method
+ * Format card display string
  */
-export async function addPaymentMethod(params: {
-  userId: string;
-  cardCompany?: string;
-  cardNumber: string;
-  cardExpiry: string;
-  isDefault?: boolean;
-  tossBillingKey?: string;
-  tossCustomerKey?: string;
-}): Promise<{ success: boolean; paymentMethod?: PaymentMethod; error?: string }> {
-  try {
-    // If this is the default card, unset other default cards
-    if (params.isDefault) {
-      await supabase
-        .from('payment_methods')
-        .update({ is_default: false })
-        .eq('user_id', params.userId)
-        .eq('is_default', true);
-    }
-
-    const { data, error } = await supabase
-      .from('payment_methods')
-      .insert({
-        user_id: params.userId,
-        card_company: params.cardCompany,
-        card_number: params.cardNumber,
-        card_expiry: params.cardExpiry,
-        is_default: params.isDefault || false,
-        is_active: true,
-        toss_billing_key: params.tossBillingKey,
-        toss_customer_key: params.tossCustomerKey,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('[paymentMethod] Error adding payment method:', error);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, paymentMethod: data as PaymentMethod };
-  } catch (error) {
-    console.error('[paymentMethod] Error adding payment method:', error);
-    return { success: false, error: String(error) };
+export function formatCardDisplay(method: PaymentMethod): string {
+  if (method.type === 'card' && method.card_type && method.last4) {
+    return `${method.card_type.toUpperCase()} •••• ${method.last4}`;
   }
+  return method.display_name;
 }
 
 /**
- * Set default payment method
+ * Format card expiry
  */
-export async function setDefaultPaymentMethod(
-  userId: string,
-  paymentMethodId: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    // Unset all default payment methods
-    await supabase
-      .from('payment_methods')
-      .update({ is_default: false })
-      .eq('user_id', userId)
-      .eq('is_default', true);
-
-    // Set new default
-    const { error } = await supabase
-      .from('payment_methods')
-      .update({ is_default: true })
-      .eq('id', paymentMethodId)
-      .eq('user_id', userId);
-
-    if (error) {
-      console.error('[paymentMethod] Error setting default payment method:', error);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error('[paymentMethod] Error setting default payment method:', error);
-    return { success: false, error: String(error) };
+export function formatCardExpiry(method: PaymentMethod): string | null {
+  if (method.expiry_month && method.expiry_year) {
+    const month = method.expiry_month.toString().padStart(2, '0');
+    const year = method.expiry_year.toString().slice(-2);
+    return `${month}/${year}`;
   }
+  return null;
 }
 
 /**
- * Delete payment method (soft delete)
+ * Check if card is expired
  */
-export async function deletePaymentMethod(
-  userId: string,
-  paymentMethodId: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const { error } = await supabase
-      .from('payment_methods')
-      .update({ is_active: false })
-      .eq('id', paymentMethodId)
-      .eq('user_id', userId);
-
-    if (error) {
-      console.error('[paymentMethod] Error deleting payment method:', error);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error('[paymentMethod] Error deleting payment method:', error);
-    return { success: false, error: String(error) };
+export function isCardExpired(method: PaymentMethod): boolean {
+  if (method.type !== 'card' || !method.expiry_month || !method.expiry_year) {
+    return false;
   }
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
+  if (method.expiry_year < currentYear) {
+    return true;
+  }
+
+  if (method.expiry_year === currentYear && method.expiry_month < currentMonth) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Get card brand icon name
+ */
+export function getCardBrandIcon(cardType: string): string {
+  const brandMap: Record<string, string> = {
+    visa: 'visa',
+    mastercard: 'mastercard',
+    amex: 'amex',
+    discover: 'discover',
+    diners: 'diners',
+    jcb: 'jcb',
+    unionpay: 'unionpay',
+  };
+
+  return brandMap[cardType.toLowerCase()] || 'card';
 }

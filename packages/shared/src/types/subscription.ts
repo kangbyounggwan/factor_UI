@@ -121,7 +121,7 @@ export interface UserSubscription {
   plan_name: SubscriptionPlan;
   status: SubscriptionStatus;
   billing_cycle?: BillingCycle;
-  provider?: 'paddle' | 'toss';
+  provider?: 'paddle';
   current_period_start: string;
   current_period_end: string;
   cancel_at_period_end: boolean;

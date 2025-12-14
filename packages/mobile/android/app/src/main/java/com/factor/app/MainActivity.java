@@ -13,6 +13,11 @@ import androidx.core.app.ActivityCompat;
 import android.Manifest;
 import com.getcapacitor.BridgeActivity;
 
+// Microsoft Clarity
+import com.microsoft.clarity.Clarity;
+import com.microsoft.clarity.ClarityConfig;
+import com.microsoft.clarity.models.LogLevel;
+
 public class MainActivity extends BridgeActivity {
   private static final String TAG = "MainActivity";
   // Capacitor Preferences 플러그인이 사용하는 SharedPreferences 파일명
@@ -24,6 +29,12 @@ public class MainActivity extends BridgeActivity {
     super.onCreate(savedInstanceState);
     // Disable edge-to-edge so content does not draw under the status bar
     WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
+
+    // Initialize Microsoft Clarity
+    ClarityConfig config = new ClarityConfig("ulihilhfie");
+    config.setLogLevel(LogLevel.None); // Use LogLevel.Verbose for debugging
+    Clarity.initialize(getApplicationContext(), config);
+    Log.d(TAG, "Microsoft Clarity initialized");
 
     // Create notification channel for Android 8.0+
     createNotificationChannel();

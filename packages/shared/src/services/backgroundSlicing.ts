@@ -178,19 +178,46 @@ export async function processSlicingTask(
       console.error('[backgroundSlicing] Failed to update ai_generated_models:', updateError);
     }
 
-    // Create notification for user
-    await supabase.from('notifications').insert({
-      user_id: task.user_id,
-      title: '슬라이싱 완료',
-      message: `모델 슬라이싱이 완료되었습니다. GCode 파일이 준비되었습니다.`,
-      type: 'success',
-      metadata: {
-        task_id: task.id,
-        model_id: task.model_id,
-        gcode_url: gcodeUploadResult.publicUrl,
-        printer_model_id: task.printer_model_id, // 프린터 모델 ID 추가
-      },
-    });
+    // Send push notification (DB 저장 + FCM 푸시 전송)
+    try {
+      await supabase.functions.invoke('send-push-notification', {
+        body: {
+          userId: task.user_id,
+          title: '슬라이싱 완료',
+          body: '모델 슬라이싱이 완료되었습니다. GCode 파일이 준비되었습니다.',
+          type: 'slicing_complete',
+          relatedId: task.model_id,
+          relatedType: 'ai_model',
+          data: {
+            task_id: task.id,
+            model_id: task.model_id,
+            gcode_url: gcodeUploadResult.publicUrl,
+            printer_model_id: task.printer_model_id || '',
+          },
+          priority: 'high',
+          messageEn: 'Model slicing completed. GCode file is ready.',
+        },
+      });
+      console.log('[backgroundSlicing] Push notification sent');
+    } catch (pushError) {
+      console.error('[backgroundSlicing] Failed to send push notification:', pushError);
+      // 푸시 실패해도 DB에는 알림 저장 (fallback)
+      await supabase.from('notifications').insert({
+        user_id: task.user_id,
+        title: '슬라이싱 완료',
+        message: '모델 슬라이싱이 완료되었습니다. GCode 파일이 준비되었습니다.',
+        message_en: 'Model slicing completed. GCode file is ready.',
+        type: 'slicing_complete',
+        related_id: task.model_id,
+        related_type: 'ai_model',
+        metadata: {
+          task_id: task.id,
+          model_id: task.model_id,
+          gcode_url: gcodeUploadResult.publicUrl,
+          printer_model_id: task.printer_model_id,
+        },
+      });
+    }
 
     // Update task status to completed
     await updateTaskStatus(
@@ -207,18 +234,43 @@ export async function processSlicingTask(
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-    // Create error notification for user
-    await supabase.from('notifications').insert({
-      user_id: task.user_id,
-      title: '슬라이싱 실패',
-      message: `모델 슬라이싱 중 오류가 발생했습니다: ${errorMessage}`,
-      type: 'error',
-      metadata: {
-        task_id: task.id,
-        model_id: task.model_id,
-        error: errorMessage,
-      },
-    });
+    // Send error push notification (DB 저장 + FCM 푸시 전송)
+    try {
+      await supabase.functions.invoke('send-push-notification', {
+        body: {
+          userId: task.user_id,
+          title: '슬라이싱 실패',
+          body: `모델 슬라이싱 중 오류가 발생했습니다: ${errorMessage}`,
+          type: 'slicing_failed',
+          relatedId: task.model_id,
+          relatedType: 'ai_model',
+          data: {
+            task_id: task.id,
+            model_id: task.model_id || '',
+            error: errorMessage,
+          },
+          priority: 'high',
+          messageEn: `Model slicing failed: ${errorMessage}`,
+        },
+      });
+    } catch (pushError) {
+      console.error('[backgroundSlicing] Failed to send error push notification:', pushError);
+      // 푸시 실패해도 DB에는 알림 저장 (fallback)
+      await supabase.from('notifications').insert({
+        user_id: task.user_id,
+        title: '슬라이싱 실패',
+        message: `모델 슬라이싱 중 오류가 발생했습니다: ${errorMessage}`,
+        message_en: `Model slicing failed: ${errorMessage}`,
+        type: 'slicing_failed',
+        related_id: task.model_id,
+        related_type: 'ai_model',
+        metadata: {
+          task_id: task.id,
+          model_id: task.model_id,
+          error: errorMessage,
+        },
+      });
+    }
 
     // Update task status to failed
     await updateTaskStatus(supabase, task.id, 'failed', undefined, undefined, errorMessage);
