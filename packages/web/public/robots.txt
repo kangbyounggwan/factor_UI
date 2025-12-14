@@ -9,6 +9,8 @@ Disallow: /api/
 Disallow: /admin/
 Disallow: /*.json$
 Disallow: /private/
+Disallow: /auth/callback
+Disallow: /setup/
 
 # Sitemap 위치
 Sitemap: https://factor.io.kr/sitemap.xml
