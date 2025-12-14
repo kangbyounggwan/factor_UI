@@ -153,7 +153,7 @@ export default {
     }
   },
   ai: {
-    title: "AI 3D Modeling Studio",
+    title: "AI Studio",
     modelGeneration: "Model Generation",
     modelGenerationDesc: "Text, Image → 3D",
     gcodeAnalysis: "G-code Analysis",
@@ -1313,7 +1313,7 @@ export default {
     heroSubtitle: "Your entire 3D printing journey, powered by AI",
     getStarted: "Get Started",
     goToDashboard: "Go to Dashboard",
-    viewPricing: "View Pricing",
+    viewPricing: "Try AI",
     // Features Section
     featuresTitle: "Core Features",
     featuresSubtitle: "Everything you need for professional 3D printer monitoring",
@@ -1332,7 +1332,7 @@ export default {
     cameraSetup: "Camera Setup",
     cameraSetupDesc: "Configure your printer camera to start real-time monitoring.",
     // AI Features Section
-    aiFeaturesTitle: "AI 3D Modeling Studio",
+    aiFeaturesTitle: "AI Studio",
     aiFeaturesSubtitle: "From text and images to 3D models - experience a new era of creation with AI",
     textTo3D: "Text → 3D Modeling",
     textTo3DDesc: "Generate professional 3D models from simple text descriptions and print them instantly.",

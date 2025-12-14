@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Activity, Github, Mail, MessageCircle } from "lucide-react";
+import { Activity, Github, Mail, MessageCircle, BookOpen } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
 export const Footer = () => {
@@ -16,9 +16,9 @@ export const Footer = () => {
     ],
     company: [
       { name: t('footer.about'), href: "#about" },
-      { name: t('footer.blog'), href: "#blog" },
-      { name: t('footer.careers'), href: "#careers" },
-      { name: t('footer.contact'), href: "#contact" },
+      { name: t('footer.blog'), href: "https://blog.naver.com/factor_3d", external: true },
+      { name: t('footer.careers'), href: "#", onClick: () => alert('준비중입니다') },
+      { name: t('footer.contact'), href: "mailto:factor@factor.io.kr", external: true },
     ],
     support: [
       { name: t('footer.documentation'), href: "#docs" },
@@ -34,7 +34,8 @@ export const Footer = () => {
   };
 
   const socialLinks = [
-    { name: "GitHub", icon: Github, href: "https://github.com" },
+    { name: "GitHub", icon: Github, href: "https://github.com/kangbyounggwan" },
+    { name: "Blog", icon: BookOpen, href: "https://blog.naver.com/factor_3d" },
     { name: "Email", icon: Mail, href: "mailto:factor@factor.io.kr" },
     { name: "Discord", icon: MessageCircle, href: "https://discord.gg/wy29sYDrCP" },
   ];
@@ -86,12 +87,30 @@ export const Footer = () => {
             <ul className="space-y-3">
               {footerLinks.company.map((link) => (
                 <li key={link.name}>
-                  <Link
-                    to={link.href}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {link.name}
-                  </Link>
+                  {link.external ? (
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {link.name}
+                    </a>
+                  ) : link.onClick ? (
+                    <button
+                      onClick={link.onClick}
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {link.name}
+                    </button>
+                  ) : (
+                    <Link
+                      to={link.href}
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {link.name}
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>

@@ -170,7 +170,7 @@ export default {
   ai: {
     openAssistant: "AI 어시스턴트 열기",
     closeAssistant: "AI 어시스턴트 닫기",
-    title: "AI 3D 모델링 스튜디오",
+    title: "AI 스튜디오",
     modelGeneration: "모델 생성",
     modelGenerationDesc: "텍스트, 이미지 → 3D",
     gcodeAnalysis: "G-code 분석",
@@ -1322,7 +1322,7 @@ export default {
     heroSubtitle: "모든 3D 프린트 여정, AI 한 번으로 끝",
     getStarted: "지금 시작하기",
     goToDashboard: "대시보드로 이동",
-    viewPricing: "요금제 보기",
+    viewPricing: "AI 체험하기",
     // Features Section
     featuresTitle: "핵심 기능",
     featuresSubtitle: "전문적인 3D 프린터 모니터링을 위한 모든 기능을 제공합니다",
@@ -1341,7 +1341,7 @@ export default {
     cameraSetup: "카메라 설정",
     cameraSetupDesc: "프린터 카메라를 설정하여 실시간 모니터링을 시작하세요.",
     // AI Features Section
-    aiFeaturesTitle: "AI 3D 모델링 스튜디오",
+    aiFeaturesTitle: "AI 스튜디오",
     aiFeaturesSubtitle: "텍스트와 이미지에서 3D 모델까지, AI로 창작의 새로운 경험을 만나보세요",
     textTo3D: "텍스트 → 3D 모델링",
     textTo3DDesc: "간단한 텍스트 설명만으로 전문적인 3D 모델을 생성하고 즉시 프린팅하세요.",

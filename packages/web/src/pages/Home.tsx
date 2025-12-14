@@ -144,17 +144,17 @@ const Home = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8">
-              <Button asChild size="lg" className="text-lg px-8 py-6">
+              <Button asChild size="lg" className="text-lg px-8 py-6 border-2 border-primary">
                 <Link to={user ? "/dashboard" : "/auth"}>
                   <Monitor className="h-5 w-5 mr-2" />
                   {user ? t('landing.goToDashboard') : t('landing.getStarted')}
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6">
-                <Link to="/subscription">
+              <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6 border-2">
+                <a href="#ai-features">
                   <Zap className="h-5 w-5 mr-2" />
                   {t('landing.viewPricing')}
-                </Link>
+                </a>
               </Button>
             </div>
           </div>
