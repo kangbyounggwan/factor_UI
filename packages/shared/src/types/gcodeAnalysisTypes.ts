@@ -304,6 +304,47 @@ export interface CollectedInfo {
   filamentType?: string;
 }
 
+// ========== Delta Export Types (대용량 파일 효율적 처리) ==========
+
+export type DeltaAction = 'modify' | 'delete' | 'insert_before' | 'insert_after';
+
+/**
+ * 단일 라인 변경 델타
+ * 원본 파일 대비 변경사항만 추적
+ */
+export interface LineDelta {
+  lineIndex: number;           // 0-based 라인 인덱스
+  action: DeltaAction;
+  originalContent?: string;    // 원본 내용 (modify, delete 시)
+  newContent?: string;         // 새 내용 (modify, insert 시)
+}
+
+/**
+ * 델타 내보내기 요청 (Python 서버용)
+ */
+export interface DeltaExportRequest {
+  analysis_id: string;         // 분석 보고서 ID
+  deltas: LineDelta[];         // 변경 델타 배열
+  filename?: string;           // 출력 파일명
+  include_comments?: boolean;  // 수정 이력 주석 포함 여부
+}
+
+/**
+ * 델타 내보내기 응답
+ */
+export interface DeltaExportResponse {
+  success: boolean;
+  download_url?: string;       // 다운로드 URL (스토리지 경로)
+  file_content?: string;       // 직접 콘텐츠 반환 (작은 파일용)
+  total_lines: number;
+  modified_lines: number;
+  deleted_lines: number;
+  inserted_lines: number;
+  error?: string;
+}
+
+// ========== G-code Summary Result ==========
+
 export interface GCodeSummaryResult {
   total_lines: number;
   slicer_name?: string;

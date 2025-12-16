@@ -68,6 +68,7 @@ export default {
     login: "로그인",
     signup: "회원가입",
     email: "이메일",
+    emailPlaceholder: "이메일 주소",
     password: "비밀번호",
     confirmPassword: "비밀번호 확인",
     forgotPassword: "비밀번호를 잊으셨나요?",
@@ -1158,7 +1159,8 @@ export default {
       abs: "ABS에 적합한 온도입니다. 밀폐된 환경에서 출력하면 뒤틀림을 방지할 수 있습니다.",
       highTemp: "노즐 온도가 높습니다. 고온 필라멘트(나일론, PC)가 아니라면 확인이 필요합니다.",
       lowBed: "베드 온도가 낮습니다. 첫 레이어 접착에 문제가 있을 수 있습니다.",
-      general: "일반적인 온도 범위입니다. 사용하는 필라멘트 권장 온도를 확인해보세요."
+      general: "일반적인 온도 범위입니다. 사용하는 필라멘트 권장 온도를 확인해보세요.",
+      noData: "온도 데이터가 없거나 비정상적입니다. G-code 파일을 확인해주세요."
     },
     materialGuess: {
       pla: "PLA",
@@ -1195,7 +1197,10 @@ export default {
     patchAction: {
       remove: "삭제",
       modify: "수정",
-      insert: "추가"
+      insert: "삽입",
+      insert_after: "삽입",
+      add: "추가",
+      review: "검토"
     },
     original: "원본",
     modified: "수정",
@@ -1220,7 +1225,8 @@ export default {
       cold_extrusion: "저온 압출",
       early_temp_off: "조기 온도 해제",
       extreme_cold: "극저온",
-      early_bed_off: "조기 베드 해제"
+      early_bed_off: "조기 베드 해제",
+      missing_warmup: "예열 누락"
     },
 
     // 상세 이슈 카드

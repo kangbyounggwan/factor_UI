@@ -462,6 +462,9 @@ export function convertDbReportToUiData(report: GCodeAnalysisReport): GCodeAnaly
   if (report.raw_analysis_data) {
     const uiData = report.raw_analysis_data as unknown as GCodeAnalysisData;
 
+    // reportId 설정 (DB ID)
+    uiData.reportId = report.id;
+
     // raw_api_response에서 layer/section 정보 보강
     if (report.raw_api_response && uiData.detailedAnalysis?.detailedIssues) {
       const apiResponse = report.raw_api_response as Record<string, unknown>;
@@ -500,6 +503,7 @@ export function convertDbReportToUiData(report: GCodeAnalysisReport): GCodeAnaly
 
   // 없으면 DB 필드에서 복원
   return {
+    reportId: report.id,
     fileName: report.file_name,
     storagePath: report.file_storage_path,
     analyzedAt: report.analyzed_at,
@@ -723,6 +727,10 @@ export async function saveIssueEdit(
     issueLine?: number;
     issueLineIndex?: number;
     note?: string;
+    // 피드백 관련 옵션
+    patchIndex?: number;
+    feedback?: 'like' | 'dislike';
+    patchId?: string;
   }
 ): Promise<{ data: GCodeIssueEdit | null; error: Error | null }> {
   try {

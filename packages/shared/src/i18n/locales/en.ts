@@ -68,6 +68,7 @@ export default {
     login: "Login",
     signup: "Sign Up",
     email: "Email",
+    emailPlaceholder: "Email address",
     password: "Password",
     confirmPassword: "Confirm Password",
     forgotPassword: "Forgot Password?",
@@ -1128,7 +1129,8 @@ export default {
       abs: "Temperature suitable for ABS. Print in enclosed environment to prevent warping.",
       highTemp: "Nozzle temperature is high. Check if not using high-temp filament (Nylon, PC).",
       lowBed: "Bed temperature is low. May have first layer adhesion issues.",
-      general: "General temperature range. Check the recommended temperature for your filament."
+      general: "General temperature range. Check the recommended temperature for your filament.",
+      noData: "Temperature data is missing or abnormal. Please check your G-code file."
     },
     materialGuess: {
       pla: "PLA",
@@ -1165,7 +1167,10 @@ export default {
     patchAction: {
       remove: "Remove",
       modify: "Modify",
-      insert: "Insert"
+      insert: "Insert",
+      insert_after: "Insert",
+      add: "Add",
+      review: "Review"
     },
     original: "Original",
     modified: "Modified",
@@ -1190,7 +1195,8 @@ export default {
       cold_extrusion: "Cold Extrusion",
       early_temp_off: "Early Temp Off",
       extreme_cold: "Extreme Cold",
-      early_bed_off: "Early Bed Off"
+      early_bed_off: "Early Bed Off",
+      missing_warmup: "Missing Warmup"
     },
 
     // Detailed issue card

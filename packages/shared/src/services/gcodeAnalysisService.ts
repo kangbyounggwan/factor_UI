@@ -15,6 +15,8 @@ import type {
     SSEErrorEvent,
     GCodeSummaryRequest,
     GCodeSummaryResponse,
+    DeltaExportRequest,
+    DeltaExportResponse,
 } from '@shared/types/gcodeAnalysisTypes';
 
 // API Base URL (환경변수 사용)
@@ -269,4 +271,76 @@ export async function requestErrorAnalysis(
     }
 
     return response.json();
+}
+
+/**
+ * 델타 기반 G-code 내보내기
+ * POST /api/v1/gcode/export
+ *
+ * 대용량 파일(50만줄+)을 효율적으로 처리하기 위해
+ * 전체 파일 대신 변경된 델타만 서버로 전송하고
+ * 서버에서 스트리밍으로 병합 후 반환
+ */
+export async function exportGCodeWithDeltas(
+    request: DeltaExportRequest
+): Promise<DeltaExportResponse> {
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/v1/gcode/export`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Export request failed: ${response.status} ${errorText}`);
+    }
+
+    return response.json();
+}
+
+/**
+ * 델타 기반 G-code 내보내기 + 직접 다운로드
+ * 서버에서 병합된 파일을 Blob으로 받아 다운로드
+ */
+export async function exportAndDownloadGCodeWithDeltas(
+    request: DeltaExportRequest,
+    filename?: string
+): Promise<void> {
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/v1/gcode/export`;
+
+    console.log('[exportAndDownloadGCodeWithDeltas] Request:', {
+        url,
+        body: request,
+    });
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Export download failed: ${response.status} ${errorText}`);
+    }
+
+    const blob = await response.blob();
+    const finalFilename = filename || request.filename || `modified_${request.analysis_id}.gcode`;
+
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = finalFilename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(blobUrl);
 }

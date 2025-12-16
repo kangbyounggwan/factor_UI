@@ -251,6 +251,7 @@ export interface AnalysisReportSortOption {
 
 export type IssueEditStatus = 'pending' | 'applied' | 'reverted';
 export type EditAction = 'edit' | 'delete';
+export type PatchFeedback = 'like' | 'dislike';
 
 // 개별 수정 항목
 export interface IssueEditItem {
@@ -260,6 +261,9 @@ export interface IssueEditItem {
   originalContent: string;
   modifiedContent: string | null;  // delete인 경우 null
   editedAt: string;         // ISO timestamp
+  // 패치 피드백 (추천/비추천)
+  feedback?: PatchFeedback;
+  feedbackAt?: string;      // ISO timestamp
 }
 
 // gcode_issue_edits 테이블 전체 타입
