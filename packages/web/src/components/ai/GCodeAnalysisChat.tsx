@@ -401,6 +401,9 @@ ${summary.patch_available ? `\n🔧 **${summary.patch_count}개의 수정 패치
                                         <span>분석 중...</span>
                                         <span>{Math.round(progress)}%</span>
                                     </div>
+                                    <p className="text-xs text-muted-foreground text-center">
+                                        💡 이번 업데이트로 더 정확한 분석을 위해 고도화된 모델을 채택했어요. 시간이 조금 오래 걸립니다...
+                                    </p>
                                     <Progress value={progress} />
                                     <div className="space-y-1">
                                         {timeline.map((step) => (

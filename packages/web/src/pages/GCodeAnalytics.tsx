@@ -1201,6 +1201,9 @@ const GCodeAnalytics = () => {
 
                     <div className="text-center space-y-4 w-full max-w-md">
                       <p className="text-lg font-semibold">{t('gcodeAnalytics.analyzing')}</p>
+                      <p className="text-xs text-muted-foreground">
+                        💡 이번 업데이트로 더 정확한 분석을 위해 고도화된 모델을 채택했어요. 시간이 조금 오래 걸립니다...
+                      </p>
 
                       {/* 진행률 바 */}
                       <div className="space-y-2">

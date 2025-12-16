@@ -6,8 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
- // 대시보드와 동일한 실시간 반영을 위해 상세 내부 카드로 대체
-import { IoTDevicePanel } from "@/components/IoTDevicePanel";
 import { PrinterControlPad } from "@/components/PrinterControlPad";
 import { GCodeUpload } from "@/components/GCodeUpload";
 import { WebSocketStatus } from "@/components/WebSocketStatus";
@@ -112,25 +110,6 @@ const defaultData: MonitoringData = {
   }
 };
 
-// IoT 디바이스 타입 정의 (IoTDevicePanel과 호환되도록)
-interface PrinterIoTDevice {
-  id: string;
-  name: string;
-  type: "sensor" | "camera" | "controller";
-  status: "connected" | "disconnected" | "error";
-  lastSeen: string;
-  batteryLevel?: number;
-  signalStrength: number; // IoTDevicePanel에서 필수 필드
-  sensorData?: {
-    temperature?: number;
-    humidity?: number;
-    vibration?: number;
-    pressure?: number;
-  };
-}
-
-// IoT 디바이스 기본 데이터
-const defaultIoTDevices: PrinterIoTDevice[] = [];
 
 const PrinterDetail = () => {
   const { t } = useTranslation();
@@ -139,7 +118,6 @@ const PrinterDetail = () => {
   const storageKey = `printer:detail:${id ?? 'unknown'}`;
   const hasSnapshot = typeof window !== 'undefined' ? !!localStorage.getItem(storageKey) : false;
   const [data, setData] = usePersistentState<MonitoringData>(storageKey, defaultData);
-  const [iotDevices, setIoTDevices] = useState<PrinterIoTDevice[]>(defaultIoTDevices);
   const [loading, setLoading] = useState(!hasSnapshot);
   const { user } = useAuth();
   const { toast } = useToast();

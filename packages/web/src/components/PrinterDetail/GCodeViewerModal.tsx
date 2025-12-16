@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, Info, CheckCircle2, X, FileCode, Trash2, Edit3, Check, XCircle, Undo2, Wrench, Link2, Link2Off, Zap, ShieldAlert, ChevronRight, Clock, Layers, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { AlertTriangle, Info, CheckCircle2, X, FileCode, Trash2, Edit3, Check, XCircle, Undo2, Wrench, Link2, Link2Off, Zap, ShieldAlert, ChevronRight, Clock, Layers, ThumbsUp, ThumbsDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DetailedIssue, PatchSuggestion } from './GCodeAnalysisReport';
 import type { IssueEditItem, PatchFeedback } from '@shared/types/gcodeAnalysisDbTypes';
@@ -113,7 +113,7 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
 
     // 적용된 패치 추적 및 이전 상태 저장 (되돌리기용)
     const [appliedPatches, setAppliedPatches] = useState<Set<number>>(new Set());
-    const [patchHistory, setPatchHistory] = useState<Map<number, { lines: string[], appliedPatches: Set<number> }>>(new Map());
+    const [patchHistory, setPatchHistory] = useState<Map<number, { lines: string[], appliedPatches: Set<number>, lineOffsets: Map<number, number> }>>(new Map());
 
     // 패치 적용 후 유지할 라인 인덱스 (뷰 위치 유지용)
     const [fixedLineIndex, setFixedLineIndex] = useState<number | null>(null);
@@ -124,6 +124,11 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
 
     // 델타 추적 (대용량 파일 효율적 처리)
     const [deltas, setDeltas] = useState<Map<number, { lineIndex: number; action: string; originalContent?: string; newContent?: string }>>(new Map());
+
+    // 라인 오프셋 추적 (패치 적용 시 라인 번호 변화 추적)
+    // key: 원본 라인 번호, value: 오프셋 (삭제: -1, 추가: +N)
+    const [lineOffsets, setLineOffsets] = useState<Map<number, number>>(new Map());
+    const [newlyInsertedLineIndex, setNewlyInsertedLineIndex] = useState<number | null>(null);
 
     const editInputRef = useRef<HTMLInputElement>(null);
     const targetLineRef = useRef<HTMLDivElement>(null);
@@ -142,6 +147,7 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
             setFixedLineIndex(null);
             setPendingFeedbacks(new Map());
             setDeltas(new Map());
+            setLineOffsets(new Map());
 
             // 초기 선택 설정 (initialIssueIndex가 있으면 우선 사용)
             if (initialIssueIndex !== undefined && initialIssueIndex >= 0 && initialIssueIndex < issues.length) {
@@ -436,6 +442,18 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
         });
     }, []);
 
+    // 오프셋 계산 함수: 이전 패치들로 인한 라인 번호 변화량 계산
+    const calculateOffset = useCallback((originalLineIdx: number): number => {
+        let offset = 0;
+        lineOffsets.forEach((deltaOffset, lineNum) => {
+            // 현재 라인보다 앞선 라인들의 변화량만 합산
+            if (lineNum <= originalLineIdx) {
+                offset += deltaOffset;
+            }
+        });
+        return offset;
+    }, [lineOffsets]);
+
     // 패치 적용 핸들러 (new API: additional_lines, add_before/add_after 지원)
     const handleApplyPatch = useCallback(async (patchIndex: number) => {
         const patch = patches[patchIndex];
@@ -444,19 +462,24 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
         // no_action, review는 적용 불가 (수동 검토 필요)
         if (patch.action === 'no_action' || patch.action === 'review') return;
 
-        // 라인 인덱스 계산 (new API: line_number, legacy: line_index, line)
-        const lineIdx = patch.line_number !== undefined
+        // 원본 라인 인덱스 계산 (new API: line_number, legacy: line_index, line)
+        const originalLineIdx = patch.line_number !== undefined
             ? patch.line_number - 1  // line_number는 1-based
             : patch.line_index ?? (patch.line ? patch.line - 1 : -1);
 
-        console.log('[Patch] Applying at line:', lineIdx + 1, 'action:', patch.action);
+        // 오프셋을 적용한 실제 라인 인덱스 계산
+        const offset = calculateOffset(originalLineIdx);
+        const lineIdx = originalLineIdx + offset;
+
+        console.log('[Patch] Applying at original line:', originalLineIdx + 1, 'offset:', offset, 'actual line:', lineIdx + 1, 'action:', patch.action);
 
         if (lineIdx < 0 || lineIdx >= lines.length) return;
 
-        // 되돌리기를 위해 현재 상태 저장
+        // 되돌리기를 위해 현재 상태 저장 (lineOffsets 포함)
         setPatchHistory(prev => new Map(prev).set(patchIndex, {
             lines: [...lines],
-            appliedPatches: new Set(appliedPatches)
+            appliedPatches: new Set(appliedPatches),
+            lineOffsets: new Map(lineOffsets)
         }));
 
         const newLines = [...lines];
@@ -540,6 +563,28 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
         setLines(newLines);
         setAppliedPatches(prev => new Set([...prev, patchIndex]));
 
+        // 라인 오프셋 업데이트 (다른 패치들의 라인 번호에 영향)
+        if (patch.action === 'remove' || patch.action === 'delete') {
+            // 삭제: 이 라인 이후의 모든 라인이 -1 오프셋
+            setLineOffsets(prev => {
+                const newOffsets = new Map(prev);
+                newOffsets.set(originalLineIdx, (prev.get(originalLineIdx) || 0) - 1);
+                return newOffsets;
+            });
+        } else if (patch.action === 'add' || patch.action === 'add_before' || patch.action === 'add_after' ||
+            patch.action === 'insert' || patch.action === 'insert_after') {
+            // 추가: 추가된 라인 수만큼 오프셋 증가
+            const addedCount = additionalLines.length > 0 ? additionalLines.length : (modifiedLine ? 1 : 0);
+            if (addedCount > 0) {
+                setLineOffsets(prev => {
+                    const newOffsets = new Map(prev);
+                    newOffsets.set(originalLineIdx, (prev.get(originalLineIdx) || 0) + addedCount);
+                    return newOffsets;
+                });
+            }
+        }
+        // modify는 라인 수 변화 없으므로 오프셋 변경 없음
+
         // 패치 적용 후 뷰 위치 유지를 위해 라인 인덱스 저장
         setFixedLineIndex(lineIdx);
 
@@ -579,16 +624,17 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
         // 선택은 유지 (적용됨 상태 표시를 위해)
         // setSelectedType(null);
         // setSelectedIndex(null);
-    }, [patches, lines, originalLines, user, reportId, appliedPatches, addDelta]);
+    }, [patches, lines, originalLines, user, reportId, appliedPatches, addDelta, lineOffsets, calculateOffset]);
 
     // 패치 되돌리기 핸들러
     const handleRevertPatch = useCallback((patchIndex: number) => {
         const history = patchHistory.get(patchIndex);
         if (!history) return;
 
-        // 저장된 상태로 복원
+        // 저장된 상태로 복원 (lineOffsets 포함)
         setLines(history.lines);
         setAppliedPatches(history.appliedPatches);
+        setLineOffsets(history.lineOffsets);
 
         // 히스토리에서 제거
         setPatchHistory(prev => {
@@ -604,29 +650,92 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
         setEditingValue(lines[lineIndex] || '');
     }, [lines]);
 
+    // 라인 추가
+    const handleInsertLine = useCallback((lineIndex: number) => {
+        const insertIndex = lineIndex + 1;
+        const newLines = [...lines];
+        // 빈 라인 추가
+        newLines.splice(insertIndex, 0, '');
+        setLines(newLines);
+        // 편집 모드 진입
+        setEditingLineIndex(insertIndex);
+        setNewlyInsertedLineIndex(insertIndex);
+        setEditingValue('');
+
+        // 라인 오프셋 업데이트 (라인 추가)
+        setLineOffsets(prev => {
+            const newOffsets = new Map(prev);
+            newOffsets.set(insertIndex, (prev.get(insertIndex) || 0) + 1);
+            return newOffsets;
+        });
+
+        // G-code 뷰 스크롤
+        setTimeout(() => {
+            if (editInputRef.current) {
+                editInputRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                editInputRef.current.focus();
+            }
+        }, 100);
+    }, [lines]);
+
     // 편집 확인
     const handleConfirmEdit = useCallback(() => {
         if (editingLineIndex === null) return;
 
-        const originalContent = originalLines[editingLineIndex] || lines[editingLineIndex];
+        const isNewInsert = editingLineIndex === newlyInsertedLineIndex;
+        const originalContent = isNewInsert ? undefined : (originalLines[editingLineIndex] || lines[editingLineIndex]);
+
         const newLines = [...lines];
+
+        if (isNewInsert && !editingValue.trim()) {
+            // 새로 추가했는데 내용이 없으면 라인 삭제 (취소와 동일)
+            newLines.splice(editingLineIndex, 1);
+            setLines(newLines);
+            setNewlyInsertedLineIndex(null);
+            setEditingLineIndex(null);
+            setEditingValue('');
+
+            // 라인 오프셋 복구 (라인 추가 취소)
+            setLineOffsets(prev => {
+                const newOffsets = new Map(prev);
+                newOffsets.set(editingLineIndex, (prev.get(editingLineIndex) || 0) - 1);
+                return newOffsets;
+            });
+            return;
+        }
+
         newLines[editingLineIndex] = editingValue;
         setLines(newLines);
 
-        // 델타 추적: modify
-        if (originalContent !== editingValue) {
+        // 델타 추적
+        if (isNewInsert) {
+            addDelta(editingLineIndex - 1, 'insert_after', undefined, editingValue);
+            setNewlyInsertedLineIndex(null);
+        } else if (originalContent !== editingValue) {
             addDelta(editingLineIndex, 'modify', originalContent, editingValue);
         }
 
         setEditingLineIndex(null);
         setEditingValue('');
-    }, [editingLineIndex, editingValue, lines, originalLines, addDelta]);
+    }, [editingLineIndex, editingValue, lines, originalLines, addDelta, newlyInsertedLineIndex]);
 
     // 편집 취소
     const handleCancelEdit = useCallback(() => {
+        if (editingLineIndex !== null && editingLineIndex === newlyInsertedLineIndex) {
+            // 새로 추가된 라인이면 삭제
+            setLines(prev => prev.filter((_, idx) => idx !== editingLineIndex));
+            setNewlyInsertedLineIndex(null);
+
+            // 라인 오프셋 복구 (라인 추가 취소)
+            setLineOffsets(prev => {
+                const newOffsets = new Map(prev);
+                newOffsets.set(editingLineIndex, (prev.get(editingLineIndex) || 0) - 1);
+                return newOffsets;
+            });
+        }
         setEditingLineIndex(null);
         setEditingValue('');
-    }, []);
+    }, [editingLineIndex, newlyInsertedLineIndex]);
 
     // 라인 삭제
     const handleDeleteLine = useCallback((lineIndex: number) => {
@@ -636,6 +745,13 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
 
         // 델타 추적: delete
         addDelta(lineIndex, 'delete', originalContent, undefined);
+
+        // 라인 오프셋 업데이트 (수동 삭제)
+        setLineOffsets(prev => {
+            const newOffsets = new Map(prev);
+            newOffsets.set(lineIndex, (prev.get(lineIndex) || 0) - 1);
+            return newOffsets;
+        });
     }, [lines, originalLines, addDelta]);
 
     // 키보드 이벤트
@@ -1481,6 +1597,15 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
                                                             title="수정"
                                                         >
                                                             <Edit3 className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleInsertLine(actualLineIdx)}
+                                                            className="h-6 w-6 p-0 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                                                            title="아래에 라인 추가"
+                                                        >
+                                                            <Plus className="h-3.5 w-3.5" />
                                                         </Button>
                                                         <Button
                                                             variant="ghost"
