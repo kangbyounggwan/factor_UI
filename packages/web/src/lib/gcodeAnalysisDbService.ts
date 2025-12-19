@@ -314,13 +314,6 @@ export async function saveAnalysisReport(
   }
 ): Promise<{ data: GCodeAnalysisReport | null; error: Error | null }> {
   try {
-    console.log('[gcodeAnalysisDbService] saveAnalysisReport called:', {
-      userId,
-      fileName,
-      hasReportData: !!reportData,
-      options,
-    });
-
     const insertData = convertReportToDbInsert(userId, fileName, reportData, options?.apiResult);
 
     // gcode_file_id와 storage_path 추가
@@ -335,15 +328,8 @@ export async function saveAnalysisReport(
       (insertData as any).segment_data_id = options.segmentDataId;
     }
 
-    console.log('[gcodeAnalysisDbService] Inserting data:', {
-      user_id: insertData.user_id,
-      file_name: insertData.file_name,
-      status: insertData.status,
-      overall_score: insertData.overall_score,
-      overall_grade: insertData.overall_grade,
-      gcode_file_id: insertData.gcode_file_id,
-      segment_data_id: (insertData as any).segment_data_id,
-    });
+    console.log('[DEBUG] gcodeAnalysisDbService.saveAnalysisReport - segmentDataId received:', options?.segmentDataId);
+    console.log('[DEBUG] gcodeAnalysisDbService.saveAnalysisReport - insertData.segment_data_id:', (insertData as any).segment_data_id);
 
     const { data, error } = await supabase
       .from('gcode_analysis_reports')
@@ -352,15 +338,14 @@ export async function saveAnalysisReport(
       .single();
 
     if (error) {
-      console.error('[gcodeAnalysisDbService] Save error:', error);
-      console.error('[gcodeAnalysisDbService] Error details:', JSON.stringify(error, null, 2));
+      console.log('[DEBUG] gcodeAnalysisDbService INSERT FAILED:', error.message);
       return { data: null, error: new Error(error.message) };
     }
 
-    console.log('[gcodeAnalysisDbService] Save success:', data?.id);
+    console.log('[DEBUG] gcodeAnalysisDbService INSERT SUCCESS - reportId:', data?.id, 'segment_data_id in DB:', (data as any)?.segment_data_id);
     return { data: data as GCodeAnalysisReport, error: null };
   } catch (err) {
-    console.error('[gcodeAnalysisDbService] Save exception:', err);
+    console.log('[DEBUG] gcodeAnalysisDbService exception:', err);
     return { data: null, error: err as Error };
   }
 }

@@ -186,11 +186,6 @@ const AIChat = () => {
       setIsLoadingSessions(true);
       try {
         const dbSessions = await getChatSessions(user.id);
-        // console.log('[AIChat] Loaded sessions from DB:', dbSessions.map(s => ({
-          id: s.id,
-          title: s.title,
-          metadata: s.metadata,
-        })));
         // DB 세션을 ChatSession 형식으로 변환
         const formattedSessions: ChatSession[] = dbSessions.map(s => ({
           id: s.id,
@@ -200,8 +195,8 @@ const AIChat = () => {
           metadata: s.metadata, // G-code 보고서 ID 등
         }));
         setChatSessions(formattedSessions);
-      } catch (e) {
-        console.error('[AIChat] Failed to load sessions from DB:', e);
+      } catch {
+        // 세션 로드 실패
       } finally {
         setIsLoadingSessions(false);
       }
@@ -240,32 +235,19 @@ const AIChat = () => {
     if (!user?.id) return;
 
     try {
-      console.log('[AIChat] Loading session:', {
-        sessionId: session.id,
-        metadata: session.metadata,
-        hasMetadata: !!session.metadata,
-      });
       // DB에서 메시지 가져오기
       const dbMessages = await getChatMessages(session.id);
-      console.log('[AIChat] Loaded messages from DB:', dbMessages.length, dbMessages.map(m => ({
-        id: m.id,
-        type: m.type,
-        metadata: m.metadata,
-        reportId: m.reportId,
-      })));
 
       // 메시지에서 reportId가 있는 것 찾기 (우선순위: 메시지 > 세션 메타데이터)
       const messageWithReport = dbMessages.find(m => m.reportId);
       const reportId = messageWithReport?.reportId || (session.metadata?.gcode_report_id as string | undefined);
       const reportFileName = session.metadata?.gcode_report_file_name as string | undefined;
-      console.log('[AIChat] Session report info:', { reportId, reportFileName, fromMessage: !!messageWithReport?.reportId });
 
       // 보고서 ID별로 reportCardData 캐시
       const reportCardCache: Record<string, Message['reportCard']> = {};
 
       // 보고서가 있으면 DB에서 조회
       if (reportId) {
-        console.log('[AIChat] Loading report from DB:', reportId);
         const { data: report } = await getAnalysisReportById(reportId);
         if (report) {
           reportCardCache[reportId] = {
@@ -277,7 +259,6 @@ const AIChat = () => {
             layerCount: report.layer_count,
             printTime: report.print_time_formatted,
           };
-          console.log('[AIChat] Report loaded:', reportCardCache[reportId]);
         }
       }
 
@@ -312,7 +293,6 @@ const AIChat = () => {
         setActiveReportId(null);
       }
     } catch (e) {
-      console.error('[AIChat] Failed to load session messages:', e);
       toast({
         title: t('aiChat.loadError', '세션 로드 실패'),
         description: t('aiChat.tryAgainLater', '잠시 후 다시 시도해주세요.'),
@@ -335,7 +315,6 @@ const AIChat = () => {
         }
       }
     } catch (e) {
-      console.error('[AIChat] Failed to delete session:', e);
       toast({
         title: t('aiChat.deleteError', '세션 삭제 실패'),
         variant: 'destructive',
@@ -566,12 +545,13 @@ const AIChat = () => {
       }
 
       // 통합 Chat API 호출
-      const aiResponse = await callChatAPI(
+      const apiResult = await callChatAPI(
         currentInput,
         currentImages,
         currentGcodeFile,
         selectedTool
       );
+      const aiResponse = apiResult.response;
 
       const assistantMessageId = `assistant-${Date.now()}`;
       const assistantMessage: Message = {
@@ -582,9 +562,35 @@ const AIChat = () => {
       };
       setMessages((prev) => [...prev, assistantMessage]);
 
-      // G-code 분석 메시지인 경우 ID 저장 (나중에 reportCard 추가용)
-      if (selectedTool === 'gcode' || currentGcodeFile) {
+      // G-code 분석인 경우 폴링 시작 + 세그먼트 저장
+      if (apiResult.analysisId) {
+        // 메시지 ID 저장 후 폴링 시작 (올바른 메시지에 보고서 카드 연결)
         setGcodeAnalysisMessageId(assistantMessageId);
+        handleGcodeAnalysisStream(apiResult.analysisId, apiResult.fileName, assistantMessageId);
+
+        // 세그먼트 데이터가 있으면 저장 (로그인 사용자만)
+        if (user?.id && apiResult.segments) {
+          savedSegmentDataIdRef.current = null;
+          console.log('[DEBUG] Saving segment data, analysisId:', apiResult.analysisId, 'layerCount:', apiResult.segments.layers?.length);
+          saveSegmentData({
+            userId: user.id,
+            analysisId: apiResult.analysisId,
+            segmentResponse: {
+              analysis_id: apiResult.analysisId,
+              status: 'segments_ready',
+              segments: apiResult.segments,
+              llm_analysis_started: true,
+            },
+          }).then(({ data, error }) => {
+            if (error) {
+              console.log('[DEBUG] Segment save FAILED:', error);
+            } else {
+              console.log('[DEBUG] Segment saved, id:', data?.id);
+              savedSegmentDataIdRef.current = data?.id || null;
+              console.log('[DEBUG] savedSegmentDataIdRef.current =', savedSegmentDataIdRef.current);
+            }
+          });
+        }
       }
 
       // 로그인 사용자: AI 응답 DB에 저장 (메타데이터 포함)
@@ -617,7 +623,6 @@ const AIChat = () => {
         saveAnonChat(updatedMessages);
       }
     } catch (error) {
-      console.error("[AIChat] Error:", error);
       const errorMessage: Message = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
@@ -641,7 +646,12 @@ const AIChat = () => {
     images: File[],
     gcodeFile: File | null,
     tool: string | null
-  ): Promise<string> => {
+  ): Promise<{
+    response: string;
+    analysisId?: string;
+    fileName?: string;
+    segments?: any;
+  }> => {
     const gcodeFileName = gcodeFile?.name;
 
     // 기본 요청 구성
@@ -750,13 +760,6 @@ const AIChat = () => {
       }
     }
 
-    console.log('[AIChat] Sending request:', {
-      tool,
-      selected_tool: request.selected_tool,
-      hasAttachments: !!request.attachments?.length,
-      attachmentTypes: request.attachments?.map(a => a.type),
-    });
-
     // API 호출
     const response = await sendChatMessage(request);
 
@@ -767,45 +770,24 @@ const AIChat = () => {
     // 응답 포맷팅
     const formattedResponse = formatChatResponse(response);
 
-    // G-code 분석인 경우 SSE 스트리밍 연결 + 세그먼트 데이터 저장
-    console.log('[AIChat] Chat API response check:', {
+    // G-code 분석인 경우 세그먼트 데이터 추출
+    // 세그먼트는 response.segments 또는 response.tool_result.segments에 있을 수 있음
+    const segments = response.segments || response.tool_result?.segments;
+    console.log('[DEBUG] Chat API response:', {
       analysis_id: response.analysis_id,
       stream_url: response.stream_url,
-      hasSegments: !!response.segments,
-      segmentsLayerCount: response.segments?.layers?.length,
+      hasSegments: !!segments,
+      segmentsLayerCount: segments?.layers?.length,
       userId: user?.id,
     });
 
-    if (response.analysis_id && response.stream_url) {
-      handleGcodeAnalysisStream(response.analysis_id, gcodeFileName);
-
-      // 세그먼트 데이터가 있으면 저장 (로그인 사용자만)
-      if (user?.id && response.segments) {
-        console.log('[AIChat] Saving segment data for analysis:', response.analysis_id);
-        // 이전 세그먼트 ID 초기화
-        savedSegmentDataIdRef.current = null;
-        saveSegmentData({
-          userId: user.id,
-          analysisId: response.analysis_id,
-          segmentResponse: {
-            analysis_id: response.analysis_id,
-            status: 'segments_ready',
-            segments: response.segments as any,
-            llm_analysis_started: true,
-          },
-        }).then(({ data, error }) => {
-          if (error) {
-            console.error('[AIChat] Failed to save segment data:', error);
-          } else {
-            console.log('[AIChat] Segment data saved:', data?.id);
-            // 세그먼트 ID 저장 (보고서 저장 시 사용)
-            savedSegmentDataIdRef.current = data?.id || null;
-          }
-        });
-      }
-    }
-
-    return formattedResponse;
+    // G-code 분석 정보와 함께 반환 (handleSubmit에서 처리)
+    return {
+      response: formattedResponse,
+      analysisId: response.analysis_id && response.stream_url ? response.analysis_id : undefined,
+      fileName: gcodeFileName,
+      segments: segments,
+    };
   };
 
   // G-code 이슈 해결 요청 (보고서에서 호출)
@@ -841,8 +823,6 @@ const AIChat = () => {
 
   // G-code 분석 폴링 처리 (2초마다 상태 조회)
   const handleGcodeAnalysisStream = useCallback((analysisId: string, fileName?: string, messageId?: string) => {
-    console.log('[AIChat] Starting polling for analysis:', analysisId, 'messageId:', messageId);
-
     // 기존 폴링이 있으면 중지
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
@@ -860,7 +840,6 @@ const AIChat = () => {
 
     // 분석 완료 처리 함수
     const handleAnalysisComplete = async (result: AnalysisResult) => {
-      console.log('[AIChat] Analysis complete:', result);
       setIsGcodeAnalyzing(false);
       setGcodeAnalysisProgress(100);
 
@@ -879,20 +858,18 @@ const AIChat = () => {
       let savedReportId: string | null = null;
       // 임시로 analysisId를 활성 보고서로 설정 (DB 저장 후 실제 ID로 업데이트)
       setActiveReportId(analysisId);
-      console.log('[AIChat] onComplete - user?.id:', user?.id, 'currentSessionId:', currentSessionId);
       if (user?.id) {
         try {
           // 세그먼트 ID가 ref에 없으면 DB에서 조회 (비동기 저장 타이밍 이슈 대응)
           let segmentDataId = savedSegmentDataIdRef.current;
+          console.log('[DEBUG] Before saving report - savedSegmentDataIdRef.current:', segmentDataId);
           if (!segmentDataId) {
             const { segmentDataId: fetchedId } = await getSegmentDataIdByAnalysisId(analysisId);
             segmentDataId = fetchedId;
-            console.log('[AIChat] Fetched segment data ID from DB:', segmentDataId);
+            console.log('[DEBUG] Fetched segmentDataId from DB:', segmentDataId);
           }
 
-          console.log('[AIChat] Saving analysis report to DB...', {
-            segmentDataId,
-          });
+          console.log('[DEBUG] Calling saveAnalysisReport with segmentDataId:', segmentDataId);
           const { data: savedReport, error } = await saveAnalysisReport(
             user.id,
             fileName || 'analysis.gcode',
@@ -903,13 +880,9 @@ const AIChat = () => {
             }
           );
           if (error) {
-            console.error('[AIChat] Failed to save analysis report:', error);
+            console.log('[DEBUG] saveAnalysisReport FAILED:', error);
           } else {
-            console.log('[AIChat] Analysis report saved successfully:', {
-              reportId: savedReport?.id,
-              fileName: savedReport?.file_name,
-              segmentDataId: savedSegmentDataIdRef.current,
-            });
+            console.log('[DEBUG] saveAnalysisReport SUCCESS - reportId:', savedReport?.id, 'passed segmentDataId:', segmentDataId);
             savedReportId = savedReport?.id || null;
 
             // 실제 저장된 reportId로 activeReportId 업데이트
@@ -928,18 +901,16 @@ const AIChat = () => {
             if (savedReportId && !savedSegmentDataIdRef.current) {
               linkSegmentToReport(analysisId, savedReportId).then(({ success, error: linkError }) => {
                 if (linkError) {
-                  console.error('[AIChat] Failed to link segment to report:', linkError);
+                  console.log('[DEBUG] linkSegmentToReport FAILED:', linkError);
                 } else if (success) {
-                  console.log('[AIChat] Segment linked to report successfully (fallback)');
+                  console.log('[DEBUG] linkSegmentToReport SUCCESS (fallback)');
                 }
               });
             }
           }
         } catch (err) {
-          console.error('[AIChat] Error saving analysis report:', err);
+          console.log('[DEBUG] saveAnalysisReport exception:', err);
         }
-      } else {
-        console.log('[AIChat] User not logged in, skipping report save');
       }
 
       // 보고서 카드 정보 생성
@@ -955,10 +926,13 @@ const AIChat = () => {
         layerCount: result.comprehensive_summary?.layer?.total_layers,
         printTime: result.comprehensive_summary?.print_time?.formatted_time,
       };
+      console.log('[DEBUG] reportCardData:', reportCardData);
+      console.log('[DEBUG] gcodeAnalysisMessageId:', gcodeAnalysisMessageId);
 
       // 기존 분석 시작 메시지에 reportCard 추가 (병합)
       setMessages(prev => {
         const targetMessageId = gcodeAnalysisMessageId;
+        console.log('[DEBUG] setMessages - targetMessageId:', targetMessageId, 'messages count:', prev.length);
         if (targetMessageId) {
           // 특정 메시지 업데이트
           return prev.map(msg =>
@@ -982,23 +956,15 @@ const AIChat = () => {
 
       // 세션 메타데이터 및 메시지 reportId 저장 (세션 복원 시 사용)
       if (user?.id && currentSessionId && savedReportId) {
-        console.log('[AIChat] Saving reportId to session metadata:', {
-          sessionId: currentSessionId,
-          savedReportId,
-          fileName: fileName || 'analysis.gcode',
-        });
-
         // 세션 메타데이터 업데이트
-        const metadataResult = await updateChatSessionMetadata(currentSessionId, {
+        await updateChatSessionMetadata(currentSessionId, {
           gcode_report_id: savedReportId,
           gcode_report_file_name: fileName || 'analysis.gcode',
         });
-        console.log('[AIChat] Session metadata update result:', metadataResult);
 
         // 해당 메시지의 reportId 업데이트 (DB)
         const targetMessage = messages.find(m => m.id === gcodeAnalysisMessageId);
         if (targetMessage?.dbMessageId) {
-          console.log('[AIChat] Updating message reportId in DB:', targetMessage.dbMessageId, savedReportId);
           await updateMessageReportId(targetMessage.dbMessageId, savedReportId);
         }
       }
@@ -1011,7 +977,6 @@ const AIChat = () => {
 
     // 에러 처리 함수
     const handleAnalysisError = (errorMsg: string) => {
-      console.error('[AIChat] Analysis error:', errorMsg);
       setIsGcodeAnalyzing(false);
 
       // 폴링 중지
@@ -1038,9 +1003,13 @@ const AIChat = () => {
     // 폴링 함수
     const pollStatus = async () => {
       try {
-        console.log('[AIChat] Polling status for analysis:', analysisId);
         const statusResponse = await getAnalysisStatus(analysisId);
-        console.log('[AIChat] Status response:', statusResponse);
+        console.log('[DEBUG] pollStatus response:', {
+          status: statusResponse.status,
+          progress: statusResponse.progress,
+          progress_message: statusResponse.progress_message,
+          timeline: statusResponse.timeline,
+        });
 
         // 진행률 업데이트
         if (statusResponse.progress !== undefined) {
@@ -1072,7 +1041,6 @@ const AIChat = () => {
         }
         // pending, running 상태면 계속 폴링
       } catch (err) {
-        console.error('[AIChat] Polling error:', err);
         handleAnalysisError(err instanceof Error ? err.message : '폴링 중 오류가 발생했습니다.');
       }
     };
@@ -1915,11 +1883,9 @@ const AIChat = () => {
                                   isActive={!reportPanelOpen || activeReportId === message.reportCard.reportId}
                                   onClick={async () => {
                                     const clickedReportId = message.reportCard?.reportId;
-                                    console.log('[ReportCard] Click - reportId:', clickedReportId, 'activeReportId:', activeReportId, 'reportPanelOpen:', reportPanelOpen);
 
                                     // 같은 보고서가 이미 열려있으면 닫기
                                     if (reportPanelOpen && activeReportId === clickedReportId) {
-                                      console.log('[ReportCard] Closing panel');
                                       setReportPanelOpen(false);
                                       setActiveReportId(null);
                                       return;
@@ -1927,12 +1893,9 @@ const AIChat = () => {
 
                                     // 다른 보고서로 전환하거나 새로 열기
                                     if (clickedReportId) {
-                                      console.log('[ReportCard] Loading report from DB:', clickedReportId);
-                                      const { data: report, error } = await getAnalysisReportById(clickedReportId);
-                                      console.log('[ReportCard] DB response - report:', !!report, 'error:', error);
+                                      const { data: report } = await getAnalysisReportById(clickedReportId);
                                       if (report) {
                                         const reportUiData = convertDbReportToUiData(report);
-                                        console.log('[ReportCard] Converted UI data:', !!reportUiData);
                                         setGcodeReportData(reportUiData);
                                         setActiveReportId(clickedReportId);
                                         setReportPanelOpen(true);
@@ -1989,33 +1952,25 @@ const AIChat = () => {
                         </div>
                         <div className="pl-8 space-y-3">
                           <Progress value={gcodeAnalysisProgress} className="h-2" />
-                          <p className="text-xs text-blue-600 dark:text-blue-400">
-                            💡 {t('aiChat.gcodeAnalysisHint', '고도화된 분석을 위해 시간이 조금 걸릴 수 있습니다...')}
-                          </p>
-                          {/* 타임라인 표시 */}
-                          {gcodeAnalysisTimeline.length > 0 && (
-                            <div className="space-y-1 mt-2">
-                              {gcodeAnalysisTimeline.map((step) => (
-                                <div key={step.step} className="flex items-center gap-2 text-sm">
-                                  {step.status === 'done' && (
-                                    <Check className="w-4 h-4 text-green-500" />
-                                  )}
-                                  {step.status === 'running' && (
-                                    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                                  )}
-                                  {step.status === 'pending' && (
-                                    <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
-                                  )}
-                                  {step.status === 'error' && (
-                                    <X className="w-4 h-4 text-red-500" />
-                                  )}
-                                  <span className={cn(
-                                    step.status === 'done' ? 'text-muted-foreground' : 'text-foreground'
-                                  )}>
-                                    {step.label}
-                                  </span>
-                                </div>
+                          {/* 타임라인 + 진행 메시지 한 줄 표시 */}
+                          {(gcodeAnalysisTimeline.length > 0 || gcodeAnalysisProgressMessage) && (
+                            <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+                              {/* 완료된 타임라인 항목들 */}
+                              {gcodeAnalysisTimeline.filter(step => step.status === 'done').map((step, idx, arr) => (
+                                <span key={step.step} className="flex items-center gap-1">
+                                  <Check className="w-3.5 h-3.5 text-green-500" />
+                                  <span className="text-muted-foreground">{step.label}</span>
+                                  {idx < arr.length - 1 && <span className="mx-1 text-muted-foreground">→</span>}
+                                </span>
                               ))}
+                              {/* 진행 중인 메시지 */}
+                              {gcodeAnalysisProgressMessage && (
+                                <span className="flex items-center gap-1">
+                                  {gcodeAnalysisTimeline.some(s => s.status === 'done') && <span className="mx-1 text-muted-foreground">→</span>}
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  <span>{gcodeAnalysisProgressMessage}</span>
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>
@@ -2058,7 +2013,7 @@ const AIChat = () => {
 
             {/* G-code 분석 보고서 - 인라인 카드 (채팅 옆에 표시) */}
             {gcodeReportData && reportPanelOpen && (
-              <div className="flex-[0_0_55%] border-l border-border bg-muted/20 flex flex-col overflow-hidden h-full">
+              <div className="flex-[0_0_55%] bg-muted/20 flex flex-col overflow-hidden h-full px-4 py-4">
                 {/* 보고서 내용 - 높이 100% 설정 */}
                 <div className="h-full">
                   <GCodeAnalysisReport data={gcodeReportData} onClose={() => {
