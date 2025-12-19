@@ -9,7 +9,7 @@
 // ============================================================================
 
 export type IssueCategory = 'temperature' | 'speed' | 'retraction' | 'layer' | 'other';
-export type IssueSeverityLevel = 'critical' | 'high' | 'medium' | 'low' | 'info';
+export type IssueSeverityLevel = 'critical' | 'high' | 'medium' | 'low' | 'info' | 'warning';
 
 export interface GCodeIssueType {
   id: string;
@@ -78,7 +78,7 @@ export interface DetailedIssueItem {
 export interface PatchSuggestionItem {
   line?: number;
   line_index?: number;
-  action: 'remove' | 'modify' | 'insert';
+  action: 'remove' | 'modify' | 'insert' | 'insert_after' | 'add' | 'add_before' | 'add_after' | 'delete' | 'no_action' | 'review';
   original?: string;
   modified?: string;
   reason: string;
@@ -190,6 +190,7 @@ export interface GCodeAnalysisReport {
   // 전체 원본 데이터
   raw_analysis_data?: Record<string, unknown>;  // UI 변환 데이터 (GCodeAnalysisData)
   raw_api_response?: Record<string, unknown>;   // API 원본 응답 전체
+  issues_found?: Record<string, unknown>[];     // API issues_found 원본 (그룹화된 이슈 포함)
 
   // 타임스탬프
   created_at: string;

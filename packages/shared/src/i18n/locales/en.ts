@@ -28,13 +28,21 @@ export default {
     rename: "Rename",
     copied: "Copied!",
     done: "Done",
-    responseTimeout: "Response timeout"
+    responseTimeout: "Response timeout",
+    myInfo: "My Info",
+    logout: "Logout",
+    hide: "Hide",
+    show: "Show",
+    retry: "Retry"
   },
   nav: {
     home: "Home",
     dashboard: "Dashboard",
-    ai: "AI Workspace",
+    ai: "AI Tools",
+    aiTools: "AI Tools",
+    aiChat: "AI Tools",
     printers: "Printers",
+    analysisHistory: "Analysis History",
     materials: "Materials",
     analytics: "Analytics",
     settings: "Settings",
@@ -138,6 +146,7 @@ export default {
     signInWithEmail: "Sign in with Email",
     checkEmailVerification: "Check Email Verification",
     recommended: "Recommended",
+    loginModalDescription: "Log in to save chat history, access analysis history, and unlock more features.",
     // Marketing banner
     marketing: {
       titleLine1: "A new experience for",
@@ -156,9 +165,12 @@ export default {
   ai: {
     title: "AI Studio",
     modelGeneration: "Model Generation",
-    modelGenerationDesc: "Text, Image → 3D",
+    modelGenerationDesc: "Turn your text or images into 3D models instantly",
     gcodeAnalysis: "G-code Analysis",
-    gcodeAnalysisDesc: "AI-powered G-code file analysis",
+    gcodeAnalysisDesc: "Catch print issues before they happen with AI analysis",
+    aiTroubleshooting: "Printer Doctor",
+    troubleshootingTitle: "Printer Doctor AI",
+    troubleshootingDescription: "Diagnose and fix printer issues with just one photo",
     description: "Convert text and images into 3D models using AI, and print them immediately with connected printers.",
     textTo3D: "Text → 3D",
     imageTo3D: "Image → 3D",
@@ -202,6 +214,13 @@ export default {
     uploadFailed: "Upload Failed",
     fileDeleted: "File Deleted",
     fileDeletedDescription: "File has been deleted.",
+    // AI Tool names
+    printerTroubleshooting: "Printer Troubleshooting",
+    modeling3d: "3D Modeling",
+    // AI Tool descriptions
+    troubleshootDesc: "Analyze printer issues with images",
+    gcodeDesc: "Analyze and optimize G-code files",
+    modelingDesc: "Generate 3D models from text",
     deleteImageConfirm: "Confirm Image Deletion",
     deleteImageQuestion: "Are you sure you want to delete this image?",
     deleteImageWithModels: "Created from this image,",
@@ -592,6 +611,7 @@ export default {
     recentActivity: "Recent Activity",
     statistics: "Info",
     quickActions: "Quick Actions",
+    sidebarPlaceholder: "Menu loading...",
     // Printer status
     status: {
       idle: "Idle",
@@ -1060,6 +1080,25 @@ export default {
     analysisComplete: "Analysis complete!",
     analysisFailed: "Analysis failed",
     analysisError: "An error occurred during analysis.",
+    aiResolving: "AI analyzing...",
+    aiResolveSuccess: "AI Resolution Complete",
+    aiResolveSolutionReady: "Solution is ready.",
+    aiResolveAgain: "Analyze Again",
+    aiResolution: "AI Resolution",
+    analysisSummary: "Analysis Summary",
+    cause: "Cause",
+    solutionTitle: "Solution",
+    codeFix: "Code Fix",
+    fixNumber: "Fix {{n}}",
+    fixed: "Fixed",
+    editInViewer: "Edit in Viewer",
+    tips: "Tips",
+    openEditor: "Open Editor",
+    clickToViewInEditor: "Click to view in editor",
+    clickCardToView: "Click card to view context",
+    selectIssueCard: "Go to Report tab > Issues > AI Solve to select a problem to fix.",
+    noIssuesFound: "No issues found.",
+    noContextSelected: "No code context",
 
     // Save related
     save: "Save",
@@ -1160,6 +1199,7 @@ export default {
     severityMedium: "Medium",
     severityLow: "Low",
     severityInfo: "Info",
+    severityNone: "None",
 
     // Patch related
     patchSuggestions: "G-code Patch Suggestions",
@@ -1193,10 +1233,17 @@ export default {
     // Issue type labels
     issueTypeLabels: {
       cold_extrusion: "Cold Extrusion",
+      cold_extrusion_zero: "Zero Temperature Extrusion",
       early_temp_off: "Early Temp Off",
       extreme_cold: "Extreme Cold",
       early_bed_off: "Early Bed Off",
-      missing_warmup: "Missing Warmup"
+      missing_warmup: "Missing Warmup",
+      excessive_body_temp: "Excessive Temperature",
+      excessive_speed: "Excessive Speed",
+      high_retraction: "High Retraction",
+      speed_mismatch: "Speed Mismatch",
+      layer_adhesion_risk: "Layer Adhesion Risk",
+      nozzle_clog_risk: "Nozzle Clog Risk"
     },
 
     // Detailed issue card
@@ -1263,6 +1310,7 @@ export default {
     reportNotFound: "Report not found.",
     gcodeLoadFailed: "Failed to load G-code source",
     gcodeLoadFailedDesc: "Analysis results are shown but original G-code is not available.",
+    retryAnalysis: "Retry Analysis",
 
     // File related
     unsupportedFormat: "Unsupported file format",
@@ -1299,7 +1347,31 @@ export default {
     patchSuggestionsTitle: "G-code Patch Suggestions",
     llmRecommendation: "Recommendation",
     recommendedAction: "Recommended Action",
-    firstLayerSettings: "First Layer Settings"
+    firstLayerSettings: "First Layer Settings",
+
+    // Tabs (embedded viewer)
+    tabReport: "Report",
+    tabViewer: "Viewer",
+    tabEditor: "Editor",
+
+    // 3D Viewer
+    loadingViewer: "Loading 3D Viewer...",
+    segmentLoadError: "Failed to load 3D data",
+    noSegmentData: "No 3D visualization data. Please re-analyze the G-code.",
+    viewerError: "Viewer Load Failed",
+    estimatedTime: "Estimated Time",
+    temperatureByLayer: "Temperature by Layer",
+
+    // AI Solve
+    aiSolve: "AI Solve",
+
+    // Editor tab
+    noGcodeContent: "No G-code Data",
+    noGcodeContentDesc: "G-code source data is not available.",
+    gcodeFileInfo: "File Info",
+    gcodeLines: "lines",
+    gcodePreview: "G-code Preview",
+    gcodePreviewNote: "Only showing first {{count}} lines. Open editor for full editing."
   },
   errors: {
     general: "An error occurred.",
@@ -1479,6 +1551,7 @@ export default {
     perMonth: "/ month",
     perYear: "/ year",
     popular: "Popular",
+    bestValue: "Best Value",
     premium: "Premium",
     currentPlanBadge: "Current Plan",
     startFree: "Start Free",
@@ -1493,13 +1566,47 @@ export default {
     featuresLabel: "Features",
     // Plan names (maps to PLAN_CODES constants)
     plans: {
-      free: "Free",
-      pro: "Pro",
-      enterprise: "Enterprise",
+      free: {
+        name: "Free",
+        description: "For hobbyists and makers",
+        feature1: "Up to 1 printer connection",
+        feature2: "Unlimited webcam streaming",
+        feature3: "Push notifications",
+        feature4: "Community support"
+      },
+      starter: {
+        name: "Starter",
+        description: "For individuals and small projects",
+        feature1: "Up to 2 printer connections",
+        feature2: "Advanced AI model usage",
+        feature3: "Basic AI assistant",
+        feature4: "Real-time anomaly detection"
+      },
+      pro: {
+        name: "Pro",
+        description: "For professionals and small teams",
+        feature1: "Up to 5 printer connections",
+        feature2: "Unlimited webcam streaming",
+        feature3: "50 AI model generations/month",
+        feature4: "Advanced analytics dashboard",
+        feature5: "API access",
+        feature6: "Priority email support"
+      },
+      enterprise: {
+        name: "Enterprise",
+        description: "For large-scale organizations",
+        feature1: "Unlimited printer connections",
+        feature2: "Unlimited AI model generation",
+        feature3: "Advanced AI assistant",
+        feature4: "ERP/MES integration",
+        feature5: "Dedicated support manager",
+        feature6: "Private Slack channel"
+      },
     },
     // Plan descriptions
     planDesc: {
       free: "Perfect for individual users and small projects",
+      starter: "For individuals and small projects",
       pro: "For professionals and small teams",
       enterprise: "For large teams and enterprises",
     },
@@ -1524,6 +1631,14 @@ export default {
         feature2: "Unlimited webcam streaming",
         feature3: "Basic print monitoring",
         feature4: "Community support"
+      },
+      starter: {
+        name: "Starter",
+        description: "For individuals and small projects",
+        feature1: "Connect up to 2 3D printers",
+        feature2: "Advanced AI model usage",
+        feature3: "Basic AI assistant",
+        feature4: "Real-time anomaly detection"
       },
       pro: {
         name: "Pro",
@@ -1649,6 +1764,9 @@ export default {
       aiModelGeneration: "AI Model Generation",
       modelsPerMonth: "{{count}} models/month",
       limited: "Limited",
+      basicAiAssistant: "Basic AI Assistant",
+      advancedAiAssistant: "Advanced AI Assistant",
+      anomalyDetection: "Real-time Anomaly Detection",
       advancedAnalytics: "Advanced Analytics & Statistics",
       apiAccess: "API Access",
       customerSupport: "Customer Support",
@@ -2051,9 +2169,25 @@ export default {
     billedAnnually: "billed annually",
     unlimited: "Unlimited",
     plans: {
+      free: {
+        name: "Free",
+        description: "For hobbyists and makers",
+        feature1: "Up to 1 printer connection",
+        feature2: "Unlimited webcam streaming",
+        feature3: "Push notifications",
+        feature4: "Community support"
+      },
       basic: {
         name: "Free",
         description: "For hobbyists and makers"
+      },
+      starter: {
+        name: "Starter",
+        description: "For individuals and small projects",
+        feature1: "Up to 2 printer connections",
+        feature2: "Advanced AI model usage",
+        feature3: "Basic AI assistant",
+        feature4: "Real-time anomaly detection"
       },
       pro: {
         name: "Pro",
@@ -2214,5 +2348,121 @@ export default {
       renameFailed: "Failed to rename",
       tryAgain: "Please try again."
     }
+  },
+  // Login prompt modal
+  loginPrompt: {
+    saveTitle: "Want to save your analysis?",
+    saveDescription: "Log in to save your analysis results and access them anytime.",
+    historyTitle: "Want to view your history?",
+    historyDescription: "Log in to see all your previous analysis results.",
+    downloadTitle: "Want to download the report?",
+    downloadDescription: "Log in to download detailed reports as PDF.",
+    compareTitle: "Want to compare results?",
+    compareDescription: "Log in to compare multiple analysis results.",
+    generalTitle: "Login Required",
+    generalDescription: "You need to log in to use this feature.",
+    benefits: "With an account, you can",
+    benefit1: "Save and manage analysis results",
+    benefit2: "View analysis history",
+    benefit3: "Download detailed reports",
+    benefit4: "Register and manage printers",
+    later: "Later",
+    login: "Log in"
+  },
+  // AI Chat page
+  aiChat: {
+    welcome: "Welcome to FACTOR AI",
+    welcomeDescription: "Experience everything about 3D printing with AI",
+    gcodeDescription: "Analyze G-code files and improve print quality",
+    troubleshootDescription: "Get AI diagnosis for 3D printer issues",
+    inputPlaceholder: "Ask me anything...",
+    thinking: "Thinking...",
+    disclaimer: "AI responses are for reference only. Consult experts for important decisions.",
+    exampleQuestions: {
+      q1: "What does the G28 command do?",
+      q2: "Why is my first layer not sticking?",
+      q3: "How can I reduce stringing?",
+      q4: "Optimal PLA print temperature?"
+    },
+    // AI Chat Page
+    greeting: ", Hello",
+    askAnything: "Ask anything about your printer",
+    newChat: "New Chat",
+    recentChats: "Recent Chats",
+    noChats: "No chat history",
+    tools: "Tools",
+    attachImage: "Attach Image",
+    gcodeUploaded: "G-code file uploaded",
+    imagePasted: "Image pasted",
+    imageFromClipboard: "Image imported from clipboard",
+    // placeholder
+    troubleshootPlaceholder: "Images and symptom details help us diagnose better",
+    gcodePlaceholder: "Upload a G-code file or paste the content",
+    modelingPlaceholder: "Describe the 3D model you want to create",
+    defaultPlaceholder: "Ask FACTOR AI",
+    chatPlaceholder: "Type a message...",
+    imageQuestionPlaceholder: "Ask about the image...",
+    gcodeQuestionPlaceholder: "Ask about the G-code...",
+    // Loading states
+    analyzingProblem: "Analyzing the problem...",
+    analyzingGcode: "Analyzing G-code...",
+    generatingModel: "Generating 3D model...",
+    thinkingText: "Thinking...",
+    // Error messages
+    errorOccurred: "Sorry, an error occurred.",
+    unknownError: "Unknown error",
+    tryAgainLater: "Please try again later.",
+    noAnalysisResult: "No analysis result received. Please try again.",
+    // Response text
+    diagnoseWithImage: "Please diagnose with the image.",
+    askMoreQuestions: "Feel free to ask more questions.",
+    imageAnalysis: "Image Analysis",
+    detectedIssues: "Detected Issues",
+    possibleCauses: "Possible Causes",
+    solutions: "Solutions",
+    // Model selection
+    model: "Model",
+    freeModels: "Free Models",
+    paidModels: "Paid Models",
+    fastAndEfficient: "Fast and efficient",
+    fastResponse: "Fast response",
+    latestModel: "Latest model",
+    mostPowerful: "Most powerful model",
+    balancedPerformance: "Balanced performance",
+    mostIntelligent: "Most intelligent model",
+    paidOnly: "Paid plans only",
+    // Session management
+    loadError: "Failed to load session",
+    deleteError: "Failed to delete session",
+    noHistory: "No chat history",
+    loginBenefit: "Log in to save chat history and access it later.",
+    loginToStart: "Log in to get started",
+    // Report related
+    viewReport: "View Report",
+    hideReport: "Hide Report",
+    attachGcode: "Attach G-code File",
+    // Tool change dialog
+    toolChangeTitle: "Start a new conversation?",
+    toolChangeDescription: "You are already using a different tool in this conversation. To change tools, you need to start a new conversation.",
+    startNewChat: "Start New Chat",
+    // G-code analysis complete
+    gcodeAnalysisComplete: "G-code Analysis Complete",
+    qualityScore: "Quality Score",
+    defaultGcodeMessage: "Analyze G-code!",
+    retryAnalysis: "Retry Analysis",
+    llmAnalysisStarting: "Starting LLM analysis...",
+    // Report card
+    gcodeAnalysisReport: "G-code Analysis Report",
+    score: "Score",
+    issues: "Issues",
+    layers: "Layers",
+    gcodeAnalysisInProgress: "Analyzing G-code...",
+    gcodeAnalysisHint: "This may take a moment for detailed analysis...",
+    gcodeAnalyzePrompt: "Analyze G-code!",
+  },
+  theme: {
+    light: "Light",
+    dark: "Dark",
+    system: "System"
   }
 };

@@ -28,13 +28,21 @@ export default {
     rename: "이름 변경",
     copied: "복사됨!",
     done: "완료",
-    responseTimeout: "응답 대기 시간 초과"
+    responseTimeout: "응답 대기 시간 초과",
+    myInfo: "내 정보",
+    logout: "로그아웃",
+    hide: "숨기기",
+    show: "보기",
+    retry: "다시 시도"
   },
   nav: {
     home: "홈",
     dashboard: "대시보드",
-    ai: "AI 작업 공간",
+    ai: "AI 도구",
+    aiTools: "AI 도구",
+    aiChat: "AI 도구",
     printers: "프린터",
+    analysisHistory: "분석 히스토리",
     materials: "재료",
     analytics: "분석",
     settings: "설정",
@@ -145,6 +153,7 @@ export default {
     signInWithEmail: "이메일로 로그인",
     checkEmailVerification: "이메일 인증 확인",
     recommended: "추천",
+    loginModalDescription: "로그인하시면 대화 기록 저장, 분석 히스토리 등 더 많은 기능을 이용하실 수 있습니다.",
     // 마케팅 배너
     marketing: {
       titleLine1: "3D 프린터 팜을 위한",
@@ -180,9 +189,9 @@ export default {
     closeAssistant: "AI 어시스턴트 닫기",
     title: "AI 스튜디오",
     modelGeneration: "모델 생성",
-    modelGenerationDesc: "텍스트, 이미지 → 3D",
+    modelGenerationDesc: "텍스트나 이미지를 3D 모델로 변환해드려요",
     gcodeAnalysis: "G-code 분석",
-    gcodeAnalysisDesc: "AI 기반 G-code 파일 분석",
+    gcodeAnalysisDesc: "출력 전 G-code를 분석해 문제를 미리 잡아드려요",
     description: "텍스트와 이미지를 AI로 3D 모델로 변환하고, 프린터와 연동해 즉시 출력까지 진행하세요.",
     textTo3D: "텍스트 → 3D",
     imageTo3D: "이미지 → 3D",
@@ -226,6 +235,13 @@ export default {
     uploadFailed: "업로드 실패",
     fileDeleted: "파일 삭제",
     fileDeletedDescription: "파일이 삭제되었습니다.",
+    // AI 도구 이름
+    printerTroubleshooting: "프린터 문제 진단",
+    modeling3d: "3D 모델링",
+    // AI 도구 설명
+    troubleshootDesc: "이미지로 프린터 문제를 분석합니다",
+    gcodeDesc: "G-code 파일을 분석하고 최적화합니다",
+    modelingDesc: "텍스트로 3D 모델을 생성합니다",
     deleteImageConfirm: "이미지 삭제 확인",
     deleteImageQuestion: "이 이미지를 삭제하시겠습니까?",
     deleteImageWithModels: "이 이미지로 생성된",
@@ -477,10 +493,10 @@ export default {
     upgradeDescription: "{{plan}} 플랜의 이번 달 AI 모델 생성 한도({{limit}}회)를 모두 사용하셨습니다. (사용: {{used}}회) 더 많은 모델을 생성하려면 플랜을 업그레이드하세요.",
     upgradePlan: "플랜 업그레이드",
     usageInfo: "이번 달 AI 사용량: {{used}}/{{limit}}회",
-    // AI 고장 해결
-    aiTroubleshooting: "AI 고장 해결",
-    troubleshootingTitle: "AI 고장 해결 도구",
-    troubleshootingDescription: "프린터 문제를 이미지로 분석하고 해결책을 제시합니다",
+    // 프린터 닥터 AI
+    aiTroubleshooting: "프린터 닥터",
+    troubleshootingTitle: "프린터 닥터 AI",
+    troubleshootingDescription: "사진 한 장으로 프린터 문제를 진단하고 해결해드려요",
     uploadIssueImage: "문제 이미지 업로드",
     uploadIssueImageDesc: "프린터나 출력물의 문제 부분을 촬영하여 업로드하세요",
     analyzeIssue: "문제 분석",
@@ -490,6 +506,96 @@ export default {
     suggestedSolutions: "해결 방안",
     noIssueDetected: "특별한 문제가 감지되지 않았습니다",
     uploadImageFirst: "먼저 이미지를 업로드해주세요"
+  },
+  aiChat: {
+    welcome: "FACTOR AI에 오신 것을 환영합니다",
+    welcomeDescription: "3D 프린팅의 모든 것을 AI와 함께하세요",
+    gcodeDescription: "G-code 파일을 분석하고 출력 품질을 개선하세요",
+    troubleshootDescription: "3D 프린터 문제를 AI로 진단받으세요",
+    inputPlaceholder: "무엇이든 물어보세요...",
+    thinking: "생각하는 중...",
+    disclaimer: "AI 응답은 참고용입니다. 중요한 결정은 전문가와 상담하세요.",
+    exampleQuestions: {
+      q1: "G28 명령어는 무슨 역할인가요?",
+      q2: "첫 레이어가 안 붙어요",
+      q3: "스트링 현상을 줄이려면?",
+      q4: "PLA 적정 출력 온도는?"
+    },
+    // AI 채팅 페이지
+    greeting: "님, 안녕하세요",
+    askAnything: "3D 프린터에 대해 무엇이든 물어보세요",
+    newChat: "새 대화",
+    recentChats: "최근 대화",
+    noChats: "대화 기록이 없습니다",
+    tools: "도구",
+    attachImage: "이미지 첨부",
+    gcodeUploaded: "G-code 파일 업로드됨",
+    imagePasted: "이미지가 붙여넣기되었습니다",
+    imageFromClipboard: "클립보드에서 이미지를 가져왔습니다",
+    // placeholder
+    troubleshootPlaceholder: "문제 상황에 대한 이미지와 증상 내용이 있으면 더 좋아요",
+    gcodePlaceholder: "G-code 파일을 업로드하거나 문제 내용을 붙여넣어보세요",
+    modelingPlaceholder: "만들고 싶은 3D 모델을 설명해주세요",
+    defaultPlaceholder: "FACTOR AI에게 물어보세요",
+    chatPlaceholder: "메시지를 입력하세요...",
+    imageQuestionPlaceholder: "이미지에 대해 질문하세요...",
+    gcodeQuestionPlaceholder: "G-code에 대해 질문하세요...",
+    // 로딩 상태
+    analyzingProblem: "문제를 분석하는 중...",
+    analyzingGcode: "G-code를 분석하는 중...",
+    generatingModel: "3D 모델을 생성하는 중...",
+    thinkingText: "생각하는 중...",
+    // 에러 메시지
+    errorOccurred: "죄송합니다. 오류가 발생했습니다.",
+    unknownError: "알 수 없는 오류",
+    tryAgainLater: "잠시 후 다시 시도해주세요.",
+    noAnalysisResult: "분석 결과를 받지 못했습니다. 다시 시도해주세요.",
+    // 응답 텍스트
+    diagnoseWithImage: "이미지로 문제를 진단해주세요.",
+    askMoreQuestions: "추가 질문이 있으시면 말씀해주세요.",
+    imageAnalysis: "이미지 분석",
+    detectedIssues: "감지된 문제",
+    possibleCauses: "가능한 원인",
+    solutions: "해결 방안",
+    // 모델 선택
+    model: "모델",
+    freeModels: "무료 모델",
+    paidModels: "유료 모델",
+    fastAndEfficient: "빠르고 효율적",
+    fastResponse: "빠른 응답",
+    latestModel: "최신 모델",
+    mostPowerful: "가장 강력한 모델",
+    balancedPerformance: "균형 잡힌 성능",
+    mostIntelligent: "최고 지능 모델",
+    paidOnly: "유료 플랜 전용",
+    // 세션 관리
+    loadError: "세션 로드 실패",
+    deleteError: "세션 삭제 실패",
+    noHistory: "대화 기록이 없습니다",
+    loginBenefit: "로그인하면 대화 기록을 저장하고 나중에 다시 볼 수 있습니다.",
+    loginToStart: "로그인하고 시작하기",
+    // 보고서 관련
+    viewReport: "보고서 보기",
+    hideReport: "보고서 접기",
+    attachGcode: "G-code 파일 첨부",
+    // 도구 변경 다이얼로그
+    toolChangeTitle: "새 대화를 시작하시겠습니까?",
+    toolChangeDescription: "현재 대화에서 이미 다른 도구를 사용 중입니다. 도구를 변경하려면 새 대화를 시작해야 합니다.",
+    startNewChat: "새 대화 시작",
+    // G-code 분석 완료
+    gcodeAnalysisComplete: "G-code 분석 완료",
+    qualityScore: "품질 점수",
+    defaultGcodeMessage: "G-code 분석해줘!",
+    retryAnalysis: "다시 분석",
+    llmAnalysisStarting: "LLM 분석 시작...",
+    // 보고서 카드
+    gcodeAnalysisReport: "G-code 분석 보고서",
+    score: "점수",
+    issues: "이슈",
+    layers: "레이어",
+    gcodeAnalysisInProgress: "G-code 분석 중...",
+    gcodeAnalysisHint: "고도화된 분석을 위해 시간이 조금 걸릴 수 있습니다...",
+    gcodeAnalyzePrompt: "G-code 분석해줘!",
   },
   profile: {
     // UserSettings 페이지
@@ -622,6 +728,7 @@ export default {
     recentActivity: "최근 활동",
     statistics: "통계",
     quickActions: "빠른 작업",
+    sidebarPlaceholder: "메뉴 준비 중...",
     // 프린터 상태
     status: {
       idle: "대기",
@@ -1090,6 +1197,25 @@ export default {
     analysisFailed: "분석 실패",
     analysisError: "분석 중 오류가 발생했습니다.",
     loginToAnalyze: "G-code 분석 기능을 이용하려면 로그인이 필요합니다.",
+    aiResolving: "AI 분석 중...",
+    aiResolveSuccess: "AI 해결 완료",
+    aiResolveSolutionReady: "해결 방안이 준비되었습니다.",
+    aiResolveAgain: "다시 분석",
+    aiResolution: "AI 해결 방안",
+    analysisSummary: "분석 요약",
+    cause: "원인",
+    solutionTitle: "해결 방안",
+    codeFix: "코드 수정",
+    fixNumber: "수정 {{n}}",
+    fixed: "수정",
+    editInViewer: "에디터에서 수정",
+    tips: "팁",
+    openEditor: "에디터 열기",
+    clickToViewInEditor: "에디터에서 보기",
+    clickCardToView: "카드 클릭 시 컨텍스트 보기",
+    selectIssueCard: "보고서 탭 > 문제점 > AI 해결하기를 통해 수정할 문제를 선택해주세요.",
+    noIssuesFound: "발견된 이슈가 없습니다.",
+    noContextSelected: "코드 컨텍스트 없음",
 
     // 저장 관련
     save: "저장",
@@ -1190,6 +1316,7 @@ export default {
     severityMedium: "중간",
     severityLow: "낮음",
     severityInfo: "정보",
+    severityNone: "없음",
 
     // 패치 관련
     patchSuggestions: "G-code 패치 제안",
@@ -1223,10 +1350,17 @@ export default {
     // 이슈 타입 라벨
     issueTypeLabels: {
       cold_extrusion: "저온 압출",
+      cold_extrusion_zero: "영도 압출",
       early_temp_off: "조기 온도 해제",
       extreme_cold: "극저온",
       early_bed_off: "조기 베드 해제",
-      missing_warmup: "예열 누락"
+      missing_warmup: "예열 누락",
+      excessive_body_temp: "과열 온도",
+      excessive_speed: "과속",
+      high_retraction: "과도한 리트렉션",
+      speed_mismatch: "속도 불일치",
+      layer_adhesion_risk: "레이어 접착 위험",
+      nozzle_clog_risk: "노즐 막힘 위험"
     },
 
     // 상세 이슈 카드
@@ -1293,6 +1427,7 @@ export default {
     reportNotFound: "보고서를 찾을 수 없습니다.",
     gcodeLoadFailed: "G-code 원본 로드 실패",
     gcodeLoadFailedDesc: "분석 결과는 표시되지만 원본 G-code를 볼 수 없습니다.",
+    retryAnalysis: "다시 분석",
 
     // 파일 관련
     unsupportedFormat: "지원하지 않는 파일 형식",
@@ -1329,7 +1464,31 @@ export default {
     patchSuggestionsTitle: "G-code 패치 제안",
     llmRecommendation: "권장사항",
     recommendedAction: "권장 조치",
-    firstLayerSettings: "첫 레이어 설정"
+    firstLayerSettings: "첫 레이어 설정",
+
+    // 탭 (embedded 뷰어용)
+    tabReport: "보고서",
+    tabViewer: "뷰어",
+    tabEditor: "에디터",
+
+    // 3D 뷰어
+    loadingViewer: "3D 뷰어 로딩 중...",
+    segmentLoadError: "3D 데이터를 불러오는데 실패했습니다",
+    noSegmentData: "3D 시각화 데이터가 없습니다. G-code를 다시 분석해주세요.",
+    viewerError: "뷰어 로드 실패",
+    estimatedTime: "예상 시간",
+    temperatureByLayer: "레이어별 온도 변화",
+
+    // AI 해결
+    aiSolve: "AI 해결하기",
+
+    // 에디터 탭
+    noGcodeContent: "G-code 데이터 없음",
+    noGcodeContentDesc: "G-code 원본 데이터가 없습니다.",
+    gcodeFileInfo: "파일 정보",
+    gcodeLines: "라인",
+    gcodePreview: "G-code 미리보기",
+    gcodePreviewNote: "처음 {{count}}줄만 표시됩니다. 전체 편집은 에디터를 열어주세요."
   },
   errors: {
     general: "오류가 발생했습니다.",
@@ -1536,6 +1695,7 @@ export default {
     month: "월",
     year: "년",
     popular: "인기",
+    bestValue: "가성비 최고",
     premium: "프리미엄",
     contactSales: "영업팀 문의",
     upgradeToPro: "프로 플랜으로 업그레이드",
@@ -1544,6 +1704,7 @@ export default {
     // 플랜 설명
     planDesc: {
       free: "개인 사용자를 위한 기본 플랜",
+      starter: "개인 및 소규모 프로젝트를 위한 플랜",
       pro: "전문가 및 소규모 팀을 위한 플랜",
       enterprise: "대규모 팀 및 기업을 위한 플랜",
     },
@@ -1561,10 +1722,12 @@ export default {
     },
     // 레거시 호환 (deprecated - use plans.* instead)
     basic: "무료",
+    starter: "스타터",
     pro: "프로",
     enterprise: "엔터프라이즈",
     // 레거시 플랜 설명 (deprecated - use planDesc.* instead)
     basicDesc: "개인 사용자를 위한 기본 플랜",
+    starterDesc: "개인 및 소규모 프로젝트를 위한 플랜",
     proDesc: "전문가 및 소규모 팀을 위한 플랜",
     enterpriseDesc: "대규모 팀 및 기업을 위한 플랜",
     // 기능
@@ -1599,6 +1762,14 @@ export default {
     faqQuestion4: "기술 지원은 어떻게 받나요?",
     faqAnswer4: "Basic 플랜은 커뮤니티 지원, Pro 플랜은 24시간 이내 응답, Enterprise 플랜은 24/7 전화 지원을 제공합니다.",
     plans: {
+      free: {
+        name: "무료",
+        description: "개인 사용자를 위한 기본 플랜",
+        feature1: "최대 1대 프린터 연결",
+        feature2: "무제한 웹 스트리밍",
+        feature3: "푸시 알림",
+        feature4: "커뮤니티 지원"
+      },
       basic: {
         name: "무료",
         description: "개인 사용자를 위한 기본 플랜",
@@ -1606,6 +1777,14 @@ export default {
         feature2: "무제한 웹 스트리밍",
         feature3: "푸시 알림",
         feature4: "커뮤니티 지원"
+      },
+      starter: {
+        name: "스타터",
+        description: "개인 및 소규모 프로젝트를 위한 플랜",
+        feature1: "최대 2대 프린터 연결",
+        feature2: "AI 고급 모델 사용",
+        feature3: "기본 AI 어시스턴트",
+        feature4: "실시간 이상 감지"
       },
       pro: {
         name: "프로",
@@ -1622,10 +1801,10 @@ export default {
         description: "대규모 조직을 위한 엔터프라이즈 플랜",
         feature1: "무제한 프린터 연결",
         feature2: "무제한 AI 모델 생성",
-        feature3: "AI 어시스턴트 지원",
+        feature3: "고급 AI 어시스턴트",
         feature4: "ERP/MES 연동",
         feature5: "전담 지원 매니저",
-        feature6: "24/7 전용 Slack 채널"
+        feature6: "전용 Slack 채널"
       }
     },
     comparison: {
@@ -1639,6 +1818,9 @@ export default {
       aiModelGeneration: "AI 모델 생성",
       modelsPerMonth: "월 {{count}}개",
       limited: "제한적",
+      basicAiAssistant: "기본 AI 어시스턴트",
+      advancedAiAssistant: "고급 AI 어시스턴트",
+      anomalyDetection: "실시간 이상 감지",
       advancedAnalytics: "고급 분석 및 통계",
       apiAccess: "API 접근",
       customerSupport: "고객 지원",
@@ -1678,7 +1860,7 @@ export default {
     proBenefit3: "고급 분석 및 통계",
     proBenefit4: "API 접근 권한",
     enterpriseBenefit1: "무제한 프린터 연결",
-    enterpriseBenefit2: "AI 어시스턴트 지원",
+    enterpriseBenefit2: "고급 AI 어시스턴트",
     enterpriseBenefit3: "ERP/MES 연동",
     enterpriseBenefit4: "전담 지원 매니저",
     printerLimitReached: "프린터 대수 제한 도달",
@@ -2052,6 +2234,10 @@ export default {
         name: "무료",
         description: "취미 및 메이커용"
       },
+      starter: {
+        name: "스타터",
+        description: "개인 및 소규모 프로젝트용"
+      },
       pro: {
         name: "Pro",
         description: "전문가 및 소규모 팀용"
@@ -2211,5 +2397,30 @@ export default {
       renameFailed: "이름 변경 실패",
       tryAgain: "다시 시도해 주세요."
     }
+  },
+  // 로그인 유도 모달
+  loginPrompt: {
+    saveTitle: "분석 결과를 저장하시겠어요?",
+    saveDescription: "로그인하면 분석 결과를 저장하고 언제든 다시 확인할 수 있어요.",
+    historyTitle: "분석 히스토리를 확인하시겠어요?",
+    historyDescription: "로그인하면 이전 분석 결과들을 모두 확인할 수 있어요.",
+    downloadTitle: "리포트를 다운로드하시겠어요?",
+    downloadDescription: "로그인하면 상세 리포트를 PDF로 다운로드할 수 있어요.",
+    compareTitle: "분석 결과를 비교하시겠어요?",
+    compareDescription: "로그인하면 여러 분석 결과를 비교할 수 있어요.",
+    generalTitle: "로그인이 필요합니다",
+    generalDescription: "이 기능을 사용하려면 로그인이 필요해요.",
+    benefits: "로그인하면 이런 기능을 사용할 수 있어요",
+    benefit1: "분석 결과 저장 및 관리",
+    benefit2: "분석 히스토리 조회",
+    benefit3: "상세 리포트 다운로드",
+    benefit4: "프린터 등록 및 관리",
+    later: "나중에",
+    login: "로그인하기"
+  },
+  theme: {
+    light: "라이트",
+    dark: "다크",
+    system: "시스템"
   }
 };

@@ -14,6 +14,7 @@ interface GCodePath3DFromAPIProps {
   isDarkMode?: boolean;
   showCurrentLayer?: boolean;
   showPreviousLayers?: boolean;
+  showExtrusionPath?: boolean;
   showWipePath?: boolean;
   showTravelPath?: boolean;
   showSupports?: boolean;
@@ -25,6 +26,7 @@ export function GCodePath3DFromAPI({
   isDarkMode = true,
   showCurrentLayer = true,
   showPreviousLayers = true,
+  showExtrusionPath = true,
   showWipePath = true,
   showTravelPath = true,
   showSupports = true
@@ -180,7 +182,7 @@ export function GCodePath3DFromAPI({
   return (
     <>
       {/* 이전 레이어들 - 반투명 */}
-      {showPreviousLayers && (
+      {showExtrusionPath && showPreviousLayers && (
         <lineSegments geometry={previousLayersGeometry}>
           <lineBasicMaterial
             color={previousLayerColor}
@@ -191,7 +193,7 @@ export function GCodePath3DFromAPI({
       )}
 
       {/* 현재 레이어 - 밝고 선명하게 */}
-      {showCurrentLayer && (
+      {showExtrusionPath && showCurrentLayer && (
         <lineSegments geometry={currentLayerGeometry}>
           <lineBasicMaterial
             color={currentLayerColor}

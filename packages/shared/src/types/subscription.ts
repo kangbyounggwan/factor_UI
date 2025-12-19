@@ -6,6 +6,7 @@
 // Plan codes - DB의 plan_code와 일치해야 함
 export const PLAN_CODES = {
   FREE: 'free',
+  STARTER: 'starter',
   PRO: 'pro',
   ENTERPRISE: 'enterprise',
 } as const;
@@ -36,6 +37,7 @@ export const USAGE_TYPES = {
 // Plan display names (i18n key 매핑용)
 export const PLAN_DISPLAY_KEYS = {
   [PLAN_CODES.FREE]: 'subscription.plans.free',
+  [PLAN_CODES.STARTER]: 'subscription.plans.starter',
   [PLAN_CODES.PRO]: 'subscription.plans.pro',
   [PLAN_CODES.ENTERPRISE]: 'subscription.plans.enterprise',
 } as const;
@@ -72,6 +74,22 @@ export const PLAN_FEATURES: Record<SubscriptionPlan, SubscriptionFeatures> = {
     },
     aiModelGeneration: 20, // 20 AI model generations per month for free plan
     analytics: false,
+    pushNotifications: true,
+    apiAccess: false,
+    aiAssistant: false,
+    erpMesIntegration: false,
+    communitySupport: true,
+    prioritySupport: false,
+    dedicatedSupport: false,
+  },
+  starter: {
+    maxPrinters: 2,
+    webcamStreaming: {
+      enabled: true,
+      reconnectInterval: undefined, // unlimited
+    },
+    aiModelGeneration: 'unlimited', // Advanced AI model usage
+    analytics: true, // Print statistics
     pushNotifications: true,
     apiAccess: false,
     aiAssistant: false,

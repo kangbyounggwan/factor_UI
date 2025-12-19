@@ -68,9 +68,9 @@ const PaddlePricing = () => {
   // 플랜 정의
   const plans: Plan[] = [
     {
-      id: 'basic',
-      name: t('pricing.plans.basic.name', 'Free'),
-      description: t('pricing.plans.basic.description', 'For hobbyists and makers'),
+      id: 'free',
+      name: t('pricing.plans.free.name', 'Free'),
+      description: t('pricing.plans.free.description', 'For hobbyists and makers'),
       monthlyPrice: 0,
       yearlyPrice: 0,
       icon: <Sparkles className="h-5 w-5" />,
@@ -172,8 +172,8 @@ const PaddlePricing = () => {
 
   // 플랜 선택 핸들러
   const handleSelectPlan = async (plan: Plan) => {
-    // Basic 플랜: 회원가입/로그인으로 이동
-    if (plan.id === 'basic') {
+    // Free 플랜: 회원가입/로그인으로 이동
+    if (plan.id === 'free') {
       if (!user) {
         navigate('/auth');
       } else {

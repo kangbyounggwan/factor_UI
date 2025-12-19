@@ -23,7 +23,7 @@ import type {
 import type { GCodeAnalysisData } from '@/components/PrinterDetail/GCodeAnalysisReport';
 import type { AnalysisResult } from '@shared/types/gcodeAnalysisTypes';
 
-const GCODE_BUCKET = 'gcode-files';
+export const GCODE_BUCKET = 'gcode-files';
 
 // ============================================================================
 // 스토리지 업로드 및 gcode_files 테이블 저장
@@ -231,15 +231,38 @@ export function convertReportToDbInsert(
       description: stat.description,
     })) || [],
 
+    // 완전한 이슈 구조 저장 (gcode_context 포함)
     detailed_issues: detailedIssues.map(issue => ({
-      issueType: issue.issueType,
+      // 필수 필드
+      id: issue.id,
+      type: issue.type || issue.issueType,
+      issueType: issue.issueType || issue.type,
       severity: issue.severity,
+      is_grouped: issue.is_grouped ?? false,
+      count: issue.count ?? 1,
+      lines: issue.lines || (issue.line !== undefined ? [Number(issue.line)] : []),
+      title: issue.title || '',
+      description: issue.description || '',
+      // all_issues (gcode_context 포함)
+      all_issues: (issue.all_issues || []).map(ai => ({
+        line: ai.line,
+        cmd: ai.cmd,
+        temp: ai.temp,
+        min_temp: ai.min_temp,
+        type: ai.type,
+        severity: ai.severity,
+        description: ai.description,
+        gcode_context: ai.gcode_context,
+      })),
+      // 선택적 필드
       line: issue.line !== undefined ? Number(issue.line) : undefined,
       line_index: issue.line_index !== undefined ? Number(issue.line_index) : undefined,
       code: issue.code,
-      description: issue.description,
       impact: issue.impact,
       suggestion: issue.suggestion,
+      layer: issue.layer,
+      section: issue.section,
+      gcode_context: issue.gcode_context,
     })),
 
     patch_suggestions: detailedAnalysis?.patchSuggestions?.map(patch => ({
@@ -270,6 +293,7 @@ export function convertReportToDbInsert(
     // 원본 데이터 백업
     raw_analysis_data: reportData as unknown as Record<string, unknown>,  // UI 변환 데이터
     raw_api_response: apiResult as unknown as Record<string, unknown>,    // API 원본 응답 전체
+    // issues_found는 사용하지 않음 (detailed_issues에 gcode_context 포함)
   };
 }
 
@@ -286,6 +310,7 @@ export async function saveAnalysisReport(
     gcodeFileId?: string;
     storagePath?: string;
     apiResult?: AnalysisResult;
+    segmentDataId?: string;
   }
 ): Promise<{ data: GCodeAnalysisReport | null; error: Error | null }> {
   try {
@@ -305,6 +330,10 @@ export async function saveAnalysisReport(
     if (options?.storagePath) {
       insertData.file_storage_path = options.storagePath;
     }
+    // segment_data_id 추가
+    if (options?.segmentDataId) {
+      (insertData as any).segment_data_id = options.segmentDataId;
+    }
 
     console.log('[gcodeAnalysisDbService] Inserting data:', {
       user_id: insertData.user_id,
@@ -313,6 +342,7 @@ export async function saveAnalysisReport(
       overall_score: insertData.overall_score,
       overall_grade: insertData.overall_grade,
       gcode_file_id: insertData.gcode_file_id,
+      segment_data_id: (insertData as any).segment_data_id,
     });
 
     const { data, error } = await supabase
@@ -431,14 +461,68 @@ export async function getAnalysisReportsList(
 
 /**
  * 단일 분석 보고서 상세 조회
+ * raw_analysis_data, raw_api_response, issues_found 제외 (너무 큼)
+ * detailed_issues에 gcode_context 포함
  */
 export async function getAnalysisReportById(
   reportId: string
 ): Promise<{ data: GCodeAnalysisReport | null; error: Error | null }> {
   try {
+    // raw_analysis_data, raw_api_response, issues_found 제외하고 조회 (너무 큼)
     const { data, error } = await supabase
       .from('gcode_analysis_reports')
-      .select('*')
+      .select(`
+        id,
+        user_id,
+        gcode_file_id,
+        file_name,
+        file_storage_path,
+        status,
+        analyzed_at,
+        print_time_seconds,
+        print_time_formatted,
+        filament_length_mm,
+        filament_weight_g,
+        filament_cost,
+        layer_count,
+        layer_height,
+        retraction_count,
+        support_percentage,
+        support_volume_cm3,
+        speed_travel,
+        speed_infill,
+        speed_perimeter,
+        speed_support,
+        speed_max,
+        speed_avg,
+        speed_min,
+        temp_nozzle,
+        temp_bed,
+        temp_nozzle_first_layer,
+        temp_bed_first_layer,
+        overall_score,
+        overall_grade,
+        total_issues_count,
+        critical_issues_count,
+        high_issues_count,
+        medium_issues_count,
+        low_issues_count,
+        analysis_warnings,
+        analysis_cautions,
+        analysis_suggestions,
+        analysis_good_points,
+        diagnosis_summary,
+        issue_statistics,
+        detailed_issues,
+        patch_suggestions,
+        solution_guides,
+        expected_improvements,
+        llm_summary,
+        llm_recommendation,
+        printing_info,
+        created_at,
+        updated_at
+      `)
       .eq('id', reportId)
       .single();
 
@@ -456,53 +540,11 @@ export async function getAnalysisReportById(
 
 /**
  * DB 보고서 → UI 보고서 데이터 변환
+ * raw_analysis_data, issues_found 사용 안함 - detailed_issues에 gcode_context 포함
  */
 export function convertDbReportToUiData(report: GCodeAnalysisReport): GCodeAnalysisData {
-  // raw_analysis_data가 있으면 그대로 사용
-  if (report.raw_analysis_data) {
-    const uiData = report.raw_analysis_data as unknown as GCodeAnalysisData;
-
-    // reportId 설정 (DB ID)
-    uiData.reportId = report.id;
-
-    // raw_api_response에서 layer/section 정보 보강
-    if (report.raw_api_response && uiData.detailedAnalysis?.detailedIssues) {
-      const apiResponse = report.raw_api_response as Record<string, unknown>;
-      const issuesFound = apiResponse.issues_found as Array<{
-        issue_type?: string;
-        event_line_index?: number;
-        layer?: number;
-        section?: string;
-      }> | undefined;
-
-      if (issuesFound && issuesFound.length > 0) {
-        // detailedIssues에 layer/section 정보 추가
-        uiData.detailedAnalysis.detailedIssues = uiData.detailedAnalysis.detailedIssues.map((issue, index) => {
-          const apiIssue = issuesFound[index];
-          if (apiIssue) {
-            return {
-              ...issue,
-              layer: issue.layer ?? apiIssue.layer,
-              section: issue.section ?? apiIssue.section,
-            };
-          }
-          return issue;
-        });
-
-        // Layer 기준 오름차순 정렬 (layer가 없는 항목은 마지막에 배치)
-        uiData.detailedAnalysis.detailedIssues.sort((a, b) => {
-          const layerA = a.layer ?? Number.MAX_SAFE_INTEGER;
-          const layerB = b.layer ?? Number.MAX_SAFE_INTEGER;
-          return layerA - layerB;
-        });
-      }
-    }
-
-    return uiData;
-  }
-
-  // 없으면 DB 필드에서 복원
-  return {
+  // DB 필드에서 복원
+  const uiData: GCodeAnalysisData = {
     reportId: report.id,
     fileName: report.file_name,
     storagePath: report.file_storage_path,
@@ -557,9 +599,10 @@ export function convertDbReportToUiData(report: GCodeAnalysisReport): GCodeAnaly
       min: report.speed_min,
     },
     detailedAnalysis: {
-      diagnosisSummary: report.diagnosis_summary,
+      diagnosisSummary: report.diagnosis_summary as GCodeAnalysisData['detailedAnalysis']['diagnosisSummary'],
       issueStatistics: report.issue_statistics,
-      detailedIssues: report.detailed_issues,
+      // detailed_issues에서 직접 로드 (gcode_context 포함)
+      detailedIssues: convertDetailedIssuesFromDb(report.detailed_issues),
       patchSuggestions: report.patch_suggestions,
       solutionGuides: report.solution_guides,
       expectedImprovements: report.expected_improvements,
@@ -568,6 +611,100 @@ export function convertDbReportToUiData(report: GCodeAnalysisReport): GCodeAnaly
       printingInfo: report.printing_info,
     },
   };
+
+  // Layer 기준 오름차순 정렬
+  if (uiData.detailedAnalysis?.detailedIssues) {
+    uiData.detailedAnalysis.detailedIssues.sort((a, b) => {
+      const layerA = a.layer ?? Number.MAX_SAFE_INTEGER;
+      const layerB = b.layer ?? Number.MAX_SAFE_INTEGER;
+      return layerA - layerB;
+    });
+  }
+
+  return uiData;
+}
+
+/**
+ * DB detailed_issues → UI DetailedIssue[] 변환
+ * detailed_issues에 gcode_context 포함 (issues_found 사용 안함)
+ */
+function convertDetailedIssuesFromDb(
+  detailedIssues: GCodeAnalysisReport['detailed_issues']
+): NonNullable<GCodeAnalysisData['detailedAnalysis']>['detailedIssues'] {
+  if (!detailedIssues || !Array.isArray(detailedIssues) || detailedIssues.length === 0) {
+    return [];
+  }
+
+  return detailedIssues.map((issue) => {
+    // DB에서 로드된 이슈 (새 구조 또는 레거시 구조)
+    const dbIssue = issue as {
+      // 새 구조 필드
+      id?: string;
+      type?: string;
+      issueType?: string;
+      severity?: string;
+      is_grouped?: boolean;
+      count?: number;
+      lines?: number[];
+      title?: string;
+      description?: string;
+      all_issues?: Array<{
+        line: number;
+        cmd?: string;
+        temp?: number;
+        min_temp?: number;
+        type?: string;
+        severity?: string;
+        description?: string;
+        gcode_context?: string;
+      }>;
+      // 레거시/선택적 필드
+      line?: number;
+      line_index?: number;
+      code?: string;
+      impact?: string;
+      suggestion?: string;
+      layer?: number;
+      section?: string;
+      gcode_context?: string;
+    };
+
+    // lines 배열 결정
+    const lines = dbIssue.lines && Array.isArray(dbIssue.lines) && dbIssue.lines.length > 0
+      ? dbIssue.lines
+      : dbIssue.line !== undefined
+        ? [Number(dbIssue.line)]
+        : [];
+
+    // count 결정
+    const count = dbIssue.count ?? dbIssue.all_issues?.length ?? 1;
+
+    // ID 결정 (없으면 생성)
+    const issueId = dbIssue.id || `ISSUE-${Math.random().toString(36).substring(2, 11)}`;
+
+    // all_issues 그대로 사용 (gcode_context 이미 포함)
+    const allIssues = dbIssue.all_issues || [];
+
+    return {
+      id: issueId,
+      type: dbIssue.type || dbIssue.issueType || 'other',
+      issueType: dbIssue.issueType || dbIssue.type || 'other',
+      severity: (dbIssue.severity || 'medium') as 'critical' | 'high' | 'medium' | 'low' | 'info' | 'warning',
+      is_grouped: dbIssue.is_grouped ?? count > 1,
+      count,
+      lines,
+      line: lines[0],
+      title: dbIssue.title || dbIssue.description || '',
+      description: dbIssue.description || '',
+      all_issues: allIssues,
+      impact: dbIssue.impact,
+      suggestion: dbIssue.suggestion,
+      layer: dbIssue.layer,
+      section: dbIssue.section,
+      code: dbIssue.code,
+      gcode_context: dbIssue.gcode_context || allIssues[0]?.gcode_context,
+    };
+  });
 }
 
 // ============================================================================

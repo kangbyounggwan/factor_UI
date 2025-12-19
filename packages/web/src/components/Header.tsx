@@ -30,7 +30,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Monitor, Settings, Menu, Activity, LogOut, Sun, Moon, BookOpen, CreditCard, Code2, Layers, Shield, User, Globe, Check, Bell, MessageSquare, Lightbulb, AlertTriangle, Upload, X, Image as ImageIcon, Sparkles, ChevronDown, FileCode2, Wrench } from "lucide-react";
+import { Monitor, Settings, Menu, Activity, LogOut, Sun, Moon, BookOpen, CreditCard, Code2, Layers, Shield, User, Globe, Check, Bell, MessageSquare, Lightbulb, AlertTriangle, Upload, X, Image as ImageIcon, Sparkles, ChevronDown, FileCode2, Wrench, Printer as PrinterIcon, History, Stethoscope } from "lucide-react";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useDashboardSummary } from "@shared/component/dashboardSummary";
 import { useTheme } from "next-themes";
@@ -49,7 +49,7 @@ export const Header = () => {
     activePrints: 0,
     totalPrinters: 0
   });
-  const [userPlan, setUserPlan] = useState<string>('basic');
+  const [userPlan, setUserPlan] = useState<string>('free');
   const [unreadNotifications, setUnreadNotifications] = useState<number>(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
@@ -96,21 +96,15 @@ export const Header = () => {
     }[];
   };
 
+  // 비로그인 상태 메뉴 (B2C 진입점) - AI 채팅으로 통합
+  const guestNavigation: NavigationItem[] = [
+    { name: t('nav.aiTools'), href: "/ai-chat", icon: Sparkles },
+  ];
+
+  // 로그인 상태 메뉴 (더 많은 기능 제공)
   const navigation: NavigationItem[] = [
-    { name: t('nav.dashboard'), href: "/dashboard", icon: Monitor },
-    {
-      name: t('nav.ai'),
-      href: "/create",
-      icon: Layers,
-      hasSubmenu: true,
-      menuType: 'mega',
-      submenu: [
-        { name: t('ai.modelGeneration'), href: "/create", icon: Sparkles, description: t('ai.modelGenerationDesc') },
-        { name: t('ai.gcodeAnalysis'), href: "/gcode-analytics", icon: FileCode2, description: t('ai.gcodeAnalysisDesc') },
-        // TODO: AI 고장 해결 - 개발 중
-        // { name: t('ai.aiTroubleshooting'), href: "/ai-troubleshooting", icon: Wrench, description: t('ai.troubleshootingDescription') },
-      ]
-    },
+    { name: t('nav.printers'), href: "/dashboard", icon: PrinterIcon },
+    { name: t('nav.aiTools'), href: "/ai-chat", icon: Sparkles },
     { name: t('nav.settings'), href: "/settings", icon: Settings },
   ];
 
@@ -207,18 +201,20 @@ export const Header = () => {
 
       if (error) {
         console.error('Error loading user subscription:', error);
-        setUserPlan('basic'); // 기본값
+        setUserPlan('free'); // 기본값
         return;
       }
 
       if (subscription && (subscription.status === 'active' || subscription.status === 'trialing')) {
-        setUserPlan(subscription.plan_name);
+        // 'basic'은 'free'로 매핑 (레거시 지원)
+        const planName = subscription.plan_name === 'basic' ? 'free' : subscription.plan_name;
+        setUserPlan(planName);
       } else {
-        setUserPlan('basic');
+        setUserPlan('free');
       }
     } catch (error) {
       console.error('Error loading user subscription:', error);
-      setUserPlan('basic');
+      setUserPlan('free');
     }
   };
 
@@ -327,7 +323,13 @@ export const Header = () => {
   const isHomePage = location.pathname === "/";
   const isAuthPage = location.pathname === "/auth";
   const isSubscriptionPage = location.pathname === "/subscription";
-  const currentNavigation = (isHomePage || isSubscriptionPage) ? homeNavigation : navigation;
+
+  // 로그인 상태에 따른 네비게이션 분기
+  const currentNavigation = (isHomePage || isSubscriptionPage)
+    ? homeNavigation
+    : user
+      ? navigation
+      : guestNavigation;
 
 
   // 로그인 페이지일 때는 간단한 헤더 표시
@@ -381,8 +383,8 @@ export const Header = () => {
   return (
     <header className="sticky top-0 z-50 w-full border-b-2 border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto relative flex h-16 items-center justify-between px-4">
-        {/* 로고 */}
-        <Link to="/" className="flex items-center space-x-3">
+        {/* 로고 - 로그인 시 대시보드로, 비로그인 시 홈으로 */}
+        <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-3">
           <div className="flex items-center justify-center w-10 h-10 bg-primary rounded-lg">
             <Activity className="w-6 h-6 text-primary-foreground" />
           </div>
@@ -954,7 +956,7 @@ export const Header = () => {
                         <p className="text-sm font-medium leading-none">
                           {user?.user_metadata?.full_name || user?.email?.split('@')[0]}
                         </p>
-                        <Badge variant={userPlan === 'basic' ? 'secondary' : 'default'} className="text-xs capitalize">
+                        <Badge variant={userPlan === 'free' ? 'secondary' : 'default'} className="text-xs capitalize">
                           {userPlan}
                         </Badge>
                       </div>

@@ -3,7 +3,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Monitor, Play, Bell, BarChart3, Settings, Zap, Shield, Smartphone, Code2, Wand2, Image, Box, Layers, Download, Video, Copy, Check, FileSearch } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
-import { useAuth } from "@shared/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import {
@@ -19,7 +18,6 @@ import { TypingEffect } from "@/components/Home/TypingEffect";
 const PLUGIN_URL = "https://github.com/kangbyounggwan/octoprint-factor-plugin/archive/main.zip";
 
 const Home = () => {
-  const { user } = useAuth();
   const { t } = useTranslation();
   const location = useLocation();
   const [showVideoModal, setShowVideoModal] = useState(false);
@@ -135,7 +133,7 @@ const Home = () => {
                   text={t('landing.heroTitleHighlight')}
                   speed={80}
                   delay={500}
-                  className="text-primary block"
+                  className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-500 bg-clip-text text-transparent block"
                 />
               </h1>
               <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto">
@@ -144,17 +142,15 @@ const Home = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8">
-              <Button asChild size="lg" className="text-lg px-8 py-6">
-                <Link to={user ? "/dashboard" : "/auth"}>
-                  <Monitor className="h-5 w-5 mr-2" />
-                  {user ? t('landing.goToDashboard') : t('landing.getStarted')}
-                </Link>
-              </Button>
-              <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6">
-                <a href="#ai-features">
+              <Button
+                asChild
+                size="lg"
+                className="relative text-lg px-12 py-7 font-semibold text-white bg-gradient-to-r from-blue-600 via-purple-600 to-pink-500 bg-[length:200%_100%] animate-gradient-x hover:shadow-2xl hover:shadow-purple-500/40 hover:scale-105 transition-all duration-300 rounded-full border-0"
+              >
+                <Link to="/ai-chat">
                   <Zap className="h-5 w-5 mr-2" />
-                  {t('landing.viewPricing')}
-                </a>
+                  {t('landing.getStarted')}
+                </Link>
               </Button>
             </div>
           </div>

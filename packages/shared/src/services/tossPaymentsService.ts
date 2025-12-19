@@ -121,7 +121,7 @@ export const requestPayment = async (params: RequestPaymentParams) => {
 /**
  * 주문 ID 생성 헬퍼 함수
  * @param prefix 주문 ID 접두사 (예: 'SUB', 'ORDER')
- * @param planName 플랜 이름 (예: 'basic', 'pro', 'enterprise')
+ * @param planName 플랜 이름 (예: 'free', 'starter', 'pro', 'enterprise')
  * @param billingCycle 결제 주기 (예: 'monthly', 'yearly')
  */
 export const generateOrderId = (
@@ -162,7 +162,8 @@ export const formatKRW = (amount: number): string => {
  */
 export const getPlanAmount = (planId: string, isYearly = false): number => {
   const monthlyPrices: Record<string, number> = {
-    basic: 0,
+    free: 0,
+    starter: 9900,
     pro: 19900,
     enterprise: 49900,
   };
@@ -182,7 +183,8 @@ export const getPlanAmount = (planId: string, isYearly = false): number => {
  */
 export const getPlanName = (planId: string): string => {
   const planNames: Record<string, string> = {
-    basic: 'Basic 플랜',
+    free: 'Free 플랜',
+    starter: 'Starter 플랜',
     pro: 'Pro 플랜',
     enterprise: 'Enterprise 플랜',
   };

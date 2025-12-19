@@ -80,7 +80,8 @@ function convertApiResultToReportData(
   } = result;
 
   // 이슈 통계 계산
-  const realIssues = issues_found.filter((i) => i.has_issue);
+  // has_issue가 true이거나 is_grouped가 true인 이슈를 포함 (그룹화된 이슈도 표시)
+  const realIssues = issues_found.filter((i) => i.has_issue || i.is_grouped);
   const issueStatistics = calculateIssueStatistics(issues_found);
 
   // 점수 및 등급
@@ -140,25 +141,41 @@ function convertApiResultToReportData(
     });
   }
 
-  // detailedIssues 변환
+  // detailedIssues 변환 (그룹화된 이슈 필드 포함)
   const detailedIssues = realIssues.map((issue) => {
     console.log('[transformAnalysisResult] Issue raw data:', {
+      id: issue.id,
       issue_type: issue.issue_type,
+      type: issue.type,
+      title: issue.title,
       layer: issue.layer,
       section: issue.section,
       event_line_index: issue.event_line_index,
+      is_grouped: issue.is_grouped,
+      count: issue.count,
+      lines: issue.lines,
     });
     return {
-      issueType: issue.issue_type,
-      severity: issue.severity as 'high' | 'medium' | 'low',
-      line: issue.event_line_index ?? issue.line_index,  // event_line_index 우선
+      id: issue.id,
+      issueType: issue.issue_type || issue.type || 'unknown',
+      type: issue.type,
+      severity: issue.severity as 'critical' | 'high' | 'medium' | 'low',
+      line: issue.event_line_index ?? issue.line_index ?? issue.line ?? (issue.lines?.[0]),
       line_index: issue.event_line_index ?? issue.line_index,
       code: issue.code,
-      description: issue.description,
-      impact: issue.impact,
-      suggestion: issue.suggestion,
-      layer: issue.layer,    // 레이어 번호
-      section: issue.section,  // 섹션 (BODY, INFILL 등)
+      description: issue.description || '',
+      impact: issue.impact || '',
+      suggestion: issue.suggestion || '',
+      layer: issue.layer,
+      section: issue.section,
+      title: issue.title,
+      gcode_context: issue.gcode_context,  // G-code 컨텍스트 (독립 이슈용)
+      // 그룹화 관련 필드
+      is_grouped: issue.is_grouped,
+      count: issue.count,
+      lines: issue.lines,
+      all_issues: issue.all_issues,  // 그룹 내 모든 개별 이슈 (gcode_context 포함)
+      representative: issue.representative,
     };
   });
 
@@ -343,10 +360,16 @@ const GCodeAnalytics = () => {
 
   // 보고서 저장 (스토리지 업로드 정보 포함)
   const handleSaveReport = useCallback(async () => {
-    if (!user?.id || !reportData || !fileName) {
+    // 비로그인 사용자는 로그인 유도 모달 표시
+    if (!user?.id) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
+    if (!reportData || !fileName) {
       toast({
         title: t('gcodeAnalytics.saveFailed'),
-        description: t('gcodeAnalytics.loginRequired'),
+        description: t('gcodeAnalytics.noDataToSave', '저장할 분석 데이터가 없습니다.'),
         variant: "destructive",
       });
       return;
@@ -449,13 +472,8 @@ const GCodeAnalytics = () => {
   }, [toast, t]);
 
   // 파일 처리 (스토리지 업로드 + 분석)
+  // NOTE: 비로그인 사용자도 분석은 가능, 저장/히스토리 접근 시에만 로그인 유도
   const processFile = useCallback(async (file: File) => {
-    // 비로그인 사용자는 로그인 모달 표시
-    if (!user?.id) {
-      setShowLoginPrompt(true);
-      return;
-    }
-
     // G-code 파일인지 확인
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (!['gcode', 'gc', 'g', 'nc', 'ngc'].includes(ext || '')) {

@@ -43,7 +43,8 @@ const PaymentCheckout = () => {
   // 플랜 이름
   const getPlanName = (id: string): string => {
     const names: Record<string, string> = {
-      basic: "Basic",
+      free: "Free",
+      starter: "Starter",
       pro: "Pro",
       enterprise: "Enterprise",
     };

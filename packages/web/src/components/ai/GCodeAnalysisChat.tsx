@@ -213,12 +213,7 @@ export function GCodeAnalysisChat({ userId }: GCodeAnalysisChatProps) {
                 onComplete: (event) => {
                     setIsAnalyzing(false);
                     setProgress(100);
-                    setAnalysisResult({
-                        final_summary: event.final_summary,
-                        issues_found: event.issues_found,
-                        patch_plan: event.patch_plan,
-                        token_usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-                    });
+                    setAnalysisResult(event);
 
                     // 결과 요약 메시지
                     const summary = event.final_summary;
@@ -366,8 +361,8 @@ ${summary.patch_available ? `\n🔧 **${summary.patch_count}개의 수정 패치
                             )}
                             <div
                                 className={`max-w-[80%] rounded-lg px-4 py-2 ${msg.role === 'user'
-                                        ? 'bg-primary text-primary-foreground'
-                                        : 'bg-muted'
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'bg-muted'
                                     }`}
                             >
                                 <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
@@ -461,7 +456,7 @@ ${summary.patch_available ? `\n🔧 **${summary.patch_count}개의 수정 패치
             </ScrollArea>
 
             {/* 입력 영역 */}
-            <div className="p-4 border-t shrink-0">
+            <div className="p-4 shrink-0">
                 <div className="flex gap-2">
                     <Input
                         value={inputValue}

@@ -231,9 +231,14 @@ export const formatKRW = (amount: number): string => {
  * Paddle은 가격을 플랫폼에서 관리하므로 표시용 가격만 정의
  */
 export const PLAN_DISPLAY_PRICES = {
-  basic: {
+  free: {
     monthly: 0,
     yearly: 0,
+    currency: 'USD',
+  },
+  starter: {
+    monthly: 9,
+    yearly: 90,
     currency: 'USD',
   },
   pro: {
@@ -269,7 +274,8 @@ export const getPlanDisplayPrice = (
  */
 export const getPlanName = (planId: string): string => {
   const planNames: Record<string, string> = {
-    basic: 'Basic',
+    free: 'Free',
+    starter: 'Starter',
     pro: 'Pro',
     enterprise: 'Enterprise',
   };

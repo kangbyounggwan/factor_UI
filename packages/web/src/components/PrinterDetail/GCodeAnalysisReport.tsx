@@ -1,7 +1,25 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Slider } from '@/components/ui/slider';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
+import { useTheme } from 'next-themes';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+} from 'recharts';
 import {
   Clock,
   Layers,
@@ -21,6 +39,7 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronRight,
+  ChevronLeft,
   X,
   Zap,
   BarChart3,
@@ -28,8 +47,27 @@ import {
   FileWarning,
   FileJson,
   FileSpreadsheet,
+  Loader2,
+  Eye,
+  EyeOff,
+  Grid3x3,
+  Edit3,
+  Wrench,
+  Check,
+  Trash2,
+  Plus,
+  XCircle,
+  Download,
+  Save,
 } from 'lucide-react';
 import { GCodeViewerModal } from './GCodeViewerModal';
+import { GCodePath3DFromAPI } from './GCodePath3DFromAPI';
+import { loadFullSegmentDataByReportId } from '@/lib/gcodeSegmentService';
+import type { LayerSegmentData, TemperatureData } from '@/lib/api/gcode';
+import { resolveIssue, type IssueResolveResponse } from '@/lib/api/gcode';
+import type { SegmentMetadata } from '@/lib/gcodeSegmentService';
+import { supabase } from '@shared/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 // ============================================================================
 // G-code 분석 보고서 데이터 타입 정의
@@ -43,6 +81,7 @@ export interface GCodeAnalysisData {
   storagePath?: string;
   analyzedAt?: string;
   reportId?: string;  // DB 보고서 ID (수정 내역 저장용)
+  analysisId?: string; // 백엔드 분석 ID (AI 해결하기 API 호출용)
 
   // 주요 메트릭
   metrics: {
@@ -163,22 +202,66 @@ export interface AnalysisItem {
 // AI 분석 상세 결과 타입
 // ============================================================================
 
+/**
+ * 그룹 내 개별 이슈 (all_issues 항목)
+ * 새로운 통합 구조: all_issues는 항상 배열
+ */
+export interface GroupedIssueItem {
+  line: number;                // 라인 번호 (필수)
+  cmd?: string;                // G-code 명령어 (예: "M104 S154")
+  temp?: number;               // 온도 값
+  min_temp?: number;           // 최소 온도
+  type?: string;               // 이슈 타입
+  severity?: string;           // 개별 심각도
+  description?: string;        // 개별 설명
+  gcode_context?: string;      // 해당 라인의 G-code 컨텍스트 (앞뒤 N줄)
+  // 레거시 호환 필드
+  has_issue?: boolean;
+  is_false_positive?: boolean;
+  false_positive_reason?: string;
+}
+
+/**
+ * 통합된 이슈 구조 (단일/그룹 공통)
+ *
+ * 새 구조:
+ * - id: "TEMP-1" (단일) 또는 "TEMP-GROUP-1" (그룹)
+ * - is_grouped: false (단일) 또는 true (그룹)
+ * - count: 1 (단일) 또는 N (그룹)
+ * - lines: [12345] (단일도 항상 배열)
+ * - all_issues: [{ line, gcode_context, ... }] (항상 배열)
+ */
 export interface DetailedIssue {
-  id?: string;                 // 이슈 고유 ID (예: ISSUE-1, ISSUE-2)
-  issueType: string;           // cold_extrusion, early_temp_off, etc.
-  type?: string;               // 이슈 유형 코드 (new API)
+  // === 필수 필드 (항상 존재) ===
+  id: string;                  // 이슈 고유 ID ("TEMP-1", "TEMP-GROUP-1" 등)
+  type: string;                // 이슈 타입 (cold_extrusion, early_temp_off 등)
   severity: 'critical' | 'high' | 'medium' | 'low' | 'info' | 'warning';
-  line?: number | string;       // G-code 라인 번호
-  line_index?: number | string; // 백엔드에서 오는 라인 인덱스
-  code?: string;               // 발견된 G-code
-  description: string;         // 상세 설명
-  impact: string;              // 영향 설명
-  suggestion: string;          // 제안 사항
+  is_grouped: boolean;         // 그룹 여부 (false: 단일, true: 그룹)
+  count: number;               // 이슈 개수 (단일: 1, 그룹: N)
+  lines: number[];             // 라인 번호 목록 (항상 배열, 단일도 [12345])
+  title: string;               // 이슈 제목
+  description: string;         // 이슈 설명
+  all_issues: GroupedIssueItem[];  // 개별 이슈 목록 (항상 배열)
+
+  // === 선택적 필드 (상황에 따라 존재) ===
+  issueType?: string;          // type 별칭 (하위 호환용)
+  impact?: string;             // 영향
+  suggestion?: string;         // 제안
   layer?: number;              // 레이어 번호
-  section?: string;            // 섹션 (BODY, INFILL, etc.)
-  patch_id?: string | null;    // 연결된 패치 ID (예: PATCH-001)
-  title?: string;              // 이슈 제목
+  section?: string;            // 섹션 (BODY, INFILL, SUPPORT 등)
+  code?: string;               // 관련 G-code 코드
+  patch_id?: string | null;    // 연결된 패치 ID
   fix_proposal?: string;       // 수정 제안
+
+  // === 레거시 호환 필드 (점진적 마이그레이션) ===
+  line?: number | string;      // 단일 라인 (레거시, lines[0] 사용 권장)
+  line_index?: number | string;  // 라인 인덱스 (레거시)
+  gcode_context?: string;      // G-code 컨텍스트 (레거시, all_issues[].gcode_context 사용 권장)
+  representative?: {           // 대표 이슈 정보 (레거시)
+    cmd?: string;
+    line?: number;
+    temp?: number;
+  };
 }
 
 export interface PatchSuggestion {
@@ -449,12 +532,593 @@ const InterpretationBadge: React.FC<InterpretationBadgeProps> = ({ textKey, stat
 };
 
 // ============================================================================
+// G-code 구문 하이라이팅 함수
+// ============================================================================
+
+const highlightGCode = (line: string): React.ReactNode => {
+  if (line.trim().startsWith(';')) {
+    return <span className="text-slate-400 italic">{line}</span>;
+  }
+
+  const parts = line.split(/(\s+)/);
+
+  return parts.map((part, i) => {
+    if (part.trim() === '') return part;
+
+    // Command (G1, M104...) - Blue/Cyan
+    if (/^[GM]\d+/.test(part)) {
+      return <span key={i} className="text-blue-600 dark:text-blue-400 font-bold">{part}</span>;
+    }
+
+    // Coordinates (X,Y,Z,E) - Orange/Yellow for axis, Green/LightBlue for value
+    if (/^[XYZE]-?[\d.]+/.test(part)) {
+      const axis = part.charAt(0);
+      const val = part.substring(1);
+      return (
+        <span key={i}>
+          <span className="text-orange-600 dark:text-orange-300 font-semibold">{axis}</span>
+          <span className="text-emerald-600 dark:text-emerald-300">{val}</span>
+        </span>
+      );
+    }
+
+    // Parameters (F,S,P) - Purple/Pink for param, Green/LightBlue for value
+    if (/^[FSP]-?[\d.]+/.test(part)) {
+      const param = part.charAt(0);
+      const val = part.substring(1);
+      return (
+        <span key={i}>
+          <span className="text-purple-600 dark:text-purple-300 font-semibold">{param}</span>
+          <span className="text-amber-600 dark:text-amber-300">{val}</span>
+        </span>
+      );
+    }
+
+    if (part.startsWith(';')) {
+      return <span key={i} className="text-slate-400 dark:text-slate-500 italic">{part}</span>;
+    }
+
+    return <span key={i} className="text-slate-700 dark:text-slate-300">{part}</span>;
+  });
+};
+
+// ============================================================================
+// 임베디드 G-code 에디터 컴포넌트
+// ============================================================================
+
+interface EmbeddedGCodeEditorProps {
+  displayContent: string;
+  isContextMode: boolean;
+  editorFixInfo?: {
+    lineNumber: number;
+    original: string;
+    fixed: string;
+    description?: string;
+  };
+  onEditorApplyFix?: (lineNumber: number, originalCode: string, fixedCode: string, newContent: string) => void;
+  onSaveGCode?: (content: string, fileName: string) => void;
+  revertLineNumber?: number;  // 되돌릴 라인 번호 (부모에서 설정)
+  onRevertComplete?: () => void;  // 되돌리기 완료 콜백
+  globalAppliedCount?: number;  // 전체 적용된 패치 수 (부모에서 관리)
+  onSaveModifiedGCode?: () => void;  // 부모에서 전체 수정본 저장 처리
+  data: GCodeAnalysisData;
+  fileName?: string;
+}
+
+const EmbeddedGCodeEditor: React.FC<EmbeddedGCodeEditorProps> = ({
+  displayContent,
+  isContextMode,
+  editorFixInfo,
+  onEditorApplyFix,
+  onSaveGCode,
+  revertLineNumber,
+  onRevertComplete,
+  globalAppliedCount = 0,
+  onSaveModifiedGCode,
+  data,
+  fileName,
+}) => {
+  const { t } = useTranslation();
+  const { theme, resolvedTheme } = useTheme();
+  const isDarkMode = theme === 'dark' || resolvedTheme === 'dark';
+
+  // 라인 상태
+  const [lines, setLines] = React.useState<string[]>([]);
+  const [originalLines, setOriginalLines] = React.useState<string[]>([]);
+
+  // 편집 상태 (현재 미사용이지만 컨텍스트 초기화에 필요)
+  const [editingLineIndex, setEditingLineIndex] = React.useState<number | null>(null);
+  const [editingValue, setEditingValue] = React.useState<string>('');
+  const [newlyInsertedLineIndex, setNewlyInsertedLineIndex] = React.useState<number | null>(null);
+  const [hoveredLineIndex, setHoveredLineIndex] = React.useState<number | null>(null);
+
+  // 수정 적용 완료 상태
+  const [appliedFixLines, setAppliedFixLines] = React.useState<Set<number>>(new Set());
+
+  // 변경 여부 추적 (패치 적용 시 true로 설정)
+  const [hasChanges, setHasChanges] = React.useState(false);
+
+  // 패치 히스토리 (되돌리기용) - lineNumber를 키로 사용
+  const [patchHistory, setPatchHistory] = React.useState<Map<number, { lines: string[], appliedFixLines: Set<number> }>>(new Map());
+
+  // refs
+  const targetLineRef = React.useRef<HTMLDivElement>(null);
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // 수정 제안 정보 파싱
+  const fixLineNumber = editorFixInfo?.lineNumber;
+  const fixOriginal = editorFixInfo?.original;
+  const fixFixed = editorFixInfo?.fixed;
+
+  // 컨텐츠 초기화 (새로운 컨텍스트가 로드될 때만)
+  const prevDisplayContentRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (displayContent && displayContent !== prevDisplayContentRef.current) {
+      // 이전 컨텐츠와 완전히 다른 새 컨텐츠인지 확인 (첫 몇 줄 비교)
+      const isNewContext = !prevDisplayContentRef.current ||
+        displayContent.split('\n').slice(0, 5).join('\n') !== prevDisplayContentRef.current.split('\n').slice(0, 5).join('\n');
+
+      if (isNewContext) {
+        const newLines = displayContent.split('\n');
+        setLines(newLines);
+        setOriginalLines(newLines);
+        setEditingLineIndex(null);
+        setEditingValue('');
+        setNewlyInsertedLineIndex(null);
+        setAppliedFixLines(new Set());
+        setHasChanges(false);
+        setPatchHistory(new Map());
+        prevDisplayContentRef.current = displayContent;
+      }
+    }
+  }, [displayContent]);
+
+  // 수정 대상 라인으로 스크롤 (화면 가운데로)
+  React.useEffect(() => {
+    if (targetLineRef.current && editorFixInfo && scrollContainerRef.current) {
+      setTimeout(() => {
+        const container = scrollContainerRef.current;
+        const target = targetLineRef.current;
+        if (container && target) {
+          const containerRect = container.getBoundingClientRect();
+          const targetRect = target.getBoundingClientRect();
+
+          // 타겟이 컨테이너 가운데에 오도록 스크롤 위치 계산
+          const targetOffsetTop = target.offsetTop;
+          const scrollTo = targetOffsetTop - (containerRect.height / 2) + (targetRect.height / 2);
+
+          container.scrollTo({
+            top: Math.max(0, scrollTo),
+            behavior: 'smooth'
+          });
+        }
+      }, 150);
+    }
+  }, [editorFixInfo, lines]);
+
+  // 되돌리기 처리 (부모에서 revertLineNumber가 설정되면 히스토리에서 복원)
+  React.useEffect(() => {
+    if (revertLineNumber && patchHistory.has(revertLineNumber)) {
+      const history = patchHistory.get(revertLineNumber)!;
+
+      // 저장된 상태로 복원
+      setLines(history.lines);
+      setAppliedFixLines(history.appliedFixLines);
+
+      // 히스토리에서 제거
+      setPatchHistory(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(revertLineNumber);
+        return newMap;
+      });
+
+      // 변경 여부 업데이트 (히스토리가 남아있으면 변경 있음, 1개 삭제 후 0개면 false)
+      setHasChanges(patchHistory.size > 1);
+
+      // 완료 콜백 호출
+      if (onRevertComplete) {
+        onRevertComplete();
+      }
+    }
+  }, [revertLineNumber, patchHistory, onRevertComplete]);
+
+  // 자동 수정 적용 (AI 패치)
+  const handleApplyFix = React.useCallback((targetIdx: number) => {
+    if (!fixLineNumber || !fixOriginal || !fixFixed) return;
+
+    // 되돌리기를 위해 현재 상태 저장
+    setPatchHistory(prev => new Map(prev).set(fixLineNumber, {
+      lines: [...lines],
+      appliedFixLines: new Set(appliedFixLines)
+    }));
+
+    // 라인 번호에서 실제 코드만 추출 (예: "678902: M104 S193.6" -> "M104 S193.6")
+    const extractCode = (lineWithNumber: string) => {
+      const match = lineWithNumber.match(/^\d+:\s*(.*)$/);
+      return match ? match[1] : lineWithNumber;
+    };
+
+    const fixedCode = extractCode(fixFixed);
+
+    // 해당 라인 수정
+    const newLines = [...lines];
+    const currentLine = newLines[targetIdx];
+
+    // 마커 형식 체크: ">>> 682077: M104 S193.6 <<< [문제 라인]"
+    const markedMatch = currentLine.match(/^>>>\s*(\d+):\s*.*?<<<.*$/);
+    // 일반 형식 체크: "682077: M104 S193.6"
+    const normalMatch = currentLine.match(/^(\d+):\s*/);
+
+    if (markedMatch) {
+      // 마커 형식 -> 일반 형식으로 변환하면서 수정된 코드 적용
+      newLines[targetIdx] = `${markedMatch[1]}: ${fixedCode}`;
+    } else if (normalMatch) {
+      // 일반 형식 유지
+      newLines[targetIdx] = `${normalMatch[1]}: ${fixedCode}`;
+    } else {
+      // 라인 번호가 없는 경우 fixLineNumber 사용
+      newLines[targetIdx] = `${fixLineNumber}: ${fixedCode}`;
+    }
+    setLines(newLines);
+
+    // 적용 완료 표시
+    setAppliedFixLines(prev => new Set(prev).add(targetIdx));
+
+    // 변경 여부 표시
+    setHasChanges(true);
+
+    // 콜백 호출
+    if (onEditorApplyFix) {
+      const originalCode = extractCode(fixOriginal);
+      onEditorApplyFix(fixLineNumber, originalCode, fixedCode, newLines.join('\n'));
+    }
+  }, [fixLineNumber, fixOriginal, fixFixed, lines, onEditorApplyFix]);
+
+  // 다운로드 핸들러
+  const handleDownload = React.useCallback(() => {
+    const content = lines.join('\n');
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+
+    // 파일명 생성
+    const baseName = (fileName || data.fileName || 'gcode').replace(/\.gcode$/i, '');
+    link.download = `${baseName}_modified.gcode`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    // 콜백 호출
+    if (onSaveGCode) {
+      onSaveGCode(content, link.download);
+    }
+  }, [lines, fileName, data.fileName, onSaveGCode]);
+
+  return (
+    <div className="flex-1 flex flex-col h-full">
+      {/* 에디터 헤더 */}
+      <div className={cn(
+        "flex items-center justify-between px-4 py-2 border-b shrink-0",
+        isDarkMode
+          ? "bg-slate-800 border-slate-700"
+          : "bg-slate-100 border-slate-200"
+      )}>
+        <div className="flex items-center gap-2">
+          <FileCode className={cn("w-4 h-4", isDarkMode ? "text-slate-400" : "text-slate-500")} />
+          <span className={cn(
+            "text-sm font-mono",
+            isDarkMode ? "text-slate-300" : "text-slate-700"
+          )}>
+            {isContextMode ? t('gcodeAnalytics.contextView', '컨텍스트 뷰') : (fileName || 'G-code')}
+          </span>
+          {isContextMode && (
+            <Badge variant="outline" className={cn(
+              "text-xs",
+              isDarkMode
+                ? "border-blue-500/50 text-blue-400"
+                : "border-blue-500 text-blue-600"
+            )}>
+              {t('gcodeAnalytics.partialView', '부분 보기')}
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <span className={cn(
+            "text-xs",
+            isDarkMode ? "text-slate-500" : "text-slate-400"
+          )}>
+            {lines.length} {t('gcodeAnalytics.lines', 'lines')}
+          </span>
+          {/* 저장 버튼 - 로컬 변경 또는 전체 패치가 적용된 경우 표시 */}
+          {(hasChanges || globalAppliedCount > 0) && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onSaveModifiedGCode || handleDownload}
+              className={cn(
+                "h-7 text-xs gap-1.5",
+                isDarkMode
+                  ? "border-emerald-600 text-emerald-400 hover:bg-emerald-900/30"
+                  : "border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+              )}
+            >
+              <Download className="w-3.5 h-3.5" />
+              {t('gcodeAnalytics.saveModified', '수정본 저장')}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* 에디터 본문 */}
+      <div
+        ref={scrollContainerRef}
+        className={cn(
+          "flex-1 overflow-auto font-mono text-sm",
+          isDarkMode ? "bg-slate-900" : "bg-white"
+        )}>
+        {lines.map((line, idx) => {
+          // 라인 번호 추출 (컨텍스트 모드에서는 라인에 번호가 포함됨)
+          // 일반 형식: "    678902: G1 X100" (앞에 4칸 공백)
+          // 문제 라인 표시 형식: ">>> 678902: M104 S193.6  <<< [문제 라인]"
+          const normalLineMatch = line.match(/^\s*(\d+):\s*(.*)/);
+          const markedLineMatch = line.match(/^>>>\s*(\d+):\s*(.*?)\s*<<<.*$/);
+
+          const lineNumberMatch = markedLineMatch || normalLineMatch;
+          // G-code 라인 번호 (줄 번호 컬럼에 표시)
+          const gcodeLineNumber = lineNumberMatch ? lineNumberMatch[1] : '';
+          // G-code 명령어만 (코드 내용에 표시)
+          const codeOnly = lineNumberMatch ? lineNumberMatch[2] : line;
+
+          // 문제 라인 마커가 있는지 확인
+          const isMarkedProblemLine = !!markedLineMatch;
+
+          // 수정 대상 라인인지 확인
+          const isFixTargetLine = (fixLineNumber !== undefined && editorFixInfo) &&
+            (parseInt(gcodeLineNumber) === fixLineNumber ||
+             isMarkedProblemLine ||
+             (fixOriginal && codeOnly.trim() === fixOriginal.replace(/^\d+:\s*/, '').trim()));
+
+          // 이미 적용된 라인인지 확인
+          const isAlreadyApplied = appliedFixLines.has(idx);
+
+          const isHovered = hoveredLineIndex === idx;
+
+          return (
+            <React.Fragment key={idx}>
+              {/* 라인 */}
+              <div
+                ref={isFixTargetLine ? targetLineRef : undefined}
+                className={cn(
+                  "flex items-stretch group transition-colors",
+                  isDarkMode
+                    ? "border-b border-slate-800/50"
+                    : "border-b border-slate-100",
+                  isFixTargetLine && !isAlreadyApplied && (isDarkMode
+                    ? "bg-amber-900/20 border-l-2 border-l-amber-500"
+                    : "bg-amber-50 border-l-2 border-l-amber-500"),
+                  isAlreadyApplied && (isDarkMode
+                    ? "bg-emerald-900/20 border-l-2 border-l-emerald-500"
+                    : "bg-emerald-50 border-l-2 border-l-emerald-500"),
+                  isHovered && !isFixTargetLine && (isDarkMode
+                    ? "bg-slate-800/50"
+                    : "bg-slate-50")
+                )}
+                onMouseEnter={() => setHoveredLineIndex(idx)}
+                onMouseLeave={() => setHoveredLineIndex(null)}
+              >
+                {/* 줄 번호 (G-code 원본 라인 번호) */}
+                <div className={cn(
+                  "w-16 min-w-[64px] flex-shrink-0 px-2 py-1 text-right select-none border-r text-xs",
+                  isDarkMode ? "border-slate-700/50" : "border-slate-200",
+                  isFixTargetLine && !isAlreadyApplied
+                    ? (isDarkMode ? "text-amber-400 bg-amber-900/30" : "text-amber-600 bg-amber-100/50")
+                    : isAlreadyApplied
+                      ? (isDarkMode ? "text-emerald-400 bg-emerald-900/30" : "text-emerald-600 bg-emerald-100/50")
+                      : (isDarkMode ? "text-slate-500 bg-slate-800/30" : "text-slate-400 bg-slate-50")
+                )}>
+                  {gcodeLineNumber || (idx + 1)}
+                </div>
+
+                {/* 라인 내용 (순수 G-code 명령어만) */}
+                <div className="flex-1 flex items-center min-w-0">
+                  <div className={cn(
+                    "flex-1 px-3 py-1 whitespace-pre overflow-x-auto",
+                    isFixTargetLine && !isAlreadyApplied && (isDarkMode ? "text-amber-200" : "text-amber-800"),
+                    isAlreadyApplied && (isDarkMode ? "text-emerald-200" : "text-emerald-800")
+                  )}>
+                    {highlightGCode(codeOnly)}
+                  </div>
+                </div>
+              </div>
+
+              {/* 인라인 수정 제안 (해당 라인 바로 아래) - GCodeViewerModal 스타일 */}
+              {isFixTargetLine && editorFixInfo && !isAlreadyApplied && (
+                <div className={cn(
+                  "border-l-4 relative",
+                  isDarkMode
+                    ? "bg-amber-950/20 border-amber-400"
+                    : "bg-amber-50/80 border-amber-400"
+                )}>
+                  {/* 배경 효과 */}
+                  <div className={cn(
+                    "absolute inset-0 backdrop-blur-[1px] pointer-events-none",
+                    isDarkMode ? "bg-slate-800/40" : "bg-white/40"
+                  )} />
+
+                  <div className="flex relative z-10">
+                    {/* 줄 번호 영역 */}
+                    <div className={cn(
+                      "w-16 min-w-[64px] border-r",
+                      isDarkMode ? "border-slate-800 bg-transparent" : "border-slate-100 bg-transparent"
+                    )} />
+
+                    {/* 수정 제안 내용 */}
+                    <div className="flex-1 px-5 py-4">
+                      {/* 패치 헤더 */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className={cn(
+                            "text-[10px] font-bold px-2 py-1 rounded shadow-sm",
+                            isDarkMode
+                              ? "bg-amber-900/40 text-amber-300 border border-amber-800"
+                              : "bg-amber-100 text-amber-700 border border-amber-200"
+                          )}>
+                            수정 예정
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Diff 뷰어 */}
+                      <div className={cn(
+                        "mb-4 rounded-xl overflow-hidden border shadow-sm",
+                        isDarkMode
+                          ? "bg-slate-900 border-slate-800"
+                          : "bg-slate-100 border-slate-200"
+                      )}>
+                        {/* 원본 코드 (Before) */}
+                        <div className={cn(
+                          "border-b",
+                          isDarkMode ? "border-slate-800" : "border-slate-200"
+                        )}>
+                          <div className={cn(
+                            "px-3 py-1.5 flex items-center justify-between border-b",
+                            isDarkMode
+                              ? "bg-slate-800/50 border-slate-700/50"
+                              : "bg-slate-50 border-slate-100"
+                          )}>
+                            <div className={cn(
+                              "text-[10px] font-bold uppercase flex items-center gap-1.5",
+                              isDarkMode ? "text-slate-400" : "text-slate-500"
+                            )}>
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                              Before (Line {fixLineNumber})
+                            </div>
+                          </div>
+                          <div className="font-mono text-xs p-3">
+                            <div className={cn(
+                              "px-3 py-1 rounded border flex items-center gap-2",
+                              isDarkMode
+                                ? "bg-rose-950/40 text-rose-300 border-rose-900/50"
+                                : "bg-rose-50 text-rose-700 border-rose-100"
+                            )}>
+                              <span className="text-rose-400 select-none">-</span>
+                              {highlightGCode(fixOriginal?.replace(/^\d+:\s*/, '') || '')}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 패치 후 코드 (After) */}
+                        <div>
+                          <div className={cn(
+                            "px-3 py-1.5 flex items-center justify-between border-b",
+                            isDarkMode
+                              ? "bg-slate-800/50 border-slate-700/50"
+                              : "bg-slate-50 border-slate-100"
+                          )}>
+                            <div className={cn(
+                              "text-[10px] font-bold uppercase flex items-center gap-1.5",
+                              isDarkMode ? "text-slate-400" : "text-slate-500"
+                            )}>
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              After
+                            </div>
+                          </div>
+                          <div className={cn(
+                            "font-mono text-xs p-3",
+                            isDarkMode ? "bg-slate-800/50" : "bg-white"
+                          )}>
+                            <div className={cn(
+                              "px-3 py-1 rounded border flex items-center gap-2 transition-all",
+                              isDarkMode
+                                ? "bg-amber-950/40 text-amber-100 border-amber-800"
+                                : "bg-amber-50 text-amber-900 border-amber-200"
+                            )}>
+                              <span className="text-amber-500 font-bold select-none">~</span>
+                              {highlightGCode(fixFixed?.replace(/^\d+:\s*/, '') || '')}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 패치 적용 버튼 */}
+                      <div className="flex items-center justify-end">
+                        <Button
+                          size="sm"
+                          onClick={() => handleApplyFix(idx)}
+                          className="font-bold bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-lg shadow-indigo-500/20 px-6"
+                        >
+                          <Zap className="h-4 w-4 mr-2 fill-current" />
+                          이 패치 적용하기
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
 // 컴포넌트 Props
 // ============================================================================
+
+// 패널 탭 타입
+export type ReportPanelTab = 'report' | 'viewer' | 'editor';
+
+// AI 해결 시작 정보 (사용자 질문 메시지용)
+export interface AIResolveStartInfo {
+  issueTitle: string;
+  issueSeverity: string;
+  issueDescription: string;
+  issueLine?: number | string;
+}
+
+// AI 해결 완료 정보 (AI 응답 메시지용)
+export interface AIResolveCompleteInfo {
+  resolution: import('@/lib/api/gcode').IssueResolveResponse;
+  gcodeContext?: string;  // AI 해결 요청 시 사용된 gcode_context
+  reportId?: string;      // 분석 보고서 ID (DB 저장용)
+}
 
 interface GCodeAnalysisReportProps {
   data: GCodeAnalysisData;
   className?: string;
+  onClose?: () => void;
+  embedded?: boolean; // 인라인 카드 모드 (채팅 내 임베드)
+  // 패널 탭 관련 (embedded 모드에서 사용)
+  activeTab?: ReportPanelTab;
+  onTabChange?: (tab: ReportPanelTab) => void;
+  // AI 해결 콜백 (채팅 메시지로 추가)
+  onAIResolveStart?: (info: AIResolveStartInfo) => void;  // 시작 시 (사용자 질문 + 로딩)
+  onAIResolveComplete?: (info: AIResolveCompleteInfo) => void;  // 완료 시 (AI 응답)
+  onAIResolveError?: (error: string) => void;  // 에러 시
+  isAIResolving?: boolean;  // AI 응답 대기 중 (버튼 비활성화용)
+  jumpToLine?: number;  // 에디터에서 특정 라인으로 점프
+  editorContent?: string;  // 에디터에 표시할 G-code 컨텍스트 (외부에서 설정 시 전체 파일 대신 표시)
+  editorLoading?: boolean;  // 에디터 컨텍스트 로딩 중
+  // 에디터 수정 기능
+  editorFixInfo?: {
+    lineNumber: number;
+    original: string;  // "678902: M104 S193.6" 형식
+    fixed: string;     // "678902: M104 S200" 형식
+    description?: string;
+  };
+  onEditorApplyFix?: (lineNumber: number, originalCode: string, fixedCode: string, newContent: string) => void;
+  // 되돌리기 기능
+  revertLineNumber?: number;
+  onRevertComplete?: () => void;
+  // 전체 패치 카운트 (저장 버튼 표시용)
+  appliedPatchCount?: number;
+  // 수정된 G-code 저장 콜백
+  onSaveModifiedGCode?: () => void;
 }
 
 import { updateGCodeFileContent } from '@/lib/gcodeAnalysisDbService';
@@ -466,13 +1130,193 @@ import { updateGCodeFileContent } from '@/lib/gcodeAnalysisDbService';
 export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   data,
   className,
+  onClose,
+  embedded = false,
+  activeTab: externalActiveTab,
+  onTabChange,
+  onAIResolveStart,
+  onAIResolveComplete,
+  onAIResolveError,
+  isAIResolving = false,
+  jumpToLine: externalJumpToLine,
+  editorContent: externalEditorContent,
+  editorLoading: externalEditorLoading = false,
+  editorFixInfo,
+  onEditorApplyFix,
+  revertLineNumber,
+  onRevertComplete,
+  appliedPatchCount = 0,
+  onSaveModifiedGCode,
 }) => {
   const { t } = useTranslation();
+  const { toast } = useToast();
+  const { theme, resolvedTheme } = useTheme();
+  const isDarkMode = theme === 'dark' || resolvedTheme === 'dark';
   const { metrics, support, speedDistribution, temperature, analysis, overallScore } = data;
   const reportRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<'info' | 'issues' | 'optimization'>('info');
   const [expandedIssueIndices, setExpandedIssueIndices] = useState<Set<number>>(new Set([0])); // 첫 번째 이슈는 기본 펼침
   const [isViewerOpen, setIsViewerOpen] = useState(false);
+
+  // 내부 패널 탭 상태 (non-embedded 모드용)
+  const [internalPanelTab, setInternalPanelTab] = useState<ReportPanelTab>('report');
+  // 실제 사용할 패널 탭 (embedded면 외부, 아니면 내부 상태)
+  const currentPanelTab = embedded ? (externalActiveTab || 'report') : internalPanelTab;
+  // 탭 변경 핸들러
+  const handlePanelTabChange = (tab: ReportPanelTab) => {
+    if (embedded && onTabChange) {
+      onTabChange(tab);
+    } else {
+      setInternalPanelTab(tab);
+    }
+  };
+
+  // 3D 뷰어 상태
+  const [viewerLoading, setViewerLoading] = useState(false);
+  const [viewerError, setViewerError] = useState<string | null>(null);
+  const [segmentLayers, setSegmentLayers] = useState<LayerSegmentData[] | null>(null);
+  const [segmentMetadata, setSegmentMetadata] = useState<SegmentMetadata | null>(null);
+  const [segmentTemperatures, setSegmentTemperatures] = useState<TemperatureData[]>([]);
+  const [currentLayer, setCurrentLayer] = useState(0);
+  const [showExtrusionPath, setShowExtrusionPath] = useState(true);
+  const [showTravelPath, setShowTravelPath] = useState(true);
+  const [showWipePath, setShowWipePath] = useState(true);
+  const [showSupports, setShowSupports] = useState(true);
+  const [showTemperatureChart, setShowTemperatureChart] = useState(true); // 온도 차트 표시
+  const [segmentLoadAttempted, setSegmentLoadAttempted] = useState(false); // 로드 시도 여부
+
+  // 에디터 G-code 상태 (data.gcodeContent 또는 externalEditorContent가 우선)
+  const [editorGcodeContent, setEditorGcodeContent] = useState<string | null>(null);
+
+  // 에디터 탭 라인 점프 상태
+  const [jumpToLine, setJumpToLine] = useState<number | null>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+
+  // 온도 차트 데이터 생성
+  const temperatureChartData = useMemo(() => {
+    if (!segmentTemperatures || segmentTemperatures.length === 0 || !segmentMetadata) return [];
+
+    // 전체 레이어에 대한 온도 데이터 생성
+    const chartData: { layer: number; nozzle: number | null; bed: number | null }[] = [];
+
+    for (let i = 0; i < segmentMetadata.layerCount; i++) {
+      const layerNum = i + 1;
+      // 해당 레이어 이하에서 가장 가까운 온도 데이터 찾기
+      const temp = [...segmentTemperatures]
+        .filter(t => t.layer <= layerNum)
+        .sort((a, b) => b.layer - a.layer)[0];
+
+      chartData.push({
+        layer: layerNum,
+        nozzle: temp?.nozzleTemp ?? null,
+        bed: temp?.bedTemp ?? null,
+      });
+    }
+
+    return chartData;
+  }, [segmentTemperatures, segmentMetadata]);
+
+  // 뷰어 탭 활성화 시 세그먼트 데이터 로드
+  useEffect(() => {
+    if (currentPanelTab === 'viewer' && data.reportId && !segmentLayers && !viewerLoading && !segmentLoadAttempted) {
+      loadSegmentData();
+    }
+  }, [currentPanelTab, data.reportId, segmentLayers, viewerLoading, segmentLoadAttempted]);
+
+  // 에디터 탭은 externalEditorContent (gcode_context)만 사용
+  // 전체 G-code(data.gcodeContent)는 에디터에 로드하지 않음 (성능 문제)
+  // data.gcodeContent는 수정본 저장 기능에서만 백엔드에서 사용
+
+  // 외부에서 전달된 editorContent가 변경되면 로그 출력 (디버깅용)
+  useEffect(() => {
+    if (externalEditorContent) {
+      console.log('[GCodeAnalysisReport] External editorContent changed, length:', externalEditorContent.length);
+    }
+  }, [externalEditorContent]);
+
+  // 외부에서 전달된 jumpToLine prop이 변경되면 내부 상태 업데이트
+  useEffect(() => {
+    if (externalJumpToLine !== undefined && externalJumpToLine !== null) {
+      console.log('[GCodeAnalysisReport] External jumpToLine changed:', externalJumpToLine);
+      setJumpToLine(externalJumpToLine);
+    }
+  }, [externalJumpToLine]);
+
+  // 이슈 클릭 시 에디터 탭으로 이동하고 해당 라인으로 스크롤
+  const handleIssueClickToEditor = (lineNumber: number | string | undefined) => {
+    if (!lineNumber) return;
+
+    const targetLine = typeof lineNumber === 'string' ? parseInt(lineNumber, 10) : lineNumber;
+    if (isNaN(targetLine) || targetLine <= 0) return;
+
+    console.log('[GCodeAnalysisReport] Issue clicked, jumping to line:', targetLine);
+
+    // 에디터 탭으로 전환
+    if (onTabChange) {
+      onTabChange('editor');
+    }
+
+    // 라인 점프 예약 (useEffect에서 처리)
+    setJumpToLine(targetLine);
+  };
+
+  // 에디터 탭에서 라인 점프 처리
+  useEffect(() => {
+    if (jumpToLine && currentPanelTab === 'editor' && (externalEditorContent || editorGcodeContent)) {
+      // 약간의 딜레이 후 스크롤 (렌더링 완료 대기)
+      const timer = setTimeout(() => {
+        const lineElement = document.getElementById(`gcode-line-${jumpToLine}`);
+        if (lineElement) {
+          lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // 하이라이트 효과 (깜빡임)
+          lineElement.classList.add('animate-pulse', 'bg-yellow-500/30');
+          setTimeout(() => {
+            lineElement.classList.remove('animate-pulse', 'bg-yellow-500/30');
+          }, 2000);
+        }
+        setJumpToLine(null);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [jumpToLine, currentPanelTab, externalEditorContent, editorGcodeContent]);
+
+  // 에디터 모달 열기 (스토리지 다운로드 로직 삭제됨 - externalEditorContent 사용)
+  const handleOpenEditor = () => {
+    setIsViewerOpen(true);
+  };
+
+  const loadSegmentData = async () => {
+    if (!data.reportId) return;
+
+    setViewerLoading(true);
+    setViewerError(null);
+    setSegmentLoadAttempted(true); // 로드 시도 표시 (무한 루프 방지)
+
+    try {
+      const { data: segmentData, error } = await loadFullSegmentDataByReportId(data.reportId);
+
+      if (error) {
+        console.error('[GCodeAnalysisReport] Segment load error:', error);
+        setViewerError(t('gcodeAnalytics.segmentLoadError', '3D 데이터를 불러오는데 실패했습니다'));
+        return;
+      }
+
+      if (!segmentData) {
+        setViewerError(t('gcodeAnalytics.noSegmentData', '3D 시각화 데이터가 없습니다. G-code를 다시 분석해주세요.'));
+        return;
+      }
+
+      setSegmentLayers(segmentData.layers);
+      setSegmentMetadata(segmentData.metadata);
+      setSegmentTemperatures(segmentData.temperatures);
+      setCurrentLayer(segmentData.metadata.layerCount - 1); // 마지막 레이어로 초기화
+    } catch (err) {
+      console.error('[GCodeAnalysisReport] Segment load exception:', err);
+      setViewerError(String(err));
+    } finally {
+      setViewerLoading(false);
+    }
+  };
 
   // JSON 다운로드 함수
   const handleDownloadJSON = () => {
@@ -493,27 +1337,33 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   // G-code 저장 핸들러
   const handleSaveGCode = async (newContent: string) => {
     if (!data.storagePath) {
-      console.error('No storage path available for saving');
-      alert(t('gcodeAnalytics.noStoragePath'));
+      console.error('[GCodeAnalysisReport] No storage path available for saving');
+      toast({
+        title: t('gcodeAnalytics.error', '오류'),
+        description: t('gcodeAnalytics.noStoragePath', '저장 경로가 없습니다.'),
+        variant: 'destructive',
+      });
       return;
     }
 
     try {
       const { error } = await updateGCodeFileContent(data.storagePath, newContent);
       if (error) {
-        console.error('Failed to save G-code:', error);
-        alert(t('gcodeAnalytics.saveError') + ': ' + error.message);
+        console.error('[GCodeAnalysisReport] Failed to save G-code:', error);
+        toast({
+          title: t('gcodeAnalytics.saveError', '저장 실패'),
+          description: error.message,
+          variant: 'destructive',
+        });
         throw error;
       }
 
-      // 성공 시 페이지를 새로고침하거나 상태를 업데이트해야 함
-      // 지금은 간단히 알림만 표시
-      alert(t('gcodeAnalytics.gcodeModified'));
-
-      // data.gcodeContent를 업데이트 (SWR 등의 갱신이 없으면 로컬 상태 업데이트는 복잡할 수 있음)
-      // 상위 컴포넌트에서 데이터를 다시 불러오는 것이 가장 좋음
+      toast({
+        title: t('gcodeAnalytics.saveSuccess', '저장 완료'),
+        description: t('gcodeAnalytics.gcodeModified', 'G-code가 수정되었습니다.'),
+      });
     } catch (e) {
-      console.error(e);
+      console.error('[GCodeAnalysisReport] Save exception:', e);
     }
   };
 
@@ -521,15 +1371,20 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   const handleDownloadCSV = () => {
     const issues = data.detailedAnalysis?.detailedIssues || [];
     if (issues.length === 0) {
-      alert(t('gcodeAnalytics.noIssuesToExport'));
+      toast({
+        title: t('gcodeAnalytics.noData', '데이터 없음'),
+        description: t('gcodeAnalytics.noIssuesToExport', '내보낼 이슈가 없습니다.'),
+        variant: 'destructive',
+      });
       return;
     }
 
     const headers = [t('gcodeAnalytics.issueType'), t('gcodeAnalytics.severity'), t('gcodeAnalytics.lineNumber'), t('gcodeAnalytics.description'), t('gcodeAnalytics.impact'), t('gcodeAnalytics.suggestion')];
     const rows = issues.map(issue => [
-      issue.issueType,
+      issue.type || issue.issueType || '',
       issue.severity,
-      issue.line || issue.line_index || 'N/A',
+      // 새 구조: lines 배열 사용, 레거시 폴백
+      issue.lines?.length > 0 ? issue.lines.join(', ') : (issue.line || issue.line_index || 'N/A'),
       `"${(issue.description || '').replace(/"/g, '""')}"`,
       `"${(issue.impact || '').replace(/"/g, '""')}"`,
       `"${(issue.suggestion || '').replace(/"/g, '""')}"`,
@@ -1144,31 +1999,77 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
       printWindow.document.close();
     } else {
       // 팝업이 차단된 경우 대체 방법
-      alert(t('gcodeAnalytics.popupBlocked'));
+      toast({
+        title: t('gcodeAnalytics.printError', '인쇄 오류'),
+        description: t('gcodeAnalytics.popupBlocked', '팝업이 차단되었습니다. 팝업 차단을 해제해주세요.'),
+        variant: 'destructive',
+      });
     }
   };
 
   return (
     <div className={cn(
-      "bg-white dark:bg-slate-950 text-slate-900 dark:text-white rounded-2xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800 gcode-report-print",
+      "bg-white dark:bg-slate-950 text-slate-900 dark:text-white overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800 gcode-report-print flex flex-col",
+      embedded ? "rounded-none border-0 h-full" : "rounded-2xl h-full",
       className
     )}>
-      {/* 인쇄 버튼 - 헤더 외부에 고정 (인쇄 시 숨김) */}
-      <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700/50 px-4 py-2 flex justify-between gap-2 no-print">
-        {/* 왼쪽: G-code 보기 버튼 */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setIsViewerOpen(true)}
-          className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-white"
-          title={t('gcodeAnalytics.viewGcode')}
-        >
-          <FileCode className="h-4 w-4 mr-2" />
-          {t('gcodeAnalytics.viewGcode')}
-        </Button>
+      {/* 상단 헤더 - 탭 + 버튼들 (인쇄 시 숨김) */}
+      <div className={cn(
+        "sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700/50 px-4 py-2 no-print",
+        embedded && "py-1.5"
+      )}>
+        {/* embedded 모드: 탭 토글 + G-code 보기 버튼 */}
+        {/* 통일된 헤더: 탭 + 오른쪽 버튼 */}
+        <div className="flex items-center justify-between gap-2">
+          {/* 왼쪽: 탭 토글 */}
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-full p-1 border border-slate-200 dark:border-slate-700">
+            {[
+              { key: 'report' as ReportPanelTab, label: t('gcodeAnalytics.tabReport', '보고서') },
+              { key: 'viewer' as ReportPanelTab, label: t('gcodeAnalytics.tabViewer', '뷰어') },
+              { key: 'editor' as ReportPanelTab, label: t('gcodeAnalytics.tabEditor', '에디터') },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => handlePanelTabChange(tab.key)}
+                className={cn(
+                  "px-4 py-1.5 text-sm font-medium rounded-full transition-colors",
+                  currentPanelTab === tab.key
+                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-        {/* Viewer Modal */}
-        {data.gcodeContent && (
+          {/* 오른쪽: 인쇄 버튼 + 닫기 버튼 */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handlePrint}
+              className="h-8 px-3 rounded-full text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+              title={t('gcodeAnalytics.printPdf')}
+            >
+              <Printer className="h-4 w-4" />
+            </Button>
+            {onClose && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                className="h-8 px-3 rounded-full text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+                title={t('common.close')}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Viewer Modal - data.gcodeContent 또는 editorGcodeContent가 있을 때 */}
+        {(data.gcodeContent || editorGcodeContent) && (
           <GCodeViewerModal
             isOpen={isViewerOpen}
             onClose={() => {
@@ -1176,31 +2077,478 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
               setIsViewerOpen(false);
             }}
             fileName={data.fileName || 'Unknown.gcode'}
-            gcodeContent={data.gcodeContent}
+            gcodeContent={data.gcodeContent || editorGcodeContent || ''}
             issues={data.detailedAnalysis?.detailedIssues || []}
             patches={data.detailedAnalysis?.patchSuggestions || []}
             reportId={data.reportId}
             metrics={data.metrics}
           />
         )}
-
-        {/* 오른쪽: 인쇄 버튼 */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handlePrint}
-          className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-white"
-          title={t('gcodeAnalytics.printPdf')}
-        >
-          <Printer className="h-4 w-4 mr-2" />
-          {t('gcodeAnalytics.printPdf')}
-        </Button>
       </div>
 
-      {/* 보고서 내용 - PDF 캡처 대상 */}
+      {/* 탭에 따른 컨텐츠 영역 */}
+      {/* 뷰어 탭 - 3D G-code 시각화 */}
+      {currentPanelTab === 'viewer' && (
+        <div className={cn(
+          "flex-1 flex flex-col overflow-hidden min-h-[400px]",
+          isDarkMode ? "bg-slate-900" : "bg-slate-100"
+        )}>
+          {/* 로딩 상태 */}
+          {viewerLoading && (
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
+              <p className={cn(
+                "text-sm",
+                isDarkMode ? "text-slate-400" : "text-slate-600"
+              )}>{t('gcodeAnalytics.loadingViewer', '3D 뷰어 로딩 중...')}</p>
+            </div>
+          )}
+
+          {/* 에러 상태 */}
+          {viewerError && !viewerLoading && (
+            <div className="flex-1 flex flex-col items-center justify-center p-8">
+              <div className={cn(
+                "w-16 h-16 rounded-full flex items-center justify-center mb-6",
+                isDarkMode ? "bg-slate-800" : "bg-slate-200"
+              )}>
+                <FileCode className={cn(
+                  "w-8 h-8",
+                  isDarkMode ? "text-slate-500" : "text-slate-400"
+                )} />
+              </div>
+              <h3 className={cn(
+                "text-lg font-semibold mb-2",
+                isDarkMode ? "text-white" : "text-slate-900"
+              )}>
+                {t('gcodeAnalytics.viewerError', '뷰어 로드 실패')}
+              </h3>
+              <p className={cn(
+                "text-sm text-center max-w-md",
+                isDarkMode ? "text-slate-400" : "text-slate-600"
+              )}>{viewerError}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => {
+                  setSegmentLoadAttempted(false); // 재시도 허용
+                  loadSegmentData();
+                }}
+              >
+                {t('common.retry', '다시 시도')}
+              </Button>
+            </div>
+          )}
+
+          {/* 3D 뷰어 */}
+          {segmentLayers && segmentMetadata && !viewerLoading && !viewerError && (
+            <>
+              {/* 3D Canvas */}
+              <div className="flex-1 relative">
+                <Canvas
+                  camera={{
+                    position: [
+                      segmentMetadata.boundingBox.maxX,
+                      segmentMetadata.boundingBox.maxZ * 1.5,
+                      segmentMetadata.boundingBox.maxY * 1.5
+                    ],
+                    fov: 50,
+                    near: 0.1,
+                    far: 10000,
+                  }}
+                  gl={{ antialias: true, alpha: true }}
+                >
+                  <color attach="background" args={[isDarkMode ? '#0f172a' : '#f1f5f9']} />
+                  <ambientLight intensity={0.6} />
+                  <directionalLight position={[10, 20, 10]} intensity={0.8} />
+
+                  {/* 베드 플레이트 */}
+                  <mesh
+                    rotation={[-Math.PI / 2, 0, 0]}
+                    position={[
+                      segmentMetadata.boundingBox.maxX / 2,
+                      0,
+                      segmentMetadata.boundingBox.maxY / 2
+                    ]}
+                    receiveShadow
+                  >
+                    <planeGeometry args={[
+                      segmentMetadata.boundingBox.maxX,
+                      segmentMetadata.boundingBox.maxY
+                    ]} />
+                    <meshStandardMaterial color={isDarkMode ? "#1e293b" : "#e2e8f0"} transparent opacity={0.8} />
+                  </mesh>
+
+                  {/* 그리드 */}
+                  <gridHelper
+                    args={[
+                      Math.max(segmentMetadata.boundingBox.maxX, segmentMetadata.boundingBox.maxY),
+                      20,
+                      isDarkMode ? '#334155' : '#cbd5e1',
+                      isDarkMode ? '#1e293b' : '#e2e8f0'
+                    ]}
+                    position={[
+                      segmentMetadata.boundingBox.maxX / 2,
+                      0.01,
+                      segmentMetadata.boundingBox.maxY / 2
+                    ]}
+                  />
+
+                  {/* G-code 경로 */}
+                  <GCodePath3DFromAPI
+                    layers={segmentLayers}
+                    maxLayer={currentLayer}
+                    isDarkMode={isDarkMode}
+                    showExtrusionPath={showExtrusionPath}
+                    showTravelPath={showTravelPath}
+                    showWipePath={showWipePath}
+                    showSupports={showSupports}
+                  />
+
+                  <OrbitControls
+                    enableDamping
+                    dampingFactor={0.05}
+                    target={[
+                      segmentMetadata.boundingBox.maxX / 2,
+                      segmentMetadata.boundingBox.maxZ / 2,
+                      segmentMetadata.boundingBox.maxY / 2
+                    ]}
+                  />
+                </Canvas>
+
+                {/* 오버레이 컨트롤 - 좌측 상단 (경로 타입 토글) */}
+                <div className="absolute top-3 left-3 flex flex-col gap-2">
+                  <div className="bg-slate-800/90 backdrop-blur rounded-lg p-2 flex flex-col gap-1.5">
+                    {/* Extrusion 토글 */}
+                    <button
+                      onClick={() => setShowExtrusionPath(!showExtrusionPath)}
+                      className={cn(
+                        "flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors",
+                        showExtrusionPath ? "bg-emerald-600/30 text-emerald-400" : "text-slate-400 hover:bg-slate-700"
+                      )}
+                    >
+                      {showExtrusionPath ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                      <span>Extrusion</span>
+                    </button>
+                    {/* Travel 토글 */}
+                    <button
+                      onClick={() => setShowTravelPath(!showTravelPath)}
+                      className={cn(
+                        "flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors",
+                        showTravelPath ? "bg-cyan-600/30 text-cyan-400" : "text-slate-400 hover:bg-slate-700"
+                      )}
+                    >
+                      {showTravelPath ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                      <span>Travel</span>
+                    </button>
+                    {/* Wipe 토글 */}
+                    {segmentLayers.some(l => l.wipeData && l.wipeCount && l.wipeCount > 0) && (
+                      <button
+                        onClick={() => setShowWipePath(!showWipePath)}
+                        className={cn(
+                          "flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors",
+                          showWipePath ? "bg-purple-600/30 text-purple-400" : "text-slate-400 hover:bg-slate-700"
+                        )}
+                      >
+                        {showWipePath ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                        <span>Wipe</span>
+                      </button>
+                    )}
+                    {/* Support 토글 */}
+                    {segmentLayers.some(l => l.supportData && l.supportCount && l.supportCount > 0) && (
+                      <button
+                        onClick={() => setShowSupports(!showSupports)}
+                        className={cn(
+                          "flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors",
+                          showSupports ? "bg-amber-600/30 text-amber-400" : "text-slate-400 hover:bg-slate-700"
+                        )}
+                      >
+                        {showSupports ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                        <span>Support</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 하단 레이어 컨트롤 */}
+              <div className="bg-slate-800/95 backdrop-blur border-t border-slate-700 p-3">
+                <div className="flex items-center gap-3">
+                  {/* 레이어 이동 버튼 */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-slate-700"
+                    onClick={() => setCurrentLayer(Math.max(0, currentLayer - 1))}
+                    disabled={currentLayer === 0}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+
+                  {/* 레이어 슬라이더 */}
+                  <div className="flex-1 flex items-center gap-3">
+                    <span className="text-xs text-slate-400 whitespace-nowrap">
+                      {t('gcodeAnalytics.layer', '레이어')}: {currentLayer + 1} / {segmentMetadata.layerCount}
+                    </span>
+                    <Slider
+                      value={[currentLayer]}
+                      min={0}
+                      max={segmentMetadata.layerCount - 1}
+                      step={1}
+                      onValueChange={([val]) => setCurrentLayer(val)}
+                      className="flex-1"
+                    />
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-slate-700"
+                    onClick={() => setCurrentLayer(Math.min(segmentMetadata.layerCount - 1, currentLayer + 1))}
+                    disabled={currentLayer === segmentMetadata.layerCount - 1}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                {/* 레이어 정보 */}
+                <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
+                  <div className="flex items-center gap-4">
+                    <span>Z: {segmentLayers[currentLayer]?.z?.toFixed(2) || 0}mm</span>
+                    <span>H: {segmentMetadata.layerHeight}mm</span>
+                    {segmentMetadata.estimatedTime && (
+                      <span>{t('gcodeAnalytics.estimatedTime', '예상 시간')}: {segmentMetadata.estimatedTime}</span>
+                    )}
+                  </div>
+                  {/* 온도 정보 + 차트 토글 */}
+                  <div className="flex items-center gap-3">
+                    {segmentTemperatures.length > 0 && (() => {
+                      // 현재 레이어 이하에서 가장 가까운 온도 데이터 찾기
+                      const currentLayerNum = currentLayer + 1;
+                      const temp = [...segmentTemperatures]
+                        .filter(t => t.layer <= currentLayerNum)
+                        .sort((a, b) => b.layer - a.layer)[0];
+                      if (!temp) return null;
+                      return (
+                        <>
+                          {temp.nozzleTemp !== null && (
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-red-500" />
+                              <span>{t('gcodeAnalytics.nozzle', '노즐')}: {temp.nozzleTemp}°C</span>
+                            </span>
+                          )}
+                          {temp.bedTemp !== null && (
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-orange-500" />
+                              <span>{t('gcodeAnalytics.bed', '베드')}: {temp.bedTemp}°C</span>
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
+                    {/* 온도 차트 토글 버튼 */}
+                    {temperatureChartData.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-slate-400 hover:text-white"
+                        onClick={() => setShowTemperatureChart(!showTemperatureChart)}
+                      >
+                        <TrendingUp className="w-3 h-3 mr-1" />
+                        {showTemperatureChart ? t('common.hide', '숨기기') : t('common.show', '보기')}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 온도 차트 섹션 */}
+              {showTemperatureChart && temperatureChartData.length > 0 && (
+                <div className="bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-slate-700 dark:text-slate-300" />
+                      <span className="text-sm font-medium text-slate-900 dark:text-white">
+                        {t('gcodeAnalytics.temperatureByLayer', '레이어별 온도 변화')}
+                      </span>
+                    </div>
+                    {/* 온도 범례 */}
+                    <div className="flex items-center gap-4 text-xs">
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-[2px] bg-red-500 rounded" />
+                        <span className="text-slate-700 dark:text-slate-300">{t('gcodeAnalytics.nozzle', '노즐')}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-[2px] bg-orange-500 rounded" />
+                        <span className="text-slate-700 dark:text-slate-300">{t('gcodeAnalytics.bed', '베드')}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="h-[120px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={temperatureChartData}
+                        margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke={resolvedTheme === 'dark' ? '#374151' : '#e5e7eb'}
+                          vertical={false}
+                        />
+                        <XAxis
+                          dataKey="layer"
+                          tick={{ fontSize: 10, fill: resolvedTheme === 'dark' ? '#9ca3af' : '#6b7280' }}
+                          axisLine={{ stroke: resolvedTheme === 'dark' ? '#4b5563' : '#d1d5db' }}
+                          tickLine={false}
+                          interval="preserveStartEnd"
+                          tickFormatter={(value) => `L${value}`}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 10, fill: resolvedTheme === 'dark' ? '#9ca3af' : '#6b7280' }}
+                          axisLine={{ stroke: resolvedTheme === 'dark' ? '#4b5563' : '#d1d5db' }}
+                          tickLine={false}
+                          width={35}
+                          domain={['auto', 'auto']}
+                          tickFormatter={(value) => `${value}°`}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: resolvedTheme === 'dark' ? '#1f2937' : '#ffffff',
+                            border: `1px solid ${resolvedTheme === 'dark' ? '#374151' : '#e5e7eb'}`,
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                          }}
+                          labelStyle={{ color: resolvedTheme === 'dark' ? '#f3f4f6' : '#111827' }}
+                          formatter={(value: number, name: string) => [
+                            `${value}°C`,
+                            name === 'nozzle' ? t('gcodeAnalytics.nozzle', '노즐') : t('gcodeAnalytics.bed', '베드')
+                          ]}
+                          labelFormatter={(label) => `${t('gcodeAnalytics.layer', '레이어')} ${label}`}
+                        />
+                        {/* 현재 레이어 위치 표시 */}
+                        <ReferenceLine
+                          x={currentLayer + 1}
+                          stroke={resolvedTheme === 'dark' ? '#60a5fa' : '#3b82f6'}
+                          strokeWidth={2}
+                          strokeDasharray="4 4"
+                        />
+                        <Line
+                          type="stepAfter"
+                          dataKey="nozzle"
+                          stroke="#ef4444"
+                          strokeWidth={2}
+                          dot={false}
+                          activeDot={{ r: 4, fill: '#ef4444' }}
+                          connectNulls
+                        />
+                        <Line
+                          type="stepAfter"
+                          dataKey="bed"
+                          stroke="#f97316"
+                          strokeWidth={2}
+                          dot={false}
+                          activeDot={{ r: 4, fill: '#f97316' }}
+                          connectNulls
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* 에디터 탭 - G-code 편집기 */}
+      {currentPanelTab === 'editor' && (
+        <div className={cn(
+          "flex-1 flex flex-col overflow-hidden",
+          isDarkMode ? "bg-slate-900" : "bg-slate-50"
+        )}>
+          {/* 로딩 상태 */}
+          {externalEditorLoading && (
+            <div className="flex-1 flex flex-col items-center justify-center p-8">
+              <div className={cn(
+                "w-16 h-16 rounded-full flex items-center justify-center mb-6",
+                isDarkMode ? "bg-slate-800" : "bg-slate-200"
+              )}>
+                <Loader2 className={cn(
+                  "w-8 h-8 animate-spin",
+                  isDarkMode ? "text-blue-400" : "text-blue-600"
+                )} />
+              </div>
+              <h3 className={cn(
+                "text-lg font-semibold mb-2",
+                isDarkMode ? "text-white" : "text-slate-900"
+              )}>
+                {t('gcodeAnalytics.loadingContext', '코드 컨텍스트 로딩 중...')}
+              </h3>
+              <p className={cn(
+                "text-sm text-center max-w-md",
+                isDarkMode ? "text-slate-400" : "text-slate-500"
+              )}>
+                {t('gcodeAnalytics.loadingContextDesc', '잠시만 기다려주세요.')}
+              </p>
+            </div>
+          )}
+
+          {/* G-code 컨텍스트 없음 상태 - 이슈 유무에 따라 다른 메시지 표시 */}
+          {!externalEditorLoading && !externalEditorContent && !editorGcodeContent && (
+            <div className="flex-1 flex flex-col items-center justify-center p-8">
+              <div className={cn(
+                "w-16 h-16 rounded-full flex items-center justify-center mb-6",
+                isDarkMode ? "bg-slate-800" : "bg-slate-200"
+              )}>
+                <FileCode className={cn(
+                  "w-8 h-8",
+                  isDarkMode ? "text-slate-500" : "text-slate-400"
+                )} />
+              </div>
+              <h3 className={cn(
+                "text-lg font-semibold mb-2",
+                isDarkMode ? "text-white" : "text-slate-900"
+              )}>
+                {t('gcodeAnalytics.noContextSelected', '코드 컨텍스트 없음')}
+              </h3>
+              <p className={cn(
+                "text-sm text-center max-w-md",
+                isDarkMode ? "text-slate-400" : "text-slate-500"
+              )}>
+                {(data.detailedAnalysis?.detailedIssues?.length ?? 0) > 0
+                  ? t('gcodeAnalytics.selectIssueCard', '보고서 탭 > 문제점 > AI 해결하기를 통해 수정할 문제를 선택해주세요.')
+                  : t('gcodeAnalytics.noIssuesFound', '발견된 이슈가 없습니다.')}
+              </p>
+            </div>
+          )}
+
+          {/* G-code 에디터 - 카드 클릭으로 컨텍스트가 설정된 경우에만 표시 (전체 G-code는 표시하지 않음) */}
+          {!externalEditorLoading && (externalEditorContent || editorGcodeContent) && (
+            <EmbeddedGCodeEditor
+              displayContent={externalEditorContent || editorGcodeContent || ''}
+              isContextMode={!!externalEditorContent}
+              editorFixInfo={editorFixInfo}
+              onEditorApplyFix={onEditorApplyFix}
+              revertLineNumber={revertLineNumber}
+              onRevertComplete={onRevertComplete}
+              globalAppliedCount={appliedPatchCount}
+              onSaveModifiedGCode={onSaveModifiedGCode}
+              data={data}
+              fileName={data.fileName}
+            />
+          )}
+        </div>
+      )}
+
+      {/* 보고서 내용 - PDF 캡처 대상 (report 탭일 때) */}
+      {currentPanelTab === 'report' && (
+      <ScrollArea className="flex-1 overflow-auto">
       <div ref={reportRef}>
         {/* 헤더 - Premium Gradient Design */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-800 dark:from-slate-950 dark:to-slate-900 text-white px-8 py-10">
+        <div className={cn(
+          "relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-800 dark:from-slate-950 dark:to-slate-900 text-white",
+          embedded ? "px-5 py-6" : "px-8 py-10"
+        )}>
           {/* Background decoration */}
           <div className="absolute top-0 right-0 p-10 opacity-10 pointer-events-none">
             <Target className="w-64 h-64" />
@@ -1218,7 +2566,10 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                   </span>
                 )}
               </div>
-              <h1 className="text-3xl lg:text-4xl font-title font-bold tracking-tight text-white drop-shadow-sm">
+              <h1 className={cn(
+                "font-title font-bold tracking-tight text-white drop-shadow-sm",
+                embedded ? "text-2xl lg:text-3xl" : "text-4xl lg:text-5xl"
+              )}>
                 {t('gcodeAnalytics.reportTitle')}
               </h1>
               <p className="text-white/70 text-base max-w-xl font-body leading-relaxed">
@@ -1252,7 +2603,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
         </div >
 
         {/* 탭 네비게이션 - Modern Style */}
-        <div className="sticky top-14 z-20 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+        <div className="bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
           <div className="px-6 flex gap-8">
             <button
               onClick={() => setActiveTab('info')}
@@ -1338,8 +2689,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                 <MetricCard
                   icon={<Repeat2 className="h-5 w-5" />}
                   label={t('gcodeAnalytics.retraction')}
-                  value={metrics.retractionCount.value.toLocaleString()}
-                  subValue={t('gcodeAnalytics.retractionCount')}
+                  value={`${metrics.retractionCount.value.toLocaleString()} ${t('gcodeAnalytics.retractionCount', '회')}`}
                   color="orange"
                 />
               </div>
@@ -1521,15 +2871,6 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                     </div>
                   </div>
 
-                  {/* Overview / Summary Text */}
-                  {(data.detailedAnalysis.printingInfo.overview || data.detailedAnalysis.printingInfo.summary_text) && (
-                    <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 mb-6 border border-slate-100 dark:border-slate-800">
-                      <p className="text-base font-body text-slate-700 dark:text-slate-300 leading-relaxed text-justify">
-                        {data.detailedAnalysis.printingInfo.overview || data.detailedAnalysis.printingInfo.summary_text}
-                      </p>
-                    </div>
-                  )}
-
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* 온도 분석 */}
                     {data.detailedAnalysis.printingInfo.temperature_analysis && (
@@ -1651,6 +2992,14 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                         patches={data.detailedAnalysis?.patchSuggestions || []}
                         reportId={data.reportId}
                         metrics={data.metrics}
+                        analysisId={data.analysisId}
+                        onAIResolveStart={onAIResolveStart}
+                        onAIResolveComplete={onAIResolveComplete}
+                        onAIResolveError={onAIResolveError}
+                        isAIResolving={isAIResolving}
+                        groupCount={issue.count}
+                        groupLines={issue.lines}
+                        onLineClick={handleIssueClickToEditor}
                       />
                     ))}
                   </div>
@@ -1715,8 +3064,10 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
             </div>
           )}
         </div>
-      </div >
-    </div >
+      </div>
+      </ScrollArea>
+      )}
+    </div>
   );
 };
 
@@ -1752,16 +3103,18 @@ function MetricCard({ icon, label, value, subValue, color }: MetricCardProps) {
       "group relative overflow-hidden rounded-2xl p-5 border shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-1 bg-gradient-to-br",
       colorStyles[color]
     )}>
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-xs font-heading font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{label}</span>
-        <div className={cn("p-2 rounded-lg transition-transform group-hover:scale-110", iconBgStyles[color])}>
+      {/* 라벨 + 아이콘 (한 줄에 정렬) */}
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <span className="text-xs font-heading font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">{label}</span>
+        <div className={cn("flex-shrink-0 p-2 rounded-xl transition-transform group-hover:scale-110", iconBgStyles[color])}>
           {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement, { className: "h-4 w-4" }) : icon}
         </div>
       </div>
-      <div>
-        <div className="text-3xl font-score font-black text-slate-900 dark:text-white tracking-tight">{value}</div>
+      {/* 값 영역 */}
+      <div className="space-y-1">
+        <div className="text-3xl font-score font-black text-slate-900 dark:text-white tracking-tight leading-none">{value}</div>
         {subValue && (
-          <div className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">{subValue}</div>
+          <div className="text-sm font-medium text-slate-500 dark:text-slate-400">{subValue}</div>
         )}
       </div>
     </div>
@@ -1895,9 +3248,15 @@ interface DetailedAnalysisSectionProps {
   onSaveGCode?: (newContent: string) => Promise<void>;
   fileName?: string;
   metrics?: GCodeAnalysisData['metrics'];
+  analysisId?: string;
+  onAIResolveStart?: (info: AIResolveStartInfo) => void;
+  onAIResolveComplete?: (info: AIResolveCompleteInfo) => void;
+  onAIResolveError?: (error: string) => void;
+  isAIResolving?: boolean;
+  onLineClick?: (line: number | string) => void;
 }
 
-function DetailedAnalysisSection({ detailedAnalysis, gcodeContent, onSaveGCode, fileName, metrics }: DetailedAnalysisSectionProps) {
+function DetailedAnalysisSection({ detailedAnalysis, gcodeContent, onSaveGCode, fileName, metrics, analysisId, onAIResolveStart, onAIResolveComplete, onAIResolveError, isAIResolving, onLineClick }: DetailedAnalysisSectionProps) {
   const [expandedIssue, setExpandedIssue] = useState<number | null>(null);
   const [showAllIssues, setShowAllIssues] = useState(false);
 
@@ -1911,10 +3270,23 @@ function DetailedAnalysisSection({ detailedAnalysis, gcodeContent, onSaveGCode, 
     llmRecommendation
   } = detailedAnalysis;
 
+  // 백엔드에서 그룹화된 이슈를 그대로 사용
+  // 새 구조: lines, count, is_grouped가 항상 존재
+  const groupedIssues = useMemo(() => {
+    if (!detailedIssues || detailedIssues.length === 0) return [];
+
+    return detailedIssues.map(issue => ({
+      issue,
+      // 새 구조: lines 배열이 항상 존재 (레거시 폴백 포함)
+      lines: issue.lines || (issue.line !== undefined ? [issue.line] : []),
+      count: issue.count || 1,
+    }));
+  }, [detailedIssues]);
+
   // 표시할 이슈 수 제한
   const displayedIssues = showAllIssues
-    ? detailedIssues
-    : detailedIssues?.slice(0, 5);
+    ? groupedIssues
+    : groupedIssues?.slice(0, 5);
 
   return (
     <div className="space-y-6 pt-6 border-t border-slate-200 dark:border-slate-700/50">
@@ -1973,26 +3345,26 @@ function DetailedAnalysisSection({ detailedAnalysis, gcodeContent, onSaveGCode, 
               <ListChecks className="h-5 w-5 text-slate-500 dark:text-slate-400" />
               <h3 className="font-heading font-semibold text-slate-900 dark:text-white">발견된 문제 상세 분석</h3>
               <span className="text-xs font-score font-black bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-300 px-2 py-0.5 rounded-full">
-                {detailedIssues.length}건
+                {groupedIssues.reduce((sum, g) => sum + g.count, 0)}건 ({groupedIssues.length}종류)
               </span>
             </div>
-            {detailedIssues.length > 5 && (
+            {groupedIssues.length > 5 && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowAllIssues(!showAllIssues)}
                 className="font-body text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               >
-                {showAllIssues ? '접기' : `모두 보기 (${detailedIssues.length})`}
+                {showAllIssues ? '접기' : `모두 보기 (${groupedIssues.length})`}
                 {showAllIssues ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
               </Button>
             )}
           </div>
           <div className="divide-y divide-slate-200 dark:divide-slate-700/30">
-            {displayedIssues?.map((issue, index) => (
+            {displayedIssues?.map((groupedIssue, index) => (
               <DetailedIssueCard
                 key={index}
-                issue={issue}
+                issue={groupedIssue.issue}
                 index={index}
                 isExpanded={expandedIssue === index}
                 onToggle={() => setExpandedIssue(expandedIssue === index ? null : index)}
@@ -2001,6 +3373,14 @@ function DetailedAnalysisSection({ detailedAnalysis, gcodeContent, onSaveGCode, 
                 fileName={fileName}
                 allIssues={detailedIssues}
                 patches={patchSuggestions || []}
+                analysisId={analysisId}
+                onAIResolveStart={onAIResolveStart}
+                onAIResolveComplete={onAIResolveComplete}
+                onAIResolveError={onAIResolveError}
+                isAIResolving={isAIResolving}
+                groupCount={groupedIssue.count}
+                groupLines={groupedIssue.lines}
+                onLineClick={onLineClick}
               />
             ))}
           </div>
@@ -2085,45 +3465,45 @@ function DiagnosisSummaryCard({ summary }: { summary: DiagnosisSummary }) {
   const style = severityStyles[summary.severity] || severityStyles.info;
 
   return (
-    <div className={cn("rounded-2xl p-8 border shadow-sm", style.bg, style.border)}>
-      <div className="flex flex-col md:flex-row gap-6 md:items-start">
-        <div className={cn("p-4 rounded-2xl bg-white shadow-sm shrink-0", style.icon)}>
-          <Thermometer className="h-10 w-10" strokeWidth={1.5} />
+    <div className={cn("rounded-xl p-5 border shadow-sm", style.bg, style.border)}>
+      <div className="flex flex-col md:flex-row gap-4 md:items-start">
+        <div className={cn("p-3 rounded-xl bg-white shadow-sm shrink-0", style.icon)}>
+          <Thermometer className="h-7 w-7" strokeWidth={1.5} />
         </div>
-        <div className="flex-1 space-y-2">
-          <div className="flex items-center gap-3">
-            <span className={cn("px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider", style.badge)}>
+        <div className="flex-1 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider", style.badge)}>
               {severityLabels[summary.severity] || summary.severity}
             </span>
-            <span className="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase tracking-wider">{t('gcodeAnalytics.diagnosisSummary')}</span>
+            <span className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-wider">{t('gcodeAnalytics.diagnosisSummary')}</span>
           </div>
-          <h3 className="text-2xl font-title font-bold text-slate-900 dark:text-white leading-tight">
+          <h3 className="text-base font-title font-bold text-slate-900 dark:text-white leading-snug">
             {summary.keyIssue?.title}
           </h3>
-          <p className="text-lg font-body text-slate-600 dark:text-slate-300 leading-relaxed max-w-3xl">
+          <p className="text-sm font-body text-slate-600 dark:text-slate-300 leading-relaxed max-w-3xl">
             {summary.keyIssue?.description}
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-8 pt-6 border-t border-slate-200/60 dark:border-slate-700/50">
-        <div className="flex items-center gap-4 p-4 bg-white/50 dark:bg-slate-900/20 rounded-xl border border-white/50 dark:border-white/5">
-          <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500">
-            <AlertTriangle className="w-5 h-5" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-5 pt-4 border-t border-slate-200/60 dark:border-slate-700/50">
+        <div className="flex items-center gap-3 p-3 bg-white/50 dark:bg-slate-900/20 rounded-lg border border-white/50 dark:border-white/5">
+          <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md text-slate-500">
+            <AlertTriangle className="w-4 h-4" />
           </div>
           <div>
-            <p className="text-xs font-heading font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('gcodeAnalytics.totalIssues')}</p>
-            <p className="text-xl font-score font-black text-slate-900 dark:text-white">{t('gcodeAnalytics.issueCountUnit', { count: summary.totalIssues })}</p>
+            <p className="text-[10px] font-heading font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('gcodeAnalytics.totalIssues')}</p>
+            <p className="text-base font-score font-black text-slate-900 dark:text-white">{t('gcodeAnalytics.issueCountUnit', { count: summary.totalIssues })}</p>
           </div>
         </div>
 
-        <div className="sm:col-span-2 lg:col-span-2 flex items-center gap-4 p-4 bg-white/50 dark:bg-slate-900/20 rounded-xl border border-white/50 dark:border-white/5">
-          <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-500">
-            <Info className="w-5 h-5" />
+        <div className="sm:col-span-2 lg:col-span-2 flex items-center gap-3 p-3 bg-white/50 dark:bg-slate-900/20 rounded-lg border border-white/50 dark:border-white/5">
+          <div className="p-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-md text-blue-500">
+            <Info className="w-4 h-4" />
           </div>
           <div className="flex-1">
-            <p className="text-xs font-heading font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('gcodeAnalytics.recommendedAction')}</p>
-            <p className="text-lg font-bold text-slate-800 dark:text-slate-200">{summary.recommendation}</p>
+            <p className="text-[10px] font-heading font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('gcodeAnalytics.recommendedAction')}</p>
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{summary.recommendation}</p>
           </div>
         </div>
       </div>
@@ -2195,7 +3575,7 @@ function IssueStatisticsChart({ statistics }: { statistics: IssueStatistics[] })
 }
 
 // 상세 이슈 카드
-function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, onSaveGCode, fileName, allIssues, patches, reportId, metrics }: {
+function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, onSaveGCode, fileName, allIssues, patches, reportId, metrics, analysisId, onAIResolveStart, onAIResolveComplete, onAIResolveError, isAIResolving, groupCount, groupLines, onLineClick }: {
   issue: DetailedIssue;
   index: number;
   isExpanded: boolean;
@@ -2207,9 +3587,22 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
   patches?: PatchSuggestion[];
   reportId?: string;
   metrics?: GCodeAnalysisData['metrics'];
+  analysisId?: string;
+  onAIResolveStart?: (info: AIResolveStartInfo) => void;
+  onAIResolveComplete?: (info: AIResolveCompleteInfo) => void;
+  onAIResolveError?: (error: string) => void;
+  isAIResolving?: boolean;
+  groupCount?: number;
+  groupLines?: (number | string)[];
+  onLineClick?: (line: number | string) => void;  // 라인 번호 클릭 시 에디터로 이동
 }) {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [showGCodeModal, setShowGCodeModal] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
+  const [resolution, setResolution] = useState<IssueResolveResponse | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [showResolution, setShowResolution] = useState(false);
 
   const severityStyles = {
     critical: { strip: 'bg-rose-600', badge: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300', icon: 'text-rose-600' },
@@ -2244,6 +3637,90 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
     }
   };
 
+  // AI 해결하기 핸들러
+  const handleAIResolve = async () => {
+    if (!analysisId) {
+      toast({
+        title: t('gcodeAnalytics.aiResolveError', 'AI 해결 오류'),
+        description: t('gcodeAnalytics.noAnalysisId', '분석 ID가 없습니다.'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // 새 구조: lines 배열이 항상 존재, count는 이슈 개수
+    const effectiveGroupLines = groupLines || issue.lines || [];
+    const effectiveGroupCount = groupCount || issue.count || 1;
+    const isGrouped = issue.is_grouped || effectiveGroupCount > 1 || effectiveGroupLines.length > 1;
+
+    // 대표 라인 번호 (새 구조: lines[0] 사용)
+    const lineNumber = effectiveGroupLines[0] || (typeof issue.line === 'string' ? parseInt(issue.line, 10) : (issue.line || issue.line_index as number || 0));
+    const issueTitle = issue.title || getIssueTypeLabel(issue.type || issue.issueType || '');
+
+    // 시작 콜백 호출 (사용자 질문 메시지 + 로딩 시작)
+    if (onAIResolveStart) {
+      onAIResolveStart({
+        issueTitle,
+        issueSeverity: issue.severity,
+        issueDescription: issue.description,
+        // 그룹: 첫 번째 라인 전달, 단일: lineNumber
+        issueLine: isGrouped ? effectiveGroupLines[0] : lineNumber,
+      });
+    }
+
+    setIsResolving(true);
+    try {
+      // issue 원본 데이터를 그대로 전송 (DetailedIssue → Record<string, unknown>)
+      const requestData = {
+        analysis_id: analysisId,
+        conversation_id: conversationId,
+        issue: issue as unknown as Record<string, unknown>,
+        language: 'ko' as const,
+      };
+
+      // API 요청 로그
+      console.log('[DetailedIssueCard] AI resolve request:', requestData);
+
+      const response = await resolveIssue(requestData);
+
+      // API 응답 로그
+      console.log('[DetailedIssueCard] AI resolve response:', response);
+
+      if (response.success) {
+        setResolution(response);
+        setConversationId(response.conversation_id);
+        setShowResolution(true);
+        toast({
+          title: t('gcodeAnalytics.aiResolveSuccess', 'AI 해결 완료'),
+          description: t('gcodeAnalytics.aiResolveSolutionReady', '해결 방안이 준비되었습니다.'),
+        });
+
+        // 완료 콜백 호출 (AI 응답 메시지)
+        if (onAIResolveComplete) {
+          // gcode_context: issue에서 직접 가져오거나 all_issues[0]에서 가져옴
+          const gcodeCtx = issue.gcode_context || issue.all_issues?.[0]?.gcode_context;
+          onAIResolveComplete({ resolution: response, gcodeContext: gcodeCtx, reportId });
+        }
+      } else {
+        throw new Error(response.error || 'Unknown error');
+      }
+    } catch (err) {
+      console.error('[DetailedIssueCard] AI resolve error:', err);
+      const errorMsg = String(err);
+      toast({
+        title: t('gcodeAnalytics.aiResolveError', 'AI 해결 오류'),
+        description: errorMsg,
+        variant: 'destructive',
+      });
+      // 에러 콜백 호출
+      if (onAIResolveError) {
+        onAIResolveError(errorMsg);
+      }
+    } finally {
+      setIsResolving(false);
+    }
+  };
+
   return (
     <>
       <div
@@ -2273,17 +3750,60 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <h4 className="font-heading font-bold text-slate-900 dark:text-white truncate">
-                  {getIssueTypeLabel(issue.issueType)}
+                  {issue.title || getIssueTypeLabel(issue.type || issue.issueType || '')}
                 </h4>
                 <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider", style.badge)}>
                   {getSeverityLabel(issue.severity)}
                 </span>
+                {/* 새 구조: count가 항상 존재 */}
+                {(issue.count || groupCount || 1) > 1 && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+                    ×{issue.count || groupCount}
+                  </span>
+                )}
               </div>
-              <div className="flex items-center gap-3 text-xs font-mono text-slate-500 dark:text-slate-400">
-                <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                  <span>LN</span>
-                  <span className="font-bold text-slate-700 dark:text-slate-300">{issue.line || issue.line_index || 'N/A'}</span>
-                </span>
+              <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400 flex-wrap">
+                {/* 새 구조: lines 배열이 항상 존재 */}
+                {(() => {
+                  const effectiveLines = issue.lines || groupLines || [];
+                  if (effectiveLines.length > 1) {
+                    return (
+                      <>
+                        <span className="text-slate-400 dark:text-slate-500">LN</span>
+                        {effectiveLines.map((ln, idx) => (
+                          <button
+                            key={idx}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onLineClick?.(ln);
+                            }}
+                            className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-bold text-slate-700 dark:text-slate-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                            title={t('gcodeAnalytics.clickToViewInEditor', '에디터에서 보기')}
+                          >
+                            {typeof ln === 'number' ? ln.toLocaleString() : ln}
+                          </button>
+                        ))}
+                      </>
+                    );
+                  }
+                  // 단일 라인 또는 레거시 폴백
+                  const lineNum = effectiveLines[0] || issue.line || issue.line_index;
+                  return (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (lineNum) onLineClick?.(lineNum);
+                      }}
+                      className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                      title={t('gcodeAnalytics.clickToViewInEditor', '에디터에서 보기')}
+                    >
+                      <span>LN</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300">
+                        {lineNum || 'N/A'}
+                      </span>
+                    </button>
+                  );
+                })()}
                 {issue.layer !== undefined && issue.layer !== null && (
                   <span className="flex items-center gap-1">
                     <span>LYR</span>
@@ -2375,18 +3895,25 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
                     </div>
                   )}
 
-                  <div className="flex justify-end pt-2">
+                  <div className="flex justify-end gap-2 pt-2">
                     <Button
-                      variant="outline"
                       size="sm"
-                      className="gap-2 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-violet-500 dark:hover:border-violet-500 hover:text-violet-600 dark:hover:text-violet-400 transition-colors shadow-sm"
+                      className="gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-md hover:shadow-lg transition-all"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setShowGCodeModal(true);
+                        handleAIResolve();
                       }}
+                      disabled={isResolving || isAIResolving || !analysisId}
                     >
-                      <FileCode className="h-4 w-4" />
-                      {t('gcodeAnalytics.openGcodeEditor')}
+                      {isResolving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Zap className="h-4 w-4" />
+                      )}
+                      {isResolving
+                        ? t('gcodeAnalytics.aiResolving', '분석 중...')
+                        : t('gcodeAnalytics.aiSolve', 'AI 해결하기')
+                      }
                     </Button>
                   </div>
                 </div>
@@ -2396,7 +3923,6 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
         </div>
       </div>
 
-      {/* G-code Raw 모달 */}
       {/* G-code 뷰어 모달 (GCodeViewerModal 사용) */}
       {showGCodeModal && gcodeContent && (
         <GCodeViewerModal
@@ -2413,6 +3939,351 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
         />
       )}
     </>
+  );
+}
+
+// AI 해결 결과 패널
+function AIResolutionPanel({
+  resolution,
+  onClose,
+  onViewCode
+}: {
+  resolution: IssueResolveResponse;
+  onClose: () => void;
+  onViewCode?: () => void;
+}) {
+  const { t } = useTranslation();
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['explanation']));
+
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(section)) {
+        newSet.delete(section);
+      } else {
+        newSet.add(section);
+      }
+      return newSet;
+    });
+  };
+
+  const { explanation, solution, tips } = resolution.resolution;
+
+  // 디버그: solution 구조 확인
+  console.log('[AIResolutionPanel] solution:', solution);
+  console.log('[AIResolutionPanel] solution.code_fix:', solution?.code_fix);
+  console.log('[AIResolutionPanel] solution.code_fixes:', solution?.code_fixes);
+
+  // 디버그: code_fixes 배열 각 항목 상세 출력
+  if (solution?.code_fixes) {
+    console.log('[AIResolutionPanel] code_fixes length:', solution.code_fixes.length);
+    solution.code_fixes.forEach((fix, idx) => {
+      console.log(`[AIResolutionPanel] code_fixes[${idx}]:`, {
+        line_number: fix.line_number,
+        has_fix: fix.has_fix,
+        original: fix.original ? `"${fix.original.substring(0, 50)}..."` : null,
+        fixed: fix.fixed ? `"${fix.fixed.substring(0, 50)}..."` : null,
+        original_type: typeof fix.original,
+        fixed_type: typeof fix.fixed,
+        passesFilter: !!(fix.original && fix.fixed)
+      });
+    });
+    const filtered = solution.code_fixes.filter(fix => fix.original && fix.fixed);
+    console.log('[AIResolutionPanel] filtered code_fixes count:', filtered.length);
+  }
+
+  // 심각도 라벨
+  const severityLabels: Record<string, string> = {
+    none: t('gcodeAnalytics.severityNone', '없음'),
+    low: t('gcodeAnalytics.severityLow', '낮음'),
+    medium: t('gcodeAnalytics.severityMedium', '중간'),
+    high: t('gcodeAnalytics.severityHigh', '높음'),
+    critical: t('gcodeAnalytics.severityCritical', '치명적'),
+  };
+
+  // 오탐 여부에 따라 헤더 색상/텍스트 변경
+  const isNormal = explanation.is_false_positive;
+
+  return (
+    <div className={cn(
+      "mt-4 border rounded-xl overflow-hidden",
+      isNormal
+        ? "bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 border-emerald-200 dark:border-emerald-800/50"
+        : "bg-gradient-to-br from-violet-50 to-indigo-50 dark:from-violet-900/20 dark:to-indigo-900/20 border-violet-200 dark:border-violet-800/50"
+    )}>
+      {/* 헤더 */}
+      <div className={cn(
+        "flex items-center justify-between px-4 py-3 text-white",
+        isNormal
+          ? "bg-gradient-to-r from-emerald-600 to-green-600"
+          : "bg-gradient-to-r from-violet-600 to-indigo-600"
+      )}>
+        <div className="flex items-center gap-2">
+          {isNormal ? <CheckCircle2 className="h-4 w-4" /> : <Zap className="h-4 w-4" />}
+          <span className="font-heading font-bold text-sm">
+            {isNormal
+              ? t('gcodeAnalytics.analysisResultNormal', '분석 결과: 정상')
+              : t('gcodeAnalytics.aiResolution', 'AI 해결 방안')
+            }
+          </span>
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 w-6 p-0 text-white hover:bg-white/20"
+          onClick={onClose}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="p-4 space-y-3">
+        {/* 분석 요약 */}
+        <CollapsibleSection
+          title={t('gcodeAnalytics.analysisSummary', '분석 요약')}
+          icon={<Target className="h-4 w-4" />}
+          isExpanded={expandedSections.has('explanation')}
+          onToggle={() => toggleSection('explanation')}
+        >
+          <div className="space-y-2 text-sm">
+            <p className="text-slate-600 dark:text-slate-400">{explanation.summary}</p>
+            <p>
+              <strong className="text-slate-700 dark:text-slate-300">{t('gcodeAnalytics.cause', '원인')}:</strong>{' '}
+              <span className="text-slate-600 dark:text-slate-400">{explanation.cause}</span>
+            </p>
+            {!isNormal && explanation.severity !== 'none' && (
+              <p>
+                <strong className="text-slate-700 dark:text-slate-300">{t('gcodeAnalytics.severity', '심각도')}:</strong>{' '}
+                <span className={cn(
+                  "font-medium",
+                  explanation.severity === 'critical' && "text-rose-600 dark:text-rose-400",
+                  explanation.severity === 'high' && "text-red-600 dark:text-red-400",
+                  explanation.severity === 'medium' && "text-orange-600 dark:text-orange-400",
+                  explanation.severity === 'low' && "text-amber-600 dark:text-amber-400",
+                )}>
+                  {severityLabels[explanation.severity] || explanation.severity}
+                </span>
+              </p>
+            )}
+          </div>
+        </CollapsibleSection>
+
+        {/* 해결 방안 (조치가 필요한 경우에만) */}
+        {solution.action_needed && (
+          <CollapsibleSection
+            title={t('gcodeAnalytics.solutionTitle', '해결 방안')}
+            icon={<CheckCircle2 className="h-4 w-4" />}
+            isExpanded={expandedSections.has('solution')}
+            onToggle={() => toggleSection('solution')}
+            highlight
+          >
+            <div className="space-y-2 text-sm">
+              {solution.steps?.length > 0 && (
+                <ol className="list-decimal list-inside space-y-1 text-slate-600 dark:text-slate-400">
+                  {solution.steps.map((step, i) => <li key={i}>{step}</li>)}
+                </ol>
+              )}
+            </div>
+          </CollapsibleSection>
+        )}
+
+        {/* 코드 수정 (있는 경우) */}
+        {(solution.code_fix?.has_fix || (solution.code_fixes && solution.code_fixes.length > 0)) && (
+          <CollapsibleSection
+            title={t('gcodeAnalytics.codeFix', '코드 수정')}
+            icon={<FileCode className="h-4 w-4" />}
+            isExpanded={expandedSections.has('code_fix')}
+            onToggle={() => toggleSection('code_fix')}
+            badge={solution.code_fixes && solution.code_fixes.length > 1 ? `${solution.code_fixes.length}건` : undefined}
+          >
+            <div className="space-y-4 text-sm">
+              {/* 그룹화된 코드 수정 (code_fixes 배열) */}
+              {solution.code_fixes && solution.code_fixes.length > 0 ? (
+                solution.code_fixes.filter(fix => fix.original && fix.fixed).map((fix, fixIdx, filteredArr) => (
+                  <div key={fixIdx} className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                    {/* 라인 번호 헤더 */}
+                    {fix.line_number && (
+                      <div className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
+                        <span className="text-xs font-mono bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-700 dark:text-slate-300">
+                          LN {fix.line_number.toLocaleString()}
+                        </span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          {t('gcodeAnalytics.fixNumber', '수정 {{n}}', { n: fixIdx + 1 })} / {filteredArr.length}
+                        </span>
+                      </div>
+                    )}
+                    {/* 원본 코드 */}
+                    <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
+                      <div className="px-3 py-1.5 bg-red-100 dark:bg-red-900/40 border-b border-red-200 dark:border-red-800">
+                        <span className="text-xs text-red-600 dark:text-red-400 font-semibold">{t('gcodeAnalytics.original', '원본')}</span>
+                      </div>
+                      <div className="p-3 overflow-x-auto">
+                        {fix.original!.split('\n').map((line, idx) => (
+                          <div key={idx} className="flex font-mono text-xs leading-relaxed">
+                            <span className="w-16 flex-shrink-0 text-red-400 dark:text-red-500 select-none pr-2 text-right border-r border-red-200 dark:border-red-700 mr-3">
+                              {line.match(/^(\d+):/)?.[1] || ''}
+                            </span>
+                            <span className="text-red-700 dark:text-red-300 whitespace-pre">
+                              {line.replace(/^\d+:\s*/, '')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {/* 수정 코드 */}
+                    <div className="bg-emerald-50 dark:bg-emerald-900/20">
+                      <div className="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/40 border-b border-emerald-200 dark:border-emerald-800">
+                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">{t('gcodeAnalytics.fixed', '수정')}</span>
+                      </div>
+                      <div className="p-3 overflow-x-auto">
+                        {fix.fixed!.split('\n').map((line, idx) => (
+                          <div key={idx} className="flex font-mono text-xs leading-relaxed">
+                            <span className="w-16 flex-shrink-0 text-emerald-400 dark:text-emerald-500 select-none pr-2 text-right border-r border-emerald-200 dark:border-emerald-700 mr-3">
+                              {line.match(/^(\d+):/)?.[1] || ''}
+                            </span>
+                            <span className="text-emerald-700 dark:text-emerald-300 whitespace-pre">
+                              {line.replace(/^\d+:\s*/, '')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                /* 단일 코드 수정 (code_fix) - 하위 호환성 */
+                solution.code_fix?.original && solution.code_fix?.fixed && (
+                  <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                    {/* 원본 코드 */}
+                    <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
+                      <div className="px-3 py-1.5 bg-red-100 dark:bg-red-900/40 border-b border-red-200 dark:border-red-800">
+                        <span className="text-xs text-red-600 dark:text-red-400 font-semibold">{t('gcodeAnalytics.original', '원본')}</span>
+                      </div>
+                      <div className="p-3 overflow-x-auto">
+                        {solution.code_fix.original.split('\n').map((line, idx) => (
+                          <div key={idx} className="flex font-mono text-xs leading-relaxed">
+                            <span className="w-16 flex-shrink-0 text-red-400 dark:text-red-500 select-none pr-2 text-right border-r border-red-200 dark:border-red-700 mr-3">
+                              {line.match(/^(\d+):/)?.[1] || ''}
+                            </span>
+                            <span className="text-red-700 dark:text-red-300 whitespace-pre">
+                              {line.replace(/^\d+:\s*/, '')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {/* 수정 코드 */}
+                    <div className="bg-emerald-50 dark:bg-emerald-900/20">
+                      <div className="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/40 border-b border-emerald-200 dark:border-emerald-800">
+                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">{t('gcodeAnalytics.fixed', '수정')}</span>
+                      </div>
+                      <div className="p-3 overflow-x-auto">
+                        {solution.code_fix.fixed.split('\n').map((line, idx) => (
+                          <div key={idx} className="flex font-mono text-xs leading-relaxed">
+                            <span className="w-16 flex-shrink-0 text-emerald-400 dark:text-emerald-500 select-none pr-2 text-right border-r border-emerald-200 dark:border-emerald-700 mr-3">
+                              {line.match(/^(\d+):/)?.[1] || ''}
+                            </span>
+                            <span className="text-emerald-700 dark:text-emerald-300 whitespace-pre">
+                              {line.replace(/^\d+:\s*/, '')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )
+              )}
+              {onViewCode && (
+                <Button size="sm" variant="outline" className="mt-2 gap-2" onClick={onViewCode}>
+                  <Edit3 className="h-3 w-3" />
+                  {t('gcodeAnalytics.editInViewer', '에디터에서 수정')}
+                </Button>
+              )}
+            </div>
+          </CollapsibleSection>
+        )}
+
+        {/* 팁 */}
+        {tips?.length > 0 && (
+          <CollapsibleSection
+            title={t('gcodeAnalytics.tips', '팁')}
+            icon={<Info className="h-4 w-4" />}
+            isExpanded={expandedSections.has('tips')}
+            onToggle={() => toggleSection('tips')}
+          >
+            <ul className="list-disc list-inside space-y-2 text-sm text-slate-600 dark:text-slate-400">
+              {tips.map((tip, i) => (
+                <li key={i} className="[&>p]:inline [&>p]:m-0 [&_strong]:font-semibold [&_strong]:text-slate-700 [&_strong]:dark:text-slate-300 [&_code]:bg-slate-100 [&_code]:dark:bg-slate-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ p: ({ children }) => <>{children}</> }}>
+                    {tip}
+                  </ReactMarkdown>
+                </li>
+              ))}
+            </ul>
+          </CollapsibleSection>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// 접을 수 있는 섹션 컴포넌트
+function CollapsibleSection({
+  title,
+  icon,
+  isExpanded,
+  onToggle,
+  highlight,
+  badge,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  isExpanded: boolean;
+  onToggle: () => void;
+  highlight?: boolean;
+  badge?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn(
+      "rounded-lg border overflow-hidden",
+      highlight
+        ? "border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-900"
+        : "border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50"
+    )}>
+      <button
+        className={cn(
+          "w-full flex items-center justify-between px-3 py-2 text-left transition-colors",
+          highlight
+            ? "bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
+            : "hover:bg-slate-50 dark:hover:bg-slate-800"
+        )}
+        onClick={onToggle}
+      >
+        <div className="flex items-center gap-2">
+          <span className={highlight ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500"}>{icon}</span>
+          <span className={cn(
+            "font-heading font-semibold text-sm",
+            highlight ? "text-emerald-700 dark:text-emerald-300" : "text-slate-700 dark:text-slate-300"
+          )}>{title}</span>
+          {badge && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-violet-100 dark:bg-violet-500/20 text-violet-600 dark:text-violet-300">
+              {badge}
+            </span>
+          )}
+        </div>
+        <ChevronDown className={cn(
+          "h-4 w-4 transition-transform text-slate-400",
+          isExpanded && "rotate-180"
+        )} />
+      </button>
+      {isExpanded && (
+        <div className="px-3 py-3 border-t border-slate-100 dark:border-slate-700">
+          {children}
+        </div>
+      )}
+    </div>
   );
 }
 

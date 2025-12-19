@@ -34,7 +34,7 @@ const Subscription = () => {
   const { toast } = useToast();
   const { t } = useTranslation();
   const [isYearly, setIsYearly] = useState(false);
-  const [currentPlan, setCurrentPlan] = useState<string>("basic");
+  const [currentPlan, setCurrentPlan] = useState<string>("free");
   const [emblaRef] = useEmblaCarousel({ align: "center", skipSnaps: false });
 
   const isMobile = Capacitor.isNativePlatform();
@@ -51,7 +51,9 @@ const Subscription = () => {
           .single();
 
         if (!error && data) {
-          setCurrentPlan(data.plan_name.toLowerCase());
+          // 'basic'은 'free'로 매핑 (레거시 지원)
+          const planName = data.plan_name.toLowerCase();
+          setCurrentPlan(planName === 'basic' ? 'free' : planName);
         }
       } catch (error) {
         console.error("Failed to load subscription:", error);
@@ -63,12 +65,12 @@ const Subscription = () => {
 
   const plans: SubscriptionPlan[] = [
     {
-      id: "basic",
-      name: t("subscription.basic"),
+      id: "free",
+      name: t("subscription.free", t("subscription.basic")),
       price: 0,
       interval: isYearly ? "year" : "month",
-      max_printers: 2,
-      description: t("subscription.basicDesc"),
+      max_printers: 1,
+      description: t("subscription.freeDesc", t("subscription.basicDesc")),
       features: [
         { text: t("subscription.feature.maxPrinters", { count: 2 }), included: true },
         { text: t("subscription.feature.monitoring"), included: true },
@@ -139,7 +141,7 @@ const Subscription = () => {
       return;
     }
 
-    if (planId === "basic") {
+    if (planId === "free") {
       toast({
         title: t("subscription.downgrade"),
         description: t("subscription.downgradeConfirm"),

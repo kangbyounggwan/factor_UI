@@ -2,6 +2,9 @@
 export type SymmetryMode = 'off' | 'auto' | 'on';
 export type ArtStyle = 'realistic' | 'sculpture';
 
+// Anonymous ID 유틸 import
+import { getAnonymousId } from '../utils/anonymousId';
+
 // AI 서버 설정 (환경변수에서 동적으로 가져옴)
 function getAIPythonURL(): string {
   // Vite 환경에서는 import.meta.env 사용
@@ -453,6 +456,118 @@ export function extractMetadata(result: AIModelResponse) {
     raw: data.raw,
   };
 }
+
+// =====================================================
+// AI Troubleshooting API (프린터 닥터)
+// =====================================================
+
+export interface TroubleshootingRequest {
+  manufacturer?: string;
+  series?: string;
+  model?: string;
+  symptom_text: string;
+  images?: string[];  // base64 encoded images
+  language?: 'ko' | 'en';
+  session_id?: string;  // 대화 세션 ID (컨텍스트 유지용)
+  anonymous_id?: string;  // 비로그인 사용자 추적용
+}
+
+export interface TroubleshootingResponse {
+  status: 'ok' | 'error';
+  data?: {
+    diagnosis: string;           // AI 진단 결과
+    detected_issues?: string[];  // 감지된 문제들
+    possible_causes?: string[];  // 가능한 원인들
+    solutions?: string[];        // 해결 방안들
+    confidence?: number;         // 신뢰도 (0-1)
+    image_analysis?: string;     // 이미지 분석 결과
+    follow_up_questions?: string[];  // 추가 질문
+  };
+  error?: string;
+  message?: string;
+}
+
+/**
+ * AI 트러블슈팅 진단 요청
+ * POST /api/v1/troubleshoot/diagnose
+ */
+export async function postTroubleshootingDiagnose(
+  request: TroubleshootingRequest
+): Promise<TroubleshootingResponse> {
+  const AI_PYTHON_URL = getAIPythonURL();
+  const DIAGNOSE_ENDPOINT = `${AI_PYTHON_URL}/api/v1/troubleshoot/diagnose`;
+
+  // anonymous_id가 없으면 자동 주입
+  const requestWithAnonymous: TroubleshootingRequest = {
+    ...request,
+    anonymous_id: request.anonymous_id || getAnonymousId(),
+  };
+
+  console.log('[Troubleshooting] Sending diagnosis request:', {
+    ...requestWithAnonymous,
+    images: requestWithAnonymous.images ? `[${requestWithAnonymous.images.length} images]` : 'none',
+  });
+
+  try {
+    const res = await fetchWithTimeout(DIAGNOSE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestWithAnonymous),
+    }, 120000); // 2분 타임아웃
+
+    console.log('[Troubleshooting] Response status:', res.status, res.statusText);
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.error('[Troubleshooting] Error response:', text);
+      throw new Error(`AI 서버 요청 실패: ${res.status} ${text || res.statusText}`);
+    }
+
+    const result = await res.json();
+    console.log('[Troubleshooting] Response data:', result);
+    return result;
+  } catch (error) {
+    console.error('[Troubleshooting] Request failed:', error);
+
+    // 네트워크 오류 또는 서버 다운 시 친근한 에러 메시지
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      return {
+        status: 'error',
+        error: 'AI 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.',
+      };
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * 이미지 파일을 Base64로 변환
+ */
+export async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // data:image/...;base64, 부분 제거하고 순수 base64만 반환
+      const base64 = result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * 여러 이미지 파일을 Base64 배열로 변환
+ */
+export async function filesToBase64(files: File[]): Promise<string[]> {
+  return Promise.all(files.map(fileToBase64));
+}
+
+// =====================================================
+// STL 업로드 및 슬라이싱 API
+// =====================================================
 
 // STL 업로드 및 슬라이싱 API
 export interface SlicingSettings {

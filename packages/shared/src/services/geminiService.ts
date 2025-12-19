@@ -5,8 +5,8 @@
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1/models';
 
-const TEXT_MODELS = ['gemini-2.5-flash-lite'];
-const VISION_MODELS = ['gemini-2.5-flash-lite'];
+const TEXT_MODELS = ['gemini-2.0-flash'];
+const VISION_MODELS = ['gemini-2.0-flash'];
 export interface GenerateFilenameOptions {
     prompt?: string;        // 사용자가 입력한 원본 프롬프트
     imageUrl?: string;      // 이미지 URL (image-to-3D용)
@@ -254,9 +254,80 @@ export function toGcodeFilename(shortName: string): string {
     return `${shortName}.gcode`;
 }
 
+/**
+ * 채팅 제목 생성 (첫 메시지 요약)
+ * - 15자 이하면 그대로 반환
+ * - 15자 초과면 AI로 요약
+ */
+export async function generateChatTitle(firstMessage: string): Promise<string> {
+    // 15자 이하면 그대로 사용
+    const cleanedMessage = firstMessage.replace(/\s+/g, ' ').trim();
+    if (cleanedMessage.length <= 15) {
+        return cleanedMessage;
+    }
+
+    const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
+
+    if (!apiKey) {
+        console.warn('[geminiService] No API key, using truncated title');
+        return cleanedMessage.substring(0, 15) + '...';
+    }
+
+    try {
+        const modelName = TEXT_MODELS[0];
+        const url = `${BASE_URL}/${modelName}:generateContent?key=${apiKey}`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{
+                        text: `다음 사용자 질문을 10자 이내의 짧은 제목으로 요약해주세요.
+핵심 키워드만 포함하고, 조사나 불필요한 단어는 제외합니다.
+반드시 한국어로 응답하세요.
+
+사용자 질문: "${firstMessage}"
+
+예시:
+- "가성비 좋은 3D 프린터 추천해줘" → "가성비 프린터 추천"
+- "PLA와 ABS의 차이점이 뭐야?" → "PLA vs ABS 차이"
+- "베드 레벨링 하는 방법 알려줘" → "베드 레벨링 방법"
+- "필라멘트가 압출이 안되는데 어떻게 해야해?" → "필라멘트 압출 문제"
+
+제목만 반환하세요:`
+                    }]
+                }],
+                generationConfig: {
+                    temperature: 0.3,
+                    maxOutputTokens: 30,
+                }
+            })
+        });
+
+        if (!response.ok) {
+            console.warn('[geminiService] Title generation API error, using fallback');
+            return cleanedMessage.substring(0, 15) + '...';
+        }
+
+        const data = await response.json();
+        const title = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+
+        if (title && title.length > 0 && title.length <= 20) {
+            console.log('[geminiService] Generated chat title:', title);
+            return title;
+        }
+
+        return cleanedMessage.substring(0, 15) + '...';
+    } catch (error) {
+        console.error('[geminiService] Error generating chat title:', error);
+        return cleanedMessage.substring(0, 15) + '...';
+    }
+}
+
 // ========== G-Code Analysis Chat ==========
 
-import type { CollectedInfo, ChatMessage } from '@shared/types/gcodeAnalysisTypes';
+import type { CollectedInfo } from '@shared/types/gcodeAnalysisTypes';
 
 /**
  * G-code 파일에서 기본 정보 추출

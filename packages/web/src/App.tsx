@@ -27,6 +27,7 @@ const UserSettings = lazy(() => import("./pages/UserSettings"));
 const Subscription = lazy(() => import("./pages/Subscription"));
 const SupportedPrinters = lazy(() => import("./pages/SupportedPrinters"));
 const AI = lazy(() => import("./pages/AI"));
+const AIChat = lazy(() => import("./pages/AIChat"));
 // TODO: AI 고장 해결 - 개발 중
 // const AITroubleshooting = lazy(() => import("./pages/AITroubleshooting"));
 const GCodeAnalytics = lazy(() => import("./pages/GCodeAnalytics"));
@@ -68,6 +69,7 @@ const AppContent = () => {
     '/dashboard',
     '/printer',
     '/create',
+    '/ai-chat',
     // '/ai-troubleshooting', // TODO: AI 고장 해결 - 개발 중
     '/gcode-analytics',
     '/settings',
@@ -76,16 +78,25 @@ const AppContent = () => {
     '/auth'
   ];
 
+  // Header를 표시하지 않을 페이지 경로들 (자체 헤더 사용)
+  const hideHeaderPaths = [
+    '/ai-chat',
+    '/user-settings',
+    '/dashboard'
+  ];
+
   // 현재 경로가 Footer를 숨겨야 하는 경로인지 확인
   const shouldHideFooter = hideFooterPaths.some(path => location.pathname.startsWith(path));
+  // 현재 경로가 Header를 숨겨야 하는 경로인지 확인
+  const shouldHideHeader = hideHeaderPaths.some(path => location.pathname.startsWith(path));
 
   return (
     <div className="flex flex-col min-h-screen bg-background transition-colors">
       {/* 페이지 이동 시 스크롤 최상단으로 */}
       <ScrollToTop />
 
-      {/* 헤더를 모든 페이지에 통합 */}
-      <Header />
+      {/* 헤더를 모든 페이지에 통합 (ai-chat 제외) */}
+      {!shouldHideHeader && <Header />}
 
       {/* 메인 컨텐츠 영역 */}
       <div className="flex-1">
@@ -127,6 +138,7 @@ const AppContent = () => {
             <Route path="/subscription" element={<Subscription />} />
             <Route path="/supported-printers" element={<SupportedPrinters />} />
             <Route path="/create" element={<AI />} />
+            <Route path="/ai-chat" element={<AIChat />} />
             {/* TODO: AI 고장 해결 - 개발 중 */}
             {/* <Route path="/ai-troubleshooting" element={<AITroubleshooting />} /> */}
             <Route path="/gcode-analytics" element={<GCodeAnalytics />} />

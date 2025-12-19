@@ -19,6 +19,7 @@ interface GCodeViewerModalProps {
     reportId?: string;
     onSave?: (newContent: string) => Promise<void>;
     initialIssueIndex?: number;
+    initialLine?: number;  // 특정 라인으로 직접 스크롤
     // 메트릭 정보 (시간, 필라멘트 등)
     metrics?: {
         printTime?: {
@@ -93,6 +94,7 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
     reportId,
     onSave,
     initialIssueIndex,
+    initialLine,
     metrics
 }) => {
     const { user } = useAuth();
@@ -149,8 +151,28 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
             setDeltas(new Map());
             setLineOffsets(new Map());
 
-            // 초기 선택 설정 (initialIssueIndex가 있으면 우선 사용)
-            if (initialIssueIndex !== undefined && initialIssueIndex >= 0 && initialIssueIndex < issues.length) {
+            // initialLine이 있으면 해당 라인에 해당하는 이슈 찾기
+            if (initialLine !== undefined && initialLine > 0) {
+                // 해당 라인에 해당하는 이슈 찾기 (새 구조: lines 배열 사용)
+                const issueIdx = issues.findIndex(issue => {
+                    if (issue.lines && issue.lines.length > 0) {
+                        return issue.lines.includes(initialLine);
+                    }
+                    // 레거시 폴백
+                    const issueLine = typeof issue.line === 'string' ? parseInt(issue.line, 10) : issue.line;
+                    return issueLine === initialLine || issue.line_index === initialLine;
+                });
+
+                if (issueIdx >= 0) {
+                    setSelectedType('issue');
+                    setSelectedIndex(issueIdx);
+                } else {
+                    // 이슈가 없으면 선택 없이 해당 라인으로만 스크롤
+                    setSelectedType(null);
+                    setSelectedIndex(null);
+                }
+            } else if (initialIssueIndex !== undefined && initialIssueIndex >= 0 && initialIssueIndex < issues.length) {
+                // initialIssueIndex가 있으면 우선 사용
                 setSelectedType('issue');
                 setSelectedIndex(initialIssueIndex);
             } else if (issues.length > 0) {
@@ -174,12 +196,26 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
 
             // 초기 오픈 시 선택된 라인으로 스크롤
             setTimeout(() => {
+                // initialLine이 있으면 해당 라인으로 직접 스크롤
+                if (initialLine !== undefined && initialLine > 0) {
+                    const lineElement = document.getElementById(`gcode-line-${initialLine}`);
+                    if (lineElement) {
+                        lineElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                        // 하이라이트 효과
+                        lineElement.classList.add('animate-pulse', 'bg-yellow-500/30');
+                        setTimeout(() => {
+                            lineElement.classList.remove('animate-pulse', 'bg-yellow-500/30');
+                        }, 2000);
+                        return;
+                    }
+                }
+                // 그렇지 않으면 선택된 타겟으로 스크롤
                 if (targetLineRef.current) {
                     targetLineRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
                 }
             }, 300);
         }
-    }, [isOpen, gcodeContent, patches.length, issues.length, initialIssueIndex]);
+    }, [isOpen, gcodeContent, patches.length, issues.length, initialIssueIndex, initialLine]);
 
     // 필터 상태
     const [activeTab, setActiveTab] = useState<'all' | 'critical' | 'warning'>('all');

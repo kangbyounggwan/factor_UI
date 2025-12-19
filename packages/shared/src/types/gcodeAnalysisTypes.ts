@@ -59,6 +59,21 @@ export interface AnalysisDetailResponse {
   error?: string;
 }
 
+/**
+ * 폴링용 상태 조회 응답
+ * GET /api/v1/gcode/analysis/{analysis_id}/status
+ */
+export interface AnalysisStatusResponse {
+  analysis_id: string;
+  status: AnalysisStatus;
+  progress: number;  // 0.0 ~ 1.0
+  current_step?: string;
+  progress_message?: string;
+  timeline?: SSETimelineEvent[];
+  result?: AnalysisResult;
+  error?: string;
+}
+
 // ========== Analysis Result (최종 결과) ==========
 
 export interface AnalysisResult {
@@ -159,19 +174,72 @@ export type IssueType =
   | 'under_extrusion'
   | 'other';
 
+/**
+ * all_issues 배열 내 개별 이슈 항목
+ * 각 이슈의 상세 정보와 G-code 컨텍스트를 포함
+ */
+export interface IssueItem {
+  line: number;                // 해당 이슈의 라인 번호 (필수)
+  cmd?: string;                // G-code 명령어 (예: "M104 S154")
+  temp?: number;               // 온도 값
+  min_temp?: number;           // 최소 온도
+  type?: string;               // 이슈 타입
+  severity?: string;           // 개별 심각도
+  description?: string;        // 개별 설명
+  gcode_context?: string;      // 해당 라인의 G-code 컨텍스트 (앞뒤 N줄)
+}
+
+/**
+ * 통합된 이슈 구조 (단일/그룹 공통)
+ *
+ * 새 구조:
+ * - id: "TEMP-1" (단일) 또는 "TEMP-GROUP-1" (그룹)
+ * - is_grouped: false (단일) 또는 true (그룹)
+ * - count: 1 (단일) 또는 N (그룹)
+ * - lines: [12345] (단일도 항상 배열)
+ * - all_issues: [{ line, gcode_context, ... }] (항상 배열)
+ */
 export interface IssueFound {
-  has_issue: boolean;
-  issue_type: IssueType | string;
-  severity: IssueSeverity;
-  line_index?: number | string;
-  event_line_index?: number | string;  // API에서 실제로 반환하는 라인 번호 키
-  code?: string;
-  description: string;
-  impact: string;
-  suggestion: string;
-  affected_lines?: string[];
-  layer?: number;    // 레이어 번호
-  section?: string;  // 섹션 (BODY, INFILL, SUPPORT 등)
+  // === 필수 필드 (항상 존재) ===
+  id: string;                  // 이슈 고유 ID ("TEMP-1", "TEMP-GROUP-1" 등)
+  type: IssueType | string;    // 이슈 타입 (cold_extrusion, early_temp_off 등)
+  severity: IssueSeverity;     // 심각도
+  is_grouped: boolean;         // 그룹 여부 (false: 단일, true: 그룹)
+  count: number;               // 이슈 개수 (단일: 1, 그룹: N)
+  lines: number[];             // 라인 번호 목록 (항상 배열, 단일도 [12345])
+  title: string;               // 이슈 제목
+  description: string;         // 이슈 설명
+  all_issues: IssueItem[];     // 개별 이슈 목록 (항상 배열)
+
+  // === 선택적 필드 (상황에 따라 존재) ===
+  issue_type?: IssueType | string;  // type 별칭 (하위 호환)
+  has_issue?: boolean;              // 레거시 호환 (true면 실제 이슈)
+  impact?: string;                  // 영향
+  suggestion?: string;              // 제안
+  layer?: number;                   // 레이어 번호
+  section?: string;                 // 섹션 (BODY, INFILL, SUPPORT 등)
+  code?: string;                    // 관련 G-code 코드
+  affected_lines?: string[];        // 영향받는 라인 (레거시)
+
+  // === 레거시 호환 필드 (점진적 마이그레이션) ===
+  line_index?: number | string;     // 라인 인덱스 (레거시)
+  line?: number | string;           // 단일 라인 (레거시, lines[0] 사용 권장)
+  event_line_index?: number | string;  // 이벤트 라인 인덱스 (레거시)
+  gcode_context?: string;           // G-code 컨텍스트 (레거시, all_issues[].gcode_context 사용 권장)
+
+  // === 그룹 전용 필드 (레거시) ===
+  representative?: {                // 대표 이슈 정보
+    cmd?: string;
+    line?: number;
+    temp?: number;
+  };
+
+  // === 검증 정보 ===
+  validation?: {
+    reasoning?: string;
+    validated?: boolean;
+    confidence?: number;
+  };
 }
 
 // ========== Token Usage ==========
@@ -185,12 +253,21 @@ export interface TokenUsage {
 // ========== Patch Plan (패치 제안) ==========
 
 export interface PatchItem {
+  id?: string;
+  issue_id?: string;
   line_index: number;
+  line?: number;
   action: 'remove' | 'modify' | 'insert';
   original_line: string;
+  original?: string;
   new_line?: string | null;
+  modified?: string | null;
   reason: string;
   issue_type?: string;
+  layer?: number;
+  position?: 'before' | 'after' | 'replace';
+  autofix_allowed?: boolean;
+  vendor_extension?: any;
 }
 
 export interface PatchPlan {
@@ -206,6 +283,26 @@ export interface AnalysisProgress {
   progress: number;  // 0-100 (UI용)
   message: string;
   currentStep?: string;
+}
+
+// ========== SSE Event Types ==========
+
+export interface SSETimelineEvent {
+  step: number;
+  label: string;
+  status: 'pending' | 'running' | 'done' | 'error';
+}
+
+export interface SSEProgressEvent {
+  progress: number;
+}
+
+export interface SSECompleteEvent extends AnalysisResult {
+  // AnalysisResult properties are inherited
+}
+
+export interface SSEErrorEvent {
+  error: string;
 }
 
 // ========== Issue Statistics (UI용 통계) ==========
@@ -247,19 +344,29 @@ export function getGradeFromScore(score: number): 'A' | 'B' | 'C' | 'D' | 'F' {
   return 'F';
 }
 
-// 이슈 목록에서 통계 계산
+/**
+ * 이슈 목록에서 통계 계산
+ * 새 구조: type, count 필드 사용 (레거시 호환 유지)
+ */
 export function calculateIssueStatistics(issues: IssueFound[]): IssueStatistics[] {
-  const realIssues = issues.filter(i => i.has_issue);
-  const total = realIssues.length;
+  // 새 구조: has_issue 필터 불필요 (모든 이슈가 유효함)
+  // 레거시 호환: has_issue가 있으면 필터링
+  const realIssues = issues.filter(i => i.has_issue !== false);
 
-  if (total === 0) return [];
+  if (realIssues.length === 0) return [];
 
   const countByType: Record<string, number> = {};
 
   for (const issue of realIssues) {
-    const type = issue.issue_type || 'other';
-    countByType[type] = (countByType[type] || 0) + 1;
+    // 새 구조: type 필드 사용, 레거시: issue_type 폴백
+    const issueType = issue.type || issue.issue_type || 'other';
+    // 새 구조: count 필드로 그룹 내 이슈 수 반영
+    const issueCount = issue.count || 1;
+    countByType[issueType] = (countByType[issueType] || 0) + issueCount;
   }
+
+  // 총 이슈 수 (그룹 내 개수 합산)
+  const total = Object.values(countByType).reduce((sum, c) => sum + c, 0);
 
   const typeColors: Record<string, string> = {
     cold_extrusion: 'red',
@@ -302,6 +409,13 @@ export interface CollectedInfo {
     z: number;
   };
   filamentType?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
 }
 
 // ========== Delta Export Types (대용량 파일 효율적 처리) ==========
@@ -386,4 +500,48 @@ export interface GCodeSummaryResult {
     average: number;
   };
   fan_events_count?: number;
+}
+
+// ========== API Response Types ==========
+
+/**
+ * G-code 분석 시작 응답 (POST /api/v1/gcode/analyze)
+ */
+export interface GCodeAnalysisResponse {
+  analysis_id: string;
+  status: AnalysisStatus;
+  message?: string;
+}
+
+/**
+ * 패치 승인 요청
+ */
+export interface PatchApprovalRequest {
+  approved: boolean;
+  patch_ids?: string[];
+}
+
+/**
+ * 패치 승인 응답
+ */
+export interface PatchApprovalResponse {
+  success: boolean;
+  message?: string;
+  patched_lines?: number;
+}
+
+/**
+ * G-code 요약 요청
+ */
+export interface GCodeSummaryRequest {
+  gcode_content: string;
+  file_name?: string;
+}
+
+/**
+ * G-code 요약 응답
+ */
+export interface GCodeSummaryResponse {
+  analysis_id: string;
+  summary: GCodeSummaryResult;
 }

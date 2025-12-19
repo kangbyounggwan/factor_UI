@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
+import { AppHeader } from "@/components/common/AppHeader";
+import { AppSidebar, type SettingsTab } from "@/components/common/AppSidebar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -129,8 +131,8 @@ const UserSettings = () => {
   const [searchParams] = useSearchParams();
 
   // Get tab from URL parameter, default to 'profile'
-  const defaultTab = searchParams.get('tab') || 'profile';
-  const [activeTab, setActiveTab] = useState(defaultTab);
+  const defaultTab = (searchParams.get('tab') || 'profile') as SettingsTab;
+  const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab);
 
   // Form states
   const [displayName, setDisplayName] = useState(
@@ -824,83 +826,29 @@ const UserSettings = () => {
     }
   };
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
-    <div className="min-h-screen pt-16">
-      {/* Left Sidebar Navigation */}
-      <aside
-        className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-background border-r z-40"
-      >
-        <div className="p-4">
-          <h2 className="text-lg font-semibold mb-6">
-            {t("userSettings.title")}
-          </h2>
-        </div>
-        <nav className="space-y-1 px-2">
-            <button
-              onClick={() => setActiveTab('profile')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium ${
-                activeTab === 'profile'
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-              }`}
-            >
-              <User className="h-4 w-4 shrink-0" />
-              <span>{t("userSettings.profile")}</span>
-            </button>
+    <div className="h-screen flex overflow-hidden">
+      {/* App Sidebar with Settings Menu */}
+      <AppSidebar
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        user={user}
+        onSignOut={signOut}
+        mode="settings"
+        activeSettingsTab={activeTab}
+        onSettingsTabChange={setActiveTab}
+      />
 
-            <button
-              onClick={() => setActiveTab('account')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium ${
-                activeTab === 'account'
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-              }`}
-            >
-              <Shield className="h-4 w-4 shrink-0" />
-              <span>{t("userSettings.account")}</span>
-            </button>
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* App Header */}
+        <AppHeader sidebarOpen={sidebarOpen} />
 
-            <button
-              onClick={() => setActiveTab('subscription')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium ${
-                activeTab === 'subscription'
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-              }`}
-            >
-              <CreditCard className="h-4 w-4 shrink-0" />
-              <span>{t("userSettings.subscription")}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('notifications')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium ${
-                activeTab === 'notifications'
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-              }`}
-            >
-              <Bell className="h-4 w-4 shrink-0" />
-              <span>{t("userSettings.notifications")}</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('api-keys')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium ${
-                activeTab === 'api-keys'
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-              }`}
-            >
-              <Key className="h-4 w-4 shrink-0" />
-              <span>{t("userSettings.apiKeys", "API Keys")}</span>
-            </button>
-          </nav>
-      </aside>
-
-      {/* Main Content Area */}
-      <div className="ml-64 flex justify-center">
-        <div className="py-8 px-8 w-full max-w-5xl">
+        {/* Main Content Area */}
+        <div className="flex-1 flex justify-center overflow-y-auto">
+          <div className="py-8 px-8 w-full max-w-5xl">
 
         {/* Profile Tab */}
         {activeTab === 'profile' && (
@@ -2040,11 +1988,6 @@ const UserSettings = () => {
           </div>
         )}
 
-        </div>
-        {/* End Inner Container */}
-      </div>
-      {/* End Main Content Area */}
-
       {/* Create API Key Dialog */}
       <Dialog open={showCreateApiKeyModal} onOpenChange={setShowCreateApiKeyModal}>
         <DialogContent>
@@ -2756,7 +2699,12 @@ const UserSettings = () => {
           </div>
         </DialogContent>
       </Dialog>
-      {/* End Root Container */}
+        </div>
+        {/* End py-8 px-8 container */}
+      </div>
+      {/* End flex-1 overflow-y-auto */}
+    </div>
+    {/* End flex-1 flex-col */}
     </div>
   );
 };

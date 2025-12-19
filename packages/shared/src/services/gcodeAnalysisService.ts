@@ -54,7 +54,8 @@ export async function startGCodeAnalysis(
 }
 
 /**
- * 분석 상태 조회
+ * 분석 상태 조회 (폴링용)
+ * GET /api/v1/gcode/analysis/{analysis_id}
  */
 export async function getAnalysisStatus(
     analysisId: string
@@ -73,11 +74,56 @@ export async function getAnalysisStatus(
 }
 
 /**
+ * SSE 세그먼트 데이터 이벤트 타입
+ */
+export interface SSESegmentsEvent {
+    layers: Array<{
+        layerNum: number;
+        z: number;
+        extrusionData: string;
+        travelData: string;
+        wipeData?: string;
+        supportData?: string;
+        extrusionCount: number;
+        travelCount: number;
+        wipeCount?: number;
+        supportCount?: number;
+        nozzleTemp?: number;
+        bedTemp?: number;
+    }>;
+    metadata: {
+        boundingBox: {
+            minX: number;
+            maxX: number;
+            minY: number;
+            maxY: number;
+            minZ: number;
+            maxZ: number;
+        };
+        layerCount: number;
+        totalFilament: number;
+        printTime: number;
+        layerHeight: number;
+        firstLayerHeight: number;
+        estimatedTime: string;
+        filamentType: string | null;
+        slicer: string;
+        slicerVersion: string | null;
+    };
+    temperatures?: Array<{
+        layer: number;
+        nozzleTemp: number | null;
+        bedTemp: number | null;
+    }>;
+}
+
+/**
  * SSE 스트리밍 구독
  */
 export interface SSECallbacks {
     onTimeline?: (event: SSETimelineEvent) => void;
     onProgress?: (event: SSEProgressEvent) => void;
+    onSegments?: (event: SSESegmentsEvent) => void;
     onComplete?: (event: SSECompleteEvent) => void;
     onError?: (event: SSEErrorEvent) => void;
 }
@@ -90,6 +136,11 @@ export function subscribeToAnalysisStream(
     const url = `${baseUrl}/api/v1/gcode/analysis/${analysisId}/stream`;
 
     const eventSource = new EventSource(url);
+
+    // 디버깅: 모든 메시지 이벤트 로깅
+    eventSource.onmessage = (e: MessageEvent) => {
+        console.log('[gcodeAnalysisService] Generic message event:', e.data?.substring(0, 200));
+    };
 
     eventSource.addEventListener('timeline', (e: MessageEvent) => {
         try {
@@ -109,13 +160,25 @@ export function subscribeToAnalysisStream(
         }
     });
 
+    eventSource.addEventListener('segments', (e: MessageEvent) => {
+        try {
+            const data = JSON.parse(e.data) as SSESegmentsEvent;
+            callbacks.onSegments?.(data);
+        } catch (err) {
+            console.error('[gcodeAnalysisService] Failed to parse segments event:', err);
+        }
+    });
+
     eventSource.addEventListener('complete', (e: MessageEvent) => {
+        console.log('[gcodeAnalysisService] Received complete event, raw data length:', e.data?.length);
         try {
             const data = JSON.parse(e.data) as SSECompleteEvent;
+            console.log('[gcodeAnalysisService] Parsed complete event successfully');
             callbacks.onComplete?.(data);
             eventSource.close();
         } catch (err) {
             console.error('[gcodeAnalysisService] Failed to parse complete event:', err);
+            console.error('[gcodeAnalysisService] Raw data preview:', e.data?.substring(0, 500));
         }
     });
 

@@ -7,6 +7,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Monitor, Settings, ArrowRight, Activity, Thermometer, Clock, Lock, LogIn, Filter, Plus, Loader2 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { AppHeader } from "@/components/common/AppHeader";
+import { AppSidebar } from "@/components/common/AppSidebar";
 import { supabase } from "@shared/integrations/supabase/client"
 import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { useToast } from "@/hooks/use-toast";
@@ -280,7 +282,7 @@ interface MqttStateCache {
 
 const Home = () => {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { toast } = useToast();
   const [printers, setPrinters] = useState<PrinterOverview[]>([]); // localStorage 제거
   const [mqttStates, setMqttStates] = usePersistentState<MqttStateCache>('web:dashboard:mqtt_states', {}); // MQTT 상태만 저장
@@ -288,6 +290,9 @@ const Home = () => {
   const [selectedGroup, setSelectedGroup] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const summary = useDashboardSummary();
+
+  // 사이드바 상태
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // 프린터 설정 모달 상태
   const [showSetupModal, setShowSetupModal] = useState(false);
@@ -602,8 +607,24 @@ const Home = () => {
   }
 
   return (
-    <div className="bg-background p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="h-screen flex overflow-hidden">
+      {/* App Sidebar */}
+      <AppSidebar
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        user={user}
+        onSignOut={signOut}
+        mode="dashboard"
+      />
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* App Header */}
+        <AppHeader sidebarOpen={sidebarOpen} />
+
+        {/* Dashboard Content */}
+        <div className="flex-1 overflow-y-auto bg-background p-6">
+          <div className="max-w-7xl mx-auto space-y-6">
 
         {/* 로그인 안내 */}
         {!user && (
@@ -731,7 +752,13 @@ const Home = () => {
             </div>
           )}
         </div>
+        {/* End space-y-4 프린터 목록 */}
+          </div>
+          {/* End max-w-7xl container */}
+        </div>
+        {/* End Dashboard Content */}
       </div>
+      {/* End Main Content */}
 
       {/* 프린터 설정 모달 */}
       {selectedPrinterForSetup && (
