@@ -1371,7 +1371,12 @@ export default {
     gcodeFileInfo: "File Info",
     gcodeLines: "lines",
     gcodePreview: "G-code Preview",
-    gcodePreviewNote: "Only showing first {{count}} lines. Open editor for full editing."
+    gcodePreviewNote: "Only showing first {{count}} lines. Open editor for full editing.",
+
+    // Context viewer
+    contextView: "Context View",
+    partialView: "Partial View",
+    lines: "lines"
   },
   errors: {
     general: "An error occurred.",
@@ -2460,6 +2465,14 @@ export default {
     gcodeAnalysisInProgress: "Analyzing G-code...",
     gcodeAnalysisHint: "This may take a moment for detailed analysis...",
     gcodeAnalyzePrompt: "Analyze G-code!",
+    // Code fix related
+    codeFixTitle: "Code Fix",
+    fixCount: " fixes",
+    clickToEdit: "Click to edit in editor",
+    moreFixes: " more",
+    showLess: "Show less",
+    noGcodeData: "No G-code data",
+    noGcodeDataDesc: "No G-code context available for code editing.",
   },
   theme: {
     light: "Light",

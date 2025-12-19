@@ -15,10 +15,10 @@ import {
   Stethoscope,
   Loader2,
   X,
-  File,
   Plus,
   Settings2,
   ChevronDown,
+  ChevronRight,
   Check,
   Box,
 } from "lucide-react";
@@ -46,10 +46,9 @@ import { useUserPlan } from "@shared/hooks/useUserPlan";
 import { AppSidebar, type ChatSession } from "@/components/common/AppSidebar";
 import { AppHeader } from "@/components/common/AppHeader";
 import { FilePreviewList } from "@/components/ai/FilePreviewList";
+import { ChatMessage, type ChatMessageData } from "@/components/ai/ChatMessage";
 import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
 import { useLocation } from "react-router-dom";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   getChatSessions,
   createChatSession,
@@ -58,8 +57,6 @@ import {
   saveChatMessage,
   updateChatSessionTitle,
   updateChatSessionToolType,
-  updateChatSessionMetadata,
-  updateMessageReportId,
   type ChatToolType,
   type ChatFileInfo,
   type ChatMessageMetadata,
@@ -73,21 +70,27 @@ import {
   MAX_LOGGED_IN_MESSAGES,
   type AnonChatMessage,
 } from "@shared/utils/anonymousId";
-import { GCodeAnalysisReport, type GCodeAnalysisData, type AIResolveStartInfo, type AIResolveCompleteInfo } from "@/components/PrinterDetail/GCodeAnalysisReport";
-import { ReportCompletionCard } from "@/components/gcodeAnalysis/ReportCompletionCard";
+import { GCodeAnalysisReport, type AIResolveStartInfo, type AIResolveCompleteInfo } from "@/components/PrinterDetail/GCodeAnalysisReport";
 import { PanelRightOpen } from "lucide-react";
 import {
-  getAnalysisStatus,
-} from "@shared/services/gcodeAnalysisService";
-import type { TimelineStep, AnalysisResult } from "@shared/types/gcodeAnalysisTypes";
+  useGcodeAnalysisPolling,
+  type ReportCardData,
+} from "@/components/gcodeAnalysis/useGcodeAnalysisPolling";
 import {
-  saveAnalysisReport,
   convertDbReportToUiData,
   getAnalysisReportById,
 } from "@/lib/gcodeAnalysisDbService";
-import { saveSegmentData, linkSegmentToReport, getSegmentDataIdByAnalysisId, loadFullSegmentDataByReportId, loadFullSegmentData } from "@/lib/gcodeSegmentService";
+import { saveSegmentData, loadFullSegmentDataByReportId } from "@/lib/gcodeSegmentService";
+import { extractGcodeContext } from "@/lib/api/gcode";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+// 코드 수정 정보 타입
+interface CodeFixInfo {
+  line_number: number | null;
+  original: string | null;
+  fixed: string | null;
+}
 
 interface Message {
   id: string;
@@ -107,6 +110,12 @@ interface Message {
     layerCount?: number;
     printTime?: string;
   };
+  // AI 해결하기 코드 수정 정보
+  codeFixes?: CodeFixInfo[];
+  // 연관된 reportId (코드 수정 시 G-code 로드용)
+  analysisReportId?: string;
+  // G-code 컨텍스트 (코드 수정 에디터에서 사용, 앞뒤 30라인)
+  gcodeContext?: string;
 }
 
 type ChatMode = "general" | "troubleshoot" | "gcode" | "modeling";
@@ -124,6 +133,7 @@ const AIChat = () => {
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [gcodeFile, setGcodeFile] = useState<File | null>(null);
+  const [gcodeFileContent, setGcodeFileContent] = useState<string | null>(null); // G-code 파일 내용 (코드 수정 컨텍스트용)
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(locationState?.openSidebar ?? false);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -133,28 +143,51 @@ const AIChat = () => {
   const [selectedModel, setSelectedModel] = useState<{ provider: string; model: string }>({ provider: 'openai', model: 'gpt-4o-mini' });
 
   // G-code 분석 보고서 패널 상태
-  const [gcodeReportData, setGcodeReportData] = useState<GCodeAnalysisData | null>(null);
   const [reportPanelOpen, setReportPanelOpen] = useState(false);
-  const [activeReportId, setActiveReportId] = useState<string | null>(null); // 현재 활성화된 보고서 ID
 
-  // G-code 분석 폴링 상태
-  const [gcodeAnalysisId, setGcodeAnalysisId] = useState<string | null>(null);
-  const [gcodeAnalysisProgress, setGcodeAnalysisProgress] = useState(0);
-  const [gcodeAnalysisTimeline, setGcodeAnalysisTimeline] = useState<TimelineStep[]>([]);
-  const [gcodeAnalysisProgressMessage, setGcodeAnalysisProgressMessage] = useState<string | null>(null);
-  const [isGcodeAnalyzing, setIsGcodeAnalyzing] = useState(false);
-  const [gcodeAnalysisMessageId, setGcodeAnalysisMessageId] = useState<string | null>(null);
-  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // G-code 분석 폴링 훅 사용
+  const {
+    isAnalyzing: isGcodeAnalyzing,
+    progress: gcodeAnalysisProgress,
+    timeline: gcodeAnalysisTimeline,
+    progressMessage: gcodeAnalysisProgressMessage,
+    analysisId: gcodeAnalysisId,
+    analysisMessageId: gcodeAnalysisMessageId,
+    reportData: gcodeReportData,
+    segmentData: gcodeSegments,
+    activeReportId,
+    startPolling: startGcodeAnalysisPolling,
+    stopPolling: stopGcodeAnalysisPolling,
+    setReportData: setGcodeReportData,
+    setActiveReportId,
+    setSegmentData: setGcodeSegments,
+  } = useGcodeAnalysisPolling();
+
   // 세그먼트 데이터 ID (3D 뷰어용 - 보고서 저장 시 함께 저장)
   const savedSegmentDataIdRef = useRef<string | null>(null);
-  // 3D 뷰어용 세그먼트 데이터 (API 응답에서 직접 받은 데이터)
-  const [gcodeSegments, setGcodeSegments] = useState<{ layers: any[]; metadata?: any; temperatures?: any[] } | null>(null);
+  // G-code 파일 내용 ref (콜백 내에서 최신 상태 참조용)
+  const gcodeFileContentRef = useRef<string | null>(null);
 
   // AI 해결하기 상태
   const [isAIResolving, setIsAIResolving] = useState(false);
 
+  // 보고서 에디터 탭 관련 상태
+  const [reportPanelTab, setReportPanelTab] = useState<'report' | 'viewer' | 'editor'>('report');
+  const [editorContent, setEditorContent] = useState<string | undefined>(undefined);
+  const [editorFixInfo, setEditorFixInfo] = useState<{
+    lineNumber: number;
+    original: string;
+    fixed: string;
+    description?: string;
+  } | undefined>(undefined);
+
   // 사용자 플랜 정보 가져오기 (shared 훅 사용)
   const { plan: userPlan } = useUserPlan(user?.id);
+
+  // gcodeFileContent 상태를 ref에 동기화 (콜백에서 최신 상태 참조)
+  useEffect(() => {
+    gcodeFileContentRef.current = gcodeFileContent;
+  }, [gcodeFileContent]);
 
   // G-code 분석 도구 선택 시 기본 메시지 설정
   useEffect(() => {
@@ -273,6 +306,13 @@ const AIChat = () => {
           reportCard = reportCardCache[m.reportId];
         }
 
+        // metadata에서 codeFixes, gcodeContext 추출
+        const metadata = m.metadata as {
+          codeFixes?: CodeFixInfo[];
+          gcodeContext?: string;
+          analysisReportId?: string;
+        } | undefined;
+
         return {
           id: m.id,
           role: m.type as 'user' | 'assistant',
@@ -281,6 +321,10 @@ const AIChat = () => {
           images: m.images || undefined,
           files: m.files || undefined,
           reportCard,
+          // metadata에서 복원
+          codeFixes: metadata?.codeFixes,
+          gcodeContext: metadata?.gcodeContext,
+          analysisReportId: metadata?.analysisReportId || m.reportId,
         };
       });
 
@@ -363,10 +407,17 @@ const AIChat = () => {
   }, []);
 
   // G-code 파일 업로드 처리
-  const handleGcodeUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleGcodeUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && (file.name.endsWith('.gcode') || file.name.endsWith('.gco'))) {
       setGcodeFile(file);
+      // 파일 내용 읽기 (코드 수정 컨텍스트용)
+      try {
+        const content = await file.text();
+        setGcodeFileContent(content);
+      } catch (err) {
+        console.error('[AIChat] Failed to read gcode file content:', err);
+      }
       toast({
         title: t('aiChat.gcodeUploaded', 'G-code 파일 업로드됨'),
         description: file.name,
@@ -391,6 +442,7 @@ const AIChat = () => {
   // G-code 파일 제거
   const removeGcodeFile = () => {
     setGcodeFile(null);
+    setGcodeFileContent(null);
     if (chatMode === "gcode") {
       setChatMode("general");
     }
@@ -428,23 +480,30 @@ const AIChat = () => {
     setIsDragging(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
 
     const files = Array.from(e.dataTransfer.files);
-    files.forEach((file) => {
+    for (const file of files) {
       if (file.type.startsWith("image/")) {
         processImageFile(file);
       } else if (file.name.endsWith('.gcode') || file.name.endsWith('.gco')) {
         setGcodeFile(file);
+        // 파일 내용 읽기 (코드 수정 컨텍스트용)
+        try {
+          const content = await file.text();
+          setGcodeFileContent(content);
+        } catch (err) {
+          console.error('[AIChat] Failed to read gcode file content:', err);
+        }
         toast({
           title: t('aiChat.gcodeUploaded', 'G-code 파일 업로드됨'),
           description: file.name,
         });
       }
-    });
+    }
   }, [processImageFile, toast, t]);
 
   // 클립보드 붙여넣기 핸들러
@@ -849,391 +908,62 @@ const AIChat = () => {
     return formatChatResponse(response);
   };
 
-  // G-code 분석 폴링 처리 (2초마다 상태 조회)
-  const handleGcodeAnalysisStream = useCallback((analysisId: string, fileName?: string, messageId?: string, dbMessageId?: string | null) => {
-    // 기존 폴링이 있으면 중지
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
+  // G-code 분석 폴링 처리 (훅 기반 래퍼 함수)
+  const handleGcodeAnalysisStream = useCallback((
+    analysisId: string,
+    fileName?: string,
+    messageId?: string,
+    dbMessageId?: string | null
+  ) => {
+    console.log('[DEBUG] handleGcodeAnalysisStream called:', { analysisId, fileName, messageId, dbMessageId });
 
-    // messageId와 dbMessageId를 로컬 변수로 캡처 (클로저 문제 방지)
-    const capturedMessageId = messageId;
-    const capturedDbMessageId = dbMessageId;
-    console.log('[DEBUG] handleGcodeAnalysisStream called:', { analysisId, fileName, messageId: capturedMessageId, dbMessageId: capturedDbMessageId });
+    // 훅의 startPolling 호출
+    startGcodeAnalysisPolling({
+      analysisId,
+      fileName,
+      messageId,
+      dbMessageId,
+      userId: user?.id,
+      sessionId: currentSessionId,
+      gcodeContent: gcodeFileContentRef.current,
+      onReportCardReady: (reportCard: ReportCardData) => {
+        console.log('[DEBUG] onReportCardReady:', reportCard);
+        // 보고서 패널 열기
+        setReportPanelOpen(true);
 
-    console.log('[DEBUG] handleGcodeAnalysisStream: Setting isGcodeAnalyzing to TRUE');
-    setGcodeAnalysisId(analysisId);
-    setIsGcodeAnalyzing(true);
-    setGcodeAnalysisProgress(0);
-    setGcodeAnalysisTimeline([]);
-    setGcodeAnalysisProgressMessage(null);
-    if (capturedMessageId) {
-      setGcodeAnalysisMessageId(capturedMessageId);
-    }
-    console.log('[DEBUG] handleGcodeAnalysisStream: State updates dispatched');
-
-    // 분석 완료 처리 함수 - capturedMessageId를 직접 사용
-    const handleAnalysisComplete = async (result: AnalysisResult) => {
-      console.log('[DEBUG] handleAnalysisComplete called with capturedMessageId:', capturedMessageId);
-      setIsGcodeAnalyzing(false);
-      setGcodeAnalysisProgress(100);
-
-      // 폴링 중지
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-
-      // 결과를 UI 데이터로 변환 (analysisId 포함 - AI 해결하기 버튼 활성화용)
-      const reportData = convertAnalysisResultToReportData(result, fileName);
-      setGcodeReportData({
-        ...reportData,
-        analysisId: analysisId,
-      });
-      setReportPanelOpen(true);
-
-      // DB에 저장 (로그인 사용자만)
-      let savedReportId: string | null = null;
-      // 임시로 analysisId를 활성 보고서로 설정 (DB 저장 후 실제 ID로 업데이트)
-      setActiveReportId(analysisId);
-      if (user?.id) {
-        try {
-          // 세그먼트 ID가 ref에 없으면 DB에서 조회 (비동기 저장 타이밍 이슈 대응)
-          let segmentDataId = savedSegmentDataIdRef.current;
-          console.log('[DEBUG] Before saving report - savedSegmentDataIdRef.current:', segmentDataId);
-          if (!segmentDataId) {
-            const { segmentDataId: fetchedId } = await getSegmentDataIdByAnalysisId(analysisId);
-            segmentDataId = fetchedId;
-            console.log('[DEBUG] Fetched segmentDataId from DB:', segmentDataId);
-          }
-
-          console.log('[DEBUG] Calling saveAnalysisReport with segmentDataId:', segmentDataId);
-          const { data: savedReport, error } = await saveAnalysisReport(
-            user.id,
-            fileName || 'analysis.gcode',
-            reportData,
-            {
-              apiResult: result,
-              segmentDataId: segmentDataId || undefined,
-            }
-          );
-          if (error) {
-            console.log('[DEBUG] saveAnalysisReport FAILED:', error);
+        // 메시지에 reportCard 추가
+        setMessages(prev => {
+          if (messageId) {
+            return prev.map(msg =>
+              msg.id === messageId
+                ? { ...msg, reportCard }
+                : msg
+            );
           } else {
-            console.log('[DEBUG] saveAnalysisReport SUCCESS - reportId:', savedReport?.id, 'passed segmentDataId:', segmentDataId);
-            savedReportId = savedReport?.id || null;
-
-            // 실제 저장된 reportId로 activeReportId 업데이트
-            if (savedReportId) {
-              setActiveReportId(savedReportId);
-
-              // gcodeReportData에 reportId와 analysisId 추가 (3D 뷰어용)
-              setGcodeReportData(prev => prev ? {
-                ...prev,
-                reportId: savedReportId,
-                analysisId: analysisId,
-              } : null);
+            // 마지막 assistant 메시지에 reportCard 추가
+            for (let i = prev.length - 1; i >= 0; i--) {
+              if (prev[i].role === 'assistant') {
+                const updated = [...prev];
+                updated[i] = { ...updated[i], reportCard };
+                return updated;
+              }
             }
-
-            // 세그먼트 데이터와 보고서 연결 (gcode_segment_data.report_id 업데이트)
-            if (savedReportId) {
-              linkSegmentToReport(analysisId, savedReportId).then(({ success, error: linkError }) => {
-                if (linkError) {
-                  console.log('[DEBUG] linkSegmentToReport FAILED:', linkError);
-                } else if (success) {
-                  console.log('[DEBUG] linkSegmentToReport SUCCESS - report_id updated in gcode_segment_data');
-                }
-              });
-            }
-
-            // 세그먼트 데이터가 아직 gcodeSegments에 없으면 DB에서 로드 (3D 뷰어용)
-            const currentSegmentId = savedSegmentDataIdRef.current || segmentDataId;
-            if (currentSegmentId) {
-              console.log('[DEBUG] Loading segment data for 3D viewer, segmentId:', currentSegmentId);
-              loadFullSegmentData(currentSegmentId).then(({ data: segmentData, error: segmentError }) => {
-                if (segmentError) {
-                  console.log('[DEBUG] loadFullSegmentData FAILED:', segmentError);
-                } else if (segmentData) {
-                  console.log('[DEBUG] loadFullSegmentData SUCCESS, layers:', segmentData.layers.length);
-                  setGcodeSegments({
-                    layers: segmentData.layers,
-                    metadata: segmentData.metadata,
-                    temperatures: segmentData.temperatures,
-                  });
-                }
-              });
-            }
+            return prev;
           }
-        } catch (err) {
-          console.log('[DEBUG] saveAnalysisReport exception:', err);
-        }
-      }
-
-      // 보고서 카드 정보 생성
-      const reportCardData = {
-        reportId: savedReportId || analysisId,
-        fileName: fileName || 'analysis.gcode',
-        overallScore: result.final_summary?.overall_quality_score,
-        overallGrade: result.final_summary?.overall_quality_score >= 90 ? 'A' :
-          result.final_summary?.overall_quality_score >= 75 ? 'B' :
-            result.final_summary?.overall_quality_score >= 60 ? 'C' :
-              result.final_summary?.overall_quality_score >= 40 ? 'D' : 'F',
-        totalIssues: result.final_summary?.total_issues_found,
-        layerCount: result.comprehensive_summary?.layer?.total_layers,
-        printTime: result.comprehensive_summary?.print_time?.formatted_time,
-      };
-      console.log('[DEBUG] reportCardData:', reportCardData);
-      console.log('[DEBUG] capturedMessageId (from closure):', capturedMessageId);
-
-      // 기존 분석 시작 메시지에 reportCard 추가 (병합)
-      // capturedMessageId를 직접 사용 (클로저 캡처 문제 방지)
-      setMessages(prev => {
-        const targetMessageId = capturedMessageId;
-        console.log('[DEBUG] setMessages - targetMessageId:', targetMessageId, 'messages count:', prev.length);
-        if (targetMessageId) {
-          // 특정 메시지 업데이트
-          return prev.map(msg =>
-            msg.id === targetMessageId
-              ? { ...msg, reportCard: reportCardData }
-              : msg
-          );
-        } else {
-          // 마지막 assistant 메시지에 reportCard 추가
-          const lastIndex = prev.length - 1;
-          for (let i = lastIndex; i >= 0; i--) {
-            if (prev[i].role === 'assistant') {
-              const updated = [...prev];
-              updated[i] = { ...updated[i], reportCard: reportCardData };
-              return updated;
-            }
-          }
-          return prev;
-        }
-      });
-
-      // 세션 메타데이터 및 메시지 reportId 저장 (세션 복원 시 사용)
-      if (user?.id && currentSessionId && savedReportId) {
-        // 세션 메타데이터 업데이트
-        await updateChatSessionMetadata(currentSessionId, {
-          gcode_report_id: savedReportId,
-          gcode_report_file_name: fileName || 'analysis.gcode',
         });
-
-        // 해당 메시지의 reportId 업데이트 (DB) - capturedDbMessageId 직접 사용 (상태 의존 제거)
-        if (capturedDbMessageId) {
-          console.log('[DEBUG] Updating message reportId:', { dbMessageId: capturedDbMessageId, reportId: savedReportId });
-          updateMessageReportId(capturedDbMessageId, savedReportId).catch(err => {
-            console.log('[DEBUG] updateMessageReportId failed:', err);
-          });
-        } else {
-          console.log('[DEBUG] No dbMessageId available, skipping reportId update');
-        }
-      }
-
-      toast({
-        title: t('aiChat.analysisCompleteTitle', '분석 완료'),
-        description: t('aiChat.analysisCompleteDesc', 'G-code 분석이 완료되었습니다.'),
-      });
-    };
-
-    // 에러 처리 함수
-    const handleAnalysisError = (errorMsg: string) => {
-      setIsGcodeAnalyzing(false);
-
-      // 폴링 중지
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-
-      const errorMessage: Message = {
-        id: `assistant-error-${Date.now()}`,
-        role: "assistant",
-        content: `❌ ${t('aiChat.analysisError', '분석 중 오류가 발생했습니다')}: ${errorMsg}`,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
-
-      toast({
-        title: t('aiChat.analysisErrorTitle', '분석 오류'),
-        description: errorMsg,
-        variant: "destructive",
-      });
-    };
-
-    // 폴링 함수
-    const pollStatus = async () => {
-      try {
-        const statusResponse = await getAnalysisStatus(analysisId);
-        console.log('[DEBUG] pollStatus response:', {
-          status: statusResponse.status,
-          progress: statusResponse.progress,
-          progress_message: statusResponse.progress_message,
-          timeline: statusResponse.timeline,
-        });
-
-        // 진행률 업데이트
-        if (statusResponse.progress !== undefined) {
-          setGcodeAnalysisProgress(Math.round(statusResponse.progress * 100));
-        }
-
-        // 진행 메시지 업데이트
-        if (statusResponse.progress_message) {
-          setGcodeAnalysisProgressMessage(statusResponse.progress_message);
-        }
-
-        // 타임라인 업데이트
-        if (statusResponse.timeline) {
-          setGcodeAnalysisTimeline(statusResponse.timeline);
-        }
-
-        // 상태에 따른 처리
-        const status = statusResponse.status;
-        if (status === 'completed' || status === 'done' || status === 'finished') {
-          // 분석 완료
-          if (statusResponse.result) {
-            await handleAnalysisComplete(statusResponse.result);
-          } else {
-            handleAnalysisError('분석 결과가 없습니다.');
-          }
-        } else if (status === 'failed' || status === 'error') {
-          // 분석 실패
-          handleAnalysisError(statusResponse.error || '알 수 없는 오류');
-        }
-        // pending, running 상태면 계속 폴링
-      } catch (err) {
-        handleAnalysisError(err instanceof Error ? err.message : '폴링 중 오류가 발생했습니다.');
-      }
-    };
-
-    // 즉시 첫 번째 폴링 실행
-    pollStatus();
-
-    // 2초마다 폴링
-    pollingIntervalRef.current = setInterval(pollStatus, 2000);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, currentSessionId, t, toast]);
-
-  // 분석 결과를 UI 보고서 데이터로 변환
-  const convertAnalysisResultToReportData = (result: AnalysisResult, fileName?: string): GCodeAnalysisData => {
-    const { comprehensive_summary, final_summary, issues_found, printing_info, patch_plan } = result;
-
-    return {
-      fileName: fileName || 'analysis.gcode',
-      metrics: {
-        printTime: {
-          value: comprehensive_summary.print_time.formatted_time,
-          seconds: comprehensive_summary.print_time.total_seconds,
-        },
-        filamentUsage: {
-          length: `${comprehensive_summary.extrusion.total_filament_used.toFixed(1)}m`,
-          weight: comprehensive_summary.extrusion.filament_weight_g
-            ? `${comprehensive_summary.extrusion.filament_weight_g.toFixed(1)}g`
-            : undefined,
-        },
-        layerCount: {
-          value: comprehensive_summary.layer.total_layers,
-          layerHeight: comprehensive_summary.layer.layer_height,
-        },
-        retractionCount: {
-          value: comprehensive_summary.extrusion.retraction_count,
-        },
       },
-      support: {
-        percentage: comprehensive_summary.support.support_ratio,
+      onError: (errorMsg: string) => {
+        // 에러 메시지 추가
+        const errorMessage: Message = {
+          id: `assistant-error-${Date.now()}`,
+          role: "assistant",
+          content: `❌ ${t('aiChat.analysisError', '분석 중 오류가 발생했습니다')}: ${errorMsg}`,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, errorMessage]);
       },
-      speedDistribution: {
-        travel: comprehensive_summary.feed_rate?.travel_speed_avg || 0,
-        infill: comprehensive_summary.feed_rate?.print_speed_avg || 0,
-        perimeter: comprehensive_summary.feed_rate?.print_speed_avg || 0,
-        support: comprehensive_summary.feed_rate?.print_speed_avg,
-      },
-      temperature: {
-        nozzle: comprehensive_summary.temperature.nozzle_avg,
-        bed: comprehensive_summary.temperature.bed_max,
-        firstLayer: {
-          nozzle: comprehensive_summary.temperature.nozzle_max,
-          bed: comprehensive_summary.temperature.bed_max,
-        },
-      },
-      analysis: {
-        warnings: [],
-        cautions: [],
-        suggestions: printing_info?.recommendations?.map((r: string) => ({
-          title: r,
-          description: r,
-          impact: 'medium',
-        })) || [],
-        goodPoints: [],
-      },
-      overallScore: {
-        value: final_summary.overall_quality_score,
-        grade: final_summary.overall_quality_score >= 90 ? 'A' :
-          final_summary.overall_quality_score >= 75 ? 'B' :
-            final_summary.overall_quality_score >= 60 ? 'C' :
-              final_summary.overall_quality_score >= 40 ? 'D' : 'F',
-      },
-      printSpeed: {
-        max: comprehensive_summary.feed_rate?.max_speed || 0,
-        avg: comprehensive_summary.feed_rate?.avg_speed || 0,
-        min: comprehensive_summary.feed_rate?.min_speed,
-      },
-      detailedAnalysis: {
-        diagnosisSummary: {
-          keyIssue: {
-            title: final_summary.summary,
-            description: final_summary.recommendation,
-          },
-          totalIssues: final_summary.total_issues_found,
-          severity: final_summary.critical_issues > 0 ? 'critical' :
-            final_summary.total_issues_found > 5 ? 'high' : 'medium',
-          recommendation: final_summary.recommendation,
-        },
-        issueStatistics: [],
-        detailedIssues: issues_found.map((issue, idx) => ({
-          id: issue.id || `issue-${idx}`,
-          type: issue.type,
-          issueType: issue.type,
-          severity: issue.severity,
-          is_grouped: issue.is_grouped,
-          count: issue.count,
-          lines: issue.lines,
-          line: issue.lines[0],
-          title: issue.title,
-          description: issue.description,
-          all_issues: issue.all_issues,
-          impact: issue.impact,
-          suggestion: issue.suggestion,
-          layer: issue.layer,
-          section: issue.section,
-        })),
-        patchSuggestions: patch_plan?.patches?.map(p => ({
-          line: p.line || p.line_index,
-          line_index: p.line_index,
-          action: p.action,
-          original: p.original_line || p.original,
-          modified: p.new_line || p.modified,
-          reason: p.reason,
-        })) || [],
-        solutionGuides: [],
-        expectedImprovements: [],
-        llmSummary: final_summary.summary,
-        llmRecommendation: final_summary.recommendation,
-        printingInfo: printing_info,
-      },
-    };
-  };
-
-  // 컴포넌트 언마운트 시 폴링 정리
-  useEffect(() => {
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-    };
-  }, []);
+    });
+  }, [startGcodeAnalysisPolling, user?.id, currentSessionId, t]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1289,6 +1019,12 @@ const AIChat = () => {
 
     const userContent = `"${info.issueTitle}" 이슈를 해결해줘`;
 
+    // 토스트 알림 표시
+    toast({
+      title: t('aiChat.aiResolving', 'AI 분석 중'),
+      description: `"${info.issueTitle}" ${t('aiChat.analyzing', '분석 중...')}`,
+    });
+
     // 사용자 질문 메시지 추가
     const userMessage: Message = {
       id: `user-resolve-${Date.now()}`,
@@ -1299,13 +1035,18 @@ const AIChat = () => {
 
     setMessages(prev => [...prev, userMessage]);
 
+    // 자동 스크롤 (메시지 추가 후 약간의 딜레이)
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+
     // 로그인 사용자: DB에 저장
     if (user?.id && currentSessionId) {
       saveChatMessage(currentSessionId, user.id, 'user', userContent, {
         metadata: { tool: 'resolve_issue' },
       });
     }
-  }, [user, currentSessionId]);
+  }, [user, currentSessionId, toast, t]);
 
   // AI 해결하기 완료 핸들러 (AI 응답 메시지 추가)
   const handleAIResolveComplete = useCallback((info: AIResolveCompleteInfo) => {
@@ -1348,32 +1089,22 @@ const AIChat = () => {
       content += '\n';
     }
 
-    // 코드 수정 (Git diff 스타일)
-    const codeFixes = solution.code_fixes && solution.code_fixes.length > 0
+    // 코드 수정 정보 추출
+    const codeFixesRaw = solution.code_fixes && solution.code_fixes.length > 0
       ? solution.code_fixes.filter(fix => fix.has_fix)
       : solution.code_fix?.has_fix ? [solution.code_fix] : [];
 
-    if (codeFixes.length > 0) {
-      content += `### 💻 코드 수정\n`;
-      codeFixes.forEach((fix, i) => {
-        if (fix.original && fix.fixed) {
-          content += `**Line ${fix.line_number}**${codeFixes.length > 1 ? ` (${i + 1}/${codeFixes.length})` : ''}\n`;
-          content += '```diff\n';
-          // 원본 코드 (라인번호: 코드 형식에서 코드만 추출)
-          const origLines = fix.original.split('\n');
-          origLines.forEach(line => {
-            const match = line.match(/^\d+:\s*(.*)$/);
-            content += `- ${match ? match[1] : line}\n`;
-          });
-          // 수정 코드
-          const fixedLines = fix.fixed.split('\n');
-          fixedLines.forEach(line => {
-            const match = line.match(/^\d+:\s*(.*)$/);
-            content += `+ ${match ? match[1] : line}\n`;
-          });
-          content += '```\n\n';
-        }
-      });
+    // CodeFixInfo 형식으로 변환 (메시지에 저장용)
+    const codeFixesForMessage: CodeFixInfo[] = codeFixesRaw.map(fix => ({
+      line_number: fix.line_number ?? null,
+      original: fix.original ?? null,
+      fixed: fix.fixed ?? null,
+    }));
+
+    // 코드 수정이 있으면 클릭 가능한 안내 텍스트 추가
+    if (codeFixesRaw.length > 0) {
+      content += `### 💻 코드 수정 (${codeFixesRaw.length}건)\n`;
+      content += `> 아래 코드 수정 카드를 클릭하면 에디터에서 직접 수정할 수 있습니다.\n\n`;
     }
 
     // 팁
@@ -1390,12 +1121,15 @@ const AIChat = () => {
       content += `> ✅ 별도의 조치가 필요하지 않습니다.\n`;
     }
 
-    // AI 응답 메시지 추가
+    // AI 응답 메시지 추가 (codeFixes, reportId, gcodeContext 포함)
     const assistantMessage: Message = {
       id: `assistant-resolve-${Date.now()}`,
       role: 'assistant',
       content: content.trim(),
       timestamp: new Date(),
+      codeFixes: codeFixesForMessage.length > 0 ? codeFixesForMessage : undefined,
+      analysisReportId: info.reportId,
+      gcodeContext: info.gcodeContext, // 에디터에서 사용할 G-code 컨텍스트 (앞뒤 30라인)
     };
 
     setMessages(prev => [...prev, assistantMessage]);
@@ -1403,7 +1137,12 @@ const AIChat = () => {
     // 로그인 사용자: DB에 저장
     if (user?.id && currentSessionId) {
       saveChatMessage(currentSessionId, user.id, 'assistant', content.trim(), {
-        metadata: { tool: 'resolve_issue' },
+        metadata: {
+          tool: 'resolve_issue',
+          codeFixes: codeFixesForMessage.length > 0 ? codeFixesForMessage : undefined,
+          gcodeContext: info.gcodeContext, // 에디터용 G-code 컨텍스트도 저장
+          analysisReportId: info.reportId,
+        },
       });
     }
   }, [user, currentSessionId]);
@@ -1881,265 +1620,68 @@ const AIChat = () => {
             {/* 채팅 영역 */}
             <div className={cn(
               "flex-1 flex flex-col min-w-0 transition-all duration-300",
-              gcodeReportData && reportPanelOpen && "flex-[0_0_45%]"
+              gcodeReportData && reportPanelOpen && "flex-[0_0_48%]"
             )}>
               <ScrollArea className="flex-1">
                 <div className="py-4">
                   <div className="space-y-4">
                     {messages.map((message) => (
-                      <div
+                      <ChatMessage
                         key={message.id}
-                        className={cn(
-                          "w-full",
-                          message.role === "user" ? "bg-transparent" : "bg-muted/30"
-                        )}
-                      >
-                        <div className={cn(
-                          "max-w-4xl mx-auto px-6 py-5",
-                          message.role === "user" && "flex flex-col items-end"
-                        )}>
-                          {message.role === "user" ? (
-                            // 사용자 메시지 - 오른쪽 정렬, 말풍선 스타일
-                            <>
-                              {/* 이미지 미리보기 */}
-                              {message.images && message.images.length > 0 && (
-                                <div className="flex flex-wrap gap-2 mb-2 justify-end">
-                                  {message.images.map((img, imgIdx) => (
-                                    <img
-                                      key={imgIdx}
-                                      src={img}
-                                      alt={`uploaded-${imgIdx}`}
-                                      className="w-24 h-24 object-cover rounded-lg border"
-                                    />
-                                  ))}
-                                </div>
-                              )}
-                              {/* 파일 미리보기 */}
-                              {message.files && message.files.length > 0 && (
-                                <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground justify-end">
-                                  <File className="w-4 h-4" />
-                                  {message.files.map((f, fIdx) => (
-                                    <span key={fIdx} className="bg-muted px-2 py-1 rounded">{f.name}</span>
-                                  ))}
-                                </div>
-                              )}
-                              {/* 메시지 내용 */}
-                              <div className="bg-blue-100 text-blue-900 rounded-2xl rounded-tr-sm px-4 py-3 max-w-[85%]">
-                                <div className="text-sm leading-relaxed whitespace-pre-wrap">
-                                  {message.content}
-                                </div>
-                              </div>
-                            </>
-                          ) : (
-                            // AI 메시지 - 좌측 정렬, 전체 너비
-                            <>
-                              {/* 역할 라벨 */}
-                              <div className="flex items-center gap-2 mb-3">
-                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center">
-                                  <Cpu className="w-3.5 h-3.5 text-white" />
-                                </div>
-                                <span className="text-sm font-semibold text-foreground">
-                                  FACTOR AI
-                                </span>
-                              </div>
-                              {/* 메시지 내용 - 마크다운 렌더링 */}
-                              <div className="prose prose-sm max-w-none text-foreground pl-8 dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-ul:my-4 prose-ol:my-4 prose-li:my-1 prose-p:my-3 prose-headings:my-4 prose-headings:mt-6">
-                                <ReactMarkdown
-                                  remarkPlugins={[remarkGfm]}
-                                  components={{
-                                    // 제목 스타일링
-                                    h1: ({ children }) => (
-                                      <h1 className="text-xl font-bold mt-6 mb-4 pb-2 border-b border-border">
-                                        {children}
-                                      </h1>
-                                    ),
-                                    h2: ({ children }) => (
-                                      <h2 className="text-lg font-bold mt-6 mb-3 pb-1.5 border-b border-border/50">
-                                        {children}
-                                      </h2>
-                                    ),
-                                    h3: ({ children }) => (
-                                      <h3 className="text-base font-semibold mt-5 mb-3">
-                                        {children}
-                                      </h3>
-                                    ),
-                                    // 문단 스타일링 - 볼드만 있는 줄은 제목처럼 표시
-                                    p: ({ children }) => {
-                                      // children이 단일 strong 요소인지 확인 (볼드만 있는 줄)
-                                      const childArray = Array.isArray(children) ? children : [children];
-                                      const isBoldOnlyLine = childArray.length === 1 &&
-                                        typeof childArray[0] === 'object' &&
-                                        childArray[0] !== null &&
-                                        (childArray[0] as React.ReactElement).type === 'strong';
+                        message={message as ChatMessageData}
+                        gcodeContent={gcodeReportData?.gcodeContent}
+                        extractGcodeContext={extractGcodeContext}
+                        onCodeFixClick={(fix, context) => {
+                          setEditorContent(context);
+                          setEditorFixInfo({
+                            lineNumber: fix.line_number!,
+                            original: fix.original || '',
+                            fixed: fix.fixed || '',
+                          });
+                          setReportPanelTab('editor');
+                          if (!reportPanelOpen) {
+                            setReportPanelOpen(true);
+                          }
+                        }}
+                        reportPanelOpen={reportPanelOpen}
+                        activeReportId={activeReportId}
+                        onReportCardClick={async (clickedReportId) => {
+                          // 같은 보고서가 이미 열려있으면 닫기
+                          if (reportPanelOpen && activeReportId === clickedReportId) {
+                            setReportPanelOpen(false);
+                            setActiveReportId(null);
+                            return;
+                          }
 
-                                      if (isBoldOnlyLine) {
-                                        // 볼드만 있는 줄은 제목처럼 크게 표시
-                                        return (
-                                          <p className="my-4 mt-6 text-base font-bold leading-relaxed">
-                                            {children}
-                                          </p>
-                                        );
-                                      }
-                                      return (
-                                        <p className="my-3 leading-relaxed">
-                                          {children}
-                                        </p>
-                                      );
-                                    },
-                                    // 링크 스타일링
-                                    a: ({ children, href }) => (
-                                      <a
-                                        href={href}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-primary hover:underline"
-                                      >
-                                        {children}
-                                      </a>
-                                    ),
-                                    // 코드 블록 스타일링
-                                    code: ({ className, children, ...props }) => {
-                                      const isInline = !className;
-                                      return isInline ? (
-                                        <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
-                                          {children}
-                                        </code>
-                                      ) : (
-                                        <code className={cn("block bg-muted p-3 rounded-lg text-sm font-mono overflow-x-auto", className)} {...props}>
-                                          {children}
-                                        </code>
-                                      );
-                                    },
-                                    // pre 태그 스타일링
-                                    pre: ({ children }) => (
-                                      <pre className="bg-muted rounded-lg overflow-x-auto my-4">
-                                        {children}
-                                      </pre>
-                                    ),
-                                    // 리스트 스타일링
-                                    ul: ({ children }) => (
-                                      <ul className="list-disc list-inside space-y-2 my-4">
-                                        {children}
-                                      </ul>
-                                    ),
-                                    ol: ({ children }) => (
-                                      <ol className="list-decimal list-inside space-y-2 my-4">
-                                        {children}
-                                      </ol>
-                                    ),
-                                    li: ({ children }) => {
-                                      // 빈 리스트 아이템 필터링 (숫자만 있는 경우)
-                                      const childArray = Array.isArray(children) ? children : [children];
-                                      const hasContent = childArray.some(child => {
-                                        if (typeof child === 'string') return child.trim().length > 0;
-                                        if (typeof child === 'object' && child !== null) return true;
-                                        return false;
-                                      });
+                          // 다른 보고서로 전환하거나 새로 열기
+                          const { data: report } = await getAnalysisReportById(clickedReportId);
+                          if (report) {
+                            // 3D 뷰어용 segment 데이터 로드 (analysisId도 함께 가져옴)
+                            const { data: segmentData } = await loadFullSegmentDataByReportId(clickedReportId);
 
-                                      if (!hasContent) {
-                                        return null; // 빈 아이템은 렌더링하지 않음
-                                      }
+                            // 보고서 UI 데이터 변환 + analysisId 추가 (AI 해결하기 버튼 활성화용)
+                            const reportUiData = convertDbReportToUiData(report);
+                            setGcodeReportData({
+                              ...reportUiData,
+                              analysisId: segmentData?.analysisId,
+                            });
+                            setActiveReportId(clickedReportId);
+                            setReportPanelOpen(true);
 
-                                      return (
-                                        <li className="my-1.5 leading-relaxed">
-                                          {children}
-                                        </li>
-                                      );
-                                    },
-                                    // 테이블 스타일링
-                                    table: ({ children }) => (
-                                      <div className="overflow-x-auto my-5">
-                                        <table className="min-w-full border-collapse border border-border">
-                                          {children}
-                                        </table>
-                                      </div>
-                                    ),
-                                    th: ({ children }) => (
-                                      <th className="border border-border bg-muted px-3 py-2 text-left font-semibold">
-                                        {children}
-                                      </th>
-                                    ),
-                                    td: ({ children }) => (
-                                      <td className="border border-border px-3 py-2">
-                                        {children}
-                                      </td>
-                                    ),
-                                    // 구분선 스타일링 - 간격 더 넓게
-                                    hr: () => (
-                                      <hr className="my-8 border-t-2 border-border/60" />
-                                    ),
-                                    // 인용구 스타일링
-                                    blockquote: ({ children }) => (
-                                      <blockquote className="border-l-4 border-primary/50 pl-4 my-5 italic text-muted-foreground bg-muted/30 py-2 rounded-r-lg">
-                                        {children}
-                                      </blockquote>
-                                    ),
-                                  }}
-                                >
-                                  {message.content}
-                                </ReactMarkdown>
-                              </div>
-                              {/* 보고서 완료 카드 (Gemini 스타일) */}
-                              {message.reportCard && (
-                                <div className="pl-8 mt-4">
-                                  <ReportCompletionCard
-                                    reportId={message.reportCard.reportId}
-                                    fileName={message.reportCard.fileName}
-                                    completedAt={message.timestamp}
-                                    overallScore={message.reportCard.overallScore}
-                                    overallGrade={message.reportCard.overallGrade}
-                                    totalIssues={message.reportCard.totalIssues}
-                                    layerCount={message.reportCard.layerCount}
-                                    printTime={message.reportCard.printTime}
-                                    isOpen={reportPanelOpen && activeReportId === message.reportCard.reportId}
-                                    isActive={!reportPanelOpen || activeReportId === message.reportCard.reportId}
-                                    onClick={async () => {
-                                      const clickedReportId = message.reportCard?.reportId;
-
-                                      // 같은 보고서가 이미 열려있으면 닫기
-                                      if (reportPanelOpen && activeReportId === clickedReportId) {
-                                        setReportPanelOpen(false);
-                                        setActiveReportId(null);
-                                        return;
-                                      }
-
-                                      // 다른 보고서로 전환하거나 새로 열기
-                                      if (clickedReportId) {
-                                        const { data: report } = await getAnalysisReportById(clickedReportId);
-                                        if (report) {
-                                          // 3D 뷰어용 segment 데이터 로드 (analysisId도 함께 가져옴)
-                                          const { data: segmentData } = await loadFullSegmentDataByReportId(clickedReportId);
-
-                                          // 보고서 UI 데이터 변환 + analysisId 추가 (AI 해결하기 버튼 활성화용)
-                                          const reportUiData = convertDbReportToUiData(report);
-                                          setGcodeReportData({
-                                            ...reportUiData,
-                                            analysisId: segmentData?.analysisId,
-                                          });
-                                          setActiveReportId(clickedReportId);
-                                          setReportPanelOpen(true);
-
-                                          if (segmentData && segmentData.layers && segmentData.layers.length > 0) {
-                                            console.log('[ReportCard onClick] Loaded segment data, layers:', segmentData.layers.length, 'analysisId:', segmentData.analysisId);
-                                            setGcodeSegments({
-                                              layers: segmentData.layers,
-                                              metadata: segmentData.metadata,
-                                              temperatures: segmentData.temperatures,
-                                            });
-                                          } else {
-                                            console.log('[ReportCard onClick] No segment data found for report:', clickedReportId);
-                                            setGcodeSegments(null);
-                                          }
-                                        }
-                                      }
-                                    }}
-                                  />
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </div>
+                            if (segmentData && segmentData.layers && segmentData.layers.length > 0) {
+                              console.log('[ReportCard onClick] Loaded segment data, layers:', segmentData.layers.length, 'analysisId:', segmentData.analysisId);
+                              setGcodeSegments({
+                                layers: segmentData.layers,
+                                metadata: segmentData.metadata,
+                                temperatures: segmentData.temperatures,
+                              });
+                            } else {
+                              console.log('[ReportCard onClick] No segment data found for report:', clickedReportId);
+                              setGcodeSegments(null);
+                            }
+                          }
+                        }}
+                      />
                     ))}
 
                     {isLoading && (
@@ -2244,7 +1786,7 @@ const AIChat = () => {
 
             {/* G-code 분석 보고서 - 인라인 카드 (채팅 옆에 표시) */}
             {gcodeReportData && reportPanelOpen && (
-              <div className="flex-[0_0_55%] bg-muted/20 flex flex-col overflow-hidden h-full pr-4 py-4">
+              <div className="flex-[0_0_52%] w-full bg-muted/20 flex flex-col overflow-hidden h-full pr-4 py-4">
                 {/* 보고서 내용 - 높이 100% 설정 */}
                 <div className="h-full">
                   <GCodeAnalysisReport
@@ -2258,6 +1800,30 @@ const AIChat = () => {
                     onAIResolveComplete={handleAIResolveComplete}
                     onAIResolveError={handleAIResolveError}
                     isAIResolving={isAIResolving}
+                    activeTab={reportPanelTab}
+                    onTabChange={setReportPanelTab}
+                    editorContent={editorContent}
+                    editorFixInfo={editorFixInfo}
+                    onViewCodeFix={(fix) => {
+                      // AI 해결 응답의 메시지에서 gcodeContext를 찾아서 에디터 탭으로 이동
+                      const resolveMessage = messages.find(m => m.codeFixes && m.gcodeContext);
+                      if (resolveMessage?.gcodeContext && fix.line_number) {
+                        // 에디터 탭으로 전환하고 수정 정보 설정
+                        setEditorContent(resolveMessage.gcodeContext);
+                        setEditorFixInfo({
+                          lineNumber: fix.line_number,
+                          original: fix.original || '',
+                          fixed: fix.fixed || '',
+                        });
+                        setReportPanelTab('editor');
+                      } else {
+                        toast({
+                          title: t('aiChat.noGcodeData', 'G-code 데이터 없음'),
+                          description: t('aiChat.noGcodeDataDesc', '연결된 G-code 데이터를 찾을 수 없습니다. AI 해결하기를 먼저 실행해주세요.'),
+                          variant: 'destructive',
+                        });
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -2286,6 +1852,7 @@ const AIChat = () => {
         title={t('auth.loginRequired', '로그인이 필요합니다')}
         description={t('auth.loginModalDescription', '로그인하시면 대화 기록 저장, 분석 히스토리 등 더 많은 기능을 이용하실 수 있습니다.')}
       />
+
     </div>
   );
 };

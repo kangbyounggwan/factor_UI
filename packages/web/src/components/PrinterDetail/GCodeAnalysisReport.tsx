@@ -1125,6 +1125,8 @@ interface GCodeAnalysisReportProps {
     metadata?: SegmentMetadata;
     temperatures?: TemperatureData[];
   };
+  // 코드 수정 클릭 시 에디터로 이동 콜백
+  onViewCodeFix?: (fix: { line_number: number | null; original: string | null; fixed: string | null }) => void;
 }
 
 import { updateGCodeFileContent } from '@/lib/gcodeAnalysisDbService';
@@ -1154,6 +1156,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   appliedPatchCount = 0,
   onSaveModifiedGCode,
   initialSegments,
+  onViewCodeFix,
 }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -2763,7 +2766,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                       </svg>
                       {/* 중앙 텍스트 */}
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-2xl font-bold text-slate-900 dark:text-white">{support.percentage.toFixed(1)}%</span>
+                        <span className="text-2xl font-heading font-bold text-slate-900 dark:text-white">{support.percentage.toFixed(1)}%</span>
                         {support.volume && (
                           <span className="text-xs font-body text-slate-500 dark:text-slate-400">{support.volume}</span>
                         )}
@@ -2826,24 +2829,24 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                         <div className="w-3 h-3 rounded-full bg-red-500" />
                         <span className="text-base font-body text-slate-700 dark:text-white">{t('gcodeAnalytics.nozzle')}</span>
                       </div>
-                      <span className="text-xl font-bold text-slate-900 dark:text-white">{temperature.nozzle}°C</span>
+                      <span className="text-xl font-heading font-bold text-slate-900 dark:text-white">{typeof temperature.nozzle === 'number' ? temperature.nozzle.toFixed(2) : temperature.nozzle}°C</span>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-700/30 rounded-lg">
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-orange-500" />
                         <span className="text-base font-body text-slate-700 dark:text-white">{t('gcodeAnalytics.bed')}</span>
                       </div>
-                      <span className="text-xl font-bold text-slate-900 dark:text-white">{temperature.bed}°C</span>
+                      <span className="text-xl font-heading font-bold text-slate-900 dark:text-white">{typeof temperature.bed === 'number' ? temperature.bed.toFixed(2) : temperature.bed}°C</span>
                     </div>
                     {temperature.firstLayer && (
                       <div className="pt-2 border-t border-slate-200 dark:border-slate-700/50">
                         <p className="text-sm text-slate-500 mb-2">{t('gcodeAnalytics.firstLayerSettings')}</p>
                         <div className="grid grid-cols-2 gap-2 text-sm text-slate-700 dark:text-white">
                           {temperature.firstLayer.nozzle && (
-                            <span>{t('gcodeAnalytics.nozzle')}: {temperature.firstLayer.nozzle}°C</span>
+                            <span>{t('gcodeAnalytics.nozzle')}: {typeof temperature.firstLayer.nozzle === 'number' ? temperature.firstLayer.nozzle.toFixed(2) : temperature.firstLayer.nozzle}°C</span>
                           )}
                           {temperature.firstLayer.bed && (
-                            <span>{t('gcodeAnalytics.bed')}: {temperature.firstLayer.bed}°C</span>
+                            <span>{t('gcodeAnalytics.bed')}: {typeof temperature.firstLayer.bed === 'number' ? temperature.firstLayer.bed.toFixed(2) : temperature.firstLayer.bed}°C</span>
                           )}
                         </div>
                       </div>
@@ -3146,7 +3149,7 @@ function MetricCard({ icon, label, value, subValue, color }: MetricCardProps) {
       </div>
       {/* 값 영역 */}
       <div className="space-y-1">
-        <div className="text-3xl font-score font-black text-slate-900 dark:text-white tracking-tight leading-none">{value}</div>
+        <div className="text-3xl font-score font-bold text-slate-900 dark:text-white tracking-tight leading-none">{value}</div>
         {subValue && (
           <div className="text-sm font-medium text-slate-500 dark:text-slate-400">{subValue}</div>
         )}
@@ -3980,11 +3983,13 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
 function AIResolutionPanel({
   resolution,
   onClose,
-  onViewCode
+  onViewCode,
+  onViewCodeFix
 }: {
   resolution: IssueResolveResponse;
   onClose: () => void;
   onViewCode?: () => void;
+  onViewCodeFix?: (fix: { line_number: number | null; original: string | null; fixed: string | null }) => void;
 }) {
   const { t } = useTranslation();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['explanation']));
@@ -4135,15 +4140,38 @@ function AIResolutionPanel({
               {solution.code_fixes && solution.code_fixes.length > 0 ? (
                 solution.code_fixes.filter(fix => fix.original && fix.fixed).map((fix, fixIdx, filteredArr) => (
                   <div key={fixIdx} className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
-                    {/* 라인 번호 헤더 */}
+                    {/* 라인 번호 헤더 - 클릭하여 에디터로 이동 */}
                     {fix.line_number && (
-                      <div className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
-                        <span className="text-xs font-mono bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-700 dark:text-slate-300">
+                      <div
+                        className={cn(
+                          "px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2",
+                          onViewCodeFix && "cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors group"
+                        )}
+                        onClick={() => onViewCodeFix?.(fix)}
+                        role={onViewCodeFix ? "button" : undefined}
+                        tabIndex={onViewCodeFix ? 0 : undefined}
+                        onKeyDown={(e) => {
+                          if (onViewCodeFix && (e.key === 'Enter' || e.key === ' ')) {
+                            e.preventDefault();
+                            onViewCodeFix(fix);
+                          }
+                        }}
+                      >
+                        <span className={cn(
+                          "text-xs font-mono bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-700 dark:text-slate-300",
+                          onViewCodeFix && "group-hover:bg-blue-100 dark:group-hover:bg-blue-800 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors"
+                        )}>
                           LN {fix.line_number.toLocaleString()}
                         </span>
                         <span className="text-xs text-slate-500 dark:text-slate-400">
                           {t('gcodeAnalytics.fixNumber', '수정 {{n}}', { n: fixIdx + 1 })} / {filteredArr.length}
                         </span>
+                        {onViewCodeFix && (
+                          <span className="ml-auto text-xs text-blue-500 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                            <Edit3 className="h-3 w-3" />
+                            {t('gcodeAnalytics.editInViewer', '에디터에서 수정')}
+                          </span>
+                        )}
                       </div>
                     )}
                     {/* 원본 코드 */}

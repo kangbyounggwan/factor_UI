@@ -597,6 +597,14 @@ export default {
     gcodeAnalysisInProgress: "G-code 분석 중...",
     gcodeAnalysisHint: "고도화된 분석을 위해 시간이 조금 걸릴 수 있습니다...",
     gcodeAnalyzePrompt: "G-code 분석해줘!",
+    // 코드 수정 관련
+    codeFixTitle: "코드 수정",
+    fixCount: "건",
+    clickToEdit: "클릭하여 에디터에서 수정하기",
+    moreFixes: "개 더 보기",
+    showLess: "접기",
+    noGcodeData: "G-code 데이터 없음",
+    noGcodeDataDesc: "코드 수정을 위한 G-code 컨텍스트가 없습니다.",
   },
   profile: {
     // UserSettings 페이지
@@ -1489,7 +1497,12 @@ export default {
     gcodeFileInfo: "파일 정보",
     gcodeLines: "라인",
     gcodePreview: "G-code 미리보기",
-    gcodePreviewNote: "처음 {{count}}줄만 표시됩니다. 전체 편집은 에디터를 열어주세요."
+    gcodePreviewNote: "처음 {{count}}줄만 표시됩니다. 전체 편집은 에디터를 열어주세요.",
+
+    // 컨텍스트 뷰어
+    contextView: "컨텍스트 뷰",
+    partialView: "부분 보기",
+    lines: "라인"
   },
   errors: {
     general: "오류가 발생했습니다.",
