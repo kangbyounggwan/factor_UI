@@ -8,7 +8,7 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // 도구 타입 정의
-export type ChatToolType = 'general' | 'troubleshoot' | 'gcode' | 'modeling';
+export type ChatToolType = 'general' | 'troubleshoot' | 'gcode' | 'modeling' | 'resolve_issue';
 
 // 파일 정보 타입
 export interface ChatFileInfo {

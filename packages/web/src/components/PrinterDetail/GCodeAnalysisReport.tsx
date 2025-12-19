@@ -1119,6 +1119,12 @@ interface GCodeAnalysisReportProps {
   appliedPatchCount?: number;
   // 수정된 G-code 저장 콜백
   onSaveModifiedGCode?: () => void;
+  // 3D 뷰어용 초기 세그먼트 데이터 (DB 로드 없이 직접 전달)
+  initialSegments?: {
+    layers: LayerSegmentData[];
+    metadata?: SegmentMetadata;
+    temperatures?: TemperatureData[];
+  };
 }
 
 import { updateGCodeFileContent } from '@/lib/gcodeAnalysisDbService';
@@ -1147,6 +1153,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   onRevertComplete,
   appliedPatchCount = 0,
   onSaveModifiedGCode,
+  initialSegments,
 }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -1216,12 +1223,39 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
     return chartData;
   }, [segmentTemperatures, segmentMetadata]);
 
-  // 뷰어 탭 활성화 시 세그먼트 데이터 로드
+  // initialSegments가 전달되면 바로 사용 (DB 로드 불필요)
   useEffect(() => {
-    if (currentPanelTab === 'viewer' && data.reportId && !segmentLayers && !viewerLoading && !segmentLoadAttempted) {
+    if (initialSegments && initialSegments.layers && initialSegments.layers.length > 0) {
+      console.log('[GCodeAnalysisReport] Using initialSegments, layers:', initialSegments.layers.length);
+      setSegmentLayers(initialSegments.layers);
+      if (initialSegments.metadata) {
+        setSegmentMetadata(initialSegments.metadata);
+        setCurrentLayer(initialSegments.metadata.layerCount - 1);
+      } else {
+        // metadata가 없으면 layers에서 추출
+        const layerCount = initialSegments.layers.length;
+        const lastLayer = initialSegments.layers[layerCount - 1];
+        setSegmentMetadata({
+          layerCount,
+          totalExtrusionPaths: initialSegments.layers.reduce((sum, l) => sum + (l.extrusionCount || 0), 0),
+          totalTravelPaths: initialSegments.layers.reduce((sum, l) => sum + (l.travelCount || 0), 0),
+          maxZ: lastLayer?.z || 0,
+        });
+        setCurrentLayer(layerCount - 1);
+      }
+      if (initialSegments.temperatures) {
+        setSegmentTemperatures(initialSegments.temperatures);
+      }
+      setSegmentLoadAttempted(true);
+    }
+  }, [initialSegments]);
+
+  // 뷰어 탭 활성화 시 세그먼트 데이터 로드 (initialSegments가 없고 reportId가 있을 때만)
+  useEffect(() => {
+    if (currentPanelTab === 'viewer' && data.reportId && !segmentLayers && !viewerLoading && !segmentLoadAttempted && !initialSegments) {
       loadSegmentData();
     }
-  }, [currentPanelTab, data.reportId, segmentLayers, viewerLoading, segmentLoadAttempted]);
+  }, [currentPanelTab, data.reportId, segmentLayers, viewerLoading, segmentLoadAttempted, initialSegments]);
 
   // 에디터 탭은 externalEditorContent (gcode_context)만 사용
   // 전체 G-code(data.gcodeContent)는 에디터에 로드하지 않음 (성능 문제)

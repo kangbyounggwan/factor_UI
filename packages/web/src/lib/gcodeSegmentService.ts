@@ -350,15 +350,20 @@ export async function loadFullSegmentDataByReportId(reportId: string): Promise<{
     metadata: SegmentMetadata;
     temperatures: TemperatureData[];
     layers: LayerSegmentData[];
+    analysisId?: string;  // AI 해결하기 API 호출용
   } | null;
   error: Error | null;
 }> {
   try {
-    // 1. DB에서 세그먼트 데이터 조회
-    const { data: segmentData, error: dbError } = await getSegmentDataByReportId(reportId);
+    // 1. gcode_segment_data 테이블에서 report_id로 직접 조회 (효율적)
+    const { data: segmentData, error: dbError } = await supabase
+      .from('gcode_segment_data')
+      .select('*')
+      .eq('report_id', reportId)
+      .maybeSingle();
+
     if (dbError || !segmentData) {
-      // 세그먼트 데이터가 없을 수 있음 (이전 분석 등)
-      console.log('[gcodeSegmentService] No segment data for report:', reportId);
+      console.log('[gcodeSegmentService] No segment data for report_id:', reportId);
       return { data: null, error: null };
     }
 
@@ -386,6 +391,7 @@ export async function loadFullSegmentDataByReportId(reportId: string): Promise<{
         metadata: segmentData.metadata,
         temperatures: segmentData.temperatures,
         layers,
+        analysisId: segmentData.analysis_id || undefined,
       },
       error: null,
     };

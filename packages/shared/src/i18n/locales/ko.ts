@@ -577,6 +577,7 @@ export default {
     // 보고서 관련
     viewReport: "보고서 보기",
     hideReport: "보고서 접기",
+    showReport: "보고서 보기",
     attachGcode: "G-code 파일 첨부",
     // 도구 변경 다이얼로그
     toolChangeTitle: "새 대화를 시작하시겠습니까?",

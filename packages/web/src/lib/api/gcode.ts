@@ -97,11 +97,13 @@ export function decodeFloat32Array(base64Data: string): Float32Array {
 }
 
 // ============================================================================
-// AI 이슈 해결 API
+// AI 이슈 해결 API (REST API 기반)
+// 엔드포인트: POST /api/v1/gcode/analysis/{analysis_id}/resolve-issue
 // ============================================================================
 
 /**
  * 이슈 해결 요청 타입
+ * 엔드포인트: POST /api/v1/gcode/analysis/{analysis_id}/resolve-issue
  */
 export interface IssueResolveRequest {
   analysis_id: string;
@@ -115,38 +117,70 @@ export interface IssueResolveRequest {
  * 단일 코드 픽스 타입
  */
 export interface CodeFix {
-  has_fix?: boolean;        // 단일 이슈용 (optional)
-  line_number?: number;     // 그룹화된 이슈용 라인 번호
-  original: string | null;
-  fixed: string | null;
+  has_fix?: boolean;        // 수정 가능 여부
+  line_number?: number | null;     // 라인 번호
+  original: string | null;  // 원본 코드 (형식: "라인번호: G-code")
+  fixed: string | null;     // 수정 코드 (형식: "라인번호: G-code")
 }
 
 /**
- * 이슈 해결 응답 타입 (새 형식)
+ * AI 해결 결과 구조
+ */
+export interface IssueResolution {
+  explanation: {
+    summary: string;          // 핵심 설명 (1-2문장)
+    cause: string;            // 원인 분석 (2-3문장)
+    is_false_positive: boolean;  // 오탐 여부
+    severity: 'none' | 'low' | 'medium' | 'high' | 'critical';
+  };
+  solution: {
+    action_needed: boolean;      // 조치 필요 여부
+    steps: string[];             // 해결 단계
+    code_fix: CodeFix;           // 대표 코드 수정 (1건)
+    code_fixes?: CodeFix[];      // 모든 코드 수정 (배열)
+  };
+  tips: string[];                // 추가 팁
+}
+
+/**
+ * 업데이트된 이슈 정보
+ */
+export interface UpdatedIssue {
+  id?: string;
+  line?: number;
+  type?: string;
+  severity?: 'none' | 'low' | 'medium' | 'high' | 'critical';
+  has_issue?: boolean;
+  is_false_positive?: boolean;
+  false_positive_reason?: string;
+  title?: string;
+  description?: string;
+  ai_resolution?: {
+    summary: string;
+    cause: string;
+    action_needed: boolean;
+    steps: string[];
+    tips: string[];
+  };
+  code_fix?: CodeFix;
+  code_fixes?: CodeFix[];
+  all_issues?: UpdatedIssue[];
+}
+
+/**
+ * 이슈 해결 응답 타입 (REST API 응답 구조)
  */
 export interface IssueResolveResponse {
+  // 기본 필드
   success: boolean;
   conversation_id: string;
   analysis_id: string;
   issue_line?: number;
-  resolution: {
-    explanation: {
-      summary: string;
-      cause: string;
-      is_false_positive: boolean;
-      severity: 'none' | 'low' | 'medium' | 'high' | 'critical';
-    };
-    solution: {
-      action_needed: boolean;
-      steps: string[];
-      // 단일 이슈용 (하위 호환성)
-      code_fix: CodeFix;
-      // 그룹화된 이슈용 (여러 개의 수정)
-      code_fixes?: CodeFix[];
-    };
-    tips: string[];
-  };
   error?: string;
+
+  // 핵심 해결 결과
+  resolution: IssueResolution;
+  updated_issue?: UpdatedIssue;
 }
 
 /**
@@ -210,11 +244,39 @@ export function extractGroupedGcodeContext(
 }
 
 /**
- * AI 이슈 해결 API 호출
+ * REST API 응답 타입 (직접 응답)
+ * 엔드포인트: POST /api/v1/gcode/analysis/{analysis_id}/resolve-issue
+ */
+interface ResolveIssueAPIResponse {
+  success: boolean;
+  conversation_id: string;
+  analysis_id: string;
+  issue_line?: number;
+  resolution: IssueResolution;
+  updated_issue?: UpdatedIssue;
+  error?: string;
+}
+
+/**
+ * AI 이슈 해결 API 호출 (REST API 기반)
+ *
+ * 문서 참조: CHAT_API_FRONTEND_GUIDE.md 섹션 10
+ * - 엔드포인트: POST /api/v1/gcode/analysis/{analysis_id}/resolve-issue
  */
 export async function resolveIssue(
   request: IssueResolveRequest
 ): Promise<IssueResolveResponse> {
+  // REST API 요청 형식
+  const apiRequest = {
+    analysis_id: request.analysis_id,
+    issue: request.issue,
+    conversation_id: request.conversation_id || undefined,
+    gcode_context: request.gcode_context || undefined,
+    language: request.language || 'ko',
+  };
+
+  console.log('[resolveIssue] REST API request:', apiRequest);
+
   const response = await fetch(
     `${API_BASE_URL}/api/v1/gcode/analysis/${request.analysis_id}/resolve-issue`,
     {
@@ -222,13 +284,7 @@ export async function resolveIssue(
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        analysis_id: request.analysis_id,
-        conversation_id: request.conversation_id || null,
-        issue: request.issue,
-        gcode_context: request.gcode_context || null,
-        language: request.language || 'ko',
-      }),
+      body: JSON.stringify(apiRequest),
     }
   );
 
@@ -237,5 +293,42 @@ export async function resolveIssue(
     throw new Error(errorData.detail || `API 호출 실패: ${response.status} ${response.statusText}`);
   }
 
-  return response.json();
+  const apiResponse: ResolveIssueAPIResponse = await response.json();
+  console.log('[resolveIssue] REST API response:', apiResponse);
+
+  // REST API 응답을 IssueResolveResponse로 변환
+  if (!apiResponse.success || !apiResponse.resolution) {
+    return {
+      success: false,
+      conversation_id: apiResponse.conversation_id || '',
+      analysis_id: request.analysis_id,
+      error: apiResponse.error || 'AI 해결 결과를 가져올 수 없습니다.',
+      resolution: {
+        explanation: {
+          summary: '',
+          cause: '',
+          is_false_positive: false,
+          severity: 'medium',
+        },
+        solution: {
+          action_needed: false,
+          steps: [],
+          code_fix: { original: null, fixed: null },
+        },
+        tips: [],
+      },
+    };
+  }
+
+  // 성공 응답 반환
+  return {
+    success: true,
+    conversation_id: apiResponse.conversation_id,
+    analysis_id: apiResponse.analysis_id,
+    issue_line: apiResponse.issue_line,
+
+    // 핵심 해결 결과
+    resolution: apiResponse.resolution,
+    updated_issue: apiResponse.updated_issue,
+  };
 }

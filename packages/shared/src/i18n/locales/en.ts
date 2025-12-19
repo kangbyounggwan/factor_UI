@@ -2440,6 +2440,7 @@ export default {
     // Report related
     viewReport: "View Report",
     hideReport: "Hide Report",
+    showReport: "View Report",
     attachGcode: "Attach G-code File",
     // Tool change dialog
     toolChangeTitle: "Start a new conversation?",
