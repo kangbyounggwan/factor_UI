@@ -770,7 +770,18 @@ const EmbeddedGCodeEditor: React.FC<EmbeddedGCodeEditorProps> = ({
     // 콜백 호출
     if (onEditorApplyFix) {
       const originalCode = extractCode(fixOriginal);
-      onEditorApplyFix(fixLineNumber, originalCode, fixedCode, newLines.join('\n'));
+      // 저장용 콘텐츠에서 라인 번호 제거 (순수 G-code만 저장)
+      const contentForSave = newLines.map(line => {
+        // 마커 형식: ">>> 123: G1 X100 <<< [문제 라인]" -> "G1 X100"
+        const markerMatch = line.match(/^>>>\s*\d+:\s*(.*?)\s*<<<.*$/);
+        if (markerMatch) return markerMatch[1];
+        // 일반 형식: "123: G1 X100" -> "G1 X100"
+        const normalMatch = line.match(/^\s*\d+:\s*(.*)$/);
+        if (normalMatch) return normalMatch[1];
+        // 라인 번호 없는 경우 그대로
+        return line;
+      }).join('\n');
+      onEditorApplyFix(fixLineNumber, originalCode, fixedCode, contentForSave);
     }
   }, [fixLineNumber, fixOriginal, fixFixed, lines, onEditorApplyFix]);
 

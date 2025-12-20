@@ -95,7 +95,6 @@ import {
   getAnalysisReportById,
   uploadGCodeForAnalysis,
   downloadGCodeContent,
-  updateGCodeFileContent,
 } from "@/lib/gcodeAnalysisDbService";
 import { saveSegmentData, loadFullSegmentDataByReportId } from "@/lib/gcodeSegmentService";
 import { extractGcodeContext } from "@/lib/api/gcode";
@@ -200,6 +199,16 @@ const AIChat = () => {
     fixed: string;
     description?: string;
   } | undefined>(undefined);
+
+  // 해결된 라인 번호 추적 (패치 적용 시 추가)
+  const [resolvedLines, setResolvedLines] = useState<Set<number>>(new Set());
+
+  // 대기 중인 패치들 (수정본 저장 시 한 번에 적용)
+  // key: lineNumber, value: { originalCode, fixedCode }
+  const [pendingPatches, setPendingPatches] = useState<Map<number, { originalCode: string; fixedCode: string }>>(new Map());
+
+  // 되돌리기 상태 (라인 번호 설정 시 해당 라인 되돌리기)
+  const [revertLineNumber, setRevertLineNumber] = useState<number | undefined>(undefined);
 
   // 사용자 플랜 정보 가져오기 (shared 훅 사용)
   const { plan: userPlan } = useUserPlan(user?.id);
@@ -1656,6 +1665,7 @@ const AIChat = () => {
                         message={message as ChatMessageData}
                         gcodeContent={gcodeReportData?.gcodeContent}
                         extractGcodeContext={extractGcodeContext}
+                        resolvedLines={resolvedLines}
                         onCodeFixClick={async (fix, _context, analysisReportId) => {
                           // 수정 정보 설정
                           setEditorFixInfo({
@@ -1719,6 +1729,30 @@ const AIChat = () => {
                         }}
                         reportPanelOpen={reportPanelOpen}
                         activeReportId={activeReportId}
+                        onRevert={(lineNumber, _fixedCode, _originalCode) => {
+                          // 로컬 상태에서만 제거 (아직 저장 전이므로 스토리지 수정 불필요)
+                          // 1. 대기 중인 패치에서 제거
+                          setPendingPatches(prev => {
+                            const newMap = new Map(prev);
+                            newMap.delete(lineNumber);
+                            return newMap;
+                          });
+
+                          // 2. 해결된 라인에서 제거
+                          setResolvedLines(prev => {
+                            const newSet = new Set(prev);
+                            newSet.delete(lineNumber);
+                            return newSet;
+                          });
+
+                          // 3. 에디터에 되돌리기 신호 전송 (patchHistory에서 복원)
+                          setRevertLineNumber(lineNumber);
+
+                          toast({
+                            title: t('aiChat.revertSuccess', '되돌리기 완료'),
+                            description: t('aiChat.revertSuccessDesc', '패치가 취소되었습니다.'),
+                          });
+                        }}
                         onReportCardClick={async (clickedReportId) => {
                           // 같은 보고서가 이미 열려있으면 닫기
                           if (reportPanelOpen && activeReportId === clickedReportId) {
@@ -1918,30 +1952,135 @@ const AIChat = () => {
                         });
                       }
                     }}
-                    onEditorApplyFix={async (lineNumber, originalCode, fixedCode, newContent) => {
-                      // 1. 스토리지에 수정된 G-code 저장
-                      if (gcodeReportData?.storagePath) {
-                        const { error } = await updateGCodeFileContent(gcodeReportData.storagePath, newContent);
-                        if (error) {
+                    onEditorApplyFix={(lineNumber, originalCode, fixedCode, _contextContent) => {
+                      // 로컬 상태에만 저장 (스토리지 저장 X) - 수정본 저장 시 한 번에 처리
+                      // 1. 대기 중인 패치에 추가
+                      setPendingPatches(prev => new Map(prev).set(lineNumber, { originalCode, fixedCode }));
+
+                      // 2. 해결된 라인 추적 (UI 표시용)
+                      setResolvedLines(prev => new Set(prev).add(lineNumber));
+
+                      toast({
+                        title: t('aiChat.patchQueued', '패치 대기 중'),
+                        description: t('aiChat.patchQueuedDesc', '수정본 저장 시 적용됩니다.'),
+                      });
+                    }}
+                    appliedPatchCount={resolvedLines.size}
+                    revertLineNumber={revertLineNumber}
+                    onRevertComplete={() => {
+                      // 되돌리기 완료 시 상태 초기화
+                      if (revertLineNumber !== undefined) {
+                        // 대기 중인 패치에서 제거
+                        setPendingPatches(prev => {
+                          const newMap = new Map(prev);
+                          newMap.delete(revertLineNumber);
+                          return newMap;
+                        });
+                        setResolvedLines(prev => {
+                          const newSet = new Set(prev);
+                          newSet.delete(revertLineNumber);
+                          return newSet;
+                        });
+                        setRevertLineNumber(undefined);
+                      }
+                    }}
+                    onSaveModifiedGCode={async () => {
+                      // 모든 대기 중인 패치를 병합하여 저장 + 다운로드
+                      if (pendingPatches.size === 0) {
+                        toast({
+                          title: t('aiChat.noPendingPatches', '적용할 패치 없음'),
+                          description: t('aiChat.noPendingPatchesDesc', '저장할 수정사항이 없습니다.'),
+                          variant: 'destructive',
+                        });
+                        return;
+                      }
+
+                      if (!gcodeReportData?.storagePath) {
+                        toast({
+                          title: t('aiChat.noStoragePath', '저장 경로 없음'),
+                          description: t('aiChat.noStoragePathDesc', 'G-code 파일의 저장 경로를 찾을 수 없습니다.'),
+                          variant: 'destructive',
+                        });
+                        return;
+                      }
+
+                      try {
+                        // 1. 전체 G-code 파일 로드
+                        let fullContent = gcodeFileContentRef.current;
+                        if (!fullContent) {
+                          fullContent = await downloadGCodeContent(gcodeReportData.storagePath);
+                          if (fullContent) {
+                            gcodeFileContentRef.current = fullContent;
+                            setGcodeFileContent(fullContent);
+                          }
+                        }
+
+                        if (!fullContent) {
                           toast({
-                            title: t('aiChat.patchSaveFailed', '패치 저장 실패'),
-                            description: error.message,
+                            title: t('aiChat.loadFailed', '파일 로드 실패'),
+                            description: t('aiChat.loadFailedDesc', 'G-code 파일을 불러올 수 없습니다.'),
                             variant: 'destructive',
                           });
                           return;
                         }
 
-                        // 2. gcodeReportData의 gcodeContent도 업데이트
-                        setGcodeReportData(prev => prev ? { ...prev, gcodeContent: newContent } : null);
+                        // 2. 모든 패치 적용
+                        const lines = fullContent.split('\n');
+                        let appliedCount = 0;
+
+                        for (const [lineNumber, patch] of pendingPatches) {
+                          const originalCodeTrimmed = patch.originalCode.trim();
+                          let found = false;
+
+                          // 먼저 정확한 라인 번호에서 찾기
+                          const targetIndex = lineNumber - 1;
+                          if (targetIndex >= 0 && targetIndex < lines.length) {
+                            if (lines[targetIndex].trim() === originalCodeTrimmed) {
+                              lines[targetIndex] = patch.fixedCode;
+                              found = true;
+                            }
+                          }
+
+                          // 전체에서 검색
+                          if (!found) {
+                            for (let i = 0; i < lines.length; i++) {
+                              if (lines[i].trim() === originalCodeTrimmed) {
+                                lines[i] = patch.fixedCode;
+                                found = true;
+                                break;
+                              }
+                            }
+                          }
+
+                          if (found) appliedCount++;
+                        }
+
+                        const mergedContent = lines.join('\n');
+
+                        // 3. 파일 다운로드 (원본 DB는 덮어쓰지 않음)
+                        const blob = new Blob([mergedContent], { type: 'text/plain;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        const baseName = (gcodeReportData.fileName || 'gcode').replace(/\.gcode$/i, '');
+                        link.download = `${baseName}_modified.gcode`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+
+                        // 4. 대기 패치 초기화 (다운로드 후 패치 상태 리셋)
+                        setPendingPatches(new Map());
 
                         toast({
-                          title: t('aiChat.patchApplied', '패치 적용 완료'),
-                          description: t('aiChat.patchAppliedDesc', 'G-code 수정이 저장되었습니다.'),
+                          title: t('aiChat.saveSuccess', '저장 완료'),
+                          description: t('aiChat.saveSuccessDesc', `${appliedCount}개 패치가 적용되어 저장되었습니다.`),
                         });
-                      } else {
+                      } catch (err) {
+                        console.error('[AIChat] Failed to save modified gcode:', err);
                         toast({
-                          title: t('aiChat.noStoragePath', '저장 경로 없음'),
-                          description: t('aiChat.noStoragePathDesc', 'G-code 파일의 저장 경로를 찾을 수 없습니다.'),
+                          title: t('aiChat.patchSaveFailed', '패치 저장 실패'),
+                          description: String(err),
                           variant: 'destructive',
                         });
                       }

@@ -605,6 +605,21 @@ export default {
     showLess: "접기",
     noGcodeData: "G-code 데이터 없음",
     noGcodeDataDesc: "코드 수정을 위한 G-code 컨텍스트가 없습니다.",
+    // 패치 적용/되돌리기 관련
+    patchApplied: "패치 적용 완료",
+    patchAppliedDesc: "G-code 수정이 저장되었습니다.",
+    patchSaveFailed: "패치 저장 실패",
+    patchNotFound: "원본 코드를 찾을 수 없음",
+    patchNotFoundDesc: "수정할 원본 코드를 파일에서 찾을 수 없습니다.",
+    noStoragePath: "저장 경로 없음",
+    noStoragePathDesc: "G-code 파일의 저장 경로를 찾을 수 없습니다.",
+    loadFailed: "파일 로드 실패",
+    loadFailedDesc: "G-code 파일을 불러올 수 없습니다.",
+    revertSuccess: "되돌리기 완료",
+    revertSuccessDesc: "코드가 원본으로 복원되었습니다.",
+    revertFailed: "되돌리기 실패",
+    revertNotFound: "수정된 코드를 찾을 수 없음",
+    revertNotFoundDesc: "되돌릴 수정된 코드를 파일에서 찾을 수 없습니다.",
   },
   profile: {
     // UserSettings 페이지
@@ -1348,6 +1363,7 @@ export default {
     criticalIssues: "치명적인 문제 감지",
     analysisCompleted: "분석 완료",
     resolved: "해결됨",
+    revert: "되돌리기",
     recommendation: "권장사항",
     recommendReslice: "재슬라이싱 권장",
     canProceed: "출력 진행 가능",
@@ -1503,7 +1519,14 @@ export default {
     // 컨텍스트 뷰어
     contextView: "컨텍스트 뷰",
     partialView: "부분 보기",
-    lines: "라인"
+    lines: "라인",
+
+    // 에디터 저장
+    saveModified: "수정본 저장",
+
+    // 로딩 상태
+    loadingContext: "코드 컨텍스트 로딩 중...",
+    loadingContextDesc: "잠시만 기다려주세요.",
   },
   errors: {
     general: "오류가 발생했습니다.",

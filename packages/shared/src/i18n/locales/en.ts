@@ -1222,6 +1222,7 @@ export default {
     criticalIssues: "Critical Issues Detected",
     analysisCompleted: "Analysis Completed",
     resolved: "Resolved",
+    revert: "Revert",
     recommendation: "Recommendation",
     recommendReslice: "Re-slicing recommended",
     canProceed: "Can proceed with printing",
@@ -1377,7 +1378,13 @@ export default {
     // Context viewer
     contextView: "Context View",
     partialView: "Partial View",
-    lines: "lines"
+    lines: "lines",
+    // Editor save
+    saveModified: "Save Modified",
+
+    // Loading states
+    loadingContext: "Loading code context...",
+    loadingContextDesc: "Please wait a moment."
   },
   errors: {
     general: "An error occurred.",
@@ -2474,6 +2481,21 @@ export default {
     showLess: "Show less",
     noGcodeData: "No G-code data",
     noGcodeDataDesc: "No G-code context available for code editing.",
+    // Patch apply/revert related
+    patchApplied: "Patch Applied",
+    patchAppliedDesc: "G-code modification has been saved.",
+    patchSaveFailed: "Patch Save Failed",
+    patchNotFound: "Original code not found",
+    patchNotFoundDesc: "Cannot find the original code to modify in the file.",
+    noStoragePath: "No storage path",
+    noStoragePathDesc: "Cannot find the storage path for the G-code file.",
+    loadFailed: "File load failed",
+    loadFailedDesc: "Cannot load the G-code file.",
+    revertSuccess: "Revert Complete",
+    revertSuccessDesc: "Code has been restored to original.",
+    revertFailed: "Revert Failed",
+    revertNotFound: "Modified code not found",
+    revertNotFoundDesc: "Cannot find the modified code to revert in the file.",
   },
   theme: {
     light: "Light",

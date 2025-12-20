@@ -44,6 +44,10 @@ interface ChatMessageProps {
   reportPanelOpen?: boolean;
   activeReportId?: string | null;
   onReportCardClick?: (reportId: string) => void | Promise<void>;
+  // 해결된 라인 번호들 (패치 적용 완료 표시)
+  resolvedLines?: Set<number>;
+  // 되돌리기 콜백 (수정코드 -> 원본코드로)
+  onRevert?: (lineNumber: number, fixedCode: string, originalCode: string) => void;
 }
 
 /**
@@ -223,6 +227,8 @@ const AssistantMessage: React.FC<{
   reportPanelOpen?: boolean;
   activeReportId?: string | null;
   onReportCardClick?: (reportId: string) => void;
+  resolvedLines?: Set<number>;
+  onRevert?: (lineNumber: number, fixedCode: string, originalCode: string) => void;
 }> = ({
   message,
   gcodeContent,
@@ -231,6 +237,8 @@ const AssistantMessage: React.FC<{
   reportPanelOpen,
   activeReportId,
   onReportCardClick,
+  resolvedLines,
+  onRevert,
 }) => (
   <>
     {/* 역할 라벨 */}
@@ -262,6 +270,8 @@ const AssistantMessage: React.FC<{
         extractGcodeContext={extractGcodeContext}
         onFixClick={onCodeFixClick}
         analysisReportId={message.analysisReportId}
+        resolvedLines={resolvedLines}
+        onRevert={onRevert}
       />
     )}
 
@@ -297,6 +307,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   reportPanelOpen,
   activeReportId,
   onReportCardClick,
+  resolvedLines,
+  onRevert,
 }) => {
   return (
     <div
@@ -320,6 +332,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             reportPanelOpen={reportPanelOpen}
             activeReportId={activeReportId}
             onReportCardClick={onReportCardClick}
+            resolvedLines={resolvedLines}
+            onRevert={onRevert}
           />
         )}
       </div>
