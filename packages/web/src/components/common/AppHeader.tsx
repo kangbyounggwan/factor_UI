@@ -16,6 +16,8 @@ import { Sun, Moon, Globe, MessageSquare, Printer, Sparkles, Rocket, Crown, Buil
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import type { SubscriptionPlan } from "@shared/types/subscription";
+import { useAuth } from "@shared/contexts/AuthContext";
+import { useUserPlan } from "@shared/hooks/useUserPlan";
 
 // 플랜별 배지 스타일 설정 (밝고 투명한 색상)
 const planBadgeConfig: Record<SubscriptionPlan, {
@@ -62,17 +64,18 @@ const planBadgeConfig: Record<SubscriptionPlan, {
 
 interface AppHeaderProps {
   sidebarOpen?: boolean;
-  userPlan?: SubscriptionPlan;
   leftContent?: React.ReactNode;
   rightContent?: React.ReactNode;
   showTabSwitch?: boolean;
 }
 
-export const AppHeader = ({ sidebarOpen = false, userPlan, leftContent, rightContent, showTabSwitch = true }: AppHeaderProps) => {
+export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, showTabSwitch = true }: AppHeaderProps) => {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { plan: userPlan } = useUserPlan(user?.id);
 
   const currentLanguage = i18n.language || 'ko';
 
@@ -180,7 +183,7 @@ export const AppHeader = ({ sidebarOpen = false, userPlan, leftContent, rightCon
           </div>
 
           {/* 플랜 배지 - 로그인한 사용자만 표시 */}
-          {userPlan && (
+          {user && (
             <Button
               variant="ghost"
               onClick={() => navigate('/subscription')}

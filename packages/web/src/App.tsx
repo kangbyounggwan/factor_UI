@@ -84,7 +84,8 @@ const AppContent = () => {
     '/user-settings',
     '/dashboard',
     '/create',
-    '/printer'
+    '/printer',
+    '/gcode-analytics/archive'
   ];
 
   // 현재 경로가 Footer를 숨겨야 하는 경로인지 확인

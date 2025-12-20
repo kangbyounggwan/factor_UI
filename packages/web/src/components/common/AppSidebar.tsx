@@ -81,7 +81,7 @@ interface AppSidebarProps {
   userPlan?: SubscriptionPlan;
   onLoginClick?: () => void;
   onSignOut?: () => void;
-  mode?: 'chat' | 'dashboard' | 'settings' | 'create' | 'printer-detail'; // 사이드바 모드
+  mode?: 'chat' | 'dashboard' | 'settings' | 'create' | 'printer-detail' | 'archive'; // 사이드바 모드
   // Settings 모드용 props
   activeSettingsTab?: SettingsTab;
   onSettingsTabChange?: (tab: SettingsTab) => void;

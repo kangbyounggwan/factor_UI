@@ -32,7 +32,6 @@ import { GCodeUpload } from "@/components/PrinterDetail/GCodeUpload";
 import { GCodeViewerCanvas } from "@/components/PrinterDetail/GCodeViewerCanvas";
 import { PrintHistory } from "@/components/PrinterDetail/PrintHistory";
 import { useAuth } from "@shared/contexts/AuthContext";
-import { useUserPlan } from "@shared/hooks/useUserPlan";
 import { supabase } from "@shared/integrations/supabase/client"
 import { onDashStatusMessage, mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, waitForGCodeUploadResult } from "@shared/services/mqttService";
 import { useToast } from "@/hooks/use-toast";
@@ -154,7 +153,6 @@ const PrinterDetail = () => {
   const [data, setData] = usePersistentState<MonitoringData>(storageKey, defaultData);
   const [loading, setLoading] = useState(!hasSnapshot);
   const { user, signOut } = useAuth();
-  const { plan: userPlan } = useUserPlan(user?.id);
   const { toast } = useToast();
 
   // 사이드바 상태 (페이지 간 공유)
@@ -1255,7 +1253,6 @@ const PrinterDetail = () => {
         <AppHeader
           sidebarOpen={sidebarOpen}
           rightContent={headerRightContent}
-          userPlan={user ? userPlan : undefined}
         />
 
         {/* 메인 컨텐츠 */}

@@ -34,7 +34,6 @@ import {
   getAnalysisReportsList,
   getAnalysisReportById,
   deleteAnalysisReport,
-  deleteMultipleReports,
   convertDbReportToUiData,
   downloadGCodeContent,
 } from '@/lib/gcodeAnalysisDbService';
@@ -64,14 +63,31 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ko, enUS } from 'date-fns/locale';
+import { AppSidebar, type ChatSession, type ReportArchiveItem } from '@/components/common/AppSidebar';
+import { AppHeader } from '@/components/common/AppHeader';
+import { useSidebarState } from '@/hooks/useSidebarState';
+import { LoginPromptModal } from '@/components/auth/LoginPromptModal';
+import { getChatSessions } from '@shared/services/supabaseService/chat';
 
 const PAGE_SIZE = 12;
 
 export default function GCodeAnalyticsArchive() {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // 사이드바 상태
+  const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
+
+  // 로그인 모달 상태
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  // 채팅 세션 상태 (사이드바용)
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+
+  // 보고서 아카이브 상태 (사이드바용)
+  const [reportArchive, setReportArchive] = useState<ReportArchiveItem[]>([]);
 
   // 현재 언어에 따른 date-fns locale
   const dateLocale = i18n.language === 'ko' ? ko : enUS;
@@ -89,10 +105,6 @@ export default function GCodeAnalyticsArchive() {
     field: 'created_at',
     direction: 'desc',
   });
-
-  // 선택 상태
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [selectMode, setSelectMode] = useState(false);
 
   // 상세 보기 상태
   const [selectedReport, setSelectedReport] = useState<GCodeAnalysisData | null>(null);
@@ -152,6 +164,87 @@ export default function GCodeAnalyticsArchive() {
   useEffect(() => {
     loadReports();
   }, [loadReports]);
+
+  // 채팅 세션 로드 (사이드바용)
+  useEffect(() => {
+    const loadSessions = async () => {
+      if (!user?.id) {
+        setChatSessions([]);
+        return;
+      }
+
+      try {
+        const dbSessions = await getChatSessions(user.id);
+        const formattedSessions: ChatSession[] = dbSessions.map(s => ({
+          id: s.id,
+          title: s.title,
+          timestamp: new Date(s.last_message_at || s.created_at),
+          messages: [],
+          metadata: s.metadata,
+        }));
+        setChatSessions(formattedSessions);
+      } catch {
+        // 세션 로드 실패
+      }
+    };
+
+    loadSessions();
+  }, [user?.id]);
+
+  // 보고서 아카이브 로드 (사이드바용)
+  useEffect(() => {
+    const loadReportArchive = async () => {
+      if (!user?.id) {
+        setReportArchive([]);
+        return;
+      }
+
+      try {
+        const { data } = await getAnalysisReportsList(user.id, { limit: 10 });
+        const formattedReports: ReportArchiveItem[] = data.map(r => ({
+          id: r.id,
+          fileName: r.file_name,
+          overallScore: r.overall_score ?? undefined,
+          overallGrade: r.overall_grade ?? undefined,
+          totalIssues: r.total_issues_count ?? undefined,
+          createdAt: new Date(r.created_at),
+        }));
+        setReportArchive(formattedReports);
+      } catch {
+        // 보고서 로드 실패
+      }
+    };
+
+    loadReportArchive();
+  }, [user?.id]);
+
+  // 새 채팅 시작 (AI 채팅으로 이동)
+  const handleNewChat = () => {
+    navigate('/ai-chat');
+  };
+
+  // 채팅 세션 로드 (AI 채팅으로 이동)
+  const handleLoadSession = (session: ChatSession) => {
+    navigate(`/ai-chat?session=${session.id}`);
+  };
+
+  // 보고서 선택
+  const handleSelectReport = (report: ReportArchiveItem) => {
+    handleViewReport(report.id, report.fileName);
+  };
+
+  // 사이드바에서 보고서 삭제
+  const handleDeleteReportFromSidebar = async (reportId: string) => {
+    try {
+      const { error } = await deleteAnalysisReport(reportId);
+      if (!error) {
+        setReportArchive(prev => prev.filter(r => r.id !== reportId));
+        loadReports(); // 메인 목록도 새로고침
+      }
+    } catch {
+      // 삭제 실패
+    }
+  };
 
   // 상세 보기
   const handleViewReport = async (reportId: string, fileName?: string) => {
@@ -229,35 +322,6 @@ export default function GCodeAnalyticsArchive() {
     }
   };
 
-  // 선택 삭제
-  const handleBulkDelete = async () => {
-    if (selectedIds.size === 0) return;
-
-    try {
-      const { error } = await deleteMultipleReports(Array.from(selectedIds));
-
-      if (error) {
-        toast({
-          title: t('gcodeAnalytics.deleteFailed'),
-          description: error.message,
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      toast({
-        title: t('gcodeAnalytics.deleteSuccess'),
-        description: t('gcodeAnalytics.deleteSuccessBulk', { count: selectedIds.size }),
-      });
-
-      setSelectedIds(new Set());
-      setSelectMode(false);
-      loadReports();
-    } catch (err) {
-      console.error('[GCodeAnalyticsArchive] Bulk delete error:', err);
-    }
-  };
-
   // 등급 배지 색상
   const getGradeBadgeColor = (grade?: OverallGrade) => {
     switch (grade) {
@@ -275,161 +339,146 @@ export default function GCodeAnalyticsArchive() {
   // 상세 보기 모드
   if (selectedReport) {
     return (
-      <div className="min-h-screen bg-background">
-        {/* 상단 바 */}
-        <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelectedReport(null)}
-              className="gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              {t('gcodeAnalytics.backToList')}
-            </Button>
-            <span className="text-sm text-muted-foreground truncate">
-              {selectedReportName}
-            </span>
-          </div>
-        </div>
+      <div className="h-screen bg-background flex">
+        {/* 왼쪽 사이드바 */}
+        <AppSidebar
+          isOpen={sidebarOpen}
+          onToggle={toggleSidebar}
+          sessions={chatSessions}
+          onNewChat={handleNewChat}
+          onLoadSession={handleLoadSession}
+          user={user}
+          onLoginClick={() => setShowLoginModal(true)}
+          onSignOut={signOut}
+          mode="chat"
+          reports={reportArchive}
+          currentReportId={selectedReport ? undefined : undefined}
+          onSelectReport={handleSelectReport}
+          onDeleteReport={handleDeleteReportFromSidebar}
+        />
 
-        {/* 보고서 */}
-        <div className="max-w-6xl mx-auto p-4">
-          <GCodeAnalysisReport
-            data={selectedReport}
-          />
+        {/* 메인 컨텐츠 */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* 앱 헤더 */}
+          <AppHeader sidebarOpen={sidebarOpen} />
+
+          {/* 상단 바 */}
+          <div className="bg-background/95 backdrop-blur-sm border-b">
+            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedReport(null)}
+                className="gap-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                {t('gcodeAnalytics.backToList')}
+              </Button>
+              <span className="text-sm text-muted-foreground truncate">
+                {selectedReportName}
+              </span>
+            </div>
+          </div>
+
+          {/* 보고서 */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-6xl mx-auto p-4">
+              <GCodeAnalysisReport
+                data={selectedReport}
+              />
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* 헤더 */}
-      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate('/gcode-analytics')}
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-              <div>
-                <h1 className="text-xl font-bold">{t('gcodeAnalytics.archiveTitle')}</h1>
-                <p className="text-sm text-muted-foreground">
-                  {t('gcodeAnalytics.archiveCount', { count: totalCount })}
-                </p>
+    <div className="h-screen bg-background flex">
+      {/* 왼쪽 사이드바 */}
+      <AppSidebar
+        isOpen={sidebarOpen}
+        onToggle={toggleSidebar}
+        sessions={chatSessions}
+        onNewChat={handleNewChat}
+        onLoadSession={handleLoadSession}
+        user={user}
+        onLoginClick={() => setShowLoginModal(true)}
+        onSignOut={signOut}
+        mode="chat"
+        reports={reportArchive}
+        onSelectReport={handleSelectReport}
+        onDeleteReport={handleDeleteReportFromSidebar}
+      />
+
+      {/* 메인 컨텐츠 */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* 앱 헤더 */}
+        <AppHeader sidebarOpen={sidebarOpen} />
+
+        {/* 페이지 헤더 */}
+        <div className="bg-background/95 backdrop-blur-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 py-4">
+            {/* 필터 바 */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* 검색 */}
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder={t('gcodeAnalytics.searchPlaceholder')}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
               </div>
-            </div>
 
-            <div className="flex items-center gap-2">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => navigate('/gcode-analytics')}
-                className="gap-2"
+              {/* 등급 필터 */}
+              <Select
+                value={gradeFilter}
+                onValueChange={(v) => setGradeFilter(v as OverallGrade | 'all')}
               >
-                <Plus className="h-4 w-4" />
-                {t('gcodeAnalytics.newAnalysis')}
-              </Button>
+                <SelectTrigger className="w-[120px]">
+                  <Filter className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder={t('gcodeAnalytics.grade')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('gcodeAnalytics.gradeAll')}</SelectItem>
+                  <SelectItem value="A">{t('gcodeAnalytics.gradeA')}</SelectItem>
+                  <SelectItem value="B">{t('gcodeAnalytics.gradeB')}</SelectItem>
+                  <SelectItem value="C">{t('gcodeAnalytics.gradeC')}</SelectItem>
+                  <SelectItem value="D">{t('gcodeAnalytics.gradeD')}</SelectItem>
+                  <SelectItem value="F">{t('gcodeAnalytics.gradeF')}</SelectItem>
+                </SelectContent>
+              </Select>
 
-              {selectMode ? (
-                <>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleBulkDelete}
-                    disabled={selectedIds.size === 0}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    {t('gcodeAnalytics.deleteSelected', { count: selectedIds.size })}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectMode(false);
-                      setSelectedIds(new Set());
-                    }}
-                  >
-                    {t('gcodeAnalytics.cancel')}
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSelectMode(true)}
-                >
-                  {t('gcodeAnalytics.select')}
-                </Button>
-              )}
+              {/* 정렬 */}
+              <Select
+                value={`${sortOption.field}-${sortOption.direction}`}
+                onValueChange={(v) => {
+                  const [field, direction] = v.split('-') as [typeof sortOption.field, 'asc' | 'desc'];
+                  setSortOption({ field, direction });
+                }}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SortDesc className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder={t('gcodeAnalytics.sort')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="created_at-desc">{t('gcodeAnalytics.sortNewest')}</SelectItem>
+                  <SelectItem value="created_at-asc">{t('gcodeAnalytics.sortOldest')}</SelectItem>
+                  <SelectItem value="overall_score-desc">{t('gcodeAnalytics.sortScoreHigh')}</SelectItem>
+                  <SelectItem value="overall_score-asc">{t('gcodeAnalytics.sortScoreLow')}</SelectItem>
+                  <SelectItem value="total_issues_count-desc">{t('gcodeAnalytics.sortIssuesHigh')}</SelectItem>
+                  <SelectItem value="file_name-asc">{t('gcodeAnalytics.sortFileName')}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </div>
-
-          {/* 필터 바 */}
-          <div className="flex flex-wrap items-center gap-3 mt-4">
-            {/* 검색 */}
-            <div className="relative flex-1 min-w-[200px] max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={t('gcodeAnalytics.searchPlaceholder')}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            {/* 등급 필터 */}
-            <Select
-              value={gradeFilter}
-              onValueChange={(v) => setGradeFilter(v as OverallGrade | 'all')}
-            >
-              <SelectTrigger className="w-[120px]">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder={t('gcodeAnalytics.grade')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('gcodeAnalytics.gradeAll')}</SelectItem>
-                <SelectItem value="A">{t('gcodeAnalytics.gradeA')}</SelectItem>
-                <SelectItem value="B">{t('gcodeAnalytics.gradeB')}</SelectItem>
-                <SelectItem value="C">{t('gcodeAnalytics.gradeC')}</SelectItem>
-                <SelectItem value="D">{t('gcodeAnalytics.gradeD')}</SelectItem>
-                <SelectItem value="F">{t('gcodeAnalytics.gradeF')}</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* 정렬 */}
-            <Select
-              value={`${sortOption.field}-${sortOption.direction}`}
-              onValueChange={(v) => {
-                const [field, direction] = v.split('-') as [typeof sortOption.field, 'asc' | 'desc'];
-                setSortOption({ field, direction });
-              }}
-            >
-              <SelectTrigger className="w-[160px]">
-                <SortDesc className="h-4 w-4 mr-2" />
-                <SelectValue placeholder={t('gcodeAnalytics.sort')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="created_at-desc">{t('gcodeAnalytics.sortNewest')}</SelectItem>
-                <SelectItem value="created_at-asc">{t('gcodeAnalytics.sortOldest')}</SelectItem>
-                <SelectItem value="overall_score-desc">{t('gcodeAnalytics.sortScoreHigh')}</SelectItem>
-                <SelectItem value="overall_score-asc">{t('gcodeAnalytics.sortScoreLow')}</SelectItem>
-                <SelectItem value="total_issues_count-desc">{t('gcodeAnalytics.sortIssuesHigh')}</SelectItem>
-                <SelectItem value="file_name-asc">{t('gcodeAnalytics.sortFileName')}</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
-      </div>
 
-      {/* 목록 */}
-      <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* 목록 */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-7xl mx-auto px-4 py-6">
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {[...Array(8)].map((_, i) => (
@@ -462,23 +511,8 @@ export default function GCodeAnalyticsArchive() {
               {reports.map((report) => (
                 <Card
                   key={report.id}
-                  className={cn(
-                    "overflow-hidden cursor-pointer transition-all hover:shadow-md",
-                    selectMode && selectedIds.has(report.id) && "ring-2 ring-primary"
-                  )}
-                  onClick={() => {
-                    if (selectMode) {
-                      const newSelected = new Set(selectedIds);
-                      if (newSelected.has(report.id)) {
-                        newSelected.delete(report.id);
-                      } else {
-                        newSelected.add(report.id);
-                      }
-                      setSelectedIds(newSelected);
-                    } else {
-                      handleViewReport(report.id, report.file_name);
-                    }
-                  }}
+                  className="overflow-hidden cursor-pointer transition-all hover:shadow-md"
+                  onClick={() => handleViewReport(report.id, report.file_name)}
                 >
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
@@ -555,22 +589,20 @@ export default function GCodeAnalyticsArchive() {
                       )}
                     </div>
 
-                    {/* 삭제 버튼 (선택 모드가 아닐 때) */}
-                    {!selectMode && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-full mt-3 text-muted-foreground hover:text-destructive"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setReportToDelete(report.id);
-                          setDeleteDialogOpen(true);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        {t('gcodeAnalytics.delete')}
-                      </Button>
-                    )}
+                    {/* 삭제 버튼 */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full mt-3 text-muted-foreground hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setReportToDelete(report.id);
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      {t('gcodeAnalytics.delete')}
+                    </Button>
                   </CardContent>
                 </Card>
               ))}
@@ -602,38 +634,46 @@ export default function GCodeAnalyticsArchive() {
             )}
           </>
         )}
-      </div>
-
-      {/* 상세 로딩 오버레이 */}
-      {isLoadingDetail && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">{t('gcodeAnalytics.loadingReport')}</p>
           </div>
         </div>
-      )}
 
-      {/* 삭제 확인 다이얼로그 */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('gcodeAnalytics.deleteReportTitle')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('gcodeAnalytics.deleteReportDesc')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('gcodeAnalytics.cancel')}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {t('gcodeAnalytics.delete')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        {/* 상세 로딩 오버레이 */}
+        {isLoadingDetail && (
+          <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">{t('gcodeAnalytics.loadingReport')}</p>
+            </div>
+          </div>
+        )}
+
+        {/* 삭제 확인 다이얼로그 */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t('gcodeAnalytics.deleteReportTitle')}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t('gcodeAnalytics.deleteReportDesc')}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t('gcodeAnalytics.cancel')}</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDelete}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {t('gcodeAnalytics.delete')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* 로그인 모달 */}
+        <LoginPromptModal
+          open={showLoginModal}
+          onOpenChange={setShowLoginModal}
+        />
+      </div>
     </div>
   );
 }
