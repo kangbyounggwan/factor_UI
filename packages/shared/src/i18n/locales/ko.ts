@@ -532,6 +532,7 @@ export default {
     reportDeleted: "보고서가 삭제되었습니다",
     reportDeleteError: "보고서 삭제 실패",
     viewMore: "더보기",
+    noReports: "보고서가 없습니다",
     tools: "도구",
     attachImage: "이미지 첨부",
     gcodeUploaded: "G-code 파일 업로드됨",

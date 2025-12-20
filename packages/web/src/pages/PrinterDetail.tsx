@@ -2,11 +2,11 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Thermometer, Camera, Code, FolderOpen, FileCode, Eye, Loader2, Trash2, Pencil, MoreVertical, Check, Upload, Copy, AlertTriangle } from "lucide-react";
+import { Thermometer, Camera, Code, FolderOpen, FileCode, Eye, Loader2, Trash2, Pencil, MoreVertical, Check, Upload, Copy, AlertTriangle, Settings } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { AppHeader } from "@/components/common/AppHeader";
-import { AppSidebar } from "@/components/common/AppSidebar";
+import { AppSidebar, PrinterDetailTab } from "@/components/common/AppSidebar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import {
   DropdownMenu,
@@ -163,7 +163,7 @@ const PrinterDetail = () => {
   // MQTT WebSocket 연결 상태는 사용하지 않음 - 프린터의 connected 상태만 사용
   const [deviceUuid, setDeviceUuid] = useState<string | null>(null);
   const [printerName, setPrinterName] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'all' | 'monitoring' | 'files'>('all');
+  const [activeTab, setActiveTab] = useState<PrinterDetailTab>('all');
   const [temperatureHistory, setTemperatureHistory] = useState<HistoryDataPoint[]>([]);
 
   // 카메라/G-code 뷰어 모드
@@ -1392,7 +1392,7 @@ const PrinterDetail = () => {
                 <div className="h-[calc(100vh-180px)]">
                   <PrintHistory printerId={id || ''} className="h-full" />
                 </div>
-              ) : (
+              ) : activeTab === 'files' ? (
                 /* 파일 관리 탭 */
                 <div className="h-[calc(100vh-180px)]">
                   <div className="grid grid-cols-12 gap-4 h-full">
@@ -1548,6 +1548,14 @@ const PrinterDetail = () => {
                         )}
                       </div>
                     </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-[calc(100vh-180px)] text-muted-foreground">
+                  <div className="text-center">
+                    <Settings className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <h3 className="text-lg font-medium">{t('printerDetail.settings', '설비 설정')}</h3>
+                    <p className="text-sm mt-1">Coming Soon...</p>
                   </div>
                 </div>
               )}

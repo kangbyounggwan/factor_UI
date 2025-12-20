@@ -29,13 +29,7 @@ import {
   FileCode,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import type { User } from "@supabase/supabase-js";
 import type { SubscriptionPlan } from "@shared/types/subscription";
@@ -169,7 +163,6 @@ export function AppSidebar({
   onDeleteReport,
 }: AppSidebarProps) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
 
   // userPlan이 undefined이거나 planConfig에 없는 경우 'free'로 fallback
   const safePlan = userPlan && planConfig[userPlan] ? userPlan : 'free';
@@ -228,7 +221,7 @@ export function AppSidebar({
                       variant="ghost"
                       size="sm"
                       className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => navigate('/gcode-analytics/archive')}
+                      onClick={() => window.location.href = '/gcode-analytics/archive'}
                     >
                       {t('aiChat.viewMore', '더보기')}
                     </Button>
@@ -684,7 +677,6 @@ export function AppSidebar({
           </span>
         </button>
       </div>
-
     </>
   );
 }

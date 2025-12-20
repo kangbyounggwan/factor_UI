@@ -2413,6 +2413,7 @@ export default {
     reportDeleted: "Report has been deleted",
     reportDeleteError: "Failed to delete report",
     viewMore: "View More",
+    noReports: "No reports",
     tools: "Tools",
     attachImage: "Attach Image",
     gcodeUploaded: "G-code file uploaded",
