@@ -68,6 +68,14 @@ const Auth = () => {
 
   // 기존 계정 확인은 signUp 에러로 처리 (Edge Function 제거)
 
+  // URL 파라미터에서 이메일 가져와서 자동 입력
+  useEffect(() => {
+    const emailFromUrl = searchParams.get('email');
+    if (emailFromUrl) {
+      setSignInData(prev => ({ ...prev, email: emailFromUrl }));
+    }
+  }, [searchParams]);
+
   // OAuth 팝업/새탭에서 메시지 수신 리스너 (postMessage + localStorage 방식)
   useEffect(() => {
     // postMessage 방식
