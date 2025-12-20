@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 // Lazy load ModelViewer to reduce initial bundle size
-const ModelViewer = lazy(() => import("@/components/ModelViewer"));
+const ModelViewer = lazy(() => import("@/components/ai/ModelViewer"));
 import WorkflowStatusCard from "./WorkflowStatusCard";
 import { WorkflowStep, WorkflowStepStatus } from "@factor/shared";
 import { useTranslation } from "react-i18next";

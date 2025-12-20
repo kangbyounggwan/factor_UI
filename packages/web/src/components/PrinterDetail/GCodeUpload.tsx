@@ -627,19 +627,19 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCo
                     return (
                       <div
                         key={`${file.name}-${idx}`}
-                        className="group flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors border border-border"
+                        className="group flex items-center gap-2 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors border border-border"
                       >
-                        <div className="p-2 rounded-lg bg-background relative">
+                        <div className="p-2 rounded-lg bg-background relative flex-shrink-0">
                           <FileCode2 className="h-4 w-4 text-muted-foreground" />
                           {isInCloud && (
                             <Cloud className="h-3 w-3 text-blue-500 absolute -top-1 -right-1" />
                           )}
                         </div>
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 max-w-[calc(100%-120px)]">
                           <div className="font-medium text-sm truncate flex items-center gap-1.5">
                             {file.display || file.name}
                             {isInCloud && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 flex-shrink-0">
                                 Cloud
                               </span>
                             )}
@@ -648,57 +648,60 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCo
                             {formatFileSize(file.size)}
                           </div>
                         </div>
-                        {/* 뷰어 버튼 (클라우드에 있을 때만) */}
-                        {isInCloud && dbFile && (
+                        {/* 버튼 그룹 - 항상 표시 */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {/* 뷰어 버튼 (클라우드에 있을 때만) */}
+                          {isInCloud && dbFile && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleViewGcode(dbFile.id)}
+                              className="h-8 w-8 p-0 hover:bg-violet-500/10 hover:text-violet-600"
+                              title={t('gcode.viewGcode')}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => handleViewGcode(dbFile.id)}
-                            className="h-9 w-9 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-violet-500/10 hover:text-violet-600"
-                            title={t('gcode.viewGcode')}
+                            onClick={() => handlePrint(fileName, 'local')}
+                            disabled={isPrinting || !isConnected}
+                            className="h-8 w-8 p-0 hover:bg-emerald-500/10 hover:text-emerald-600"
                           >
-                            <Eye className="h-4 w-4" />
+                            <Play className="h-4 w-4" />
                           </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handlePrint(fileName, 'local')}
-                          disabled={isPrinting || !isConnected}
-                          className="h-9 w-9 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-emerald-500/10 hover:text-emerald-600"
-                        >
-                          <Play className="h-4 w-4" />
-                        </Button>
-                        {/* 클라우드 파일 관리 메뉴 */}
-                        {isInCloud && dbFile && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-9 w-9 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted"
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => startRenaming(dbFile)}>
-                                <Pencil className="h-4 w-4 mr-2" />
-                                {t('common.rename')}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setFileToDelete(dbFile);
-                                  setDeleteDialogOpen(true);
-                                }}
-                                className="text-destructive focus:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                {t('common.delete')}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
+                          {/* 클라우드 파일 관리 메뉴 */}
+                          {isInCloud && dbFile && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 hover:bg-muted"
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => startRenaming(dbFile)}>
+                                  <Pencil className="h-4 w-4 mr-2" />
+                                  {t('common.rename')}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setFileToDelete(dbFile);
+                                    setDeleteDialogOpen(true);
+                                  }}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  {t('common.delete')}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
                       </div>
                     );
                   })
@@ -706,12 +709,12 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCo
                   sdFiles.map((file, idx) => (
                     <div
                       key={`${file.name}-${idx}`}
-                      className="group flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors border border-border"
+                      className="group flex items-center gap-2 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors border border-border"
                     >
-                      <div className="p-2 rounded-lg bg-background">
+                      <div className="p-2 rounded-lg bg-background flex-shrink-0">
                         <FileCode2 className="h-4 w-4 text-muted-foreground" />
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 max-w-[calc(100%-60px)]">
                         <div className="font-medium text-sm truncate">
                           {file.name}
                         </div>
@@ -724,7 +727,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCo
                         variant="ghost"
                         onClick={() => handlePrint(file.name, 'sdcard')}
                         disabled={isPrinting || !isConnected}
-                        className="h-9 w-9 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-emerald-500/10 hover:text-emerald-600"
+                        className="h-8 w-8 p-0 flex-shrink-0 hover:bg-emerald-500/10 hover:text-emerald-600"
                       >
                         <Play className="h-4 w-4" />
                       </Button>

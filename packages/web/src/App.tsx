@@ -83,7 +83,8 @@ const AppContent = () => {
     '/ai-chat',
     '/user-settings',
     '/dashboard',
-    '/create'
+    '/create',
+    '/printer'
   ];
 
   // 현재 경로가 Footer를 숨겨야 하는 경로인지 확인

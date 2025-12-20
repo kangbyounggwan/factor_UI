@@ -94,6 +94,7 @@ import {
   renameApiKey,
   type ApiKey,
 } from "@shared/services/supabaseService/apiKeys";
+import { useSidebarState } from "@/hooks/useSidebarState";
 
 // Google Logo SVG Component
 const GoogleLogo = () => (
@@ -826,14 +827,15 @@ const UserSettings = () => {
     }
   };
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // 사이드바 상태 (페이지 간 공유)
+  const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
 
   return (
     <div className="h-screen flex overflow-hidden">
       {/* App Sidebar with Settings Menu */}
       <AppSidebar
         isOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onToggle={toggleSidebar}
         user={user}
         onSignOut={signOut}
         mode="settings"

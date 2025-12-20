@@ -17,50 +17,58 @@ import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import type { SubscriptionPlan } from "@shared/types/subscription";
 
-// 플랜별 배지 스타일 설정 (프리미엄 색상 채움)
+// 플랜별 배지 스타일 설정 (밝고 투명한 색상)
 const planBadgeConfig: Record<SubscriptionPlan, {
   label: string;
   icon: typeof Sparkles;
   bgColor: string;
   textColor: string;
   hoverBgColor: string;
+  borderColor: string;
 }> = {
   free: {
     label: 'Free',
     icon: Sparkles,
-    bgColor: 'bg-gradient-to-r from-purple-500 to-violet-600',
-    textColor: 'text-white',
-    hoverBgColor: 'hover:from-purple-600 hover:to-violet-700',
+    bgColor: 'bg-purple-500/15',
+    textColor: 'text-purple-600 dark:text-purple-400',
+    hoverBgColor: 'hover:bg-purple-500/25',
+    borderColor: 'border border-purple-500/30',
   },
   starter: {
     label: 'Starter',
     icon: Rocket,
-    bgColor: 'bg-gradient-to-r from-amber-500 to-orange-500',
-    textColor: 'text-white',
-    hoverBgColor: 'hover:from-amber-600 hover:to-orange-600',
+    bgColor: 'bg-amber-500/15',
+    textColor: 'text-amber-600 dark:text-amber-400',
+    hoverBgColor: 'hover:bg-amber-500/25',
+    borderColor: 'border border-amber-500/30',
   },
   pro: {
     label: 'Pro',
     icon: Crown,
-    bgColor: 'bg-gradient-to-r from-blue-500 to-indigo-600',
-    textColor: 'text-white',
-    hoverBgColor: 'hover:from-blue-600 hover:to-indigo-700',
+    bgColor: 'bg-blue-500/15',
+    textColor: 'text-blue-600 dark:text-blue-400',
+    hoverBgColor: 'hover:bg-blue-500/25',
+    borderColor: 'border border-blue-500/30',
   },
   enterprise: {
     label: 'Enterprise',
     icon: Building2,
-    bgColor: 'bg-gradient-to-r from-emerald-500 to-teal-600',
-    textColor: 'text-white',
-    hoverBgColor: 'hover:from-emerald-600 hover:to-teal-700',
+    bgColor: 'bg-emerald-500/15',
+    textColor: 'text-emerald-600 dark:text-emerald-400',
+    hoverBgColor: 'hover:bg-emerald-500/25',
+    borderColor: 'border border-emerald-500/30',
   },
 };
 
 interface AppHeaderProps {
   sidebarOpen?: boolean;
   userPlan?: SubscriptionPlan;
+  leftContent?: React.ReactNode;
+  rightContent?: React.ReactNode;
+  showTabSwitch?: boolean;
 }
 
-export const AppHeader = ({ sidebarOpen = false, userPlan }: AppHeaderProps) => {
+export const AppHeader = ({ sidebarOpen = false, userPlan, leftContent, rightContent, showTabSwitch = true }: AppHeaderProps) => {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
   const location = useLocation();
@@ -89,42 +97,53 @@ export const AppHeader = ({ sidebarOpen = false, userPlan }: AppHeaderProps) => 
       )}
     >
       <div className="relative flex h-16 items-center justify-center px-4">
-        {/* 중앙: 탭 스위치 */}
-        <div className="hidden sm:flex items-center">
-          <div className="flex items-center bg-muted rounded-full p-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/ai-chat')}
-              className={cn(
-                "rounded-full px-5 h-9 text-sm font-medium transition-colors",
-                isAITools
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <MessageSquare className="w-4 h-4 mr-2" />
-              {t('nav.aiTools', 'AI 도구')}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/dashboard')}
-              className={cn(
-                "rounded-full px-5 h-9 text-sm font-medium transition-colors",
-                isPrinter
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Printer className="w-4 h-4 mr-2" />
-              {t('nav.printers', '프린터')}
-            </Button>
+        {/* 왼쪽: 커스텀 콘텐츠 */}
+        {leftContent && (
+          <div className="absolute left-4 flex items-center">
+            {leftContent}
           </div>
-        </div>
+        )}
 
-        {/* 오른쪽: 언어/테마 그룹 + 플랜 배지 (absolute 배치로 중앙 영향 없음) */}
+        {/* 중앙: 탭 스위치 */}
+        {showTabSwitch && (
+          <div className="hidden sm:flex items-center">
+            <div className="flex items-center bg-muted rounded-full p-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/ai-chat')}
+                className={cn(
+                  "rounded-full px-5 h-9 text-sm font-medium transition-colors",
+                  isAITools
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <MessageSquare className="w-4 h-4 mr-2" />
+                {t('nav.aiTools', 'AI 도구')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/dashboard')}
+                className={cn(
+                  "rounded-full px-5 h-9 text-sm font-medium transition-colors",
+                  isPrinter
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                {t('nav.printers', '프린터')}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* 오른쪽: 언어/테마 그룹 + 플랜 배지 + 커스텀 콘텐츠 */}
         <div className="absolute right-4 flex items-center gap-3">
+          {/* 커스텀 오른쪽 콘텐츠 */}
+          {rightContent}
           {/* 언어 + 테마 버튼 그룹 */}
           <div className="flex items-center bg-muted rounded-full p-1">
             {/* 언어 선택 */}
@@ -166,10 +185,11 @@ export const AppHeader = ({ sidebarOpen = false, userPlan }: AppHeaderProps) => 
               variant="ghost"
               onClick={() => navigate('/subscription')}
               className={cn(
-                "h-11 px-4 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 shadow-md hover:text-white",
+                "h-9 px-3 rounded-full text-sm font-medium transition-all flex items-center gap-1.5",
                 currentPlanConfig.bgColor,
                 currentPlanConfig.textColor,
-                currentPlanConfig.hoverBgColor
+                currentPlanConfig.hoverBgColor,
+                currentPlanConfig.borderColor
               )}
             >
               <PlanIcon className="w-4 h-4" />

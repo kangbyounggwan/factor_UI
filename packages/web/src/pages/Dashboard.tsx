@@ -7,11 +7,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Monitor, Settings, ArrowRight, Activity, Thermometer, Clock, Lock, LogIn, Filter, Plus, Loader2 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { useUserPlan } from "@shared/hooks/useUserPlan";
 import { AppHeader } from "@/components/common/AppHeader";
 import { AppSidebar } from "@/components/common/AppSidebar";
 import { supabase } from "@shared/integrations/supabase/client"
 import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { useToast } from "@/hooks/use-toast";
+import { useSidebarState } from "@/hooks/useSidebarState";
 import { onDashStatusMessage } from "@shared/services/mqttService";
 import { PrinterStatusBadge } from "@/components/Dashboard/PrinterStatusBadge";
 import {
@@ -283,6 +285,7 @@ interface MqttStateCache {
 const Home = () => {
   const { t } = useTranslation();
   const { user, signOut } = useAuth();
+  const { plan: userPlan } = useUserPlan(user?.id);
   const { toast } = useToast();
   const [printers, setPrinters] = useState<PrinterOverview[]>([]); // localStorage 제거
   const [mqttStates, setMqttStates] = usePersistentState<MqttStateCache>('web:dashboard:mqtt_states', {}); // MQTT 상태만 저장
@@ -291,8 +294,8 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const summary = useDashboardSummary();
 
-  // 사이드바 상태
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // 사이드바 상태 (페이지 간 공유)
+  const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
 
   // 프린터 설정 모달 상태
   const [showSetupModal, setShowSetupModal] = useState(false);
@@ -611,7 +614,7 @@ const Home = () => {
       {/* App Sidebar */}
       <AppSidebar
         isOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onToggle={toggleSidebar}
         user={user}
         onSignOut={signOut}
         mode="dashboard"
@@ -620,7 +623,7 @@ const Home = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* App Header */}
-        <AppHeader sidebarOpen={sidebarOpen} />
+        <AppHeader sidebarOpen={sidebarOpen} userPlan={user ? userPlan : undefined} />
 
         {/* Dashboard Content */}
         <div className="flex-1 overflow-y-auto bg-background p-6">

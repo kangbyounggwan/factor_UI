@@ -2060,8 +2060,8 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
 
   return (
     <div className={cn(
-      "bg-white dark:bg-slate-950 text-slate-900 dark:text-white overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800 gcode-report-print flex flex-col",
-      embedded ? "rounded-none border-0 h-full" : "rounded-2xl h-full",
+      "bg-white dark:bg-slate-950 text-slate-900 dark:text-white overflow-hidden shadow-sm border border-slate-200/60 dark:border-slate-700/50 gcode-report-print flex flex-col",
+      embedded ? "rounded-none border-0 h-full" : "rounded-xl h-full",
       className
     )}>
       {/* 상단 헤더 - 탭 + 버튼들 (인쇄 시 숨김) */}

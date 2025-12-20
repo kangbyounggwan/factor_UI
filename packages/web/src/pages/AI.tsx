@@ -97,14 +97,15 @@ import { canGenerateAiModel, getAiGenerationLimit, getRemainingAiGenerations } f
 import { SubscriptionPlan } from "@shared/types/subscription";
 import { generateShortFilename } from "@shared/services/geminiService";
 import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
+import { useSidebarState } from "@/hooks/useSidebarState";
 
 
 const AI = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
 
-  // 사이드바 상태 - 기본으로 열림
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // 사이드바 상태 (페이지 간 공유)
+  const { isOpen: sidebarOpen, setIsOpen: setSidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
 
   const [activeTab, setActiveTab] = useState<string>('text-to-3d');
   const [textPrompt, setTextPrompt] = useState<string>('');
@@ -1200,7 +1201,7 @@ const AI = () => {
               handleModelDelete={handleModelDelete}
               modelViewerUrl={modelViewerUrl}
               isLeftSidebar={true}
-              onToggle={() => setSidebarOpen(false)}
+              onToggle={toggleSidebar}
             />
           </Suspense>
         </div>
@@ -1214,7 +1215,7 @@ const AI = () => {
             variant="ghost"
             size="icon"
             className="fixed top-4 left-4 z-50 h-10 w-10 rounded-full bg-background/80 backdrop-blur-sm border shadow-sm"
-            onClick={() => setSidebarOpen(true)}
+            onClick={toggleSidebar}
           >
             <Menu className="w-5 h-5" />
           </Button>

@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Wifi, WifiOff, LayoutGrid, Activity, Thermometer, Camera, Code, FolderOpen, FileCode, Eye, Loader2, Trash2, Pencil, MoreVertical, Check, Download, Upload, Copy, AlertTriangle } from "lucide-react";
+import { Thermometer, Camera, Code, FolderOpen, FileCode, Eye, Loader2, Trash2, Pencil, MoreVertical, Check, Upload, Copy, AlertTriangle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
+import { AppHeader } from "@/components/common/AppHeader";
+import { AppSidebar } from "@/components/common/AppSidebar";
+import { useSidebarState } from "@/hooks/useSidebarState";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +32,7 @@ import { GCodeUpload } from "@/components/PrinterDetail/GCodeUpload";
 import { GCodeViewerCanvas } from "@/components/PrinterDetail/GCodeViewerCanvas";
 import { PrintHistory } from "@/components/PrinterDetail/PrintHistory";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { useUserPlan } from "@shared/hooks/useUserPlan";
 import { supabase } from "@shared/integrations/supabase/client"
 import { onDashStatusMessage, mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, waitForGCodeUploadResult } from "@shared/services/mqttService";
 import { useToast } from "@/hooks/use-toast";
@@ -149,8 +153,12 @@ const PrinterDetail = () => {
   const hasSnapshot = typeof window !== 'undefined' ? !!localStorage.getItem(storageKey) : false;
   const [data, setData] = usePersistentState<MonitoringData>(storageKey, defaultData);
   const [loading, setLoading] = useState(!hasSnapshot);
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const { plan: userPlan } = useUserPlan(user?.id);
   const { toast } = useToast();
+
+  // 사이드바 상태 (페이지 간 공유)
+  const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
 
   // MQTT WebSocket 연결 상태는 사용하지 않음 - 프린터의 connected 상태만 사용
   const [deviceUuid, setDeviceUuid] = useState<string | null>(null);
@@ -1190,112 +1198,70 @@ const PrinterDetail = () => {
     ) : null
   ), [selectedFileContent]);
 
-  return (
-    <div className="bg-background min-h-screen">
-      <div className="w-full mx-auto">
-        {/* 상단 헤더 바 */}
-        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-          <div className="flex items-center justify-between px-6 py-3">
-            {/* 왼쪽: 뒤로가기 + 프린터 정보 + 연결 상태 */}
-            <div className="flex items-center gap-4">
-              <Button asChild variant="ghost" size="icon">
-                <Link to="/dashboard">
-                  <ArrowLeft className="h-5 w-5" />
-                </Link>
-              </Button>
-              <div>
-                <h1 className="text-lg font-semibold tracking-tight">{printerName || t('printerDetail.defaultPrinterName')}</h1>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="font-mono">{deviceUuid ? `${deviceUuid.substring(0, 8)}...` : 'N/A'}</span>
-                </div>
-              </div>
-              {data.printerStatus.connected ? (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">
-                  <Wifi className="h-3 w-3" />
-                  <span className="text-xs font-medium">{t('printerDetail.connected')}</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
-                  <WifiOff className="h-3 w-3" />
-                  <span className="text-xs font-medium">{t('printerDetail.disconnected')}</span>
-                </div>
-              )}
-            </div>
-
-            {/* 오른쪽: 온도 정보 */}
-            <div className="flex items-center gap-3">
-              {/* 베드 온도 */}
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20">
-                <Thermometer className="h-4 w-4 text-red-600 dark:text-red-400" />
-                <div className="text-sm">
-                  <span className="font-bold text-red-600 dark:text-red-400">
-                    {data.temperature.bed.actual.toFixed(0)}°C
-                  </span>
-                  {data.temperature.bed.target > 0 && (
-                    <span className="text-muted-foreground ml-0.5">
-                      / {data.temperature.bed.target}°C
-                    </span>
-                  )}
-                </div>
-              </div>
-              {/* 노즐 온도 */}
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                <Thermometer className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <div className="text-sm">
-                  <span className="font-bold text-blue-600 dark:text-blue-400">
-                    {data.temperature.tool.actual.toFixed(0)}°C
-                  </span>
-                  {data.temperature.tool.target > 0 && (
-                    <span className="text-muted-foreground ml-0.5">
-                      / {data.temperature.tool.target}°C
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+  // 헤더 오른쪽 콘텐츠: 온도 정보
+  const headerRightContent = (
+    <div className="flex items-center gap-3">
+      {/* 베드 온도 */}
+      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20">
+        <Thermometer className="h-4 w-4 text-red-600 dark:text-red-400" />
+        <div className="text-sm">
+          <span className="font-bold text-red-600 dark:text-red-400">
+            {data.temperature.bed.actual.toFixed(0)}°C
+          </span>
+          {data.temperature.bed.target > 0 && (
+            <span className="text-muted-foreground ml-0.5">
+              / {data.temperature.bed.target}°C
+            </span>
+          )}
         </div>
+      </div>
+      {/* 노즐 온도 */}
+      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
+        <Thermometer className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+        <div className="text-sm">
+          <span className="font-bold text-blue-600 dark:text-blue-400">
+            {data.temperature.tool.actual.toFixed(0)}°C
+          </span>
+          {data.temperature.tool.target > 0 && (
+            <span className="text-muted-foreground ml-0.5">
+              / {data.temperature.tool.target}°C
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 
-        {/* 메인 컨텐츠 - 사이드바와 컨텐츠 */}
-        <div className="flex">
-          {/* 왼쪽 사이드바 */}
-          <div className="w-64 border-r bg-muted/10 min-h-screen">
-            <div className="p-4 space-y-2">
-              <button
-                onClick={() => setActiveTab('all')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'all'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-muted'
-                  }`}
-              >
-                <LayoutGrid className="h-5 w-5" />
-                <span className="font-medium">{t('printerDetail.monitoring')}</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('monitoring')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'monitoring'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-muted'
-                  }`}
-              >
-                <Activity className="h-5 w-5" />
-                <span className="font-medium">{t('printerDetail.history')}</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('files')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'files'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-muted'
-                  }`}
-              >
-                <FolderOpen className="h-5 w-5" />
-                <span className="font-medium">{t('printerDetail.fileManagement')}</span>
-              </button>
-            </div>
-          </div>
+  return (
+    <div className="h-screen flex overflow-hidden">
+      {/* App Sidebar - printer-detail 모드 */}
+      <AppSidebar
+        isOpen={sidebarOpen}
+        onToggle={toggleSidebar}
+        user={user}
+        onSignOut={signOut}
+        mode="printer-detail"
+        printerName={printerName}
+        printerUuid={deviceUuid || undefined}
+        printerConnected={data.printerStatus.connected}
+        activePrinterTab={activeTab}
+        onPrinterTabChange={setActiveTab}
+        onBackClick={() => window.history.back()}
+      />
 
-          {/* 오른쪽 컨텐츠 */}
-          <div className="flex-1 px-8 py-6 flex justify-center">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* App Header */}
+        <AppHeader
+          sidebarOpen={sidebarOpen}
+          rightContent={headerRightContent}
+          userPlan={user ? userPlan : undefined}
+        />
+
+        {/* 메인 컨텐츠 */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* 컨텐츠 영역 */}
+          <div className="flex-1 px-8 py-6 flex justify-center overflow-y-auto">
             <div className="w-[80%] space-y-6">
               {activeTab === 'all' ? (
                 <>

@@ -49,7 +49,7 @@ import {
   type ChatToolType as ApiToolType,
 } from "@shared/services/chatApiService";
 import { useUserPlan } from "@shared/hooks/useUserPlan";
-import { AppSidebar, type ChatSession } from "@/components/common/AppSidebar";
+import { AppSidebar, type ChatSession, type ReportArchiveItem } from "@/components/common/AppSidebar";
 import { AppHeader } from "@/components/common/AppHeader";
 import { FilePreviewList } from "@/components/ai/FilePreviewList";
 import { ChatMessage, type ChatMessageData } from "@/components/ai/ChatMessage";
@@ -95,6 +95,7 @@ import {
 } from "@/hooks/chat";
 import { GCodeAnalysisReport, type AIResolveStartInfo, type AIResolveCompleteInfo } from "@/components/PrinterDetail/GCodeAnalysisReport";
 import { PanelRightOpen } from "lucide-react";
+import { useSidebarState } from "@/hooks/useSidebarState";
 import {
   useGcodeAnalysisPolling,
   type ReportCardData,
@@ -104,6 +105,8 @@ import {
   getAnalysisReportById,
   uploadGCodeForAnalysis,
   downloadGCodeContent,
+  getAnalysisReportsList,
+  deleteAnalysisReport,
 } from "@/lib/gcodeAnalysisDbService";
 import { saveSegmentData, loadFullSegmentDataByReportId } from "@/lib/gcodeSegmentService";
 import { extractGcodeContext } from "@/lib/api/gcode";
@@ -161,12 +164,16 @@ const AIChat = () => {
   const [gcodeFile, setGcodeFile] = useState<File | null>(null);
   const [gcodeFileContent, setGcodeFileContent] = useState<string | null>(null); // G-code 파일 내용 (코드 수정 컨텍스트용)
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(locationState?.openSidebar ?? false);
+  // 사이드바 상태 (페이지 간 공유)
+  const { isOpen: sidebarOpen, toggle: toggleSidebar, setIsOpen: setSidebarOpen } = useSidebarState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [_isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [selectedModel, setSelectedModel] = useState<{ provider: string; model: string }>({ provider: 'google', model: 'gemini-2.5-flash-lite' });
+
+  // 보고서 아카이브 상태
+  const [reportArchive, setReportArchive] = useState<ReportArchiveItem[]>([]);
 
   // 현재 세션의 도구 타입 추적 (한 세션에서 하나의 도구만 사용 가능)
   const [currentSessionToolType, setCurrentSessionToolType] = useState<string | null>(null);
@@ -287,6 +294,34 @@ const AIChat = () => {
 
     loadSessions();
   }, [user?.id]);
+
+  // 로그인 사용자: 보고서 아카이브 불러오기
+  useEffect(() => {
+    const loadReportArchive = async () => {
+      if (!user?.id) {
+        setReportArchive([]);
+        return;
+      }
+
+      try {
+        const { data } = await getAnalysisReportsList(user.id, { limit: 10 });
+        const formattedReports: ReportArchiveItem[] = data.map(r => ({
+          id: r.id,
+          fileName: r.file_name,
+          overallScore: r.overall_score ?? undefined,
+          overallGrade: r.overall_grade ?? undefined,
+          totalIssues: r.total_issues_count ?? undefined,
+          createdAt: new Date(r.created_at),
+        }));
+        setReportArchive(formattedReports);
+      } catch {
+        // 보고서 로드 실패
+      }
+    };
+
+    loadReportArchive();
+  }, [user?.id]);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -392,12 +427,11 @@ const AIChat = () => {
       setMessages(formattedMessages);
       setCurrentSessionId(session.id);
 
-      // 보고서가 있으면 패널 상태 초기화 (닫힌 상태로 시작)
-      if (Object.keys(reportCardCache).length > 0) {
-        setReportPanelOpen(false);
-        setGcodeReportData(null);
-        setActiveReportId(null);
-      }
+      // 세션 변경 시 항상 보고서 상태 초기화 (이전 세션의 보고서가 남아있지 않도록)
+      setReportPanelOpen(false);
+      setGcodeReportData(null);
+      setActiveReportId(null);
+      setGcodeSegments(null);
     } catch (e) {
       toast({
         title: t('aiChat.loadError', '세션 로드 실패'),
@@ -428,6 +462,58 @@ const AIChat = () => {
     } catch (e) {
       toast({
         title: t('aiChat.deleteError', '세션 삭제 실패'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // 보고서 아카이브 선택 핸들러
+  const handleSelectReport = async (report: ReportArchiveItem) => {
+    try {
+      const { data } = await getAnalysisReportById(report.id);
+      if (data) {
+        const uiData = convertDbReportToUiData(data);
+        setGcodeReportData(uiData);
+        setActiveReportId(report.id);
+        setReportPanelOpen(true);
+        setReportPanelTab('report');
+
+        // 세그먼트 데이터도 로드 (3D 뷰어용)
+        const segments = await loadFullSegmentDataByReportId(report.id);
+        if (segments) {
+          setGcodeSegments(segments);
+        }
+      }
+    } catch {
+      toast({
+        title: t('aiChat.reportLoadError', '보고서 로드 실패'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // 보고서 아카이브 삭제 핸들러
+  const handleDeleteReport = async (reportId: string) => {
+    if (!user?.id) return;
+
+    try {
+      const { error } = await deleteAnalysisReport(reportId);
+      if (!error) {
+        setReportArchive(prev => prev.filter(r => r.id !== reportId));
+        // 현재 열린 보고서가 삭제된 경우 패널 닫기
+        if (activeReportId === reportId) {
+          setReportPanelOpen(false);
+          setGcodeReportData(null);
+          setActiveReportId(null);
+          setGcodeSegments(null);
+        }
+        toast({
+          title: t('aiChat.reportDeleted', '보고서가 삭제되었습니다'),
+        });
+      }
+    } catch {
+      toast({
+        title: t('aiChat.reportDeleteError', '보고서 삭제 실패'),
         variant: 'destructive',
       });
     }
@@ -992,6 +1078,25 @@ const AIChat = () => {
       onReportCardReady: (reportCard: ReportCardData) => {
         // 보고서 패널 열기
         setReportPanelOpen(true);
+
+        // 보고서 아카이브에 추가 (맨 앞에)
+        if (reportCard.reportId) {
+          setReportArchive(prev => {
+            // 이미 존재하는지 확인
+            if (prev.some(r => r.id === reportCard.reportId)) {
+              return prev;
+            }
+            const newReport: ReportArchiveItem = {
+              id: reportCard.reportId,
+              fileName: reportCard.fileName,
+              overallScore: reportCard.overallScore,
+              overallGrade: reportCard.overallGrade,
+              totalIssues: reportCard.totalIssues,
+              createdAt: new Date(),
+            };
+            return [newReport, ...prev].slice(0, 10); // 최대 10개 유지
+          });
+        }
 
         // 메시지에 reportCard 추가
         setMessages(prev => {
@@ -1656,7 +1761,7 @@ const AIChat = () => {
       {/* 왼쪽 사이드바 */}
       <AppSidebar
         isOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onToggle={toggleSidebar}
         sessions={chatSessions}
         currentSessionId={currentSessionId}
         onNewChat={handleNewChat}
@@ -1667,6 +1772,11 @@ const AIChat = () => {
         onLoginClick={() => setShowLoginModal(true)}
         onSignOut={signOut}
         mode="chat"
+        // 보고서 아카이브 props
+        reports={reportArchive}
+        currentReportId={activeReportId}
+        onSelectReport={handleSelectReport}
+        onDeleteReport={handleDeleteReport}
       />
 
       {/* 메인 컨텐츠 */}
