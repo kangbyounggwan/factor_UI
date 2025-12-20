@@ -1672,7 +1672,7 @@ const AIChat = () => {
       {/* 메인 컨텐츠 */}
       <div className="flex-1 flex flex-col min-w-0 relative transition-all duration-300">
         {/* 상단 헤더 - AppHeader 재사용 */}
-        <AppHeader sidebarOpen={sidebarOpen} />
+        <AppHeader sidebarOpen={sidebarOpen} userPlan={user ? userPlan : undefined} />
 
         {messages.length === 0 ? (
           // Gemini 스타일 초기 화면

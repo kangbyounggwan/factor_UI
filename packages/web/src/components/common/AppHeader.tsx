@@ -6,7 +6,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,46 +17,41 @@ import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import type { SubscriptionPlan } from "@shared/types/subscription";
 
-// 플랜별 배지 스타일 설정
+// 플랜별 배지 스타일 설정 (프리미엄 색상 채움)
 const planBadgeConfig: Record<SubscriptionPlan, {
   label: string;
   icon: typeof Sparkles;
   bgColor: string;
   textColor: string;
-  borderColor: string;
   hoverBgColor: string;
 }> = {
   free: {
     label: 'Free',
     icon: Sparkles,
-    bgColor: 'bg-purple-50 dark:bg-purple-950',
-    textColor: 'text-purple-600 dark:text-purple-400',
-    borderColor: 'border-purple-200 dark:border-purple-800',
-    hoverBgColor: 'hover:bg-purple-100 dark:hover:bg-purple-900',
+    bgColor: 'bg-gradient-to-r from-purple-500 to-violet-600',
+    textColor: 'text-white',
+    hoverBgColor: 'hover:from-purple-600 hover:to-violet-700',
   },
   starter: {
     label: 'Starter',
     icon: Rocket,
-    bgColor: 'bg-blue-50 dark:bg-blue-950',
-    textColor: 'text-blue-600 dark:text-blue-400',
-    borderColor: 'border-blue-200 dark:border-blue-800',
-    hoverBgColor: 'hover:bg-blue-100 dark:hover:bg-blue-900',
+    bgColor: 'bg-gradient-to-r from-amber-500 to-orange-500',
+    textColor: 'text-white',
+    hoverBgColor: 'hover:from-amber-600 hover:to-orange-600',
   },
   pro: {
     label: 'Pro',
     icon: Crown,
-    bgColor: 'bg-amber-50 dark:bg-amber-950',
-    textColor: 'text-amber-600 dark:text-amber-400',
-    borderColor: 'border-amber-200 dark:border-amber-800',
-    hoverBgColor: 'hover:bg-amber-100 dark:hover:bg-amber-900',
+    bgColor: 'bg-gradient-to-r from-blue-500 to-indigo-600',
+    textColor: 'text-white',
+    hoverBgColor: 'hover:from-blue-600 hover:to-indigo-700',
   },
   enterprise: {
     label: 'Enterprise',
     icon: Building2,
-    bgColor: 'bg-emerald-50 dark:bg-emerald-950',
-    textColor: 'text-emerald-600 dark:text-emerald-400',
-    borderColor: 'border-emerald-200 dark:border-emerald-800',
-    hoverBgColor: 'hover:bg-emerald-100 dark:hover:bg-emerald-900',
+    bgColor: 'bg-gradient-to-r from-emerald-500 to-teal-600',
+    textColor: 'text-white',
+    hoverBgColor: 'hover:from-emerald-600 hover:to-teal-700',
   },
 };
 
@@ -166,21 +160,22 @@ export const AppHeader = ({ sidebarOpen = false, userPlan }: AppHeaderProps) => 
             </Button>
           </div>
 
-          {/* 플랜 배지 - 클릭 시 구독 페이지로 이동 */}
-          <Badge
-            variant="outline"
-            onClick={() => navigate('/settings?tab=subscription')}
-            className={cn(
-              "flex items-center gap-1.5 px-3 h-9 rounded-full text-xs font-medium cursor-pointer transition-colors",
-              currentPlanConfig.bgColor,
-              currentPlanConfig.textColor,
-              currentPlanConfig.borderColor,
-              currentPlanConfig.hoverBgColor
-            )}
-          >
-            <PlanIcon className="w-3 h-3" />
-            {currentPlanConfig.label}
-          </Badge>
+          {/* 플랜 배지 - 로그인한 사용자만 표시 */}
+          {userPlan && (
+            <Button
+              variant="ghost"
+              onClick={() => navigate('/subscription')}
+              className={cn(
+                "h-11 px-4 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 shadow-md hover:text-white",
+                currentPlanConfig.bgColor,
+                currentPlanConfig.textColor,
+                currentPlanConfig.hoverBgColor
+              )}
+            >
+              <PlanIcon className="w-4 h-4" />
+              {currentPlanConfig.label}
+            </Button>
+          )}
         </div>
       </div>
     </header>
