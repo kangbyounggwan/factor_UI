@@ -287,11 +287,11 @@ class PrinterStatusManager {
   // 설정
   private readonly TIMEOUT_MS = 30000; // 30초
   private readonly CHECK_INTERVAL_MS = 10000; // 10초마다 체크
-  private readonly SYNC_THROTTLE_MS = 3000; // DB 동기화 최소 간격 3초
+  private readonly SYNC_THROTTLE_MS = 30000; // DB 동기화 최소 간격 30초 (리퀘스트 절감)
 
   // 프린트 히스토리 관리
   // deviceUuid → { jobId, printerId, lastStatus, jobKey }
-  private activeJobs = new Map<string, { jobId: string; printerId: string; lastStatus: string; jobKey: string }>();
+  private activeJobs = new Map<string, { jobId: string; printerId: string; lastStatus: string; octoprintJobId: string }>();
 
   /**
    * MQTT 페이로드에서 상태값 추출 및 매핑
@@ -334,69 +334,59 @@ class PrinterStatusManager {
 
   /**
    * 프린터 상태를 DB와 동기화
+   * 최적화: 실제 상태 변경 시에만 업데이트, throttle 적용
    */
   async syncToDb(deviceUuid: string, newStatus: string): Promise<void> {
     if (!supabase) return;
 
     const cachedStatus = this.statusCache.get(deviceUuid);
 
-    // 캐시가 있고 상태가 같으면 스킵 (DB 조회 없이)
+    // 1. 캐시가 있고 상태가 같으면 완전 스킵 (가장 빠름)
     if (cachedStatus === newStatus) return;
 
-    // 공통 Throttle 적용 (상태 변경 시에도 최소 간격 적용)
+    // 2. 캐시가 없으면 먼저 DB에서 읽어서 캐시 초기화 (업데이트 없이)
+    if (!cachedStatus) {
+      try {
+        const { data: printer } = await supabase
+          .from('printers')
+          .select('status')
+          .eq('device_uuid', deviceUuid)
+          .maybeSingle();
+
+        if (printer) {
+          this.statusCache.set(deviceUuid, printer.status);
+          // DB 상태와 동일하면 리턴 (업데이트 불필요)
+          if (printer.status === newStatus) {
+            return;
+          }
+        }
+      } catch {
+        return;
+      }
+    }
+
+    // 3. 여기까지 왔다면 실제 상태 변경이 필요함 → Throttle 체크
     const now = Date.now();
     const lastSync = this.lastSyncTime.get(deviceUuid) || 0;
 
     if (now - lastSync < this.SYNC_THROTTLE_MS) {
-      // console.log(`[MQTT] ⏳ 상태 업데이트 대기 (Throttle): ${deviceUuid} ${cachedStatus} -> ${newStatus}`);
-      return; // 아직 최소 간격이 지나지 않음
+      // Throttle 중이면 캐시만 업데이트하고 DB는 나중에
+      // (다음 throttle 통과 시 업데이트됨)
+      return;
     }
 
+    // 4. DB 업데이트 실행
     try {
       this.lastSyncTime.set(deviceUuid, now);
 
-      // 캐시가 있으면 DB 조회 없이 바로 업데이트
-      if (cachedStatus) {
-        // 캐시된 printer ID가 필요하므로 ID도 캐시해야 함
-        // 일단 device_uuid로 업데이트
-        const { error: updateError } = await supabase
-          .from('printers')
-          .update({ status: newStatus, updated_at: new Date().toISOString() })
-          .eq('device_uuid', deviceUuid);
-
-        if (!updateError) {
-          this.statusCache.set(deviceUuid, newStatus);
-          console.log(`[MQTT] ✅ 상태 변경: ${deviceUuid} → ${newStatus}`);
-        }
-        return;
-      }
-
-      // 캐시가 없으면 DB에서 현재 상태 조회 (최초 1회)
-      const { data: printer, error: selectError } = await supabase
-        .from('printers')
-        .select('id, status')
-        .eq('device_uuid', deviceUuid)
-        .maybeSingle();
-
-      if (selectError || !printer) return;
-
-      // 캐시 초기화
-      this.statusCache.set(deviceUuid, printer.status);
-
-      // DB 상태와 동일하면 끝
-      if (printer.status === newStatus) {
-        return;
-      }
-
-      // DB 업데이트
       const { error: updateError } = await supabase
         .from('printers')
         .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', printer.id);
+        .eq('device_uuid', deviceUuid);
 
       if (!updateError) {
         this.statusCache.set(deviceUuid, newStatus);
-        console.log(`[MQTT] ✅ 상태 동기화: ${deviceUuid} → ${newStatus}`);
+        console.log(`[MQTT] ✅ 상태 동기화: ${deviceUuid.slice(0, 8)}... → ${newStatus}`);
       }
     } catch (error) {
       console.error('[MQTT] DB 동기화 실패:', error);
@@ -510,39 +500,45 @@ class PrinterStatusManager {
         const fileName = jobFile?.name || jobFile?.display || 'Unknown';
         const filePath = jobFile?.path || jobFile?.origin || '';
 
-        // OctoPrint job key 생성: 파일명 + 예상시간 (고유 식별자)
-        // OctoPrint는 고유 job ID를 제공하지 않으므로 파일명+예상시간으로 식별
-        const estimatedTime = parsed?.job?.estimatedPrintTime || 0;
-        const jobKey = `${fileName}_${Math.floor(estimatedTime)}`;
+        // OctoPrint job ID 사용 (고유 식별자)
+        const octoprintJobId = parsed?.job?.id;
+        if (!octoprintJobId) {
+          console.warn(`[MQTT] ⚠️ No job.id in payload, skipping print history`);
+          return;
+        }
 
-        // 이미 동일한 job key를 가진 진행 중인 job이 DB에 있는지 확인 (앱 재시작 시 중복 방지)
+        // octoprint_job_id로 동일한 진행 중인 job이 DB에 있는지 확인 (앱 재시작/새로고침 시 중복 방지)
         const { data: existingJob } = await supabase
           .from('model_print_history')
-          .select('id, print_settings')
+          .select('id, octoprint_job_id')
           .eq('printer_id', printer.id)
           .eq('print_status', 'printing')
+          .eq('octoprint_job_id', octoprintJobId)
           .maybeSingle();
 
         if (existingJob) {
-          // 기존 job의 파일명/예상시간으로 job key 비교
-          const existingFileName = existingJob.print_settings?.file_name || '';
-          const existingEstimatedTime = existingJob.print_settings?.estimated_time || 0;
-          const existingJobKey = `${existingFileName}_${Math.floor(existingEstimatedTime)}`;
+          // 동일한 octoprint_job_id가 있으면 메모리에 복원하고 리턴
+          this.activeJobs.set(deviceUuid, {
+            jobId: existingJob.id,
+            printerId: printer.id,
+            lastStatus: 'printing',
+            octoprintJobId: octoprintJobId,
+          });
+          console.log(`[MQTT] 🔄 Restored existing print job: ${existingJob.id} (octoprint_job_id: ${octoprintJobId})`);
+          return;
+        }
 
-          // job key가 같으면 동일 job으로 판단 → 메모리에 복원
-          if (existingJobKey === jobKey) {
-            this.activeJobs.set(deviceUuid, {
-              jobId: existingJob.id,
-              printerId: printer.id,
-              lastStatus: 'printing',
-              jobKey: jobKey,
-            });
-            console.log(`[MQTT] 🔄 Restored existing print job: ${existingJob.id} (key: ${jobKey})`);
-            return;
-          }
+        // 다른 octoprint_job_id로 printing 중인 레코드가 있으면 cancelled 처리
+        const { data: oldJob } = await supabase
+          .from('model_print_history')
+          .select('id')
+          .eq('printer_id', printer.id)
+          .eq('print_status', 'printing')
+          .neq('octoprint_job_id', octoprintJobId)
+          .maybeSingle();
 
-          // job key가 다르면 이전 job을 cancelled로 처리 후 새 job 생성
-          console.log(`[MQTT] ⚠️ Different job detected. Closing old job: ${existingJob.id}`);
+        if (oldJob) {
+          console.log(`[MQTT] ⚠️ Different job detected. Closing old job: ${oldJob.id}`);
           await supabase
             .from('model_print_history')
             .update({
@@ -550,7 +546,7 @@ class PrinterStatusManager {
               completed_at: new Date().toISOString(),
               error_message: 'New job started, previous job auto-cancelled',
             })
-            .eq('id', existingJob.id);
+            .eq('id', oldJob.id);
         }
 
         // SD 카드/로컬 파일의 경우 gcode_url 구성
@@ -562,6 +558,7 @@ class PrinterStatusManager {
         }
 
         // model_print_history에 새 레코드 생성 (model_id는 null 허용)
+        // octoprint_job_id를 포함하여 중복 방지 (unique index가 걸려있음)
         const { data: newJob, error } = await supabase
           .from('model_print_history')
           .insert({
@@ -573,6 +570,7 @@ class PrinterStatusManager {
             started_at: new Date().toISOString(),
             short_filename: fileName,
             gcode_url: gcodeUrl || null,
+            octoprint_job_id: octoprintJobId, // OctoPrint job ID로 중복 방지
             print_settings: {
               file_name: fileName,
               file_path: filePath,
@@ -588,15 +586,36 @@ class PrinterStatusManager {
           .single();
 
         if (error) {
-          console.error(`[MQTT] ❌ Failed to create print job:`, error);
+          // unique constraint 위반 (23505) = 이미 같은 octoprint_job_id가 존재 → 기존 job 복원
+          if (error.code === '23505') {
+            const { data: existingByJobId } = await supabase
+              .from('model_print_history')
+              .select('id')
+              .eq('printer_id', printer.id)
+              .eq('octoprint_job_id', octoprintJobId)
+              .eq('print_status', 'printing')
+              .maybeSingle();
+
+            if (existingByJobId) {
+              this.activeJobs.set(deviceUuid, {
+                jobId: existingByJobId.id,
+                printerId: printer.id,
+                lastStatus: 'printing',
+                octoprintJobId: octoprintJobId,
+              });
+              console.log(`[MQTT] 🔄 Restored job after unique conflict: ${existingByJobId.id} (octoprint_job_id: ${octoprintJobId})`);
+            }
+          } else {
+            console.error(`[MQTT] ❌ Failed to create print job:`, error);
+          }
         } else if (newJob) {
           this.activeJobs.set(deviceUuid, {
             jobId: newJob.id,
             printerId: printer.id,
             lastStatus: 'printing',
-            jobKey: jobKey,
+            octoprintJobId: octoprintJobId,
           });
-          console.log(`[MQTT] 🖨️ Print job started: ${newJob.id} (key: ${jobKey}), file: ${fileName}`);
+          console.log(`[MQTT] 🖨️ Print job started: ${newJob.id} (octoprint_job_id: ${octoprintJobId}), file: ${fileName}`);
         }
       }
 
