@@ -2761,7 +2761,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                     {t('gcodeAnalytics.supportRatio')}
                   </h3>
                   <div className="flex-grow flex items-center justify-center">
-                    <div className="relative w-32 h-32">
+                    <div className="relative w-40 h-40">
                       {/* 도넛 차트 배경 */}
                       <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
                         <circle
@@ -2770,7 +2770,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                           r="40"
                           fill="none"
                           stroke="currentColor"
-                          strokeWidth="12"
+                          strokeWidth="10"
                           className="text-slate-200 dark:text-slate-700"
                         />
                         <circle
@@ -2779,7 +2779,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                           r="40"
                           fill="none"
                           stroke="currentColor"
-                          strokeWidth="12"
+                          strokeWidth="10"
                           strokeLinecap="round"
                           strokeDasharray={`${(support.percentage / 100) * 251.2} 251.2`}
                           className="text-primary"
@@ -2787,7 +2787,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                       </svg>
                       {/* 중앙 텍스트 */}
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-2xl font-heading font-bold text-slate-900 dark:text-white">{support.percentage.toFixed(1)}%</span>
+                        <span className="text-3xl font-heading font-bold text-slate-900 dark:text-white">{support.percentage.toFixed(1)}%</span>
                         {support.volume && (
                           <span className="text-xs font-body text-slate-500 dark:text-slate-400">{support.volume}</span>
                         )}
@@ -2850,24 +2850,24 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                         <div className="w-3 h-3 rounded-full bg-red-500" />
                         <span className="text-base font-body text-slate-700 dark:text-white">{t('gcodeAnalytics.nozzle')}</span>
                       </div>
-                      <span className="text-xl font-heading font-bold text-slate-900 dark:text-white">{typeof temperature.nozzle === 'number' ? temperature.nozzle.toFixed(2) : temperature.nozzle}°C</span>
+                      <span className="text-xl font-heading font-bold text-slate-900 dark:text-white">{typeof temperature.nozzle === 'number' ? temperature.nozzle.toFixed(1) : temperature.nozzle}°C</span>
                     </div>
                     <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-700/30 rounded-lg">
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-orange-500" />
                         <span className="text-base font-body text-slate-700 dark:text-white">{t('gcodeAnalytics.bed')}</span>
                       </div>
-                      <span className="text-xl font-heading font-bold text-slate-900 dark:text-white">{typeof temperature.bed === 'number' ? temperature.bed.toFixed(2) : temperature.bed}°C</span>
+                      <span className="text-xl font-heading font-bold text-slate-900 dark:text-white">{typeof temperature.bed === 'number' ? temperature.bed.toFixed(1) : temperature.bed}°C</span>
                     </div>
                     {temperature.firstLayer && (
                       <div className="pt-2 border-t border-slate-200 dark:border-slate-700/50">
                         <p className="text-sm text-slate-500 mb-2">{t('gcodeAnalytics.firstLayerSettings')}</p>
                         <div className="grid grid-cols-2 gap-2 text-sm text-slate-700 dark:text-white">
                           {temperature.firstLayer.nozzle && (
-                            <span>{t('gcodeAnalytics.nozzle')}: {typeof temperature.firstLayer.nozzle === 'number' ? temperature.firstLayer.nozzle.toFixed(2) : temperature.firstLayer.nozzle}°C</span>
+                            <span>{t('gcodeAnalytics.nozzle')}: {typeof temperature.firstLayer.nozzle === 'number' ? temperature.firstLayer.nozzle.toFixed(1) : temperature.firstLayer.nozzle}°C</span>
                           )}
                           {temperature.firstLayer.bed && (
-                            <span>{t('gcodeAnalytics.bed')}: {typeof temperature.firstLayer.bed === 'number' ? temperature.firstLayer.bed.toFixed(2) : temperature.firstLayer.bed}°C</span>
+                            <span>{t('gcodeAnalytics.bed')}: {typeof temperature.firstLayer.bed === 'number' ? temperature.firstLayer.bed.toFixed(1) : temperature.firstLayer.bed}°C</span>
                           )}
                         </div>
                       </div>
@@ -3533,6 +3533,22 @@ function DiagnosisSummaryCard({ summary, detailedIssues }: { summary: DiagnosisS
 
   const style = severityStyles[summary.severity] || severityStyles.info;
 
+  // 출력 판단 문구 생성 (severity 기반)
+  const getPrintabilityVerdict = () => {
+    switch (summary.severity) {
+      case 'critical':
+        return t('gcodeAnalytics.verdictReslice', '재슬라이싱 권장');
+      case 'high':
+        return t('gcodeAnalytics.verdictCautionReslice', '주의 필요 - 재슬라이싱 고려');
+      case 'medium':
+        return t('gcodeAnalytics.verdictCaution', '주의하여 출력');
+      case 'low':
+      case 'info':
+      default:
+        return t('gcodeAnalytics.verdictPrintOk', '출력 권장');
+    }
+  };
+
   return (
     <div className={cn("rounded-xl p-5 border shadow-sm", style.bg, style.border)}>
       <div className="flex flex-col md:flex-row gap-4 md:items-start">
@@ -3547,10 +3563,10 @@ function DiagnosisSummaryCard({ summary, detailedIssues }: { summary: DiagnosisS
             <span className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-wider">{t('gcodeAnalytics.diagnosisSummary')}</span>
           </div>
           <h3 className="text-base font-title font-bold text-slate-900 dark:text-white leading-snug">
-            {t('gcodeAnalytics.analysisCompleted')}
+            {summary.keyIssue?.title || t('gcodeAnalytics.analysisCompleted')}
           </h3>
           <p className="text-sm font-body text-slate-600 dark:text-slate-300 leading-relaxed max-w-3xl">
-            {summary.keyIssue?.title}
+            {summary.recommendation}
           </p>
         </div>
       </div>
@@ -3571,8 +3587,8 @@ function DiagnosisSummaryCard({ summary, detailedIssues }: { summary: DiagnosisS
             <Info className="w-4 h-4" />
           </div>
           <div className="flex-1">
-            <p className="text-[10px] font-heading font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('gcodeAnalytics.recommendedAction')}</p>
-            <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{summary.recommendation}</p>
+            <p className="text-[10px] font-heading font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('gcodeAnalytics.printabilityVerdict')}</p>
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{getPrintabilityVerdict()}</p>
           </div>
         </div>
       </div>

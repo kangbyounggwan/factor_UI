@@ -57,54 +57,127 @@ interface Message {
   timestamp: Date;
 }
 
+// 출처 정보 타입
+interface SourceInfo {
+  title: string;
+  url: string;
+}
+
+// 출처 추출 함수 (GPT 스타일)
+function extractSources(content: string): { cleanContent: string; sources: SourceInfo[] } {
+  const sources: SourceInfo[] = [];
+
+  const sourcePatterns = [
+    /📚\s*출처:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
+    /🔗\s*출처:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
+    /\*\s*출처:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
+  ];
+
+  let cleanContent = content;
+
+  for (const pattern of sourcePatterns) {
+    cleanContent = cleanContent.replace(pattern, (_, sourceText) => {
+      const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
+      let linkMatch;
+      while ((linkMatch = linkPattern.exec(sourceText)) !== null) {
+        const title = linkMatch[1].trim();
+        const url = linkMatch[2].trim();
+        if (!sources.some(s => s.url === url)) {
+          sources.push({ title, url });
+        }
+      }
+      return '';
+    });
+  }
+
+  cleanContent = cleanContent.replace(/\n{3,}/g, '\n\n').trim();
+
+  return { cleanContent, sources };
+}
+
 // 마크다운 렌더링 컴포넌트
-const MarkdownContent = ({ content, isUser = false }: { content: string; isUser?: boolean }) => (
-  <ReactMarkdown
-    remarkPlugins={[remarkGfm]}
-    components={{
-      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-      strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-      em: ({ children }) => <em className="italic">{children}</em>,
-      ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-      ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-      li: ({ children }) => <li className="ml-2">{children}</li>,
-      code: ({ children, className }) => {
-        const isInline = !className;
-        return isInline ? (
-          <code className={`px-1.5 py-0.5 rounded text-xs font-mono ${isUser ? 'bg-primary-foreground/20' : 'bg-muted'}`}>
-            {children}
-          </code>
-        ) : (
-          <code className="block p-2 rounded bg-muted text-xs font-mono overflow-x-auto my-2">
-            {children}
-          </code>
-        );
-      },
-      a: ({ href, children }) => (
-        <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:no-underline">
-          {children}
-        </a>
-      ),
-      h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
-      h2: ({ children }) => <h2 className="text-base font-bold mb-2">{children}</h2>,
-      h3: ({ children }) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
-      blockquote: ({ children }) => (
-        <blockquote className="border-l-2 border-primary/50 pl-3 italic text-muted-foreground my-2">
-          {children}
-        </blockquote>
-      ),
-      table: ({ children }) => (
-        <div className="overflow-x-auto my-2">
-          <table className="min-w-full text-xs border-collapse">{children}</table>
+const MarkdownContent = ({ content, isUser = false }: { content: string; isUser?: boolean }) => {
+  // 출처 추출 및 본문 분리
+  const { cleanContent, sources } = extractSources(content);
+
+  return (
+    <>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+          em: ({ children }) => <em className="italic">{children}</em>,
+          ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+          li: ({ children }) => <li className="ml-2">{children}</li>,
+          code: ({ children, className }) => {
+            const isInline = !className;
+            return isInline ? (
+              <code className={`px-1.5 py-0.5 rounded text-xs font-mono ${isUser ? 'bg-primary-foreground/20' : 'bg-muted'}`}>
+                {children}
+              </code>
+            ) : (
+              <code className="block p-2 rounded bg-muted text-xs font-mono overflow-x-auto my-2">
+                {children}
+              </code>
+            );
+          },
+          a: ({ href, children }) => (
+            <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:no-underline">
+              {children}
+            </a>
+          ),
+          h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-base font-bold mb-2">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-2 border-primary/50 pl-3 italic text-muted-foreground my-2">
+              {children}
+            </blockquote>
+          ),
+          table: ({ children }) => (
+            <div className="overflow-x-auto my-2">
+              <table className="min-w-full text-xs border-collapse">{children}</table>
+            </div>
+          ),
+          th: ({ children }) => <th className="border border-border px-2 py-1 bg-muted font-semibold">{children}</th>,
+          td: ({ children }) => <td className="border border-border px-2 py-1">{children}</td>,
+        }}
+      >
+        {cleanContent}
+      </ReactMarkdown>
+
+      {/* 출처 섹션 - GPT 스타일 (하단 별도 표시) */}
+      {sources.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-border/50">
+          <div className="flex items-center gap-1.5 mb-2 text-[10px] font-medium text-muted-foreground">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+            <span>출처</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {sources.map((source, idx) => (
+              <a
+                key={idx}
+                href={source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-full transition-colors"
+              >
+                <span className="max-w-[150px] truncate">{source.title}</span>
+                <svg className="w-2.5 h-2.5 flex-shrink-0 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            ))}
+          </div>
         </div>
-      ),
-      th: ({ children }) => <th className="border border-border px-2 py-1 bg-muted font-semibold">{children}</th>,
-      td: ({ children }) => <td className="border border-border px-2 py-1">{children}</td>,
-    }}
-  >
-    {content}
-  </ReactMarkdown>
-);
+      )}
+    </>
+  );
+};
 
 // 이슈 타입에 따른 아이콘 및 색상
 const getIssueStyle = (issueType: string) => {

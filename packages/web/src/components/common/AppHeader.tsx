@@ -13,21 +13,71 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sun, Moon, Globe, MessageSquare, Printer, Sparkles } from "lucide-react";
+import { Sun, Moon, Globe, MessageSquare, Printer, Sparkles, Rocket, Crown, Building2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
+import type { SubscriptionPlan } from "@shared/types/subscription";
+
+// 플랜별 배지 스타일 설정
+const planBadgeConfig: Record<SubscriptionPlan, {
+  label: string;
+  icon: typeof Sparkles;
+  bgColor: string;
+  textColor: string;
+  borderColor: string;
+  hoverBgColor: string;
+}> = {
+  free: {
+    label: 'Free',
+    icon: Sparkles,
+    bgColor: 'bg-purple-50 dark:bg-purple-950',
+    textColor: 'text-purple-600 dark:text-purple-400',
+    borderColor: 'border-purple-200 dark:border-purple-800',
+    hoverBgColor: 'hover:bg-purple-100 dark:hover:bg-purple-900',
+  },
+  starter: {
+    label: 'Starter',
+    icon: Rocket,
+    bgColor: 'bg-blue-50 dark:bg-blue-950',
+    textColor: 'text-blue-600 dark:text-blue-400',
+    borderColor: 'border-blue-200 dark:border-blue-800',
+    hoverBgColor: 'hover:bg-blue-100 dark:hover:bg-blue-900',
+  },
+  pro: {
+    label: 'Pro',
+    icon: Crown,
+    bgColor: 'bg-amber-50 dark:bg-amber-950',
+    textColor: 'text-amber-600 dark:text-amber-400',
+    borderColor: 'border-amber-200 dark:border-amber-800',
+    hoverBgColor: 'hover:bg-amber-100 dark:hover:bg-amber-900',
+  },
+  enterprise: {
+    label: 'Enterprise',
+    icon: Building2,
+    bgColor: 'bg-emerald-50 dark:bg-emerald-950',
+    textColor: 'text-emerald-600 dark:text-emerald-400',
+    borderColor: 'border-emerald-200 dark:border-emerald-800',
+    hoverBgColor: 'hover:bg-emerald-100 dark:hover:bg-emerald-900',
+  },
+};
 
 interface AppHeaderProps {
   sidebarOpen?: boolean;
+  userPlan?: SubscriptionPlan;
 }
 
-export const AppHeader = ({ sidebarOpen = false }: AppHeaderProps) => {
+export const AppHeader = ({ sidebarOpen = false, userPlan }: AppHeaderProps) => {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
 
   const currentLanguage = i18n.language || 'ko';
+
+  // 플랜 설정 (기본값: free)
+  const safePlan = userPlan && planBadgeConfig[userPlan] ? userPlan : 'free';
+  const currentPlanConfig = planBadgeConfig[safePlan];
+  const PlanIcon = currentPlanConfig.icon;
 
   const changeLanguage = (lng: string) => {
     i18n.changeLanguage(lng);
@@ -116,13 +166,20 @@ export const AppHeader = ({ sidebarOpen = false }: AppHeaderProps) => {
             </Button>
           </div>
 
-          {/* 플랜 배지 */}
+          {/* 플랜 배지 - 클릭 시 구독 페이지로 이동 */}
           <Badge
             variant="outline"
-            className="flex items-center gap-1.5 px-3 h-9 rounded-full border-purple-200 bg-purple-50 text-purple-600 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-400 text-xs font-medium"
+            onClick={() => navigate('/settings?tab=subscription')}
+            className={cn(
+              "flex items-center gap-1.5 px-3 h-9 rounded-full text-xs font-medium cursor-pointer transition-colors",
+              currentPlanConfig.bgColor,
+              currentPlanConfig.textColor,
+              currentPlanConfig.borderColor,
+              currentPlanConfig.hoverBgColor
+            )}
           >
-            <Sparkles className="w-3 h-3" />
-            Free
+            <PlanIcon className="w-3 h-3" />
+            {currentPlanConfig.label}
           </Badge>
         </div>
       </div>

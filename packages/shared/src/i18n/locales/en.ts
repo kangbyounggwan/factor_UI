@@ -1349,6 +1349,11 @@ export default {
     patchSuggestionsTitle: "G-code Patch Suggestions",
     llmRecommendation: "Recommendation",
     recommendedAction: "Print Decision",
+    printabilityVerdict: "Print Decision",
+    verdictPrintOk: "Print Recommended",
+    verdictCaution: "Print with Caution",
+    verdictCautionReslice: "Caution - Consider Re-slicing",
+    verdictReslice: "Re-slicing Recommended",
     firstLayerSettings: "First Layer Settings",
 
     // Tabs (embedded viewer)
@@ -2459,6 +2464,8 @@ export default {
     toolChangeTitle: "Start a new conversation?",
     toolChangeDescription: "You are already using a different tool in this conversation. To change tools, you need to start a new conversation.",
     startNewChat: "Start New Chat",
+    newChatRequired: "New Chat Required",
+    newChatRequiredDesc: "Only one tool can be used per session. Please start a new chat to use a different tool.",
     // G-code analysis complete
     gcodeAnalysisComplete: "G-code Analysis Complete",
     qualityScore: "Quality Score",

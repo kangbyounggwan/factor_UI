@@ -583,6 +583,8 @@ export default {
     toolChangeTitle: "새 대화를 시작하시겠습니까?",
     toolChangeDescription: "현재 대화에서 이미 다른 도구를 사용 중입니다. 도구를 변경하려면 새 대화를 시작해야 합니다.",
     startNewChat: "새 대화 시작",
+    newChatRequired: "새 채팅이 필요합니다",
+    newChatRequiredDesc: "한 세션에서는 하나의 도구만 사용할 수 있습니다. 다른 도구를 사용하려면 새 채팅을 시작해주세요.",
     // G-code 분석 완료
     gcodeAnalysisComplete: "G-code 분석 완료",
     qualityScore: "품질 점수",
@@ -1490,6 +1492,11 @@ export default {
     patchSuggestionsTitle: "G-code 패치 제안",
     llmRecommendation: "권장사항",
     recommendedAction: "출력 판단",
+    printabilityVerdict: "출력 판단",
+    verdictPrintOk: "출력 권장",
+    verdictCaution: "주의하여 출력",
+    verdictCautionReslice: "주의 필요 - 재슬라이싱 고려",
+    verdictReslice: "재슬라이싱 권장",
     firstLayerSettings: "첫 레이어 설정",
 
     // 탭 (embedded 뷰어용)

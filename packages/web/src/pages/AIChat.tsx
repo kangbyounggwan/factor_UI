@@ -54,9 +54,18 @@ import { AppHeader } from "@/components/common/AppHeader";
 import { FilePreviewList } from "@/components/ai/FilePreviewList";
 import { ChatMessage, type ChatMessageData } from "@/components/ai/ChatMessage";
 import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   getChatSessions,
+  getChatSession,
   createChatSession,
   deleteChatSession as deleteDBSession,
   getChatMessages,
@@ -158,6 +167,12 @@ const AIChat = () => {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [_isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [selectedModel, setSelectedModel] = useState<{ provider: string; model: string }>({ provider: 'google', model: 'gemini-2.5-flash-lite' });
+
+  // 현재 세션의 도구 타입 추적 (한 세션에서 하나의 도구만 사용 가능)
+  const [currentSessionToolType, setCurrentSessionToolType] = useState<string | null>(null);
+  // 새 채팅 유도 모달 상태
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [pendingToolId, setPendingToolId] = useState<string | null>(null);
 
   // G-code 분석 보고서 패널 상태
   const [reportPanelOpen, setReportPanelOpen] = useState(false);
@@ -288,6 +303,7 @@ const AIChat = () => {
     setGcodeFile(null);
     setSelectedTool(null);
     setChatMode("general");
+    setCurrentSessionToolType(null); // 도구 타입 초기화
 
     // 보고서 상태 초기화
     setReportPanelOpen(false);
@@ -306,6 +322,19 @@ const AIChat = () => {
     if (!user?.id) return;
 
     try {
+      // DB에서 세션 정보 가져오기 (tool_type 포함)
+      const sessionData = await getChatSession(session.id);
+      if (sessionData) {
+        // 세션의 도구 타입 설정 (general이 아닌 경우에만)
+        if (sessionData.tool_type && sessionData.tool_type !== 'general') {
+          setCurrentSessionToolType(sessionData.tool_type);
+          setSelectedTool(sessionData.tool_type);
+        } else {
+          setCurrentSessionToolType(null);
+          setSelectedTool(null);
+        }
+      }
+
       // DB에서 메시지 가져오기
       const dbMessages = await getChatMessages(session.id);
 
@@ -606,9 +635,17 @@ const AIChat = () => {
           timestamp: new Date(newSession.created_at),
           messages: [],
         }, ...prev]);
+        // 세션 도구 타입 상태 업데이트 (general이 아닌 경우)
+        if (toolType !== 'general') {
+          setCurrentSessionToolType(toolType);
+        }
       }
     } else if (user?.id && sessionId && isFirstMessage) {
       await updateChatSessionToolType(sessionId, toolType);
+      // 세션 도구 타입 상태 업데이트 (general이 아닌 경우)
+      if (toolType !== 'general') {
+        setCurrentSessionToolType(toolType);
+      }
     }
 
     // 4. 사용자 메시지 생성 및 UI 반영
@@ -701,6 +738,7 @@ const AIChat = () => {
           setGcodeSegments({
             layers: apiResult.segments.layers || [],
             metadata: apiResult.segments.metadata,
+            temperatures: apiResult.segments.temperatures || [],
           });
         }
 
@@ -1036,11 +1074,41 @@ const AIChat = () => {
     }
 
     if (selectedTool === toolId) {
-      // 이미 선택된 도구를 다시 클릭하면 해제
+      // 이미 선택된 도구를 다시 클릭하면 해제 (general로 되돌아감)
+      // 단, 이미 해당 도구로 메시지가 있으면 해제 불가
+      if (currentSessionToolType && currentSessionToolType !== 'general') {
+        // 이미 도구가 사용된 세션에서는 해제 불가
+        return;
+      }
       setSelectedTool(null);
     } else {
+      // 다른 도구 선택 시
+      // 1. general 모드에서는 자유롭게 도구 변경 가능
+      // 2. 이미 특정 도구(troubleshoot, gcode)가 사용된 세션에서는 다른 도구 선택 시 새 채팅 유도
+      if (currentSessionToolType && currentSessionToolType !== 'general' && currentSessionToolType !== toolId) {
+        // 이미 다른 도구가 사용된 세션 -> 새 채팅 유도 모달
+        setPendingToolId(toolId);
+        setShowNewChatModal(true);
+        return;
+      }
       setSelectedTool(toolId);
     }
+  };
+
+  // 새 채팅 모달에서 "새 채팅 시작" 클릭 시
+  const handleStartNewChatWithTool = () => {
+    handleNewChat(); // 새 채팅 초기화
+    if (pendingToolId) {
+      setSelectedTool(pendingToolId);
+    }
+    setShowNewChatModal(false);
+    setPendingToolId(null);
+  };
+
+  // 새 채팅 모달 닫기
+  const handleCloseNewChatModal = () => {
+    setShowNewChatModal(false);
+    setPendingToolId(null);
   };
 
   // AI 해결하기 시작 핸들러 (사용자 질문 메시지 추가)
@@ -2113,6 +2181,26 @@ const AIChat = () => {
         title={t('auth.loginRequired', '로그인이 필요합니다')}
         description={t('auth.loginModalDescription', '로그인하시면 대화 기록 저장, 분석 히스토리 등 더 많은 기능을 이용하실 수 있습니다.')}
       />
+
+      {/* 새 채팅 유도 모달 (한 세션에서 하나의 도구만 사용 가능) */}
+      <Dialog open={showNewChatModal} onOpenChange={handleCloseNewChatModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('aiChat.newChatRequired', '새 채팅이 필요합니다')}</DialogTitle>
+            <DialogDescription>
+              {t('aiChat.newChatRequiredDesc', '한 세션에서는 하나의 도구만 사용할 수 있습니다. 다른 도구를 사용하려면 새 채팅을 시작해주세요.')}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button variant="outline" onClick={handleCloseNewChatModal}>
+              {t('common.cancel', '취소')}
+            </Button>
+            <Button onClick={handleStartNewChatWithTool}>
+              {t('aiChat.startNewChat', '새 채팅 시작')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

@@ -387,8 +387,8 @@ export function AppSidebar({
             <Menu className="w-5 h-5" />
           </Button>
         )}
-        {/* FACTOR 로고 */}
-        <Link to="/" className="flex items-center space-x-2.5">
+        {/* FACTOR 로고 - AI 채팅 새 채팅으로 이동 */}
+        <Link to="/ai-chat" className="flex items-center space-x-2.5">
           <div className="flex items-center justify-center w-8 h-8 bg-primary rounded-lg">
             <Activity className="w-5 h-5 text-primary-foreground" />
           </div>

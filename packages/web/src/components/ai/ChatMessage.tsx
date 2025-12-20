@@ -217,6 +217,54 @@ const markdownComponents = {
 };
 
 /**
+ * 출처 정보 타입
+ */
+interface SourceInfo {
+  title: string;
+  url: string;
+}
+
+/**
+ * 마크다운에서 출처 링크를 추출하고 본문과 분리
+ * GPT 스타일: 본문에서 출처를 제거하고 하단에 별도 섹션으로 표시
+ */
+function extractSources(content: string): { cleanContent: string; sources: SourceInfo[] } {
+  const sources: SourceInfo[] = [];
+
+  // 📚 출처: 또는 🔗 출처: 패턴 매칭 (여러 줄에 걸쳐 있을 수 있음)
+  // 예: 📚 출처: [Title1](url1), [Title2](url2)
+  const sourcePatterns = [
+    /📚\s*출처:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
+    /🔗\s*출처:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
+    /\*\s*출처:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
+  ];
+
+  let cleanContent = content;
+
+  for (const pattern of sourcePatterns) {
+    cleanContent = cleanContent.replace(pattern, (match, sourceText) => {
+      // [Title](URL) 패턴 추출
+      const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
+      let linkMatch;
+      while ((linkMatch = linkPattern.exec(sourceText)) !== null) {
+        const title = linkMatch[1].trim();
+        const url = linkMatch[2].trim();
+        // 중복 체크
+        if (!sources.some(s => s.url === url)) {
+          sources.push({ title, url });
+        }
+      }
+      return ''; // 본문에서 출처 제거
+    });
+  }
+
+  // 정리: 연속된 빈 줄 제거
+  cleanContent = cleanContent.replace(/\n{3,}/g, '\n\n').trim();
+
+  return { cleanContent, sources };
+}
+
+/**
  * AI 메시지 컴포넌트
  */
 const AssistantMessage: React.FC<{
@@ -239,7 +287,11 @@ const AssistantMessage: React.FC<{
   onReportCardClick,
   resolvedLines,
   onRevert,
-}) => (
+}) => {
+  // 출처 추출 및 본문 분리
+  const { cleanContent, sources } = extractSources(message.content);
+
+  return (
   <>
     {/* 역할 라벨 */}
     <div className="flex items-center gap-2 mb-3">
@@ -251,15 +303,43 @@ const AssistantMessage: React.FC<{
       </span>
     </div>
 
-    {/* 메시지 내용 - 마크다운 렌더링 */}
+    {/* 메시지 내용 - 마크다운 렌더링 (출처 제외) */}
     <div className="prose prose-base max-w-none text-foreground pl-8 dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-ul:my-4 prose-ol:my-4 prose-li:my-1 prose-p:my-3 prose-headings:my-4 prose-headings:mt-6">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={markdownComponents}
       >
-        {message.content}
+        {cleanContent}
       </ReactMarkdown>
     </div>
+
+    {/* 출처 섹션 - GPT 스타일 (하단 별도 표시) */}
+    {sources.length > 0 && (
+      <div className="pl-8 mt-6 pt-4 border-t border-border/50">
+        <div className="flex items-center gap-2 mb-3 text-sm font-medium text-muted-foreground">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+          </svg>
+          <span>출처</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {sources.map((source, idx) => (
+            <a
+              key={idx}
+              href={source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-full transition-colors"
+            >
+              <span className="max-w-[200px] truncate">{source.title}</span>
+              <svg className="w-3 h-3 flex-shrink-0 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          ))}
+        </div>
+      </div>
+    )}
 
     {/* 코드 수정 카드 (GitHub Diff 스타일) */}
     {message.codeFixes && message.codeFixes.length > 0 && onCodeFixClick && (
@@ -294,7 +374,8 @@ const AssistantMessage: React.FC<{
       </div>
     )}
   </>
-);
+  );
+};
 
 /**
  * 메인 ChatMessage 컴포넌트
