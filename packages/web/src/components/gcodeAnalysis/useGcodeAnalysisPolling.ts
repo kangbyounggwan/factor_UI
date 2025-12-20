@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useToast } from '@/hooks/use-toast';
 import { getAnalysisStatus } from '@shared/services/gcodeAnalysisService';
 import type { TimelineStep, AnalysisResult } from '@shared/types/gcodeAnalysisTypes';
+import { calculateIssueStatistics, ISSUE_TYPE_LABELS } from '@shared/types/gcodeAnalysisTypes';
 import type { GCodeAnalysisData } from '@/components/PrinterDetail/GCodeAnalysisReport';
 import { completeAnalysisDbOperations } from './gcodeAnalysisCompleteService';
 
@@ -55,6 +56,7 @@ export interface UseGcodeAnalysisPollingReturn {
   setReportData: React.Dispatch<React.SetStateAction<GCodeAnalysisData | null>>;
   setActiveReportId: React.Dispatch<React.SetStateAction<string | null>>;
   setSegmentData: React.Dispatch<React.SetStateAction<SegmentData | null>>;
+  setAnalysisMessageId: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 // 폴링 시작 파라미터
@@ -66,6 +68,8 @@ export interface StartPollingParams {
   userId?: string;
   sessionId?: string | null;
   gcodeContent?: string | null;
+  gcodeFileId?: string;
+  storagePath?: string;
   onReportCardReady?: (reportCard: ReportCardData) => void;
   onError?: (errorMessage: string) => void;
 }
@@ -171,15 +175,18 @@ export const convertAnalysisResultToReportData = (
     detailedAnalysis: {
       diagnosisSummary: {
         keyIssue: {
-          title: final_summary.summary,
-          description: final_summary.recommendation,
+          title: final_summary.critical_issues > 0 ? '치명적인 문제 감지' : '분석 완료',
+          description: final_summary.summary,
         },
         totalIssues: final_summary.total_issues_found,
         severity: final_summary.critical_issues > 0 ? 'critical' :
           final_summary.total_issues_found > 5 ? 'high' : 'medium',
         recommendation: final_summary.recommendation,
       },
-      issueStatistics: [],
+      issueStatistics: calculateIssueStatistics(issues_found).map((stat) => ({
+        ...stat,
+        description: stat.description || ISSUE_TYPE_LABELS[stat.type] || stat.type,
+      })),
       detailedIssues: issues_found.map((issue, idx) => ({
         id: issue.id || `issue-${idx}`,
         type: issue.type,
@@ -257,6 +264,8 @@ export const useGcodeAnalysisPolling = (): UseGcodeAnalysisPollingReturn => {
       userId,
       sessionId,
       gcodeContent,
+      gcodeFileId,
+      storagePath,
       onReportCardReady,
       onError,
     } = params;
@@ -323,6 +332,8 @@ export const useGcodeAnalysisPolling = (): UseGcodeAnalysisPollingReturn => {
         apiResult: result,
         cachedSegmentId: savedSegmentDataIdRef.current,
         dbMessageId: capturedDbMessageId,
+        gcodeFileId,
+        storagePath,
       });
 
       // 4. DB 결과를 UI 상태에 반영
@@ -442,6 +453,7 @@ export const useGcodeAnalysisPolling = (): UseGcodeAnalysisPollingReturn => {
     setReportData,
     setActiveReportId,
     setSegmentData,
+    setAnalysisMessageId,
   };
 };
 

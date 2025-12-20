@@ -82,7 +82,8 @@ const AppContent = () => {
   const hideHeaderPaths = [
     '/ai-chat',
     '/user-settings',
-    '/dashboard'
+    '/dashboard',
+    '/create'
   ];
 
   // 현재 경로가 Footer를 숨겨야 하는 경로인지 확인

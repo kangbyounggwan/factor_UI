@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import ModelArchive from "@/components/ai/ModelArchive";
 import UploadArchive from "@/components/ai/UploadArchive";
 import { PrinterCard } from "@/components/PrinterCard";
-import { FolderOpen, Type, Grid3X3, Image as ImageFile } from "lucide-react";
+import { FolderOpen, Type, Grid3X3, Image as ImageFile, Menu } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AIGeneratedModel } from "@shared/types/aiModelType";
 import { UploadedFile } from "@shared/hooks/useAIImageUpload";
@@ -47,6 +47,10 @@ interface AIArchiveSidebarProps {
     handleModelDelete: (item: { id: string | number; name: string }) => Promise<void>;
 
     modelViewerUrl: string | null; // For logging/checking
+
+    // 왼쪽 사이드바 모드용 props
+    isLeftSidebar?: boolean;
+    onToggle?: () => void;
 }
 
 export function AIArchiveSidebar({
@@ -78,18 +82,33 @@ export function AIArchiveSidebar({
     targetPrinterModelId,
     currentGCodeUrl,
     handleModelDelete,
-    modelViewerUrl
+    modelViewerUrl,
+    isLeftSidebar = false,
+    onToggle
 }: AIArchiveSidebarProps) {
     const { t } = useTranslation();
 
     return (
-        <div className="w-[340px] border-l-2 border-border bg-muted/5 flex flex-col overflow-hidden h-full">
+        <div className={`${isLeftSidebar ? 'w-full border-r-2' : 'w-[340px] border-l-2'} border-border bg-muted/5 flex flex-col overflow-hidden h-full`}>
+            {/* 왼쪽 사이드바 모드일 때 상단 헤더 추가 */}
+            {isLeftSidebar && (
+                <div className="h-14 px-3 flex items-center justify-between border-b border-border/50 shrink-0">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 rounded-full"
+                        onClick={onToggle}
+                    >
+                        <Menu className="w-5 h-5" />
+                    </Button>
+                </div>
+            )}
             {/* 모델 아카이브 영역 (동적 높이) */}
             <div
-                className="flex flex-col p-6 overflow-hidden"
+                className="flex flex-col px-2 py-4 overflow-hidden"
                 style={{ height: (activeTab === 'text-to-3d' || activeTab === 'image-to-3d') ? `${100 - printerAreaHeight}%` : '100%' }}
             >
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-4 px-2">
                     {/* 제목 - 왼쪽 */}
                     <h2 className="text-lg font-semibold">{t('ai.modelArchive').toUpperCase()}</h2>
                     {/* RAW / 3D/2D 모델 토글 - 오른쪽 (탭에 따라 레이블 변경) */}

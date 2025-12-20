@@ -274,7 +274,7 @@ function convertApiResultToReportData(
         },
         totalIssues: final_summary.total_issues_found,
         severity: getSeverity(),
-        recommendation: final_summary.critical_issues > 0 ? '재슬라이싱 권장' : '출력 진행 가능',
+        recommendation: final_summary.recommendation,
       },
       issueStatistics: issueStatistics.map((stat) => ({
         ...stat,

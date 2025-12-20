@@ -32,13 +32,14 @@ export interface ChatMessageData {
   };
   codeFixes?: CodeFixInfo[];
   gcodeContext?: string;
+  analysisReportId?: string; // 연결된 보고서 ID (코드 수정 시 보고서 로드용)
 }
 
 interface ChatMessageProps {
   message: ChatMessageData;
   gcodeContent?: string;
   extractGcodeContext?: (content: string, lineNumber: number, contextSize: number) => string;
-  onCodeFixClick?: (fix: CodeFixInfo, context: string) => void;
+  onCodeFixClick?: (fix: CodeFixInfo, context: string, analysisReportId?: string) => void;
   // 보고서 카드 관련
   reportPanelOpen?: boolean;
   activeReportId?: string | null;
@@ -73,8 +74,8 @@ const UserMessage: React.FC<{ message: ChatMessageData }> = ({ message }) => (
       </div>
     )}
     {/* 메시지 내용 */}
-    <div className="bg-blue-100 text-blue-900 rounded-2xl rounded-tr-sm px-4 py-3 max-w-[85%]">
-      <div className="text-base leading-relaxed whitespace-pre-wrap">
+    <div className="bg-blue-100 text-blue-900 rounded-2xl rounded-tr-sm px-4 py-3 max-w-[85%] overflow-hidden">
+      <div className="text-base leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere">
         {message.content}
       </div>
     </div>
@@ -218,7 +219,7 @@ const AssistantMessage: React.FC<{
   message: ChatMessageData;
   gcodeContent?: string;
   extractGcodeContext?: (content: string, lineNumber: number, contextSize: number) => string;
-  onCodeFixClick?: (fix: CodeFixInfo, context: string) => void;
+  onCodeFixClick?: (fix: CodeFixInfo, context: string, analysisReportId?: string) => void;
   reportPanelOpen?: boolean;
   activeReportId?: string | null;
   onReportCardClick?: (reportId: string) => void;
@@ -260,6 +261,7 @@ const AssistantMessage: React.FC<{
         gcodeContent={gcodeContent}
         extractGcodeContext={extractGcodeContext}
         onFixClick={onCodeFixClick}
+        analysisReportId={message.analysisReportId}
       />
     )}
 

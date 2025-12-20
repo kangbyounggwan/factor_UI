@@ -22,7 +22,8 @@ interface CodeFixDiffCardProps {
   gcodeContext?: string;
   gcodeContent?: string; // 전체 G-code 파일 내용
   extractGcodeContext?: (content: string, lineNumber: number, contextSize: number) => string;
-  onFixClick?: (fix: CodeFixInfo, context: string) => void;
+  onFixClick?: (fix: CodeFixInfo, context: string, analysisReportId?: string) => void;
+  analysisReportId?: string; // 연결된 보고서 ID
   maxVisible?: number;
 }
 
@@ -32,6 +33,7 @@ export const CodeFixDiffCard = ({
   gcodeContent,
   extractGcodeContext,
   onFixClick,
+  analysisReportId,
   maxVisible = 5,
 }: CodeFixDiffCardProps) => {
   const { t } = useTranslation();
@@ -47,26 +49,19 @@ export const CodeFixDiffCard = ({
   const hasMore = codeFixes.length > maxVisible;
 
   const handleFixClick = (fix: CodeFixInfo) => {
-    if (fix.line_number) {
+    if (fix.line_number && onFixClick) {
       // 전체 G-code가 있으면 해당 라인에 맞는 컨텍스트 추출
       let contextToUse = gcodeContext;
       if (gcodeContent && extractGcodeContext) {
         contextToUse = extractGcodeContext(gcodeContent, fix.line_number, 30);
       }
 
-      if (contextToUse && onFixClick) {
-        onFixClick(fix, contextToUse);
-      } else {
-        toast({
-          title: t('aiChat.noGcodeData', 'G-code 데이터 없음'),
-          description: t('aiChat.noGcodeDataDesc', '코드 수정을 위한 G-code 컨텍스트가 없습니다.'),
-          variant: 'destructive',
-        });
-      }
-    } else {
+      // 컨텍스트가 없어도 에디터 탭으로 이동 (빈 문자열 전달)
+      onFixClick(fix, contextToUse || '', analysisReportId);
+    } else if (!fix.line_number) {
       toast({
-        title: t('aiChat.noGcodeData', 'G-code 데이터 없음'),
-        description: t('aiChat.noGcodeDataDesc', '코드 수정을 위한 G-code 컨텍스트가 없습니다.'),
+        title: t('aiChat.noLineNumber', '라인 번호 없음'),
+        description: t('aiChat.noLineNumberDesc', '수정할 라인 번호 정보가 없습니다.'),
         variant: 'destructive',
       });
     }

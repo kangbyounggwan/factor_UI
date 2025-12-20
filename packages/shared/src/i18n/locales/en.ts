@@ -1221,6 +1221,7 @@ export default {
     diagnosisSummary: "Diagnosis Summary",
     criticalIssues: "Critical Issues Detected",
     analysisCompleted: "Analysis Completed",
+    resolved: "Resolved",
     recommendation: "Recommendation",
     recommendReslice: "Re-slicing recommended",
     canProceed: "Can proceed with printing",
@@ -1346,7 +1347,7 @@ export default {
     issueStats: "Issue Distribution by Type",
     patchSuggestionsTitle: "G-code Patch Suggestions",
     llmRecommendation: "Recommendation",
-    recommendedAction: "Recommended Action",
+    recommendedAction: "Print Decision",
     firstLayerSettings: "First Layer Settings",
 
     // Tabs (embedded viewer)
@@ -2454,7 +2455,7 @@ export default {
     // G-code analysis complete
     gcodeAnalysisComplete: "G-code Analysis Complete",
     qualityScore: "Quality Score",
-    defaultGcodeMessage: "Analyze G-code!",
+    defaultGcodeMessage: "Check this print file",
     retryAnalysis: "Retry Analysis",
     llmAnalysisStarting: "Starting LLM analysis...",
     // Report card
@@ -2464,7 +2465,7 @@ export default {
     layers: "Layers",
     gcodeAnalysisInProgress: "Analyzing G-code...",
     gcodeAnalysisHint: "This may take a moment for detailed analysis...",
-    gcodeAnalyzePrompt: "Analyze G-code!",
+    gcodeAnalyzePrompt: "Check this print file",
     // Code fix related
     codeFixTitle: "Code Fix",
     fixCount: " fixes",

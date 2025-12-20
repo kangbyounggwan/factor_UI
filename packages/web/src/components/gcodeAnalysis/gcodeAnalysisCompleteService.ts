@@ -23,6 +23,8 @@ export interface SaveReportParams {
   reportData: GCodeAnalysisData;
   apiResult: AnalysisResult;
   segmentDataId?: string;
+  gcodeFileId?: string;
+  storagePath?: string;
 }
 
 // DB 저장 결과
@@ -72,7 +74,7 @@ export const fetchSegmentDataId = async (
 export const saveReportToDb = async (
   params: SaveReportParams
 ): Promise<SaveReportResult> => {
-  const { userId, fileName, reportData, apiResult, segmentDataId } = params;
+  const { userId, fileName, reportData, apiResult, segmentDataId, gcodeFileId, storagePath } = params;
 
   try {
     const { data: savedReport, error } = await saveAnalysisReport(
@@ -82,6 +84,8 @@ export const saveReportToDb = async (
       {
         apiResult,
         segmentDataId,
+        gcodeFileId,
+        storagePath,
       }
     );
 
@@ -168,6 +172,8 @@ export interface CompleteAnalysisDbParams {
   apiResult: AnalysisResult;
   cachedSegmentId?: string | null;
   dbMessageId?: string | null;
+  gcodeFileId?: string;
+  storagePath?: string;
 }
 
 export interface CompleteAnalysisDbResult {
@@ -188,6 +194,8 @@ export const completeAnalysisDbOperations = async (
     apiResult,
     cachedSegmentId,
     dbMessageId,
+    gcodeFileId,
+    storagePath,
   } = params;
 
   // 비로그인 사용자는 DB 작업 스킵
@@ -209,6 +217,8 @@ export const completeAnalysisDbOperations = async (
     reportData,
     apiResult,
     segmentDataId: segmentDataId || undefined,
+    gcodeFileId,
+    storagePath,
   });
 
   // 3. 세그먼트-보고서 연결

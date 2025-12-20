@@ -239,9 +239,9 @@ export default {
     printerTroubleshooting: "프린터 문제 진단",
     modeling3d: "3D 모델링",
     // AI 도구 설명
-    troubleshootDesc: "이미지로 프린터 문제를 분석합니다",
-    gcodeDesc: "G-code 파일을 분석하고 최적화합니다",
-    modelingDesc: "텍스트로 3D 모델을 생성합니다",
+    troubleshootDesc: "출력 중 출력 후 괜찮은지 확인",
+    gcodeDesc: "이 출력 그대로 돌려도 될지 확인",
+    modelingDesc: "내 캐릭터 생성하기",
     deleteImageConfirm: "이미지 삭제 확인",
     deleteImageQuestion: "이 이미지를 삭제하시겠습니까?",
     deleteImageWithModels: "이 이미지로 생성된",
@@ -512,9 +512,9 @@ export default {
     welcomeDescription: "3D 프린팅의 모든 것을 AI와 함께하세요",
     gcodeDescription: "G-code 파일을 분석하고 출력 품질을 개선하세요",
     troubleshootDescription: "3D 프린터 문제를 AI로 진단받으세요",
-    inputPlaceholder: "무엇이든 물어보세요...",
+    inputPlaceholder: "지금 출력 상태를 붙여넣거나, 사진을 올려주세요",
     thinking: "생각하는 중...",
-    disclaimer: "AI 응답은 참고용입니다. 중요한 결정은 전문가와 상담하세요.",
+    disclaimer: "질문을 잘 쓸 필요 없습니다. 보이는 그대로 적으면 됩니다.",
     exampleQuestions: {
       q1: "G28 명령어는 무슨 역할인가요?",
       q2: "첫 레이어가 안 붙어요",
@@ -522,8 +522,8 @@ export default {
       q4: "PLA 적정 출력 온도는?"
     },
     // AI 채팅 페이지
-    greeting: "님, 안녕하세요",
-    askAnything: "3D 프린터에 대해 무엇이든 물어보세요",
+    greeting: "지금 어떤 문제가 생겼는지 그대로 보여주세요",
+    askAnything: "출력 문제가 생겼나요? 뭔가 이상하다면",
     newChat: "새 대화",
     recentChats: "최근 대화",
     noChats: "대화 기록이 없습니다",
@@ -533,7 +533,7 @@ export default {
     imagePasted: "이미지가 붙여넣기되었습니다",
     imageFromClipboard: "클립보드에서 이미지를 가져왔습니다",
     // placeholder
-    troubleshootPlaceholder: "문제 상황에 대한 이미지와 증상 내용이 있으면 더 좋아요",
+    troubleshootPlaceholder: "질문을 잘 쓸 필요 없습니다. 보이는 그대로 적거나 올려주세요.",
     gcodePlaceholder: "G-code 파일을 업로드하거나 문제 내용을 붙여넣어보세요",
     modelingPlaceholder: "만들고 싶은 3D 모델을 설명해주세요",
     defaultPlaceholder: "FACTOR AI에게 물어보세요",
@@ -586,7 +586,7 @@ export default {
     // G-code 분석 완료
     gcodeAnalysisComplete: "G-code 분석 완료",
     qualityScore: "품질 점수",
-    defaultGcodeMessage: "G-code 분석해줘!",
+    defaultGcodeMessage: "이 출력 파일 확인해줘",
     retryAnalysis: "다시 분석",
     llmAnalysisStarting: "LLM 분석 시작...",
     // 보고서 카드
@@ -596,7 +596,7 @@ export default {
     layers: "레이어",
     gcodeAnalysisInProgress: "G-code 분석 중...",
     gcodeAnalysisHint: "고도화된 분석을 위해 시간이 조금 걸릴 수 있습니다...",
-    gcodeAnalyzePrompt: "G-code 분석해줘!",
+    gcodeAnalyzePrompt: "이 출력 파일 확인해줘",
     // 코드 수정 관련
     codeFixTitle: "코드 수정",
     fixCount: "건",
@@ -1347,6 +1347,7 @@ export default {
     diagnosisSummary: "진단 요약",
     criticalIssues: "치명적인 문제 감지",
     analysisCompleted: "분석 완료",
+    resolved: "해결됨",
     recommendation: "권장사항",
     recommendReslice: "재슬라이싱 권장",
     canProceed: "출력 진행 가능",
@@ -1472,7 +1473,7 @@ export default {
     issueStats: "이슈 유형별 분포",
     patchSuggestionsTitle: "G-code 패치 제안",
     llmRecommendation: "권장사항",
-    recommendedAction: "권장 조치",
+    recommendedAction: "출력 판단",
     firstLayerSettings: "첫 레이어 설정",
 
     // 탭 (embedded 뷰어용)

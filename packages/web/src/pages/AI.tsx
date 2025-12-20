@@ -75,9 +75,11 @@ import {
   Grid3X3,
   Image as ImageFile,
   Shapes,
-  Type
+  Type,
+  Menu
 } from "lucide-react";
-import { AIPageHeader } from "@/components/ai/AIPageHeader";
+import { cn } from "@/lib/utils";
+import { AppHeader } from "@/components/common/AppHeader";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
@@ -101,6 +103,8 @@ const AI = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
 
+  // 사이드바 상태 - 기본으로 열림
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const [activeTab, setActiveTab] = useState<string>('text-to-3d');
   const [textPrompt, setTextPrompt] = useState<string>('');
@@ -1151,7 +1155,7 @@ const AI = () => {
   const remainingGenerations = getRemainingAiGenerations(userPlan, monthlyAiUsage);
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-background">
+    <div className="flex min-h-screen bg-background">
       {/* 업그레이드 프롬프트 다이얼로그 */}
       <UpgradePromptDialog
         open={showUpgradePrompt}
@@ -1161,43 +1165,116 @@ const AI = () => {
         userPlan={userPlan}
       />
 
-      <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
-        {/* 메인 작업 영역 */}
-        <div className="flex-1 flex flex-col">
-          {/* 헤더 */}
-          <AIPageHeader
-            icon={Sparkles}
-            title={t('ai.title')}
-            subtitle={t('ai.description')}
-            rightContent={
-              <div className="text-sm text-muted-foreground">
-                {t('ai.usageInfo', {
-                  used: monthlyAiUsage,
-                  limit: aiLimit === 'unlimited' ? '∞' : aiLimit
-                })}
-              </div>
-            }
-          />
+      {/* 왼쪽 사이드바 - 모델 아카이브 */}
+      {sidebarOpen && (
+        <div className="w-[340px] border-r-2 border-border bg-background flex flex-col h-screen shrink-0">
+          <Suspense fallback={<div className="w-full h-full bg-muted animate-pulse" />}>
+            <AIArchiveSidebar
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              archiveViewMode={archiveViewMode}
+              setArchiveViewMode={setArchiveViewMode}
+              archiveFilter={archiveFilter}
+              setArchiveFilter={setArchiveFilter}
+              uploadedFiles={uploadedFiles}
+              generatedModels={generatedModels}
+              selectedImageId={selectedImageId}
+              selectImage={selectImage}
+              setModelViewerUrl={setModelViewerUrl}
+              setSelectedImageHasModel={setSelectedImageHasModel}
+              setCurrentModelId={setCurrentModelId}
+              setCurrentGlbUrl={setCurrentGlbUrl}
+              setCurrentStlUrl={setCurrentStlUrl}
+              setCurrentGCodeUrl={setCurrentGCodeUrl}
+              setTextPrompt={setTextPrompt}
+              reloadModels={reloadModels}
+              printers={printers}
+              connectedCount={connectedCount}
+              totalPrinters={totalPrinters}
+              printingCount={printingCount}
+              printerAreaHeight={printerAreaHeight}
+              handleResizeStart={handleResizeStart}
+              openPrinterSettings={openPrinterSettings}
+              targetPrinterModelId={targetPrinterModelId}
+              currentGCodeUrl={currentGCodeUrl}
+              handleModelDelete={handleModelDelete}
+              modelViewerUrl={modelViewerUrl}
+              isLeftSidebar={true}
+              onToggle={() => setSidebarOpen(false)}
+            />
+          </Suspense>
+        </div>
+      )}
 
+      {/* 메인 컨텐츠 */}
+      <div className="flex-1 flex flex-col min-w-0 relative transition-all duration-300">
+        {/* 사이드바 토글 버튼 - 닫혀있을 때만 표시 */}
+        {!sidebarOpen && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="fixed top-4 left-4 z-50 h-10 w-10 rounded-full bg-background/80 backdrop-blur-sm border shadow-sm"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="w-5 h-5" />
+          </Button>
+        )}
+        <AppHeader sidebarOpen={sidebarOpen} />
+        <div className="flex h-[calc(100vh-4rem)] overflow-hidden items-center justify-center">
+          {/* 메인 작업 영역 - 85% 너비, 중앙 배치 */}
+          <div className="w-[85%] h-[95%] flex flex-col">
           {/* 탭 및 작업 영역 */}
           <div className="flex-1 p-4 overflow-hidden">
             {/* 모델 생성 메인 영역 */}
             <div className="flex-1 min-h-0 overflow-hidden h-full flex flex-col">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col overflow-hidden">
-                <TabsList className="grid w-full grid-cols-3 mb-4 shrink-0 border-2 border-border">
-                  <TabsTrigger value="text-to-3d" className="flex items-center gap-2">
-                    <Wand2 className="w-4 h-4" />
-                    {t('ai.textTo3D')}
-                  </TabsTrigger>
-                  <TabsTrigger value="image-to-3d" className="flex items-center gap-2">
-                    <ImageIcon className="w-4 h-4" />
-                    {t('ai.imageTo3D')}
-                  </TabsTrigger>
-                  <TabsTrigger value="text-to-image" className="flex items-center gap-2">
-                    <FileText className="w-4 h-4" />
-                    {t('ai.textToImage')}
-                  </TabsTrigger>
-                </TabsList>
+                {/* 헤더 스타일 탭 버튼 - 전체 너비 */}
+                <div className="w-full mb-4 shrink-0">
+                  <div className="flex items-center bg-muted rounded-full p-1 w-full border border-border">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setActiveTab('text-to-3d')}
+                      className={cn(
+                        "flex-1 rounded-full h-9 text-sm font-medium transition-colors",
+                        activeTab === 'text-to-3d'
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <Wand2 className="w-4 h-4 mr-2" />
+                      {t('ai.textTo3D')}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setActiveTab('image-to-3d')}
+                      className={cn(
+                        "flex-1 rounded-full h-9 text-sm font-medium transition-colors",
+                        activeTab === 'image-to-3d'
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <ImageIcon className="w-4 h-4 mr-2" />
+                      {t('ai.imageTo3D')}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setActiveTab('text-to-image')}
+                      className={cn(
+                        "flex-1 rounded-full h-9 text-sm font-medium transition-colors",
+                        activeTab === 'text-to-image'
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      {t('ai.textToImage')}
+                    </Button>
+                  </div>
+                </div>
 
                 {/* 텍스트 → 3D 탭 */}
                 <TabsContent value="text-to-3d" className="flex-1 min-h-0 overflow-hidden">
@@ -1412,40 +1489,7 @@ const AI = () => {
             </div>
           </div>
         </div>
-        <Suspense fallback={<div className="w-96 bg-muted animate-pulse" />}>
-          <AIArchiveSidebar
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            archiveViewMode={archiveViewMode}
-            setArchiveViewMode={setArchiveViewMode}
-            archiveFilter={archiveFilter}
-            setArchiveFilter={setArchiveFilter}
-            uploadedFiles={uploadedFiles}
-            generatedModels={generatedModels}
-            selectedImageId={selectedImageId}
-            selectImage={selectImage}
-            setModelViewerUrl={setModelViewerUrl}
-            setSelectedImageHasModel={setSelectedImageHasModel}
-            setCurrentModelId={setCurrentModelId}
-            setCurrentGlbUrl={setCurrentGlbUrl}
-            setCurrentStlUrl={setCurrentStlUrl}
-            setCurrentGCodeUrl={setCurrentGCodeUrl}
-            setTextPrompt={setTextPrompt}
-            reloadModels={reloadModels}
-
-            printers={printers}
-            connectedCount={connectedCount}
-            totalPrinters={totalPrinters}
-            printingCount={printingCount}
-            printerAreaHeight={printerAreaHeight}
-            handleResizeStart={handleResizeStart}
-            openPrinterSettings={openPrinterSettings}
-            targetPrinterModelId={targetPrinterModelId}
-            currentGCodeUrl={currentGCodeUrl}
-            handleModelDelete={handleModelDelete}
-            modelViewerUrl={modelViewerUrl}
-          />
-        </Suspense>
+        </div>
       </div>
 
 
@@ -1504,7 +1548,7 @@ const AI = () => {
         title={t('auth.loginRequired', '로그인이 필요합니다')}
         description={t('ai.loginToGenerate', 'AI 모델을 생성하려면 로그인이 필요합니다. 로그인하시면 더 많은 기능을 이용하실 수 있습니다.')}
       />
-    </div >
+    </div>
   );
 };
 

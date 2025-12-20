@@ -1198,6 +1198,9 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   // 에디터 G-code 상태 (data.gcodeContent 또는 externalEditorContent가 우선)
   const [editorGcodeContent, setEditorGcodeContent] = useState<string | null>(null);
 
+  // 해결된 이슈 라인 번호 추적 (패치 적용 시 추가)
+  const [resolvedIssueLines, setResolvedIssueLines] = useState<Set<number>>(new Set());
+
   // 에디터 탭 라인 점프 상태
   const [jumpToLine, setJumpToLine] = useState<number | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
@@ -2565,7 +2568,14 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
               displayContent={externalEditorContent || editorGcodeContent || ''}
               isContextMode={!!externalEditorContent}
               editorFixInfo={editorFixInfo}
-              onEditorApplyFix={onEditorApplyFix}
+              onEditorApplyFix={(lineNumber, originalCode, fixedCode, newContent) => {
+                // 해결된 라인 추적
+                setResolvedIssueLines(prev => new Set(prev).add(lineNumber));
+                // 원래 콜백 호출
+                if (onEditorApplyFix) {
+                  onEditorApplyFix(lineNumber, originalCode, fixedCode, newContent);
+                }
+              }}
               revertLineNumber={revertLineNumber}
               onRevertComplete={onRevertComplete}
               globalAppliedCount={appliedPatchCount}
@@ -2670,7 +2680,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                     ? "bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300"
                     : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
                 )}>
-                  {analysis.warnings.length + (data.detailedAnalysis?.issueStatistics?.reduce((acc, curr) => acc + curr.count, 0) || 0)}
+                  {analysis.warnings.length + (data.detailedAnalysis?.detailedIssues?.reduce((acc, curr) => acc + (curr.count || 1), 0) || 0)}
                 </span>
               </div>
             </button>
@@ -2908,6 +2918,15 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                     </div>
                   </div>
 
+                  {/* 진단 요약 설명 (diagnosisSummary에서 이동) */}
+                  {(data.detailedAnalysis?.diagnosisSummary?.keyIssue?.description || data.detailedAnalysis?.llmSummary) && (
+                    <div className="mb-6 p-4 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800/30">
+                      <p className="text-sm font-body text-slate-700 dark:text-slate-300 leading-relaxed">
+                        {data.detailedAnalysis?.diagnosisSummary?.keyIssue?.description || data.detailedAnalysis?.llmSummary}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* 온도 분석 */}
                     {data.detailedAnalysis.printingInfo.temperature_analysis && (
@@ -2969,7 +2988,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
               {/* 진단 요약 카드 */}
               {data.detailedAnalysis?.diagnosisSummary && (
-                <DiagnosisSummaryCard summary={data.detailedAnalysis.diagnosisSummary} />
+                <DiagnosisSummaryCard summary={data.detailedAnalysis.diagnosisSummary} detailedIssues={data.detailedAnalysis?.detailedIssues} />
               )}
 
               {/* 위험 경고 */}
@@ -3037,6 +3056,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                         groupCount={issue.count}
                         groupLines={issue.lines}
                         onLineClick={handleIssueClickToEditor}
+                        resolvedLines={resolvedIssueLines}
                       />
                     ))}
                   </div>
@@ -3091,12 +3111,8 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
               )}
 
               {/* 패치 제안 */}
-              {data.detailedAnalysis?.patchSuggestions && data.detailedAnalysis.patchSuggestions.length > 0 ? (
+              {data.detailedAnalysis?.patchSuggestions && data.detailedAnalysis.patchSuggestions.length > 0 && (
                 <PatchSuggestionsSection patches={data.detailedAnalysis.patchSuggestions} />
-              ) : (
-                <div className="text-center py-10 text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/10 rounded-xl border border-slate-300 dark:border-slate-800 border-dashed font-body">
-                  제안된 G-code 패치가 없습니다.
-                </div>
               )}
             </div>
           )}
@@ -3340,7 +3356,7 @@ function DetailedAnalysisSection({ detailedAnalysis, gcodeContent, onSaveGCode, 
 
       {/* 진단 요약 카드 */}
       {diagnosisSummary && (
-        <DiagnosisSummaryCard summary={diagnosisSummary} />
+        <DiagnosisSummaryCard summary={diagnosisSummary} detailedIssues={detailedIssues} />
       )}
 
       {/* 문제 유형별 통계 */}
@@ -3455,8 +3471,13 @@ function DetailedAnalysisSection({ detailedAnalysis, gcodeContent, onSaveGCode, 
 };
 
 // 진단 요약 카드
-function DiagnosisSummaryCard({ summary }: { summary: DiagnosisSummary }) {
+function DiagnosisSummaryCard({ summary, detailedIssues }: { summary: DiagnosisSummary; detailedIssues?: DetailedIssue[] }) {
   const { t } = useTranslation();
+
+  // 실제 이슈 개수 계산: 리스트 개수 + 그룹화된 이슈의 count 합산
+  const calculatedTotalIssues = detailedIssues
+    ? detailedIssues.reduce((total, issue) => total + (issue.count || 1), 0)
+    : summary.totalIssues;
 
   const severityStyles = {
     critical: {
@@ -3515,10 +3536,10 @@ function DiagnosisSummaryCard({ summary }: { summary: DiagnosisSummary }) {
             <span className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-wider">{t('gcodeAnalytics.diagnosisSummary')}</span>
           </div>
           <h3 className="text-base font-title font-bold text-slate-900 dark:text-white leading-snug">
-            {summary.keyIssue?.title}
+            {t('gcodeAnalytics.analysisCompleted')}
           </h3>
           <p className="text-sm font-body text-slate-600 dark:text-slate-300 leading-relaxed max-w-3xl">
-            {summary.keyIssue?.description}
+            {summary.keyIssue?.title}
           </p>
         </div>
       </div>
@@ -3530,7 +3551,7 @@ function DiagnosisSummaryCard({ summary }: { summary: DiagnosisSummary }) {
           </div>
           <div>
             <p className="text-[10px] font-heading font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{t('gcodeAnalytics.totalIssues')}</p>
-            <p className="text-base font-score font-black text-slate-900 dark:text-white">{t('gcodeAnalytics.issueCountUnit', { count: summary.totalIssues })}</p>
+            <p className="text-base font-score font-black text-slate-900 dark:text-white">{t('gcodeAnalytics.issueCountUnit', { count: calculatedTotalIssues })}</p>
           </div>
         </div>
 
@@ -3612,7 +3633,7 @@ function IssueStatisticsChart({ statistics }: { statistics: IssueStatistics[] })
 }
 
 // 상세 이슈 카드
-function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, onSaveGCode, fileName, allIssues, patches, reportId, metrics, analysisId, onAIResolveStart, onAIResolveComplete, onAIResolveError, isAIResolving, groupCount, groupLines, onLineClick }: {
+function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, onSaveGCode, fileName, allIssues, patches, reportId, metrics, analysisId, onAIResolveStart, onAIResolveComplete, onAIResolveError, isAIResolving, groupCount, groupLines, onLineClick, resolvedLines }: {
   issue: DetailedIssue;
   index: number;
   isExpanded: boolean;
@@ -3632,6 +3653,7 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
   groupCount?: number;
   groupLines?: (number | string)[];
   onLineClick?: (line: number | string) => void;  // 라인 번호 클릭 시 에디터로 이동
+  resolvedLines?: Set<number>;  // 해결된 라인 번호들
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -3650,6 +3672,18 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
   };
 
   const style = severityStyles[issue.severity] || severityStyles.info;
+
+  // 이슈가 해결되었는지 확인 (이슈의 라인 번호 중 하나라도 resolvedLines에 있으면 해결됨)
+  const isResolved = useMemo(() => {
+    if (!resolvedLines || resolvedLines.size === 0) return false;
+    // 단일 라인
+    if (issue.line !== undefined && resolvedLines.has(Number(issue.line))) return true;
+    // 그룹화된 라인들
+    if (groupLines && groupLines.length > 0) {
+      return groupLines.some(line => resolvedLines.has(Number(line)));
+    }
+    return false;
+  }, [resolvedLines, issue.line, groupLines]);
 
   const getIssueTypeLabel = (type: string) => {
     const key = `gcodeAnalytics.issueTypeLabels.${type}`;
@@ -3763,14 +3797,15 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
       <div
         className={cn(
           "group relative bg-white dark:bg-slate-900 overflow-hidden transition-all duration-300 border-b border-slate-100 dark:border-slate-800 last:border-b-0",
-          isExpanded ? "bg-slate-50/50 dark:bg-slate-800/10" : "hover:bg-slate-50 dark:hover:bg-slate-800/30"
+          isExpanded ? "bg-slate-50/50 dark:bg-slate-800/10" : "hover:bg-slate-50 dark:hover:bg-slate-800/30",
+          isResolved && "bg-emerald-50/50 dark:bg-emerald-900/10"
         )}
       >
         {/* Left Status Strip */}
         <div className={cn(
           "absolute left-0 top-0 bottom-0 w-1 transition-all duration-300",
-          style.strip,
-          isExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          isResolved ? "bg-emerald-500" : style.strip,
+          isExpanded || isResolved ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         )} />
 
         {/* 헤더 */}
@@ -3792,6 +3827,13 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
                 <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider", style.badge)}>
                   {getSeverityLabel(issue.severity)}
                 </span>
+                {/* 해결됨 뱃지 */}
+                {isResolved && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    {t('gcodeAnalytics.resolved', '해결됨')}
+                  </span>
+                )}
                 {/* 새 구조: count가 항상 존재 */}
                 {(issue.count || groupCount || 1) > 1 && (
                   <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200">

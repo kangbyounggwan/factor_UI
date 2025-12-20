@@ -34,7 +34,6 @@ import {
   Loader2
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PaymentDialog } from "@/components/Subscription/PaymentDialog";
 import { supabase } from "@shared/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { initializePaddleService } from "@/lib/paddleService";
@@ -131,9 +130,7 @@ const Subscription = () => {
   const { user } = useAuth();
   const { t } = useTranslation();
   const { toast } = useToast();
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [isYearly, setIsYearly] = useState(false);
-  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showDetailedTable, setShowDetailedTable] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [currentPlanId, setCurrentPlanId] = useState<string>('free');
@@ -755,16 +752,6 @@ const Subscription = () => {
           )}
         </div>
       </div>
-
-      {/* 결제 다이얼로그 */}
-      {selectedPlan && (
-        <PaymentDialog
-          open={showPaymentDialog}
-          onOpenChange={setShowPaymentDialog}
-          planId={selectedPlan}
-          isYearly={isYearly}
-        />
-      )}
 
       {/* 구독 취소 확인 다이얼로그 */}
       <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
