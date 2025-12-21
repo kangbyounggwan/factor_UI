@@ -195,6 +195,8 @@ export interface ChatApiResponse {
   segments?: GcodeAnalysisData['segments'];
   // Fallback 응답 여부 (서버 연결 실패 시 true - 유료 모델 차감 안함)
   is_fallback?: boolean;
+  // 참고 자료 (문제진단 등에서 웹 검색 결과)
+  references?: SourceReference[];
 }
 
 // ============================================
@@ -351,7 +353,14 @@ export async function gcodeToAttachment(file: File): Promise<ChatAttachment> {
 export function formatChatResponse(response: ChatApiResponse): string {
   // 기본 응답 사용
   if (response.response) {
-    return response.response;
+    let formattedResponse = response.response;
+
+    // troubleshoot 응답인 경우, 솔루션별 출처를 마크다운에 주입
+    if (response.tool_result?.data && isTroubleshootData(response.tool_result.data)) {
+      formattedResponse = injectSolutionSources(formattedResponse, response.tool_result.data);
+    }
+
+    return formattedResponse;
   }
 
   // 도구 결과에서 응답 생성 (fallback)
@@ -372,6 +381,65 @@ export function formatChatResponse(response: ChatApiResponse): string {
   }
 
   return '응답을 처리할 수 없습니다.';
+}
+
+/**
+ * 솔루션별 출처를 마크다운 응답에 주입
+ * 백엔드가 response 텍스트와 tool_result.data를 모두 반환할 때 사용
+ */
+function injectSolutionSources(markdown: string, data: TroubleshootData): string {
+  if (!data.solutions || data.solutions.length === 0) {
+    return markdown;
+  }
+
+  let result = markdown;
+
+  // 각 솔루션의 출처를 해당 솔루션 섹션 뒤에 추가
+  data.solutions.forEach((sol, index) => {
+    if (sol.source_refs && sol.source_refs.length > 0) {
+      const solutionNumber = index + 1;
+      const nextSolutionNumber = index + 2;
+
+      // 솔루션 제목 패턴 찾기 (예: "**1. 리트랙션 설정 조정**" 또는 "1. 리트랙션 설정 조정")
+      // 다음 솔루션 시작 또는 다음 섹션 시작 전까지의 영역을 찾음
+      const solutionPatterns = [
+        // 볼드 숫자 패턴: **1. Title**
+        new RegExp(`(\\*\\*${solutionNumber}\\.\\s*[^*]+\\*\\*[\\s\\S]*?)(?=\\*\\*${nextSolutionNumber}\\.\\s|\\*\\*💡|\\*\\*전문가|\\*\\*예방|\\*\\*📚|$)`, 'i'),
+        // 일반 숫자 패턴: 1. Title
+        new RegExp(`(${solutionNumber}\\.\\s*[^\\n]+[\\s\\S]*?)(?=${nextSolutionNumber}\\.\\s|💡|전문가|예방|📚|$)`, 'i'),
+      ];
+
+      for (const pattern of solutionPatterns) {
+        const match = result.match(pattern);
+        if (match && match[1]) {
+          const solutionSection = match[1];
+          // 이미 출처가 포함되어 있는지 확인
+          if (!solutionSection.includes('📎') && !solutionSection.includes('출처:')) {
+            const sourceLinks = formatSourceRefs(sol.source_refs, '   ');
+            // 솔루션 섹션 끝에 출처 추가
+            const updatedSection = solutionSection.trimEnd() + '\n' + sourceLinks;
+            result = result.replace(solutionSection, updatedSection);
+          }
+          break;
+        }
+      }
+    }
+  });
+
+  // 전문가 의견 출처 추가
+  if (data.expert_opinion?.source_refs && data.expert_opinion.source_refs.length > 0) {
+    // 전문가 의견 섹션 찾기
+    const expertPattern = /(💡\s*전문가\s*의견[:\s]*[^\n]*[\s\S]*?)(?=📚|$)/i;
+    const expertMatch = result.match(expertPattern);
+    if (expertMatch && expertMatch[1] && !expertMatch[1].includes('📎')) {
+      const expertSection = expertMatch[1];
+      const sourceLinks = formatSourceRefs(data.expert_opinion.source_refs, '');
+      const updatedSection = expertSection.trimEnd() + '\n\n' + sourceLinks;
+      result = result.replace(expertSection, updatedSection);
+    }
+  }
+
+  return result;
 }
 
 // 타입 가드

@@ -89,7 +89,6 @@ import {
   saveAnonChat,
   loadAnonChat,
   clearAnonChat,
-  MAX_LOGGED_IN_MESSAGES,
   type AnonChatMessage,
 } from "@shared/utils/anonymousId";
 
@@ -1046,7 +1045,7 @@ const AIChat = () => {
         await incrementUsage(user.id, USAGE_TYPES.AI_MODEL_GENERATION);
       }
 
-      // 10-2. 문제진단 성공 시 사용량 증가 (무료 사용자만 - 일별 5회 제한)
+      // 10-2. 문제진단 성공 시 사용량 증가 (모든 모델 포함)
       if (selectedTool === 'troubleshoot' && user?.id) {
         await incrementTroubleshootAdvancedUsage(user.id);
       }
@@ -1182,7 +1181,7 @@ const AIChat = () => {
     };
 
     // 컨텍스트 윈도우: 최근 대화 히스토리 구성 (비로그인: 10개, 로그인: 15개)
-    const contextLimit = user?.id ? MAX_LOGGED_IN_MESSAGES : 10;
+    const contextLimit = user?.id ? 15 : 10;
     const conversationHistory = messages
       .slice(-contextLimit)
       .map(m => ({ role: m.role, content: m.content }));
@@ -1211,13 +1210,18 @@ const AIChat = () => {
 
       case 'troubleshoot': {
         // 2. 문제 진단 (Troubleshoot) 요청
-        // 무료 사용자의 경우 고급 문제진단 일일 사용량 체크 (5회/일)
+        // 무료 사용자 일일 사용량 체크 (5회/일, 모든 모델 포함)
         if (user?.id) {
           const troubleshootUsage = await checkTroubleshootAdvancedUsage(user.id);
           if (troubleshootUsage.isFreePlan && !troubleshootUsage.canUse) {
+            // 다음날 날짜 계산
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowStr = `${tomorrow.getMonth() + 1}월 ${tomorrow.getDate()}일`;
+
             toast({
-              title: t('aiChat.troubleshootLimitReached', '오늘 고급 문제진단 한도 도달'),
-              description: t('aiChat.troubleshootLimitDescription', '무료 플랜은 하루 5회까지 고급 문제진단을 사용할 수 있습니다. 내일 다시 시도하거나 플랜을 업그레이드해주세요.'),
+              title: t('aiChat.troubleshootLimitReached', '오늘 문제진단 한도 도달'),
+              description: t('aiChat.troubleshootLimitDescriptionWithDate', `무료 플랜은 하루 5회까지 문제진단을 사용할 수 있습니다. 내일(${tomorrowStr})부터 다시 사용 가능합니다.`),
               variant: "destructive"
             });
             throw new Error('TROUBLESHOOT_DAILY_LIMIT_REACHED');
@@ -1323,7 +1327,8 @@ const AIChat = () => {
     // 세그먼트는 response.segments 또는 response.tool_result.segments에 있을 수 있음
     const segments = response.segments || response.tool_result?.segments;
 
-    // 참고 자료 추출 (tool_result.data.references 또는 references)
+    // 참고 자료 추출 (tool_result.data.references 또는 response.references)
+    // 각 솔루션별 출처는 마크다운 응답에 포함되어야 함 (백엔드에서 처리)
     const references = response.tool_result?.data?.references || response.references;
 
     // 제안 액션 추출 (suggested_actions)
@@ -2659,6 +2664,23 @@ const AIChat = () => {
                             toast({
                               title: t('common.copied', '복사됨'),
                               description: t('common.copiedToClipboard', '클립보드에 복사되었습니다'),
+                            });
+                          } else if (action.action === 'detailed_diagnosis' || action.label?.includes('자세한 진단')) {
+                            // 더 자세한 진단: 후속 질문으로 처리
+                            setSelectedTool('troubleshoot');
+                            setInput(t('aiChat.detailedDiagnosis', '더 자세하게 진단해주세요. 원인과 해결 방법을 단계별로 알려주세요.'));
+                          } else if (action.action === 'new_issue' || action.label?.includes('다른 문제')) {
+                            // 다른 문제 상담: 도구 선택하고 입력 포커스
+                            setSelectedTool('troubleshoot');
+                            setInput('');
+                            // 입력창에 포커스
+                            setTimeout(() => {
+                              const textarea = document.querySelector('textarea');
+                              textarea?.focus();
+                            }, 100);
+                            toast({
+                              title: t('aiChat.newIssue', '새 문제 상담'),
+                              description: t('aiChat.describeNewIssue', '새로운 문제를 설명해주세요'),
                             });
                           }
                         }}
