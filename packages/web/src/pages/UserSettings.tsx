@@ -262,6 +262,13 @@ const UserSettings = () => {
     }
   }, [shouldOpenPlanModal, loadingPlan]);
 
+  // 플랜 모달이 열릴 때 paddleLoading 리셋 (결제창에서 돌아왔을 때)
+  useEffect(() => {
+    if (showChangePlanModal) {
+      setPaddleLoading(false);
+    }
+  }, [showChangePlanModal]);
+
   // Load profile data from DB (including phone)
   useEffect(() => {
     const loadProfile = async () => {
@@ -2487,44 +2494,44 @@ const UserSettings = () => {
 
       {/* Change Plan Sheet - Supabase Style */}
       <Sheet open={showChangePlanModal} onOpenChange={setShowChangePlanModal}>
-        <SheetContent className="w-full sm:max-w-4xl overflow-y-auto z-50">
-          <SheetHeader className="mb-6">
-            <SheetTitle className="text-2xl">플랜 선택</SheetTitle>
-            <SheetDescription>
+        <SheetContent className="w-full sm:max-w-4xl overflow-y-auto z-50 px-4 sm:px-6">
+          <SheetHeader className="mb-6 pb-2">
+            <SheetTitle className="text-xl">플랜 선택</SheetTitle>
+            <SheetDescription className="text-sm mt-1">
               필요에 맞는 플랜을 선택하세요. 언제든지 변경 가능합니다.
             </SheetDescription>
           </SheetHeader>
 
           {/* 3-column grid layout like Supabase */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Free Plan */}
-            <div className={`relative border rounded-xl p-5 flex flex-col transition-all ${currentPlan === 'free' ? 'border-primary border-2 bg-primary/5 shadow-md' : 'border-border hover:border-primary/50'}`}>
+            <div className={`relative border rounded-xl p-4 flex flex-col transition-all ${currentPlan === 'free' ? 'border-primary border-2 bg-primary/5 shadow-md' : 'border-border hover:border-primary/50'}`}>
               {currentPlan === 'free' && (
-                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary">현재 플랜</Badge>
+                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary text-xs">현재 플랜</Badge>
               )}
 
-              <div className="mb-4">
-                <h3 className="text-lg font-bold text-muted-foreground">FREE</h3>
-                <p className="text-2xl font-bold mt-2">₩0<span className="text-sm font-normal text-muted-foreground">/월</span></p>
-                <p className="text-xs text-muted-foreground mt-1">개인 사용자용</p>
+              <div className="mb-3">
+                <h3 className="text-base font-bold text-muted-foreground">FREE</h3>
+                <p className="text-xl font-bold mt-1">₩0<span className="text-sm font-normal text-muted-foreground">/월</span></p>
+                <p className="text-xs text-muted-foreground mt-0.5">개인 사용자용</p>
               </div>
 
               {currentPlan !== 'free' ? (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full mb-4"
+                  className="w-full mb-3 h-8"
                   onClick={() => setShowDowngradeWarningModal(true)}
                 >
                   다운그레이드
                 </Button>
               ) : (
-                <Button variant="secondary" size="sm" className="w-full mb-4" disabled>
+                <Button variant="secondary" size="sm" className="w-full mb-3 h-8" disabled>
                   현재 플랜
                 </Button>
               )}
 
-              <div className="space-y-2 text-sm flex-1">
+              <div className="space-y-1.5 text-sm flex-1">
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
                   <span>기본 AI 모델</span>
@@ -2549,15 +2556,15 @@ const UserSettings = () => {
             </div>
 
             {/* Starter Plan */}
-            <div className={`relative border rounded-xl p-5 flex flex-col transition-all ${currentPlan === 'starter' ? 'border-primary border-2 bg-primary/5 shadow-md' : 'border-amber-500 border-2 hover:shadow-lg'}`}>
+            <div className={`relative border rounded-xl p-4 flex flex-col transition-all ${currentPlan === 'starter' ? 'border-primary border-2 bg-primary/5 shadow-md' : 'border-amber-500 border-2 hover:shadow-lg'}`}>
               {currentPlan === 'starter' ? (
-                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary">현재 플랜</Badge>
+                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary text-xs">현재 플랜</Badge>
               ) : (
-                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-500">Best Value</Badge>
+                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-500 text-xs">Best Value</Badge>
               )}
 
-              <div className="mb-4">
-                <h3 className="text-lg font-bold">STARTER</h3>
+              <div className="mb-3">
+                <h3 className="text-base font-bold">STARTER</h3>
                 {/* 결제 주기 토글 */}
                 {currentPlan !== 'starter' && (
                   <div className="flex rounded-md border border-border p-0.5 bg-muted/30 mt-2 mb-2">
@@ -2586,32 +2593,32 @@ const UserSettings = () => {
                   </div>
                 )}
                 {starterBillingCycle === 'monthly' ? (
-                  <p className="text-2xl font-bold">{formatPlanPrice(prices.starter.monthly)}<span className="text-sm font-normal text-muted-foreground">/월</span></p>
+                  <p className="text-xl font-bold">{formatPlanPrice(prices.starter.monthly)}<span className="text-sm font-normal text-muted-foreground">/월</span></p>
                 ) : (
                   <>
-                    <p className="text-2xl font-bold">{formatPlanPrice(prices.starter.yearly)}<span className="text-sm font-normal text-muted-foreground">/년</span></p>
+                    <p className="text-xl font-bold">{formatPlanPrice(prices.starter.yearly)}<span className="text-sm font-normal text-muted-foreground">/년</span></p>
                     <p className="text-xs text-green-500">월 {formatPlanPrice(prices.starter.monthlyEquivalent)} (17% 할인)</p>
                   </>
                 )}
-                <p className="text-xs text-muted-foreground mt-1">취미 사용자 및 소규모 제작자</p>
+                <p className="text-xs text-muted-foreground mt-0.5">취미 사용자 및 소규모 제작자</p>
               </div>
 
               {currentPlan !== 'starter' ? (
                 <Button
                   size="sm"
-                  className="w-full mb-4 bg-amber-500 hover:bg-amber-600"
+                  className="w-full mb-3 h-8 bg-amber-500 hover:bg-amber-600"
                   onClick={() => handleStarterUpgrade(starterBillingCycle)}
                   disabled={paddleLoading || !paddleReady}
                 >
                   {paddleLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : '업그레이드'}
                 </Button>
               ) : (
-                <Button variant="secondary" size="sm" className="w-full mb-4" disabled>
+                <Button variant="secondary" size="sm" className="w-full mb-3 h-8" disabled>
                   현재 플랜
                 </Button>
               )}
 
-              <div className="space-y-2 text-sm flex-1">
+              <div className="space-y-1.5 text-sm flex-1">
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-amber-500 shrink-0" />
                   <span className="font-medium text-amber-700 dark:text-amber-400">고급 AI 모델</span>
@@ -2636,15 +2643,15 @@ const UserSettings = () => {
             </div>
 
             {/* Pro Plan */}
-            <div className={`relative border rounded-xl p-5 flex flex-col transition-all ${currentPlan === 'pro' ? 'border-primary border-2 bg-primary/5 shadow-md' : 'border-blue-500 border-2 hover:shadow-lg'}`}>
+            <div className={`relative border rounded-xl p-4 flex flex-col transition-all ${currentPlan === 'pro' ? 'border-primary border-2 bg-primary/5 shadow-md' : 'border-blue-500 border-2 hover:shadow-lg'}`}>
               {currentPlan === 'pro' ? (
-                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary">현재 플랜</Badge>
+                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary text-xs">현재 플랜</Badge>
               ) : (
-                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-blue-500">Pro</Badge>
+                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-blue-500 text-xs">Pro</Badge>
               )}
 
-              <div className="mb-4">
-                <h3 className="text-lg font-bold">PRO</h3>
+              <div className="mb-3">
+                <h3 className="text-base font-bold">PRO</h3>
                 {/* 결제 주기 토글 */}
                 {currentPlan !== 'pro' && (
                   <div className="flex rounded-md border border-border p-0.5 bg-muted/30 mt-2 mb-2">
@@ -2673,32 +2680,32 @@ const UserSettings = () => {
                   </div>
                 )}
                 {proBillingCycle === 'monthly' ? (
-                  <p className="text-2xl font-bold">{formatPlanPrice(prices.pro.monthly)}<span className="text-sm font-normal text-muted-foreground">/월</span></p>
+                  <p className="text-xl font-bold">{formatPlanPrice(prices.pro.monthly)}<span className="text-sm font-normal text-muted-foreground">/월</span></p>
                 ) : (
                   <>
-                    <p className="text-2xl font-bold">{formatPlanPrice(prices.pro.yearly)}<span className="text-sm font-normal text-muted-foreground">/년</span></p>
+                    <p className="text-xl font-bold">{formatPlanPrice(prices.pro.yearly)}<span className="text-sm font-normal text-muted-foreground">/년</span></p>
                     <p className="text-xs text-green-500">월 {formatPlanPrice(prices.pro.monthlyEquivalent)} (17% 할인)</p>
                   </>
                 )}
-                <p className="text-xs text-muted-foreground mt-1">전문가 및 프린터 팜</p>
+                <p className="text-xs text-muted-foreground mt-0.5">전문가 및 프린터 팜</p>
               </div>
 
               {currentPlan !== 'pro' ? (
                 <Button
                   size="sm"
-                  className="w-full mb-4 bg-blue-500 hover:bg-blue-600"
+                  className="w-full mb-3 h-8 bg-blue-500 hover:bg-blue-600"
                   onClick={() => handleProUpgrade(proBillingCycle)}
                   disabled={paddleLoading || !paddleReady}
                 >
                   {paddleLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : '업그레이드'}
                 </Button>
               ) : (
-                <Button variant="secondary" size="sm" className="w-full mb-4" disabled>
+                <Button variant="secondary" size="sm" className="w-full mb-3 h-8" disabled>
                   현재 플랜
                 </Button>
               )}
 
-              <div className="space-y-2 text-sm flex-1">
+              <div className="space-y-1.5 text-sm flex-1">
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-blue-500 shrink-0" />
                   <span className="font-medium text-blue-700 dark:text-blue-400">고급 AI 모델</span>
@@ -2723,64 +2730,67 @@ const UserSettings = () => {
             </div>
           </div>
 
-          {/* 플랜별 세부 사항 비교 테이블 */}
-          <div className="mt-8 space-y-4">
+          {/* 구분선 */}
+          <div className="my-6 border-t border-border" />
+
+          {/* 플랜별 세부 사항 비교 테이블 - 독립 섹션 */}
+          <div className="space-y-4 pb-4">
             <div className="text-center space-y-1">
               <h3 className="text-lg font-bold">플랜별 세부 사항</h3>
-              <p className="text-xs text-muted-foreground">모든 기능을 자세히 비교해보세요</p>
+              <p className="text-sm text-muted-foreground">모든 기능을 자세히 비교해보세요</p>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-border/60 bg-card/50">
-              <table className="w-full border-collapse text-xs">
+            <div className="overflow-x-auto rounded-xl border border-border bg-card">
+              <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-border/60 bg-muted/40">
-                    <th className="text-left py-3 px-3 font-bold min-w-[100px]">항목</th>
-                    <th className="text-center py-3 px-2 font-bold min-w-[70px] text-slate-600 dark:text-slate-400">무료</th>
-                    <th className="text-center py-3 px-2 font-bold min-w-[70px] text-amber-600 dark:text-amber-400">스타터</th>
-                    <th className="text-center py-3 px-2 font-bold min-w-[70px] bg-blue-500/10 text-blue-700 dark:text-blue-300 border-x border-blue-500/20">프로</th>
-                    <th className="text-center py-3 px-2 font-bold min-w-[70px] text-purple-700 dark:text-purple-300">엔터프라이즈</th>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="text-left py-3 px-4 font-bold min-w-[120px]">항목</th>
+                    <th className="text-center py-3 px-3 font-bold min-w-[80px] text-slate-600 dark:text-slate-400">무료</th>
+                    <th className="text-center py-3 px-3 font-bold min-w-[80px] text-amber-600 dark:text-amber-400">스타터</th>
+                    <th className="text-center py-3 px-3 font-bold min-w-[80px] bg-blue-500/10 text-blue-700 dark:text-blue-300 border-x border-blue-500/20">프로</th>
+                    <th className="text-center py-3 px-3 font-bold min-w-[90px] text-purple-700 dark:text-purple-300">엔터프라이즈</th>
                   </tr>
                 </thead>
                 <tbody>
                   {/* 1. 고급 분석 및 대화 */}
-                  <tr className="border-b border-border/40">
-                    <td className="py-3 px-3 font-medium">고급 분석 및 대화</td>
-                    <td className="py-3 px-2 text-center text-slate-600 dark:text-slate-400">기본 모델</td>
-                    <td className="py-3 px-2 text-center font-medium text-amber-600 dark:text-amber-400">고급 모델</td>
-                    <td className="py-3 px-2 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">고급 모델</td>
-                    <td className="py-3 px-2 text-center font-medium text-purple-700 dark:text-purple-300">고급 모델</td>
+                  <tr className="border-b border-border/50">
+                    <td className="py-3 px-4 font-medium">고급 분석 및 대화</td>
+                    <td className="py-3 px-3 text-center text-slate-600 dark:text-slate-400">기본 모델</td>
+                    <td className="py-3 px-3 text-center font-medium text-amber-600 dark:text-amber-400">고급 모델</td>
+                    <td className="py-3 px-3 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">고급 모델</td>
+                    <td className="py-3 px-3 text-center font-medium text-purple-700 dark:text-purple-300">고급 모델</td>
                   </tr>
                   {/* 2. 이상 감지 간격 */}
-                  <tr className="border-b border-border/40">
-                    <td className="py-3 px-3 font-medium">이상 감지 간격</td>
-                    <td className="py-3 px-2 text-center text-slate-600 dark:text-slate-400">60분</td>
-                    <td className="py-3 px-2 text-center font-medium text-amber-600 dark:text-amber-400">60분</td>
-                    <td className="py-3 px-2 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">10분</td>
-                    <td className="py-3 px-2 text-center font-medium text-purple-700 dark:text-purple-300">실시간</td>
+                  <tr className="border-b border-border/50">
+                    <td className="py-3 px-4 font-medium">이상 감지 간격</td>
+                    <td className="py-3 px-3 text-center text-slate-600 dark:text-slate-400">60분</td>
+                    <td className="py-3 px-3 text-center font-medium text-amber-600 dark:text-amber-400">60분</td>
+                    <td className="py-3 px-3 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">10분</td>
+                    <td className="py-3 px-3 text-center font-medium text-purple-700 dark:text-purple-300">실시간</td>
                   </tr>
                   {/* 3. 최대 프린터 연결 */}
-                  <tr className="border-b border-border/40">
-                    <td className="py-3 px-3 font-medium">최대 프린터 연결</td>
-                    <td className="py-3 px-2 text-center text-slate-600 dark:text-slate-400">1대</td>
-                    <td className="py-3 px-2 text-center font-medium text-amber-600 dark:text-amber-400">1대</td>
-                    <td className="py-3 px-2 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">5대</td>
-                    <td className="py-3 px-2 text-center font-medium text-purple-700 dark:text-purple-300">무제한</td>
+                  <tr className="border-b border-border/50">
+                    <td className="py-3 px-4 font-medium">최대 프린터 연결</td>
+                    <td className="py-3 px-3 text-center text-slate-600 dark:text-slate-400">1대</td>
+                    <td className="py-3 px-3 text-center font-medium text-amber-600 dark:text-amber-400">1대</td>
+                    <td className="py-3 px-3 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">5대</td>
+                    <td className="py-3 px-3 text-center font-medium text-purple-700 dark:text-purple-300">무제한</td>
                   </tr>
                   {/* 4. 3D 모델링 사용 */}
-                  <tr className="border-b border-border/40">
-                    <td className="py-3 px-3 font-medium">3D 모델링 사용</td>
-                    <td className="py-3 px-2 text-center text-slate-600 dark:text-slate-400">월 20개</td>
-                    <td className="py-3 px-2 text-center font-medium text-amber-600 dark:text-amber-400">무제한</td>
-                    <td className="py-3 px-2 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">월 50개</td>
-                    <td className="py-3 px-2 text-center font-medium text-purple-700 dark:text-purple-300">무제한</td>
+                  <tr className="border-b border-border/50">
+                    <td className="py-3 px-4 font-medium">3D 모델링 사용</td>
+                    <td className="py-3 px-3 text-center text-slate-600 dark:text-slate-400">월 20개</td>
+                    <td className="py-3 px-3 text-center font-medium text-amber-600 dark:text-amber-400">무제한</td>
+                    <td className="py-3 px-3 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">월 50개</td>
+                    <td className="py-3 px-3 text-center font-medium text-purple-700 dark:text-purple-300">무제한</td>
                   </tr>
                   {/* 5. API 접근 */}
                   <tr>
-                    <td className="py-3 px-3 font-medium">API 접근</td>
-                    <td className="py-3 px-2 text-center text-slate-600 dark:text-slate-400">일부 제한</td>
-                    <td className="py-3 px-2 text-center font-medium text-amber-600 dark:text-amber-400">일부 제한</td>
-                    <td className="py-3 px-2 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">전체</td>
-                    <td className="py-3 px-2 text-center font-medium text-purple-700 dark:text-purple-300">전체</td>
+                    <td className="py-3 px-4 font-medium">API 접근</td>
+                    <td className="py-3 px-3 text-center text-slate-600 dark:text-slate-400">일부 제한</td>
+                    <td className="py-3 px-3 text-center font-medium text-amber-600 dark:text-amber-400">일부 제한</td>
+                    <td className="py-3 px-3 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">전체</td>
+                    <td className="py-3 px-3 text-center font-medium text-purple-700 dark:text-purple-300">전체</td>
                   </tr>
                 </tbody>
               </table>
