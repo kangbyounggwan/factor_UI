@@ -2415,6 +2415,10 @@ const AIChat = () => {
                 <div className="flex flex-wrap justify-center gap-2">
                   <button
                     onClick={() => {
+                      if (!user) {
+                        setShowLoginModal(true);
+                        return;
+                      }
                       setSelectedTool('gcode');
                       setInput(t('aiChat.quickPrompt.gcodeOptimize', '출력 시간 줄이고 싶은데 G-code 봐줘'));
                     }}
@@ -2424,6 +2428,10 @@ const AIChat = () => {
                   </button>
                   <button
                     onClick={() => {
+                      if (!user) {
+                        setShowLoginModal(true);
+                        return;
+                      }
                       setSelectedTool('gcode');
                       setInput(t('aiChat.quickPrompt.gcodeCheck', '이 G-code 문제 있는지 확인해줘'));
                     }}
@@ -2433,6 +2441,10 @@ const AIChat = () => {
                   </button>
                   <button
                     onClick={() => {
+                      if (!user) {
+                        setShowLoginModal(true);
+                        return;
+                      }
                       setSelectedTool('troubleshoot');
                       setInput(t('aiChat.quickPrompt.stringing', '출력물에 실 같은 게 달려있어요'));
                     }}
@@ -2446,6 +2458,10 @@ const AIChat = () => {
                 <div className="flex flex-wrap justify-center gap-2">
                   <button
                     onClick={() => {
+                      if (!user) {
+                        setShowLoginModal(true);
+                        return;
+                      }
                       setSelectedTool('troubleshoot');
                       setInput(t('aiChat.quickPrompt.warping', '첫 레이어가 베드에서 떨어져요'));
                     }}
@@ -2455,6 +2471,10 @@ const AIChat = () => {
                   </button>
                   <button
                     onClick={() => {
+                      if (!user) {
+                        setShowLoginModal(true);
+                        return;
+                      }
                       const prompt = t('aiChat.quickPrompt.modeling', '스마트폰 거치대 만들어줘');
                       navigate('/create', { state: { prompt } });
                     }}
