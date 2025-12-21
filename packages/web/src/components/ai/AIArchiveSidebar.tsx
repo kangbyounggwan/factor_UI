@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import ModelArchive from "@/components/ai/ModelArchive";
 import UploadArchive from "@/components/ai/UploadArchive";
 import { PrinterCard } from "@/components/PrinterCard";
-import { FolderOpen, Type, Grid3X3, Image as ImageFile, Menu } from "lucide-react";
+import { FolderOpen, Type, Image as ImageFile, Menu } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AIGeneratedModel } from "@shared/types/aiModelType";
 import { UploadedFile } from "@shared/hooks/useAIImageUpload";
@@ -19,8 +19,8 @@ interface AIArchiveSidebarProps {
     setActiveTab: (tab: string) => void;
     archiveViewMode: 'raw' | '3d';
     setArchiveViewMode: (mode: 'raw' | '3d') => void;
-    archiveFilter: 'all' | 'text-to-3d' | 'image-to-3d' | 'text-to-image';
-    setArchiveFilter: (filter: 'all' | 'text-to-3d' | 'image-to-3d' | 'text-to-image') => void;
+    archiveFilter: 'all' | 'text-to-3d' | 'image-to-3d';
+    setArchiveFilter: (filter: 'all' | 'text-to-3d' | 'image-to-3d') => void;
     uploadedFiles: UploadedFile[];
     generatedModels: AIGeneratedModel[];
     selectedImageId: number | null;
@@ -127,7 +127,7 @@ export function AIArchiveSidebar({
                             className="h-7 px-3 text-xs"
                             onClick={() => setArchiveViewMode('3d')}
                         >
-                            {activeTab === 'text-to-image' ? '2D' : '3D'}
+                            3D
                         </Button>
                     </div>
                 </div>
@@ -174,10 +174,10 @@ export function AIArchiveSidebar({
                                                 return true;
                                             case 'text-to-3d':
                                                 return model.generation_type === 'text_to_3d';
-                                            case 'text-to-image':
-                                                return model.generation_type === 'text_to_image';
+                                            case 'image-to-3d':
+                                                return model.generation_type === 'image_to_3d';
                                             default:
-                                                return model.generation_type !== 'image_to_3d';
+                                                return true;
                                         }
                                     })
                                     .map(model => ({
@@ -207,15 +207,14 @@ export function AIArchiveSidebar({
                                         case 'all': typeMatch = true; break;
                                         case 'text-to-3d': typeMatch = model.generation_type === 'text_to_3d'; break;
                                         case 'image-to-3d': typeMatch = model.generation_type === 'image_to_3d'; break;
-                                        case 'text-to-image': typeMatch = model.generation_type === 'text_to_image'; break;
-                                        default: typeMatch = false;
+                                        default: typeMatch = true;
                                     }
 
                                     if (!typeMatch) return false;
 
                                     if (model.generation_type === 'image_to_3d') {
                                         return !!model.source_image_url;
-                                    } else if (model.generation_type === 'text_to_3d' || model.generation_type === 'text_to_image') {
+                                    } else if (model.generation_type === 'text_to_3d') {
                                         return !!model.prompt;
                                     }
                                     return true;
@@ -331,18 +330,6 @@ export function AIArchiveSidebar({
                         title="이미지→3D"
                     >
                         <ImageFile className="w-4 h-4" />
-                    </Button>
-                    <Button
-                        variant={archiveFilter === 'text-to-image' ? 'default' : 'ghost'}
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => {
-                            setArchiveFilter('text-to-image');
-                            setActiveTab('text-to-image');
-                        }}
-                        title="텍스트→이미지"
-                    >
-                        <Grid3X3 className="w-4 h-4" />
                     </Button>
                 </div>
             </div>

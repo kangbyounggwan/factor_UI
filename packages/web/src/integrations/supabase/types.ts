@@ -460,6 +460,102 @@ export type Database = {
         }
         Relationships: []
       }
+      subscription_plans: {
+        Row: {
+          id: string
+          plan_code: string
+          display_name: string
+          display_name_ko: string | null
+          description: string | null
+          price_monthly: number
+          price_yearly: number
+          paddle_price_id_monthly: string | null
+          paddle_price_id_yearly: string | null
+          max_printers: number
+          ai_generation_limit: number
+          storage_limit_gb: number
+          webcam_reconnect_interval: number | null
+          anomaly_detection_interval: number
+          support_type: string
+          has_slack_channel: boolean
+          ai_model_type: string
+          has_analytics: boolean
+          has_push_notifications: boolean
+          has_api_access: boolean
+          has_ai_assistant: boolean
+          has_erp_mes_integration: boolean
+          has_community_support: boolean
+          has_priority_support: boolean
+          has_dedicated_support: boolean
+          sort_order: number
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          plan_code: string
+          display_name: string
+          display_name_ko?: string | null
+          description?: string | null
+          price_monthly?: number
+          price_yearly?: number
+          paddle_price_id_monthly?: string | null
+          paddle_price_id_yearly?: string | null
+          max_printers?: number
+          ai_generation_limit?: number
+          storage_limit_gb?: number
+          webcam_reconnect_interval?: number | null
+          anomaly_detection_interval?: number
+          support_type?: string
+          has_slack_channel?: boolean
+          ai_model_type?: string
+          has_analytics?: boolean
+          has_push_notifications?: boolean
+          has_api_access?: boolean
+          has_ai_assistant?: boolean
+          has_erp_mes_integration?: boolean
+          has_community_support?: boolean
+          has_priority_support?: boolean
+          has_dedicated_support?: boolean
+          sort_order?: number
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          plan_code?: string
+          display_name?: string
+          display_name_ko?: string | null
+          description?: string | null
+          price_monthly?: number
+          price_yearly?: number
+          paddle_price_id_monthly?: string | null
+          paddle_price_id_yearly?: string | null
+          max_printers?: number
+          ai_generation_limit?: number
+          storage_limit_gb?: number
+          webcam_reconnect_interval?: number | null
+          anomaly_detection_interval?: number
+          support_type?: string
+          has_slack_channel?: boolean
+          ai_model_type?: string
+          has_analytics?: boolean
+          has_push_notifications?: boolean
+          has_api_access?: boolean
+          has_ai_assistant?: boolean
+          has_erp_mes_integration?: boolean
+          has_community_support?: boolean
+          has_priority_support?: boolean
+          has_dedicated_support?: boolean
+          sort_order?: number
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

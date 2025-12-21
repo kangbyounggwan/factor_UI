@@ -7,9 +7,36 @@ export async function mqttConnect(): Promise<void> {
   await client.connect();
 }
 
+// 민감한 정보 마스킹 유틸리티
+function maskSensitiveData(obj: unknown): unknown {
+  if (typeof obj !== 'object' || obj === null) return obj;
+
+  const masked: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    // URL 관련 필드는 존재 여부만 표시
+    if (['input', 'streamUrl', 'url', 'play_url_webrtc', 'rtsp_base', 'webrtc_base'].includes(key)) {
+      masked[key] = value ? '[MASKED]' : null;
+    } else if (typeof value === 'object' && value !== null) {
+      masked[key] = maskSensitiveData(value);
+    } else {
+      masked[key] = value;
+    }
+  }
+  return masked;
+}
+
 export async function mqttPublish(topic: string, message: unknown, qos: 0 | 1 | 2 = 1, retain = false): Promise<void> {
-  console.log('[MQTT][PUBLISH] Topic:', topic);
-  console.log('[MQTT][PUBLISH] Message:', typeof message === 'object' ? JSON.stringify(message, null, 2) : message);
+  // 토픽에서 UUID 마스킹
+  const maskedTopic = topic.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '***');
+  console.log('[MQTT][PUBLISH] Topic:', maskedTopic);
+
+  // 메시지에서 민감한 정보 마스킹
+  if (typeof message === 'object' && message !== null) {
+    console.log('[MQTT][PUBLISH] Message:', JSON.stringify(maskSensitiveData(message), null, 2));
+  } else {
+    console.log('[MQTT][PUBLISH] Message:', message);
+  }
+
   console.log('[MQTT][PUBLISH] QoS:', qos, 'Retain:', retain);
   await client.publish(topic, message, qos, retain);
   console.log('[MQTT][PUBLISH] Published successfully');
@@ -337,7 +364,6 @@ export type CameraStartOptions = {
  */
 export async function publishCameraStart(options: CameraStartOptions): Promise<void> {
   console.log('[CAM][MQTT] ========== publishCameraStart CALLED ==========');
-  console.log('[CAM][MQTT] Input options:', JSON.stringify(options, null, 2));
 
   const {
     deviceUuid,
@@ -353,18 +379,13 @@ export async function publishCameraStart(options: CameraStartOptions): Promise<v
     webrtcBase = 'https://factor.io.kr/webrtc'
   } = options;
 
-  console.log('[CAM][MQTT] Destructured values:', {
-    deviceUuid,
-    streamUrl,
+  // 로그에서 민감한 정보 마스킹
+  console.log('[CAM][MQTT] Config:', {
+    hasStreamUrl: !!streamUrl,
     fps,
     width,
     height,
-    bitrateKbps,
-    encoder,
-    forceMjpeg,
-    lowLatency,
-    rtspBase,
-    webrtcBase
+    encoder
   });
 
   const topic = `camera/${deviceUuid}/cmd`;
@@ -386,13 +407,11 @@ export async function publishCameraStart(options: CameraStartOptions): Promise<v
     }
   };
 
-  console.log('[CAM][MQTT] Topic:', topic);
-  console.log('[CAM][MQTT] Final payload to be published:', JSON.stringify(payload, null, 2));
-  console.log('[CAM][MQTT] ========== PUBLISHING NOW ==========');
+  console.log('[CAM][MQTT] Publishing camera start command...');
 
   await mqttPublish(topic, payload, 1, false);
 
-  console.log('[CAM][MQTT] ========== PUBLISH COMPLETE ==========');
+  console.log('[CAM][MQTT] ✅ Camera start command published');
 }
 
 /**
@@ -436,9 +455,9 @@ export async function subscribeCameraState(
 
   const handler = (_t: string, payload: any) => {
     try {
-      console.log('[CAM][STATE] Raw message received on topic', _t, ':', payload);
+      // 로그에서 민감한 정보 마스킹
+      console.log('[CAM][STATE] Message received on topic:', _t.replace(deviceUuid, '***'));
       const msg = typeof payload === 'string' ? JSON.parse(payload) : payload;
-      console.log('[CAM][STATE] Parsed message:', msg);
 
       // 상태 판단
       const running = !!(msg?.running);
@@ -450,7 +469,7 @@ export async function subscribeCameraState(
         msg?.play_url_webrtc ||
         (typeof msg?.url === 'string' && !msg.url.endsWith('.m3u8') ? msg.url : null);
 
-      console.log('[CAM][STATE] Extracted state:', { running, webrtcUrl, status });
+      console.log('[CAM][STATE] Extracted state:', { running, hasUrl: !!webrtcUrl, status });
       onStateChange({ running, webrtcUrl, status });
     } catch (e) {
       console.warn('[CAM][STATE] parse error', e);

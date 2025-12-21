@@ -624,6 +624,95 @@ app.get('/api/printers/status', (req, res) => {
 });
 
 // ============================================
+// 카메라 스트림 상태 API
+// ============================================
+
+// MediaMTX API URL (nginx 프록시 또는 직접 연결)
+const MEDIAMTX_API_URL = process.env.MEDIAMTX_API_URL || 'http://localhost:9997/v3';
+
+/**
+ * @api {get} /api/camera/:deviceUuid/stream-status 카메라 스트림 상태 확인
+ * @apiParam {String} deviceUuid 디바이스 UUID
+ * @apiDescription MediaMTX에서 해당 카메라의 스트림 상태를 확인합니다.
+ * @apiSuccess {Boolean} success 성공 여부
+ * @apiSuccess {Object} data 스트림 정보
+ * @apiSuccess {Boolean} data.streaming 스트리밍 중 여부
+ * @apiSuccess {String} data.status 상태 (streaming, waiting, not_found)
+ * @apiSuccess {String} data.webrtc_url WebRTC URL (스트리밍 중일 때)
+ */
+app.get('/api/camera/:deviceUuid/stream-status', async (req, res) => {
+  try {
+    const { deviceUuid } = req.params;
+
+    // 스트림 이름: cam-{deviceUuid}
+    const streamName = `cam-${deviceUuid}`;
+
+    // MediaMTX API v3: /v3/paths/get/{name}
+    const apiUrl = `${MEDIAMTX_API_URL}/paths/get/${encodeURIComponent(streamName)}`;
+
+    console.log('[API][Camera] Checking stream status:', { streamName, apiUrl: apiUrl.replace(deviceUuid, '***') });
+
+    const response = await fetch(apiUrl);
+
+    if (response.status === 404) {
+      // 스트림이 존재하지 않음
+      console.log('[API][Camera] Stream not found (404):', streamName.replace(deviceUuid, '***'));
+      return res.json({
+        success: true,
+        data: {
+          streaming: false,
+          status: 'not_found',
+          message: 'Stream not found in MediaMTX',
+        },
+      });
+    }
+
+    if (!response.ok) {
+      console.error('[API][Camera] MediaMTX API error:', response.status, response.statusText);
+      return res.status(response.status).json({
+        success: false,
+        error: `MediaMTX API returned ${response.status}`,
+      });
+    }
+
+    const pathInfo = await response.json();
+
+    // MediaMTX v3 응답 구조:
+    // { name, source, sourceReady, tracks, bytesReceived, bytesSent, readers, ... }
+    const isStreaming = pathInfo.sourceReady === true && pathInfo.source !== null;
+
+    // WebRTC URL 생성
+    const WEBRTC_BASE = process.env.VITE_MEDIA_WEBRTC_BASE || 'https://factor.io.kr/webrtc';
+    const webrtcUrl = isStreaming ? `${WEBRTC_BASE}/${streamName}` : null;
+
+    console.log('[API][Camera] Stream status:', {
+      streaming: isStreaming,
+      sourceReady: pathInfo.sourceReady,
+      source: !!pathInfo.source,
+      tracks: pathInfo.tracks?.length || 0,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        streaming: isStreaming,
+        status: isStreaming ? 'streaming' : 'waiting',
+        webrtc_url: webrtcUrl,
+        source_ready: pathInfo.sourceReady,
+        tracks: pathInfo.tracks?.length || 0,
+        readers: pathInfo.readers?.length || 0,
+      },
+    });
+  } catch (error) {
+    console.error('[API][Camera] Stream status error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// ============================================
 // API 상태 확인
 // ============================================
 app.get('/api/health', (req, res) => {

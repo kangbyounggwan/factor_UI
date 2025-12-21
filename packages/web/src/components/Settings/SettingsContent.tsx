@@ -10,12 +10,10 @@ import {
   Plus,
   Trash2,
   Edit,
-  Monitor,
-  Wifi,
   Settings as SettingsIcon,
   FolderPlus,
-  Palette,
-  AlertTriangle
+  AlertTriangle,
+  X
 } from "lucide-react";
 import {
   Dialog,
@@ -32,11 +30,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@shared/integrations/supabase/client";
-import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
+import { getUserPrinterGroups }  from "@shared/services/supabaseService/printerList";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
 import { useWebSocket } from "@shared/hooks/useWebSocket";
 import { onDashStatusMessage } from "@shared/services/mqttService";
 import { getPrinterStatusInfo } from "@shared/utils/printerStatus";
@@ -76,23 +73,28 @@ interface PrinterConfig {
   firmware: "marlin" | "klipper" | "repetier" | "octoprint";
   status: "connected" | "disconnected" | "error";
   last_connected?: Date;
-  manufacture_id?: string; // manufacturing_printers ID 저장
-  device_uuid?: string; // MQTT 상태 추적용 device_uuid
-  stream_url?: string; // cameras 테이블의 stream_url (읽기 전용)
+  manufacture_id?: string;
+  device_uuid?: string;
+  stream_url?: string;
 }
 
 // 미리 정의된 색상 팔레트
 const colorPalette = [
-  "#3b82f6", "#ef4444", "#10b981", "#f59e0b", 
+  "#3b82f6", "#ef4444", "#10b981", "#f59e0b",
   "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16",
   "#f97316", "#6366f1", "#14b8a6", "#eab308"
 ];
 
-const Settings = () => {
+interface SettingsContentProps {
+  embedded?: boolean;
+  onBack?: () => void;
+  editPrinterId?: string;
+}
+
+export const SettingsContent = ({ embedded = false, onBack, editPrinterId }: SettingsContentProps) => {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();
-  const [searchParams, setSearchParams] = useSearchParams();
   const manufacturerCardRef = useRef<HTMLDivElement>(null);
   const isPrefillingRef = useRef(false);
 
@@ -127,14 +129,14 @@ const Settings = () => {
   const [modelsList, setModelsList] = useState<ModelOption[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string>("");
-  
+
   // 폼 데이터
   const [newGroup, setNewGroup] = useState({
     name: "",
     description: "",
     color: colorPalette[0]
   });
-  
+
   const [newPrinter, setNewPrinter] = useState<Partial<PrinterConfig>>({
     name: "",
     model: "",
@@ -246,20 +248,12 @@ const Settings = () => {
     loadUserPlan();
   }, [user]);
 
-  // 페이지 진입 시 스크롤 초기화
+  // editPrinterId가 전달되면 해당 프린터 수정 모달 열기
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
-
-  // 쿼리 파라미터로 프린터 ID가 전달되면 해당 프린터 수정 모달 열기
-  useEffect(() => {
-    const editPrinterId = searchParams.get('editPrinter');
     if (editPrinterId && printers.length > 0) {
       const printer = printers.find(p => p.id === editPrinterId);
       if (printer) {
         handleEditPrinter(printer);
-        setSearchParams({});
-        // 제조사 카드로 스크롤 (모달이 열린 후, 모달 내부 스크롤)
         setTimeout(() => {
           manufacturerCardRef.current?.scrollIntoView({
             behavior: 'smooth',
@@ -269,7 +263,7 @@ const Settings = () => {
         }, 500);
       }
     }
-  }, [searchParams, printers, setSearchParams]);
+  }, [editPrinterId, printers]);
 
   // 제조사 목록 로드
   useEffect(() => {
@@ -378,7 +372,7 @@ const Settings = () => {
       setGroups([...groups, data]);
       setNewGroup({ name: "", description: "", color: colorPalette[0] });
       setShowAddGroup(false);
-      
+
       toast({
         title: t('settings.success'),
         description: t('settings.groupAdded'),
@@ -476,12 +470,10 @@ const Settings = () => {
     const canAdd = await canAddPrinterAsync(user.id);
 
     if (!canAdd) {
-      // 업그레이드 필요
       setShowUpgradePrompt(true);
       return;
     }
 
-    // 프린터 추가 모달 열기
     setShowAddPrinter(true);
   };
 
@@ -509,7 +501,6 @@ const Settings = () => {
 
       if (error) throw error;
 
-      // 타입 변환하여 추가
       const formattedPrinter: PrinterConfig = {
         id: data.id,
         name: data.name,
@@ -524,7 +515,7 @@ const Settings = () => {
         last_connected: data.last_connected ? new Date(data.last_connected) : undefined,
         device_uuid: data.device_uuid
       };
-      
+
       setPrinters([...printers, formattedPrinter]);
       setNewPrinter({
         name: "",
@@ -535,11 +526,11 @@ const Settings = () => {
         firmware: "marlin"
       });
       setShowAddPrinter(false);
-      
+
       toast({
         title: t('settings.success'),
         description: t('settings.printerAdded'),
-        duration: 3000, // 3초 후 자동 닫힘
+        duration: 3000,
       });
     } catch (error) {
       console.error('Error adding printer:', error);
@@ -555,10 +546,8 @@ const Settings = () => {
     if (!user) return;
 
     try {
-      // 삭제할 프린터의 device_uuid 조회
       const printerToDelete = printers.find(p => p.id === printerId);
 
-      // 프린터 삭제
       const { error } = await supabase
         .from('printers')
         .delete()
@@ -566,7 +555,6 @@ const Settings = () => {
 
       if (error) throw error;
 
-      // 카메라 레코드도 함께 삭제 (device_uuid가 있는 경우)
       if (printerToDelete?.device_uuid) {
         const { error: cameraError } = await supabase
           .from('cameras')
@@ -576,7 +564,6 @@ const Settings = () => {
 
         if (cameraError) {
           console.error('[Settings] Failed to delete camera record:', cameraError);
-          // 카메라 삭제 실패는 무시 (프린터 삭제는 성공)
         } else {
           console.log('[Settings] Camera record deleted for device_uuid:', printerToDelete.device_uuid);
         }
@@ -599,11 +586,9 @@ const Settings = () => {
   };
 
   const handleEditPrinter = async (printer: PrinterConfig) => {
-    // Settings 페이지에서는 항상 설정 모달 열기 (페이지 이동 안 함)
     setEditingPrinter(printer);
     setShowEditPrinter(true);
 
-    // 먼저 모든 선택 state 초기화 (이전 프린터의 state가 남아있지 않도록)
     setSelectedManufacturer("");
     setSelectedSeries("");
     setSelectedModel("");
@@ -611,10 +596,8 @@ const Settings = () => {
     setSeriesList([]);
     setModelsList([]);
 
-    // 초기 프리필 중에는 의도치 않은 reset을 방지
     isPrefillingRef.current = true;
 
-    // manufacture_id가 있으면 제조사 정보 로드하여 드롭다운 미리 채우기
     const printerExt = printer as PrinterConfig & { manufacture_id?: string };
     if (printerExt.manufacture_id) {
       try {
@@ -631,15 +614,12 @@ const Settings = () => {
         }
 
         if (manufacturingPrinter) {
-          // 1단계: 제조사 설정
           setSelectedManufacturer(manufacturingPrinter.manufacturer);
 
-          // 2단계: 시리즈 목록 로드 후 시리즈 설정
           const seriesData = await getSeriesByManufacturer(manufacturingPrinter.manufacturer);
           setSeriesList(seriesData);
           setSelectedSeries(manufacturingPrinter.series);
 
-          // 3단계: 모델 목록 로드 후 모델 설정
           const modelsData = await getModelsByManufacturerAndSeries(
             manufacturingPrinter.manufacturer,
             manufacturingPrinter.series
@@ -654,7 +634,6 @@ const Settings = () => {
         isPrefillingRef.current = false;
       }
     } else {
-      // manufacture_id가 없으면 초기화
       isPrefillingRef.current = false;
     }
   };
@@ -674,12 +653,10 @@ const Settings = () => {
         group_id: editingPrinter.group_id || null,
       };
 
-      // selectedModelId가 있으면 manufacture_id도 업데이트
       if (selectedModelId) {
         updateData.manufacture_id = selectedModelId;
       }
 
-      // 프린터 정보 업데이트
       const { error } = await supabase
         .from('printers')
         .update(updateData)
@@ -688,7 +665,6 @@ const Settings = () => {
 
       if (error) throw error;
 
-      // cameras 테이블 업데이트 (device_uuid가 있는 경우)
       if (editingPrinter.device_uuid && editingPrinter.stream_url !== undefined) {
         const { error: cameraError } = await supabase
           .from('cameras')
@@ -698,11 +674,9 @@ const Settings = () => {
 
         if (cameraError) {
           console.error('Error updating camera URL:', cameraError);
-          // 카메라 업데이트 실패는 무시 (프린터 업데이트는 성공)
         }
       }
 
-      // 로컬 상태 업데이트
       setPrinters(prev => prev.map(p => {
         if (p.id !== editingPrinter.id) return p;
         return { ...p, ...updateData };
@@ -725,7 +699,6 @@ const Settings = () => {
     }
   };
 
-  // 프린터 그룹 배정/해제 (카드에서 즉시 반영)
   const handleAssignPrinterGroup = async (printerId: string, value: string) => {
     if (!user) return;
     const groupId = value === "none" ? null : value;
@@ -738,7 +711,6 @@ const Settings = () => {
       const { error } = await q;
       if (error) throw error;
 
-      // 로컬 상태 업데이트
       setPrinters(prev => prev.map(p => {
         if (p.id !== printerId) return p;
         const nextGroup = groupId ? groups.find(g => g.id === groupId) : undefined;
@@ -785,17 +757,31 @@ const Settings = () => {
   }
 
   return (
-    <div className="bg-background p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className={embedded ? "" : "bg-background p-6"}>
+      <div className={embedded ? "space-y-8" : "max-w-7xl mx-auto space-y-8"}>
         {/* 헤더 */}
-        <header className="space-y-2">
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <SettingsIcon className="h-8 w-8" />
-            {t('settings.title')}
-          </h1>
-          <p className="text-muted-foreground">
-            {t('settings.description')}
-          </p>
+        <header className="space-y-2 pb-6 border-b">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1">
+              <h1 className="text-3xl font-bold flex items-center gap-2">
+                <SettingsIcon className="h-8 w-8" />
+                {t('settings.title')}
+              </h1>
+              <p className="text-muted-foreground">
+                {t('settings.description')}
+              </p>
+            </div>
+            {embedded && onBack && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onBack}
+                className="h-8 w-8 rounded-full hover:bg-muted"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            )}
+          </div>
         </header>
 
         {/* 프린터 그룹 관리 섹션 */}
@@ -882,7 +868,7 @@ const Settings = () => {
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <div className="space-y-1 flex-1">
                       <CardTitle className="text-lg flex items-center gap-2">
-                        <div 
+                        <div
                           className="w-3 h-3 rounded-full"
                           style={{ backgroundColor: group.color }}
                         />
@@ -974,7 +960,7 @@ const Settings = () => {
                         {groups.map((group) => (
                           <SelectItem key={group.id} value={group.id}>
                             <div className="flex items-center gap-2">
-                              <div 
+                              <div
                                 className="w-2 h-2 rounded-full"
                                 style={{ backgroundColor: group.color }}
                               />
@@ -1046,12 +1032,10 @@ const Settings = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {printers.map((printer) => {
-              // MQTT 실시간 연결 상태 사용 (device_uuid로 조회)
-              const mqttConnected = printer.device_uuid ? printerMqttStatus[printer.device_uuid] ?? false : false;
+              const mqttConnectedStatus = printer.device_uuid ? printerMqttStatus[printer.device_uuid] ?? false : false;
 
-              // getPrinterStatusInfo 사용하여 상태 정보 가져오기
-              const printerState = mqttConnected ? 'operational' : 'disconnected';
-              const flags = mqttConnected ? { operational: true } : null;
+              const printerState = mqttConnectedStatus ? 'operational' : 'disconnected';
+              const flags = mqttConnectedStatus ? { operational: true } : null;
               const statusInfo = getPrinterStatusInfo(
                 printerState,
                 flags,
@@ -1273,7 +1257,8 @@ const Settings = () => {
 
                   {/* 카메라 정보 섹션 */}
                   <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
-                    <h3 className="text-sm font-bold uppercase tracking-wide">{t('settings.connection')}</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-wide">{t('settings.camera')}</h3>
+
                     <div className="space-y-2">
                       <Label htmlFor="edit-camera-url">{t('settings.cameraUrl')}</Label>
                       <Input
@@ -1303,8 +1288,6 @@ const Settings = () => {
           </Dialog>
         </section>
 
-        <Separator />
-
         {/* 업그레이드 프롬프트 */}
         <UpgradePrompt
           open={showUpgradePrompt}
@@ -1318,4 +1301,4 @@ const Settings = () => {
   );
 };
 
-export default Settings;
+export default SettingsContent;

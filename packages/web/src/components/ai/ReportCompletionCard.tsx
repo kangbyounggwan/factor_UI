@@ -108,7 +108,7 @@ export function ReportCompletionCard({
           {/* 제목 */}
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-foreground truncate">
-              {t('aiChat.gcodeAnalysisReport', 'G-code 분석 보고서')}
+              {t('aiChat.gcodeAnalysisReport', 'G-code 보고서')}
             </h3>
             {overallGrade && (
               <span className={cn(

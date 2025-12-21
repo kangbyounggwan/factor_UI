@@ -12,11 +12,12 @@ export const PLAN_CODES = {
 } as const;
 
 // Subscription status - DB의 status와 일치해야 함
+// 트라이얼 기간 없음 - 바로 결제
 export const SUBSCRIPTION_STATUS = {
   ACTIVE: 'active',
   CANCELLED: 'cancelled',
   EXPIRED: 'expired',
-  TRIALING: 'trialing',
+  PAST_DUE: 'past_due', // 결제 실패 (재시도 중)
 } as const;
 
 // Billing cycle - DB의 billing_cycle과 일치해야 함
@@ -32,6 +33,8 @@ export const USAGE_TYPES = {
   PRINTER_COUNT: 'printer_count',
   STORAGE_BYTES: 'storage_bytes',
   API_CALLS: 'api_calls',
+  TROUBLESHOOT_ADVANCED: 'troubleshoot_advanced', // 고급 문제진단 (일별 5회, 무료 사용자용)
+  PREMIUM_MODEL_TRIAL: 'premium_model_trial', // 유료 모델 체험 (일별 3회, 무료 사용자용)
 } as const;
 
 // Plan display names (i18n key 매핑용)
@@ -48,89 +51,16 @@ export type SubscriptionStatus = typeof SUBSCRIPTION_STATUS[keyof typeof SUBSCRI
 export type BillingCycle = typeof BILLING_CYCLE[keyof typeof BILLING_CYCLE];
 export type UsageType = typeof USAGE_TYPES[keyof typeof USAGE_TYPES];
 
-export interface SubscriptionFeatures {
-  maxPrinters: number | 'unlimited';
-  webcamStreaming: {
-    enabled: boolean;
-    reconnectInterval?: number; // in minutes, undefined means unlimited
-  };
-  aiModelGeneration: number | 'unlimited'; // monthly AI model generation limit
-  analytics: boolean;
-  pushNotifications: boolean;
-  apiAccess: boolean;
-  aiAssistant: boolean;
-  erpMesIntegration: boolean;
-  communitySupport: boolean;
-  prioritySupport: boolean;
-  dedicatedSupport: boolean;
-}
+// 지원 타입
+export type SupportType = 'community' | 'email' | 'dedicated';
 
-export const PLAN_FEATURES: Record<SubscriptionPlan, SubscriptionFeatures> = {
-  free: {
-    maxPrinters: 1,
-    webcamStreaming: {
-      enabled: true,
-      reconnectInterval: undefined, // unlimited (기본 기능)
-    },
-    aiModelGeneration: 20, // 20 AI model generations per month for free plan
-    analytics: false,
-    pushNotifications: true,
-    apiAccess: false,
-    aiAssistant: false,
-    erpMesIntegration: false,
-    communitySupport: true,
-    prioritySupport: false,
-    dedicatedSupport: false,
-  },
-  starter: {
-    maxPrinters: 2,
-    webcamStreaming: {
-      enabled: true,
-      reconnectInterval: undefined, // unlimited
-    },
-    aiModelGeneration: 'unlimited', // Advanced AI model usage
-    analytics: true, // Print statistics
-    pushNotifications: true,
-    apiAccess: false,
-    aiAssistant: false,
-    erpMesIntegration: false,
-    communitySupport: true,
-    prioritySupport: false,
-    dedicatedSupport: false,
-  },
-  pro: {
-    maxPrinters: 5,
-    webcamStreaming: {
-      enabled: true,
-      reconnectInterval: undefined, // unlimited
-    },
-    aiModelGeneration: 50, // 50 AI model generations per month
-    analytics: true,
-    pushNotifications: true,
-    apiAccess: true,
-    aiAssistant: false,
-    erpMesIntegration: false,
-    communitySupport: true,
-    prioritySupport: true,
-    dedicatedSupport: false,
-  },
-  enterprise: {
-    maxPrinters: 'unlimited',
-    webcamStreaming: {
-      enabled: true,
-      reconnectInterval: undefined, // unlimited
-    },
-    aiModelGeneration: 'unlimited', // unlimited AI model generations
-    analytics: true,
-    pushNotifications: true,
-    apiAccess: true,
-    aiAssistant: true,
-    erpMesIntegration: true,
-    communitySupport: true,
-    prioritySupport: true,
-    dedicatedSupport: true,
-  },
-};
+// AI 모델 타입
+export type AiModelType = 'basic' | 'advanced';
+
+// ============================================
+// 플랜 기능은 DB (subscription_plans 테이블)에서 관리됩니다
+// PLAN_FEATURES 하드코딩 제거됨 - DB 값 사용
+// ============================================
 
 export interface UserSubscription {
   id: string;
@@ -144,8 +74,7 @@ export interface UserSubscription {
   current_period_end: string;
   cancel_at_period_end: boolean;
   cancelled_at?: string;
-  trial_start?: string;
-  trial_end?: string;
+  // 트라이얼 기간 없음 - 바로 결제
   paddle_subscription_id?: string;
   paddle_customer_id?: string;
   created_at: string;
@@ -167,6 +96,10 @@ export interface SubscriptionPlanInfo {
   ai_generation_limit: number;  // -1 = unlimited
   storage_limit_gb: number;  // -1 = unlimited
   webcam_reconnect_interval?: number;  // null = unlimited
+  anomaly_detection_interval: number;  // 이상 감지 간격 (분), 0 = 실시간
+  support_type: SupportType;  // 지원 방식
+  has_slack_channel: boolean;  // 전용 Slack 채널
+  ai_model_type: AiModelType;  // AI 모델 타입
   has_analytics: boolean;
   has_push_notifications: boolean;
   has_api_access: boolean;
@@ -194,6 +127,12 @@ export interface UserUsage {
   storage_bytes: number;
   // API 호출 (월별 리셋)
   api_calls: number;
+  // 고급 문제진단 (일별 리셋 - 무료 사용자용 5회/일)
+  troubleshoot_advanced_today: number;
+  troubleshoot_advanced_date: string; // YYYY-MM-DD 형식
+  // 유료 모델 체험 (일별 리셋 - 무료 사용자용 3회/일)
+  premium_model_trial_today: number;
+  premium_model_trial_date: string; // YYYY-MM-DD 형식
   // 메타데이터
   last_used_at?: string;
   created_at: string;

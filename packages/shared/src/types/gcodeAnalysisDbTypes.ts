@@ -218,6 +218,7 @@ export interface GCodeAnalysisReportListItem {
   total_issues_count: number;
   high_issues_count: number;
   print_time_formatted?: string;
+  filament_length_mm?: number;
   filament_weight_g?: number;
   layer_count?: number;
   created_at: string;

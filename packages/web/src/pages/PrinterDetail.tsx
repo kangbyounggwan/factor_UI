@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Thermometer, Camera, Code, FolderOpen, FileCode, Eye, Loader2, Trash2, Pencil, MoreVertical, Check, Upload, Copy, AlertTriangle, Settings } from "lucide-react";
+import { Thermometer, Camera, Code, FolderOpen, FileCode, Eye, Loader2, Trash2, Pencil, MoreVertical, Check, Upload, Copy, AlertTriangle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { AppHeader } from "@/components/common/AppHeader";
@@ -31,6 +31,7 @@ import { TemperatureChart } from "@/components/PrinterDetail/TemperatureChart";
 import { GCodeUpload } from "@/components/PrinterDetail/GCodeUpload";
 import { GCodeViewerCanvas } from "@/components/PrinterDetail/GCodeViewerCanvas";
 import { PrintHistory } from "@/components/PrinterDetail/PrintHistory";
+import { PrinterSettingsTab } from "@/components/PrinterDetail/PrinterSettingsTab";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { supabase } from "@shared/integrations/supabase/client"
 import { onDashStatusMessage, mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, waitForGCodeUploadResult } from "@shared/services/mqttService";
@@ -189,6 +190,7 @@ const PrinterDetail = () => {
   const [printerManufacturer, setPrinterManufacturer] = useState<string | null>(null);
   const [printerSeries, setPrinterSeries] = useState<string | null>(null);
   const [printerModelName, setPrinterModelName] = useState<string | null>(null);
+  const [printerManufactureId, setPrinterManufactureId] = useState<string | null>(null);
 
   // 호환되지 않는 파일 전송 경고 모달
   const [incompatibleWarningOpen, setIncompatibleWarningOpen] = useState(false);
@@ -861,16 +863,19 @@ const PrinterDetail = () => {
         manufacturer?: string;
         series?: string;
         printer_model_name?: string;
+        manufacture_id?: string;
       };
       setPrinterName(printerWithInfo?.name || '프린터');
       setPrinterManufacturer(printerWithInfo?.manufacturer || null);
       setPrinterSeries(printerWithInfo?.series || null);
       setPrinterModelName(printerWithInfo?.printer_model_name || null);
+      setPrinterManufactureId(printerWithInfo?.manufacture_id || null);
 
       console.log('[PrinterDetail] 프린터 모델 정보:', {
         manufacturer: printerWithInfo?.manufacturer,
         series: printerWithInfo?.series,
-        modelName: printerWithInfo?.printer_model_name
+        modelName: printerWithInfo?.printer_model_name,
+        manufactureId: printerWithInfo?.manufacture_id
       });
 
       // DB 상태를 항상 우선 적용 (DB가 source of truth)
@@ -1547,15 +1552,27 @@ const PrinterDetail = () => {
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="flex items-center justify-center h-[calc(100vh-180px)] text-muted-foreground">
-                  <div className="text-center">
-                    <Settings className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <h3 className="text-lg font-medium">{t('printerDetail.settings', '설비 설정')}</h3>
-                    <p className="text-sm mt-1">Coming Soon...</p>
-                  </div>
-                </div>
-              )}
+              ) : activeTab === 'settings-equipment' ? (
+                /* 설비 설정 탭 */
+                <PrinterSettingsTab
+                  printerId={id || ''}
+                  printerName={printerName}
+                  currentManufactureId={printerManufactureId}
+                  deviceUuid={deviceUuid}
+                  onSuccess={() => loadPrinterData(false)}
+                  mode="equipment"
+                />
+              ) : activeTab === 'settings-camera' ? (
+                /* 카메라 설정 탭 */
+                <PrinterSettingsTab
+                  printerId={id || ''}
+                  printerName={printerName}
+                  currentManufactureId={printerManufactureId}
+                  deviceUuid={deviceUuid}
+                  onSuccess={() => loadPrinterData(false)}
+                  mode="camera"
+                />
+              ) : null}
             </div>
           </div>
         </div>

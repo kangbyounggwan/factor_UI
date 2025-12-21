@@ -124,12 +124,42 @@ const GoogleLogo = () => (
   </svg>
 );
 
+// 한국 사용자 감지 (언어 또는 타임존 기반)
+const isKoreanUser = () => {
+  const lang = navigator.language || navigator.languages?.[0] || '';
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  return lang.startsWith('ko') || timezone === 'Asia/Seoul';
+};
+
+// 통화별 가격 설정
+const PLAN_PRICES = {
+  USD: {
+    starter: { monthly: 7, yearly: 70, monthlyEquivalent: 5.83 },
+    pro: { monthly: 15, yearly: 150, monthlyEquivalent: 12.50 },
+  },
+  KRW: {
+    starter: { monthly: 9900, yearly: 99900, monthlyEquivalent: 8325 },
+    pro: { monthly: 22900, yearly: 229000, monthlyEquivalent: 19083 },
+  },
+};
+
 const UserSettings = () => {
   const { user, signOut, linkGoogleAccount, unlinkProvider } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
+  const [isKorea] = useState(() => isKoreanUser()); // 한국 사용자 여부
+
+  // 통화에 따른 가격 포맷팅
+  const formatPlanPrice = (amount: number) => {
+    if (isKorea) {
+      return `₩${amount.toLocaleString('ko-KR')}`;
+    }
+    return `$${amount.toLocaleString('en-US')}`;
+  };
+
+  const prices = isKorea ? PLAN_PRICES.KRW : PLAN_PRICES.USD;
 
   // Get tab from URL parameter, default to 'profile'
   const defaultTab = (searchParams.get('tab') || 'profile') as SettingsTab;
@@ -197,6 +227,7 @@ const UserSettings = () => {
   // Paddle states
   const [paddleReady, setPaddleReady] = useState(false);
   const [paddleLoading, setPaddleLoading] = useState(false);
+  const [starterBillingCycle, setStarterBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [proBillingCycle, setProBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
   // API Keys states
@@ -581,6 +612,49 @@ const UserSettings = () => {
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString();
+  };
+
+  // Handle Starter plan upgrade with Paddle
+  const handleStarterUpgrade = async (cycle: 'monthly' | 'yearly' = 'monthly') => {
+    if (!paddleReady) {
+      toast({
+        title: t("pricing.error.notReady", "Payment system loading"),
+        description: t("pricing.error.tryAgain", "Please wait a moment and try again."),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const priceId = getPaddlePriceId('starter', cycle === 'yearly');
+
+    if (!priceId) {
+      toast({
+        title: t("pricing.error.configError", "Configuration error"),
+        description: t("pricing.error.contactSupport", "Please contact support."),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPaddleLoading(true);
+
+    try {
+      await openPaddleCheckout({
+        priceId,
+        customerEmail: user?.email,
+        customData: user?.id ? { user_id: user.id } : undefined,
+        locale: 'en',
+        successUrl: `${window.location.origin}/payment/success?provider=paddle&plan=starter`,
+      });
+    } catch (error) {
+      console.error('[UserSettings] Failed to open Paddle checkout:', error);
+      setPaddleLoading(false);
+      toast({
+        title: t("payment.error", "Payment failed"),
+        description: t("payment.requestFailed", "Please try again or contact support."),
+        variant: "destructive",
+      });
+    }
   };
 
   // Handle Pro plan upgrade with Paddle
@@ -2389,67 +2463,144 @@ const UserSettings = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Change Plan Sheet */}
+      {/* Change Plan Sheet - Supabase Style */}
       <Sheet open={showChangePlanModal} onOpenChange={setShowChangePlanModal}>
-        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto z-50">
-          <SheetHeader>
-            <SheetTitle>{user?.email}님의 구독 플랜 변경</SheetTitle>
+        <SheetContent className="w-full sm:max-w-4xl overflow-y-auto z-50">
+          <SheetHeader className="mb-6">
+            <SheetTitle className="text-2xl">플랜 선택</SheetTitle>
             <SheetDescription>
-              3D 프린터 팜 규모와 필요한 기능에 따라 적합한 플랜을 선택하세요. 언제든지 변경 가능합니다.
+              필요에 맞는 플랜을 선택하세요. 언제든지 변경 가능합니다.
             </SheetDescription>
           </SheetHeader>
-          <div className="space-y-4 py-6">
+
+          {/* 3-column grid layout like Supabase */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Free Plan */}
-            <div className={`relative border rounded-lg p-6 hover:border-primary/50 transition-colors ${currentPlan === 'free' ? 'border-primary border-2 bg-primary/5' : 'border-border'}`}>
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xl font-bold">FREE</h3>
-                    {currentPlan === 'free' && (
-                      <Badge className="bg-primary">현재 플랜</Badge>
-                    )}
-                  </div>
-                  <p className="text-3xl font-bold mt-3">₩0 <span className="text-base font-normal text-muted-foreground">/ 월</span></p>
-                </div>
+            <div className={`relative border rounded-xl p-5 flex flex-col transition-all ${currentPlan === 'free' ? 'border-primary border-2 bg-primary/5 shadow-md' : 'border-border hover:border-primary/50'}`}>
+              {currentPlan === 'free' && (
+                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary">현재 플랜</Badge>
+              )}
+
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-muted-foreground">FREE</h3>
+                <p className="text-2xl font-bold mt-2">₩0<span className="text-sm font-normal text-muted-foreground">/월</span></p>
+                <p className="text-xs text-muted-foreground mt-1">개인 사용자용</p>
               </div>
 
-              {currentPlan !== 'free' && (
+              {currentPlan !== 'free' ? (
                 <Button
                   variant="outline"
+                  size="sm"
                   className="w-full mb-4"
-                  onClick={() => {
-                    setShowDowngradeWarningModal(true);
-                  }}
+                  onClick={() => setShowDowngradeWarningModal(true)}
                 >
-                  Free 플랜으로 변경
+                  다운그레이드
                 </Button>
-              )}
-              {currentPlan === 'free' && (
-                <Button
-                  variant="outline"
-                  className="w-full mb-4"
-                  onClick={() => {
-                    // Keep modal open and switch to subscription tab
-                    setActiveTab('subscription');
-                  }}
-                >
-                  Manage in Settings
+              ) : (
+                <Button variant="secondary" size="sm" className="w-full mb-4" disabled>
+                  현재 플랜
                 </Button>
               )}
 
-              <div className="space-y-3 text-sm">
-                <p className="text-xs text-muted-foreground mb-3">개인 사용자 및 소규모 프로젝트에 적합합니다.</p>
+              <div className="space-y-2 text-sm flex-1">
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>{PLAN_FEATURES.free.maxPrinters}대의 3D 프린터 연결</span>
+                  <span>{PLAN_FEATURES.free.maxPrinters}대 프린터</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>무제한 웹캠 스트리밍</span>
+                  <span>웹캠 스트리밍</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>기본 출력 모니터링</span>
+                  <span>기본 모니터링</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-primary shrink-0" />
+                  <span>커뮤니티 지원</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Starter Plan */}
+            <div className={`relative border rounded-xl p-5 flex flex-col transition-all ${currentPlan === 'starter' ? 'border-primary border-2 bg-primary/5 shadow-md' : 'border-amber-500 border-2 hover:shadow-lg'}`}>
+              {currentPlan === 'starter' ? (
+                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary">현재 플랜</Badge>
+              ) : (
+                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-500">Best Value</Badge>
+              )}
+
+              <div className="mb-4">
+                <h3 className="text-lg font-bold">STARTER</h3>
+                {/* 결제 주기 토글 */}
+                {currentPlan !== 'starter' && (
+                  <div className="flex rounded-md border border-border p-0.5 bg-muted/30 mt-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setStarterBillingCycle('monthly')}
+                      className={`flex-1 py-1 px-2 text-xs font-medium rounded transition-colors ${
+                        starterBillingCycle === 'monthly'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      월간
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStarterBillingCycle('yearly')}
+                      className={`flex-1 py-1 px-2 text-xs font-medium rounded transition-colors ${
+                        starterBillingCycle === 'yearly'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      연간
+                    </button>
+                  </div>
+                )}
+                {starterBillingCycle === 'monthly' ? (
+                  <p className="text-2xl font-bold">{formatPlanPrice(prices.starter.monthly)}<span className="text-sm font-normal text-muted-foreground">/월</span></p>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold">{formatPlanPrice(prices.starter.yearly)}<span className="text-sm font-normal text-muted-foreground">/년</span></p>
+                    <p className="text-xs text-green-500">월 {formatPlanPrice(prices.starter.monthlyEquivalent)} (17% 할인)</p>
+                  </>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">취미 사용자 및 소규모 제작자</p>
+              </div>
+
+              {currentPlan !== 'starter' ? (
+                <Button
+                  size="sm"
+                  className="w-full mb-4 bg-amber-500 hover:bg-amber-600"
+                  onClick={() => handleStarterUpgrade(starterBillingCycle)}
+                  disabled={paddleLoading || !paddleReady}
+                >
+                  {paddleLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : '업그레이드'}
+                </Button>
+              ) : (
+                <Button variant="secondary" size="sm" className="w-full mb-4" disabled>
+                  현재 플랜
+                </Button>
+              )}
+
+              <div className="space-y-2 text-sm flex-1">
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-primary shrink-0" />
+                  <span>{PLAN_FEATURES.starter.maxPrinters}대 프린터</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-primary shrink-0" />
+                  <span>웹캠 스트리밍</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-amber-500 shrink-0" />
+                  <span className="font-medium">무제한 AI 모델 생성</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-primary shrink-0" />
+                  <span>출력 통계</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
@@ -2459,31 +2610,24 @@ const UserSettings = () => {
             </div>
 
             {/* Pro Plan */}
-            <div className={`relative border rounded-lg p-6 pt-8 hover:border-primary/50 transition-colors overflow-hidden ${currentPlan === 'pro' ? 'border-primary border-2 bg-primary/5' : 'border-border'}`}>
-              {/* Popular Badge */}
-              <Badge className="absolute top-3 right-3 bg-blue-500 hover:bg-blue-500">추천</Badge>
+            <div className={`relative border rounded-xl p-5 flex flex-col transition-all ${currentPlan === 'pro' ? 'border-primary border-2 bg-primary/5 shadow-md' : 'border-blue-500 border-2 hover:shadow-lg'}`}>
+              {currentPlan === 'pro' ? (
+                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary">현재 플랜</Badge>
+              ) : (
+                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-blue-500">Pro</Badge>
+              )}
 
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xl font-bold">PRO</h3>
-                    {currentPlan === 'pro' && (
-                      <Badge className="bg-primary">현재 플랜</Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* 결제 주기 선택 탭 */}
-              {currentPlan !== 'pro' && (
-                <div className="mb-4">
-                  <div className="flex rounded-lg border border-border p-1 bg-muted/30">
+              <div className="mb-4">
+                <h3 className="text-lg font-bold">PRO</h3>
+                {/* 결제 주기 토글 */}
+                {currentPlan !== 'pro' && (
+                  <div className="flex rounded-md border border-border p-0.5 bg-muted/30 mt-2 mb-2">
                     <button
                       type="button"
                       onClick={() => setProBillingCycle('monthly')}
-                      className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+                      className={`flex-1 py-1 px-2 text-xs font-medium rounded transition-colors ${
                         proBillingCycle === 'monthly'
-                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          ? 'bg-primary text-primary-foreground'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
@@ -2492,163 +2636,66 @@ const UserSettings = () => {
                     <button
                       type="button"
                       onClick={() => setProBillingCycle('yearly')}
-                      className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+                      className={`flex-1 py-1 px-2 text-xs font-medium rounded transition-colors ${
                         proBillingCycle === 'yearly'
-                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          ? 'bg-primary text-primary-foreground'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      연간 <span className={`text-xs ml-1 ${proBillingCycle === 'yearly' ? 'text-green-300' : 'text-green-500'}`}>17% 할인</span>
+                      연간
                     </button>
                   </div>
-                </div>
-              )}
-
-              {/* 가격 표시 */}
-              <div className="mb-4">
-                {proBillingCycle === 'monthly' ? (
-                  <p className="text-3xl font-bold">$19 <span className="text-base font-normal text-muted-foreground">/ month</span></p>
-                ) : (
-                  <div>
-                    <p className="text-3xl font-bold">$190 <span className="text-base font-normal text-muted-foreground">/ year</span></p>
-                    <p className="text-sm text-muted-foreground">월 $15.83 (연간 청구)</p>
-                  </div>
                 )}
+                {proBillingCycle === 'monthly' ? (
+                  <p className="text-2xl font-bold">{formatPlanPrice(prices.pro.monthly)}<span className="text-sm font-normal text-muted-foreground">/월</span></p>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold">{formatPlanPrice(prices.pro.yearly)}<span className="text-sm font-normal text-muted-foreground">/년</span></p>
+                    <p className="text-xs text-green-500">월 {formatPlanPrice(prices.pro.monthlyEquivalent)} (17% 할인)</p>
+                  </>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">전문가 및 프린터 팜</p>
               </div>
 
-              {currentPlan !== 'pro' && (
+              {currentPlan !== 'pro' ? (
                 <Button
-                  className="w-full mb-4 bg-primary hover:bg-primary/90"
+                  size="sm"
+                  className="w-full mb-4 bg-blue-500 hover:bg-blue-600"
                   onClick={() => handleProUpgrade(proBillingCycle)}
                   disabled={paddleLoading || !paddleReady}
                 >
-                  {paddleLoading ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      처리 중...
-                    </>
-                  ) : (
-                    `Pro 플랜으로 업그레이드 (${proBillingCycle === 'yearly' ? '연간' : '월간'})`
-                  )}
+                  {paddleLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : '업그레이드'}
                 </Button>
-              )}
-              {currentPlan === 'pro' && (
-                <Button
-                  variant="outline"
-                  className="w-full mb-4"
-                  onClick={() => {
-                    // Keep modal open and switch to subscription tab
-                    setActiveTab('subscription');
-                  }}
-                >
-                  Manage in Settings
+              ) : (
+                <Button variant="secondary" size="sm" className="w-full mb-4" disabled>
+                  현재 플랜
                 </Button>
               )}
 
-              <div className="space-y-3 text-sm">
-                <p className="text-xs text-muted-foreground mb-3">중소규모 프린터 팜을 운영하는 전문가에게 적합합니다.</p>
+              <div className="space-y-2 text-sm flex-1">
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>최대 {PLAN_FEATURES.pro.maxPrinters}대의 3D 프린터 연결</span>
+                  <span>{PLAN_FEATURES.pro.maxPrinters}대 프린터</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>무제한 웹캠 스트리밍</span>
+                  <span>웹캠 스트리밍</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>월 50회 AI 모델 생성</span>
+                  <span>월 50회 AI 생성</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-blue-500 shrink-0" />
+                  <span className="font-medium">고급 분석</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-blue-500 shrink-0" />
+                  <span className="font-medium">API 액세스</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>고급 분석 대시보드</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>API 액세스</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>이메일 우선 지원</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>7일 로그 보관</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Enterprise Plan */}
-            <div className={`relative border rounded-lg p-6 hover:border-primary/50 transition-colors ${currentPlan === 'enterprise' ? 'border-primary border-2 bg-primary/5' : 'border-border'}`}>
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xl font-bold">ENTERPRISE</h3>
-                    {currentPlan === 'enterprise' && (
-                      <Badge className="bg-primary">현재 플랜</Badge>
-                    )}
-                  </div>
-                  <p className="text-3xl font-bold mt-3">Custom <span className="text-base font-normal text-muted-foreground"></span></p>
-                  <p className="text-xs text-muted-foreground mt-1">Contact for pricing</p>
-                </div>
-              </div>
-
-              {currentPlan !== 'enterprise' && (
-                <Button
-                  className="w-full mb-4 bg-primary hover:bg-primary/90"
-                  onClick={() => {
-                    window.open('mailto:contact@factor.io.kr?subject=엔터프라이즈 플랜 문의', '_blank');
-                  }}
-                >
-                  영업팀 문의하기
-                </Button>
-              )}
-              {currentPlan === 'enterprise' && (
-                <Button
-                  variant="outline"
-                  className="w-full mb-4"
-                  onClick={() => {
-                    // Keep modal open and switch to subscription tab
-                    setActiveTab('subscription');
-                  }}
-                >
-                  Manage in Settings
-                </Button>
-              )}
-
-              <div className="space-y-3 text-sm">
-                <p className="text-xs text-muted-foreground mb-3">대규모 프린터 팜과 맞춤형 솔루션이 필요한 기업에 적합합니다.</p>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>무제한 3D 프린터 연결</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>무제한 AI 모델 생성</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>AI 어시스턴트</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>ERP/MES 시스템 통합</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>전담 고객 성공 매니저</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>온프레미스 배포 지원</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>24시간 프리미엄 기술 지원</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>맞춤형 교육 및 컨설팅</span>
+                  <span>우선 지원</span>
                 </div>
               </div>
             </div>

@@ -134,6 +134,13 @@ export default {
     userAlreadyRegistered: "This email is already registered.",
     welcome: "Welcome!",
     signupFailed: "Sign up failed",
+    // Continue buttons
+    or: "or",
+    continue: "Continue",
+    continueWithGoogle: "Continue with Google",
+    continueWithApple: "Continue with Apple",
+    continueWithMicrosoft: "Continue with Microsoft",
+    continueWithPhone: "Continue with Phone",
     // Account linking modal
     accountExists: "Account Already Exists",
     accountExistsDesc: " is already registered. Would you like to sign in with your existing account?",
@@ -174,7 +181,7 @@ export default {
     description: "Convert text and images into 3D models using AI, and print them immediately with connected printers.",
     textTo3D: "Text → 3D",
     imageTo3D: "Image → 3D",
-    textToImage: "Text → Image",
+    loginToGenerate: "Please log in to generate AI models. More features are available after logging in.",
     textPrompt: "Text Prompt",
     textPromptPlaceholder: "Describe the 3D model you want to generate...",
     imageUpload: "Image Upload",
@@ -612,6 +619,11 @@ export default {
     statistics: "Info",
     quickActions: "Quick Actions",
     sidebarPlaceholder: "Menu loading...",
+    // Sidebar - Printer quick select
+    printerQuickSelect: "Printers",
+    // Sidebar - Alerts
+    alerts: "Alerts",
+    noAlerts: "No new alerts",
     // Printer status
     status: {
       idle: "Idle",
@@ -783,6 +795,9 @@ export default {
     selectModelPlaceholder: "Select model",
     selectFirmware: "Select Firmware",
     connection: "Connection",
+    connectionType: "Connection Type",
+    local: "Local",
+    server: "Server",
     cameraUrl: "Camera URL",
     cameraUrlPlaceholder: "e.g., http://192.168.1.100/webcam",
     cameraUrlComingSoon: "Camera URL configuration will be available soon.",
@@ -792,7 +807,7 @@ export default {
     loginRequired: "Login Required",
     loginRequiredDescription: "Please log in to use printer and group management features.",
     // Subscription Plan Features
-    planFeature1: "Up to 2 printers",
+    planFeature1: "Up to 1 printer",
     planFeature2: "Basic monitoring",
     planFeature3: "Email notifications",
     planFeature4: "Community support",
@@ -913,7 +928,11 @@ export default {
     newFileNamePlaceholder: "Enter new file name",
     extensionAutoAdded: "extension will be added automatically",
     copyAndCreate: "Copy & Create",
-    fileCopied: "File Copied"
+    fileCopied: "File Copied",
+    // Settings menu
+    settingsMenu: "Settings",
+    settingsEquipment: "Equipment Settings",
+    settingsCamera: "Camera Settings"
   },
   camera: {
     title: "Live Camera Feed",
@@ -927,7 +946,7 @@ export default {
     startStreamingDesc: "Press the button to start live camera feed",
     startStreaming: "Start Streaming",
     startStream: "Start Stream",
-    starting: "Starting...",
+    starting: "Connecting...",
     streamStarting: "Starting Stream",
     streamStartingDesc: "Preparing camera stream.",
     streamStartFailed: "Failed to start stream.",
@@ -948,10 +967,53 @@ export default {
     cameraUrl: "Camera URL",
     urlExample: "Example",
     urlRequired: "Please enter the camera URL.",
-    urlSaveFailed: "Failed to save camera URL.",
+    urlSaveFailed: "Failed to save camera settings.",
     urlSaved: "Camera URL saved successfully.",
     error: "Error",
-    success: "Success"
+    success: "Success",
+    // Camera settings page - Camera type
+    type: "Camera Type",
+    typeOctoprint: "OctoPrint Plugin",
+    typeOctoprintDesc: "For Raspberry Pi + Factor plugin. Streams via WebRTC.",
+    typeExternal: "External Camera",
+    typeExternalDesc: "Externally accessible camera URL (MJPEG, HTTP stream, etc.)",
+    // Camera settings section
+    octoprintSettings: "OctoPrint Plugin Settings",
+    externalSettings: "External Camera Settings",
+    settingsDescription: "Configure the streaming URL for the camera connected to the printer",
+    settingsSaved: "Camera settings saved successfully.",
+    // Stream URL input
+    streamUrl: "Stream URL",
+    urlPlaceholderOctoprint: "http://192.168.0.100:8080/video (Local network URL)",
+    urlPlaceholderExternal: "https://camera.example.com/stream (External URL)",
+    urlDescriptionOctoprint: "Enter a camera URL accessible from Raspberry Pi (Local network)",
+    urlDescriptionExternal: "Enter an externally accessible camera URL (Public URL)",
+    urlNotSet: "Camera URL is not configured",
+    // Test related
+    test: "Test",
+    testFailed: "Camera test failed",
+    testRequired: "Test must pass to save",
+    testRequiredToSave: "Camera test must pass to save.",
+    connectionTimeout: "Connection timed out. Please check if Raspberry Pi is connected.",
+    streamNotFound: "Stream not found. Please check Raspberry Pi connection.",
+    streamNotReady: "Raspberry Pi responded but stream is not ready. Please check FFmpeg status.",
+    // Preview
+    preview: "Preview",
+    previewNote: "Streamed via WebRTC through Raspberry Pi. Device must be connected.",
+    previewFailed: "Failed to load preview. Please check if the URL is correct.",
+    externalPreviewNote: "Displays external camera URL directly. MJPEG or static image URLs are supported.",
+    // Connection status
+    deviceNotConnected: "Device is not connected",
+    connectingToRaspberry: "Connecting to Raspberry Pi...",
+    testingConnection: "Testing connection",
+    waitingForStream: "Waiting for stream...",
+    retry: "Retry",
+    externalLoadFailed: "Failed to load external camera stream",
+    loadSuccess: "Load success",
+    loadFailed: "Load failed",
+    testing: "Testing",
+    loadingImage: "Loading image...",
+    waitingForTest: "Waiting for test..."
   },
   printHistory: {
     title: "Print History",
@@ -1062,6 +1124,7 @@ export default {
     subtitle: "AI analyzes your G-code",
     archive: "Archive",
     archiveTitle: "Analysis Archive",
+    reportArchiveTitle: "Report Archive",
     archiveCount: "{{count}} analysis reports",
     newFile: "New File",
     newAnalysis: "New Analysis",
@@ -1570,6 +1633,7 @@ export default {
     perYear: "/ year",
     popular: "Popular",
     bestValue: "Best Value",
+    professional: "Professional",
     premium: "Premium",
     currentPlanBadge: "Current Plan",
     startFree: "Start Free",
@@ -1587,38 +1651,38 @@ export default {
       free: {
         name: "Free",
         description: "For hobbyists and makers",
-        feature1: "Up to 1 printer connection",
-        feature2: "Unlimited webcam streaming",
-        feature3: "Push notifications",
-        feature4: "Community support"
+        feature1: "Basic AI model",
+        feature2: "60min anomaly detection",
+        feature3: "Up to 1 printer",
+        feature4: "5 3D models/month",
+        feature5: "Partial API access"
       },
       starter: {
         name: "Starter",
         description: "For individuals and small projects",
-        feature1: "Up to 2 printer connections",
-        feature2: "Advanced AI model usage",
-        feature3: "Basic AI assistant",
-        feature4: "Real-time anomaly detection"
+        feature1: "Advanced AI model",
+        feature2: "30min anomaly detection",
+        feature3: "Up to 1 printer",
+        feature4: "20 3D models/month",
+        feature5: "Partial API access"
       },
       pro: {
         name: "Pro",
         description: "For professionals and small teams",
-        feature1: "Up to 5 printer connections",
-        feature2: "Unlimited webcam streaming",
-        feature3: "50 AI model generations/month",
-        feature4: "Advanced analytics dashboard",
-        feature5: "API access",
-        feature6: "Priority email support"
+        feature1: "Advanced AI model",
+        feature2: "10min anomaly detection",
+        feature3: "Up to 5 printers",
+        feature4: "50 3D models/month",
+        feature5: "Full API access"
       },
       enterprise: {
         name: "Enterprise",
         description: "For large-scale organizations",
-        feature1: "Unlimited printer connections",
-        feature2: "Unlimited AI model generation",
-        feature3: "Advanced AI assistant",
-        feature4: "ERP/MES integration",
-        feature5: "Dedicated support manager",
-        feature6: "Private Slack channel"
+        feature1: "Advanced AI model",
+        feature2: "Real-time anomaly detection",
+        feature3: "Unlimited printers",
+        feature4: "Unlimited 3D models",
+        feature5: "Full API access"
       },
     },
     // Plan descriptions
@@ -1772,6 +1836,7 @@ export default {
     faqQuestion4: "How do I get technical support?",
     faqAnswer4: "Basic plan includes community support, Pro plan has 24-hour response, and Enterprise plan provides 24/7 phone support.",
     comparison: {
+      feature: "Feature",
       printerManagement: "Printer Management",
       maxPrinters: "Maximum Printers",
       printersCount: "{{count}} printers",
@@ -1779,14 +1844,25 @@ export default {
       realtimeMonitoring: "Real-time Monitoring",
       remoteControl: "Remote Control",
       keyFeatures: "Key Features",
-      aiModelGeneration: "AI Model Generation",
-      modelsPerMonth: "{{count}} models/month",
+      aiModelGeneration: "3D Modeling Usage",
+      modelsPerMonth: "{{count}}/month",
       limited: "Limited",
       basicAiAssistant: "Basic AI Assistant",
       advancedAiAssistant: "Advanced AI Assistant",
       anomalyDetection: "Real-time Anomaly Detection",
+      anomalyDetectionInterval: "Anomaly Detection Interval",
+      interval60min: "60 min",
+      interval30min: "30 min",
+      interval10min: "10 min",
+      intervalMinutes: "{{count}} min",
+      realtime: "Real-time",
       advancedAnalytics: "Advanced Analytics & Statistics",
+      advancedAnalyticsChat: "Advanced Analytics & Chat",
+      basicModel: "Basic Model",
+      advancedModel: "Advanced Model",
       apiAccess: "API Access",
+      partialAccess: "Partial",
+      fullAccess: "Full",
       customerSupport: "Customer Support",
       supportType: "Support Type",
       community: "Community",
@@ -2202,10 +2278,10 @@ export default {
       starter: {
         name: "Starter",
         description: "For individuals and small projects",
-        feature1: "Up to 2 printer connections",
-        feature2: "Advanced AI model usage",
+        feature1: "Up to 1 printer connection",
+        feature2: "20 AI model generations/month",
         feature3: "Basic AI assistant",
-        feature4: "Real-time anomaly detection"
+        feature4: "Advanced AI model"
       },
       pro: {
         name: "Pro",
@@ -2403,8 +2479,8 @@ export default {
       q4: "Optimal PLA print temperature?"
     },
     // AI Chat Page
-    greeting: ", Hello",
-    askAnything: "Ask anything about your printer",
+    greeting: "Show us exactly what's happening right now",
+    askAnything: "Having print issues? Something seems off?",
     newChat: "New Chat",
     recentChats: "Recent Chats",
     reportArchive: "Report Archive",
@@ -2413,6 +2489,7 @@ export default {
     reportDeleted: "Report has been deleted",
     reportDeleteError: "Failed to delete report",
     viewMore: "View More",
+    close: "Close",
     noReports: "No reports",
     tools: "Tools",
     attachImage: "Attach Image",
@@ -2450,6 +2527,10 @@ export default {
     paidModels: "Paid Models",
     fastAndEfficient: "Fast and efficient",
     fastResponse: "Fast response",
+    starterExperience: "Starter Experience",
+    trialRemaining: "{{count}} trials left",
+    trialLimitReached: "Daily Trial Limit Reached",
+    trialLimitDescription: "Free plan allows up to 3 Gemini 3.0 Flash trials per day. Please try again tomorrow or upgrade your plan.",
     latestModel: "Latest model",
     mostPowerful: "Most powerful model",
     balancedPerformance: "Balanced performance",
@@ -2509,6 +2590,24 @@ export default {
     revertFailed: "Revert Failed",
     revertNotFound: "Modified code not found",
     revertNotFoundDesc: "Cannot find the modified code to revert in the file.",
+    // G-code file required check
+    gcodeRequired: "G-code File Required",
+    gcodeRequiredDescription: "Please upload a G-code file first for analysis.",
+    // Advanced troubleshoot daily limit (free users)
+    troubleshootLimitReached: "Daily Troubleshoot Limit Reached",
+    troubleshootLimitDescription: "Free plan allows up to 5 advanced troubleshoot sessions per day. Please try again tomorrow or upgrade your plan.",
+    // Quick Prompts
+    quickPrompt: {
+      // G-code analysis (blue)
+      gcodeOptimize: "Optimize print time",
+      gcodeCheck: "Check G-code for issues",
+      // Printer troubleshooting (emerald)
+      stringing: "Strings on my print",
+      warping: "Lifting from bed",
+      // 3D Modeling (purple)
+      modeling: "Make a phone stand",
+      modelingHook: "Make a wall hook",
+    },
   },
   theme: {
     light: "Light",

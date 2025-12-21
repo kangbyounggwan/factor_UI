@@ -1577,6 +1577,140 @@ function mountRest(app) {
       res.status(500).json({ success: false, error: error.message || '이동 실패' });
     }
   });
+
+  // ============================================
+  // 카메라 WebRTC 상태 조회 API (MediaMTX API 활용)
+  // ============================================
+
+  // MediaMTX API 기본 주소 (환경변수 또는 기본값)
+  const MEDIAMTX_API_URL = process.env.MEDIAMTX_API_URL || 'http://127.0.0.1:9997';
+
+  // GET /api/camera/:deviceUuid/stream-status - 특정 카메라 스트림 상태 조회
+  app.get('/api/camera/:deviceUuid/stream-status', async (req, res) => {
+    try {
+      const { deviceUuid } = req.params;
+      const streamName = `cam-${deviceUuid}`;
+
+      // MediaMTX API v3 호출 - /v3/paths/get/{name} 형식
+      const apiUrl = `${MEDIAMTX_API_URL}/v3/paths/get/${encodeURIComponent(streamName)}`;
+      console.log('[CAMERA] Checking stream status:', apiUrl);
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+
+      if (response.status === 404) {
+        // 스트림이 존재하지 않음
+        return res.json({
+          success: true,
+          data: {
+            device_uuid: deviceUuid,
+            stream_name: streamName,
+            status: 'offline',
+            streaming: false,
+            message: '스트림이 존재하지 않습니다.',
+          },
+        });
+      }
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        console.warn('[CAMERA] MediaMTX API error:', response.status, text);
+        return res.status(502).json({
+          success: false,
+          error: 'MediaMTX API 오류',
+          status: response.status,
+        });
+      }
+
+      const pathData = await response.json();
+      console.log('[CAMERA] Stream data:', pathData);
+
+      // 스트림 상태 분석
+      const hasSource = pathData.source !== null && pathData.source !== undefined;
+      const hasReaders = (pathData.readers?.length || 0) > 0;
+      const isReady = pathData.ready === true;
+
+      res.json({
+        success: true,
+        data: {
+          device_uuid: deviceUuid,
+          stream_name: streamName,
+          status: isReady ? 'online' : (hasSource ? 'connecting' : 'offline'),
+          streaming: isReady && hasSource,
+          ready: isReady,
+          has_source: hasSource,
+          readers_count: pathData.readers?.length || 0,
+          source_type: pathData.source?.type || null,
+          // WebRTC 플레이어 URL (프론트엔드에서 사용)
+          webrtc_url: isReady ? `https://factor.io.kr/webrtc/${streamName}` : null,
+          rtsp_url: isReady ? `rtsp://factor.io.kr:8554/${streamName}` : null,
+        },
+      });
+    } catch (error) {
+      console.error('[CAMERA] Stream status error:', error);
+      res.status(500).json({ success: false, error: error.message || '스트림 상태 조회 실패' });
+    }
+  });
+
+  // GET /api/cameras/streams - 모든 활성 스트림 목록 조회
+  app.get('/api/cameras/streams', async (req, res) => {
+    try {
+      // MediaMTX API v3 - 모든 경로 조회
+      const apiUrl = `${MEDIAMTX_API_URL}/v3/paths/list`;
+      console.log('[CAMERA] Fetching all streams:', apiUrl);
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        console.warn('[CAMERA] MediaMTX API error:', response.status, text);
+        return res.status(502).json({
+          success: false,
+          error: 'MediaMTX API 오류',
+          status: response.status,
+        });
+      }
+
+      const data = await response.json();
+      const paths = data.items || [];
+
+      // cam-* 패턴의 스트림만 필터링하고 상태 정보 추출
+      const cameraStreams = paths
+        .filter(p => p.name && p.name.startsWith('cam-'))
+        .map(p => {
+          const deviceUuid = p.name.replace('cam-', '');
+          const hasSource = p.source !== null && p.source !== undefined;
+          const isReady = p.ready === true;
+
+          return {
+            device_uuid: deviceUuid,
+            stream_name: p.name,
+            status: isReady ? 'online' : (hasSource ? 'connecting' : 'offline'),
+            streaming: isReady && hasSource,
+            ready: isReady,
+            has_source: hasSource,
+            readers_count: p.readers?.length || 0,
+            source_type: p.source?.type || null,
+            webrtc_url: isReady ? `https://factor.io.kr/webrtc/${p.name}` : null,
+          };
+        });
+
+      res.json({
+        success: true,
+        data: cameraStreams,
+        count: cameraStreams.length,
+        total_paths: paths.length,
+      });
+    } catch (error) {
+      console.error('[CAMERA] Streams list error:', error);
+      res.status(500).json({ success: false, error: error.message || '스트림 목록 조회 실패' });
+    }
+  });
 }
 
 export function createApp({ staticDir, enableRest = true, enableWs = true } = {}) {

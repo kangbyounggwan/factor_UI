@@ -27,7 +27,6 @@ import {
 // Lazy load refactored components
 const PrintSettingsDialog = lazy(() => import("@/components/ai/PrintSettingsDialog").then(m => ({ default: m.PrintSettingsDialog })));
 const AIArchiveSidebar = lazy(() => import("@/components/ai/AIArchiveSidebar").then(m => ({ default: m.AIArchiveSidebar })));
-const TextToImageTab = lazy(() => import("@/components/ai/TextToImageTab").then(m => ({ default: m.TextToImageTab })));
 
 // Load dialog components lazily
 import {
@@ -51,7 +50,6 @@ import {
   Pause,
   Image,
   Box,
-  FileText,
   File as FileIcon,
   Printer as PrinterIcon,
   Settings,
@@ -93,8 +91,15 @@ import { usePrintJob } from "@/hooks/ai/usePrintJob";
 import { downloadAndUploadModel, downloadAndUploadSTL, downloadAndUploadThumbnail, deleteModelFiles } from "@shared/services/supabaseService/aiStorage";
 
 import { subscribeToTaskUpdates, BackgroundTask } from "@shared/services/backgroundSlicing";
-import { canGenerateAiModel, getAiGenerationLimit, getRemainingAiGenerations } from "@shared/utils/subscription";
-import { SubscriptionPlan } from "@shared/types/subscription";
+import {
+  getPlanInfo,
+  getUserUsage,
+  canGenerateAiModelWithPlanInfo,
+  getAiGenerationLimitFromPlanInfo,
+  getRemainingAiGenerationsFromPlanInfo,
+  incrementUsage
+} from "@shared/utils/subscription";
+import { SubscriptionPlan, SubscriptionPlanInfo, USAGE_TYPES } from "@shared/types/subscription";
 import { generateShortFilename } from "@shared/services/geminiService";
 import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
 import { useSidebarState } from "@/hooks/useSidebarState";
@@ -119,7 +124,6 @@ const AI = () => {
   const [currentGlbUrl, setCurrentGlbUrl] = useState<string | null>(null); // 현재 모델의 GLB URL
   const [currentStlUrl, setCurrentStlUrl] = useState<string | null>(null); // 현재 모델의 STL URL
   const [currentGCodeUrl, setCurrentGCodeUrl] = useState<string | null>(null); // 현재 모델의 GCode URL
-  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null); // Text-to-Image 생성 이미지 URL
 
   const {
     isSlicing, setIsSlicing,
@@ -157,7 +161,7 @@ const AI = () => {
   });
   const [selectedImageHasModel, setSelectedImageHasModel] = useState<boolean>(false); // 선택된 이미지의 3D 모델 존재 여부
   // 모델 아카이브 필터 상태
-  type ArchiveFilter = 'all' | 'text-to-3d' | 'image-to-3d' | 'text-to-image';
+  type ArchiveFilter = 'all' | 'text-to-3d' | 'image-to-3d';
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>('all');
   // 아카이브 뷰 모드 (RAW / 3D 모델)
   const [archiveViewMode, setArchiveViewMode] = useState<'raw' | '3d'>('3d');
@@ -176,8 +180,9 @@ const AI = () => {
 
 
 
-  // 구독 플랜 상태
+  // 구독 플랜 상태 (DB 기반)
   const [userPlan, setUserPlan] = useState<SubscriptionPlan>('free');
+  const [planInfo, setPlanInfo] = useState<SubscriptionPlanInfo | null>(null);
   const [monthlyAiUsage, setMonthlyAiUsage] = useState<number>(0);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState<boolean>(false);
 
@@ -257,7 +262,7 @@ const AI = () => {
     }
   });
 
-  // 구독 플랜 및 AI 사용량 로드
+  // 구독 플랜 및 AI 사용량 로드 (DB 기반)
   useEffect(() => {
     const loadSubscriptionData = async () => {
       if (!user?.id) return;
@@ -268,24 +273,21 @@ const AI = () => {
           .from('user_subscriptions')
           .select('plan_name')
           .eq('user_id', user.id)
+          .eq('status', 'active')
           .single();
 
         const planName = (subscription?.plan_name?.toLowerCase() || 'free') as SubscriptionPlan;
         setUserPlan(planName);
 
-        // 2. 이번 달 AI 모델 생성 횟수 로드
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+        // 2. 플랜 정보 로드 (DB에서)
+        const info = await getPlanInfo(planName);
+        setPlanInfo(info);
 
-        const { count } = await supabase
-          .from('ai_generated_models')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .gte('created_at', startOfMonth)
-          .lte('created_at', endOfMonth);
-
-        setMonthlyAiUsage(count || 0);
+        // 3. 사용량 로드 (user_usage 테이블에서)
+        const usage = await getUserUsage(user.id);
+        if (usage) {
+          setMonthlyAiUsage(usage.ai_model_generation);
+        }
       } catch (error) {
         console.error('[AI] Failed to load subscription data:', error);
       }
@@ -402,7 +404,7 @@ const AI = () => {
 
   // Sync archiveFilter with activeTab
   useEffect(() => {
-    if (activeTab === 'text-to-3d' || activeTab === 'image-to-3d' || activeTab === 'text-to-image') {
+    if (activeTab === 'text-to-3d' || activeTab === 'image-to-3d') {
       setArchiveFilter(activeTab as ArchiveFilter);
     }
   }, [activeTab]);
@@ -477,7 +479,17 @@ const AI = () => {
     }
   }, [location.state, user]);
 
-
+  // AI Chat에서 3D 모델링 퀵 버튼으로 전달된 프롬프트 처리
+  useEffect(() => {
+    const state = location.state as Record<string, unknown> | null;
+    if (state?.prompt && typeof state.prompt === 'string') {
+      console.log('[AI] Setting prompt from navigation state:', state.prompt);
+      setTextPrompt(state.prompt);
+      setActiveTab('text-to-3d');
+      // state 초기화 (뒤로가기 시 재로드 방지)
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   // 이미지 삭제 확인 다이얼로그 상태
   const [deleteImageDialogOpen, setDeleteImageDialogOpen] = useState<boolean>(false);
@@ -774,10 +786,10 @@ const AI = () => {
       return;
     }
 
-    // 구독 플랜 제한 체크 (text-to-3d, image-to-3d 탭에서만)
+    // 구독 플랜 제한 체크 (text-to-3d, image-to-3d 탭에서만) - DB 기반
     if (activeTab === 'text-to-3d' || activeTab === 'image-to-3d') {
-      if (!canGenerateAiModel(userPlan, monthlyAiUsage)) {
-        const limit = getAiGenerationLimit(userPlan);
+      if (!canGenerateAiModelWithPlanInfo(planInfo, monthlyAiUsage)) {
+        const limit = getAiGenerationLimitFromPlanInfo(planInfo);
         setShowUpgradePrompt(true);
         toast({
           title: t('ai.limitReached'),
@@ -941,7 +953,10 @@ const AI = () => {
           // 모델 목록 새로고침
           await reloadModels();
 
-          // 월별 AI 사용량 증가
+          // 월별 AI 사용량 증가 (DB에 기록)
+          if (user?.id) {
+            await incrementUsage(user.id, USAGE_TYPES.AI_MODEL_GENERATION);
+          }
           setMonthlyAiUsage(prev => prev + 1);
         } else {
           // URL이 없으면 실패 처리
@@ -1110,7 +1125,10 @@ const AI = () => {
           // 모델 목록 새로고침
           await reloadModels();
 
-          // 월별 AI 사용량 증가
+          // 월별 AI 사용량 증가 (DB에 기록)
+          if (user?.id) {
+            await incrementUsage(user.id, USAGE_TYPES.AI_MODEL_GENERATION);
+          }
           setMonthlyAiUsage(prev => prev + 1);
         } else {
           await updateAIModel(supabase, dbModelId, {
@@ -1151,9 +1169,9 @@ const AI = () => {
     }
   };
 
-  // AI 생성 제한 정보
-  const aiLimit = getAiGenerationLimit(userPlan);
-  const remainingGenerations = getRemainingAiGenerations(userPlan, monthlyAiUsage);
+  // AI 생성 제한 정보 (DB 기반)
+  const aiLimit = getAiGenerationLimitFromPlanInfo(planInfo);
+  const remainingGenerations = getRemainingAiGenerationsFromPlanInfo(planInfo, monthlyAiUsage);
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -1259,20 +1277,6 @@ const AI = () => {
                     >
                       <ImageIcon className="w-4 h-4 mr-2" />
                       {t('ai.imageTo3D')}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setActiveTab('text-to-image')}
-                      className={cn(
-                        "flex-1 rounded-full h-9 text-sm font-medium transition-colors",
-                        activeTab === 'text-to-image'
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      <FileText className="w-4 h-4 mr-2" />
-                      {t('ai.textToImage')}
                     </Button>
                   </div>
                 </div>
@@ -1470,19 +1474,6 @@ const AI = () => {
                       </CardContent>
                     </Card>
                     </div>
-                  </Suspense>
-                </TabsContent>
-
-                {/* 텍스트 → 이미지 탭 */}
-                <TabsContent value="text-to-image" className="flex-1 min-h-0 overflow-hidden">
-                  <Suspense fallback={<div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}>
-                    <TextToImageTab
-                    prompt={textPrompt}
-                    setPrompt={setTextPrompt}
-                    isProcessing={isProcessing}
-                    generateImage={generateModel}
-                    generatedImageUrl={generatedImageUrl}
-                    />
                   </Suspense>
                 </TabsContent>
 

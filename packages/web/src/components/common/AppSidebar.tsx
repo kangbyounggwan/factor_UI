@@ -26,10 +26,19 @@ import {
   LayoutGrid,
   FolderOpen,
   ChevronLeft,
+  ChevronDown,
   FileCode,
+  Printer,
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle,
+  Info,
+  X,
+  Camera,
+  Wrench,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import type { User } from "@supabase/supabase-js";
 import type { SubscriptionPlan } from "@shared/types/subscription";
@@ -57,7 +66,7 @@ export interface ChatSession {
 export type SettingsTab = 'profile' | 'account' | 'subscription' | 'notifications' | 'api-keys';
 
 // PrinterDetail 탭 타입
-export type PrinterDetailTab = 'all' | 'monitoring' | 'files' | 'settings';
+export type PrinterDetailTab = 'all' | 'monitoring' | 'files' | 'settings' | 'settings-equipment' | 'settings-camera';
 
 // 보고서 아카이브 아이템 타입
 export interface ReportArchiveItem {
@@ -67,6 +76,26 @@ export interface ReportArchiveItem {
   overallGrade?: string;
   totalIssues?: number;
   createdAt: Date;
+}
+
+// 프린터 빠른 선택 아이템 타입
+export interface PrinterQuickItem {
+  id: string;
+  name: string;
+  model?: string;
+  isOnline: boolean;
+  progress?: number; // 0-100
+  currentJob?: string;
+}
+
+// 프린터 알림 타입
+export type PrinterAlertType = 'error' | 'warning' | 'info' | 'success';
+export interface PrinterAlert {
+  id: string;
+  type: PrinterAlertType;
+  printerName: string;
+  message: string;
+  timestamp: Date;
 }
 
 interface AppSidebarProps {
@@ -81,7 +110,7 @@ interface AppSidebarProps {
   userPlan?: SubscriptionPlan;
   onLoginClick?: () => void;
   onSignOut?: () => void;
-  mode?: 'chat' | 'dashboard' | 'settings' | 'create' | 'printer-detail' | 'archive'; // 사이드바 모드
+  mode?: 'chat' | 'dashboard' | 'settings' | 'create' | 'printer-detail' | 'archive' | 'admin'; // 사이드바 모드
   // Settings 모드용 props
   activeSettingsTab?: SettingsTab;
   onSettingsTabChange?: (tab: SettingsTab) => void;
@@ -102,6 +131,13 @@ interface AppSidebarProps {
   currentReportId?: string | null;
   onSelectReport?: (report: ReportArchiveItem) => void;
   onDeleteReport?: (reportId: string) => void;
+  onViewMoreReports?: () => void; // 더보기 클릭 콜백
+  archiveViewActive?: boolean; // 아카이브 뷰 활성화 상태
+  // Dashboard 모드용 props (프린터 빠른 선택 + 알림)
+  printers?: PrinterQuickItem[];
+  onSelectPrinter?: (printer: PrinterQuickItem) => void;
+  alerts?: PrinterAlert[];
+  onDismissAlert?: (alertId: string) => void;
 }
 
 // 플랜별 표시 설정
@@ -161,8 +197,16 @@ export function AppSidebar({
   currentReportId = null,
   onSelectReport,
   onDeleteReport,
+  onViewMoreReports,
+  archiveViewActive = false,
+  // Dashboard 모드용 props
+  printers = [],
+  onSelectPrinter,
+  alerts = [],
+  onDismissAlert,
 }: AppSidebarProps) {
   const { t } = useTranslation();
+  const location = useLocation();
 
   // userPlan이 undefined이거나 planConfig에 없는 경우 'free'로 fallback
   const safePlan = userPlan && planConfig[userPlan] ? userPlan : 'free';
@@ -217,14 +261,16 @@ export function AppSidebar({
                     <p className="text-sm font-semibold text-foreground">
                       {t('aiChat.reportArchive', '보고서 아카이브')}
                     </p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => window.location.href = '/gcode-analytics/archive'}
-                    >
-                      {t('aiChat.viewMore', '더보기')}
-                    </Button>
+                    {onViewMoreReports && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={onViewMoreReports}
+                      >
+                        {archiveViewActive ? t('aiChat.close', '닫기') : t('aiChat.viewMore', '더보기')}
+                      </Button>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     {reports.slice(0, 3).map((report) => (
@@ -553,26 +599,227 @@ export function AppSidebar({
                   <span>{t('printerDetail.fileManagement', '파일 관리')}</span>
                 </button>
 
-                <button
-                  onClick={() => onPrinterTabChange?.('settings')}
+                {/* 설정 메뉴 (서브메뉴 포함) */}
+                <div className="space-y-1">
+                  <button
+                    onClick={() => onPrinterTabChange?.('settings-equipment')}
+                    className={cn(
+                      "w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                      activePrinterTab?.startsWith('settings')
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Settings className="h-4 w-4 shrink-0" />
+                      <span>{t('printerDetail.settingsMenu', '설정')}</span>
+                    </div>
+                    <ChevronDown className={cn(
+                      "h-4 w-4 shrink-0 transition-transform",
+                      activePrinterTab?.startsWith('settings') ? "rotate-0" : "-rotate-90"
+                    )} />
+                  </button>
+
+                  {/* 설정 서브메뉴 */}
+                  {activePrinterTab?.startsWith('settings') && (
+                    <div className="ml-4 pl-3 border-l border-border space-y-1">
+                      <button
+                        onClick={() => onPrinterTabChange?.('settings-equipment')}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                          activePrinterTab === 'settings-equipment'
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        <Wrench className="h-4 w-4 shrink-0" />
+                        <span>{t('printerDetail.settingsEquipment', '설비 설정')}</span>
+                      </button>
+
+                      <button
+                        onClick={() => onPrinterTabChange?.('settings-camera')}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                          activePrinterTab === 'settings-camera'
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        <Camera className="h-4 w-4 shrink-0" />
+                        <span>{t('printerDetail.settingsCamera', '카메라 설정')}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </nav>
+            </>
+          ) : mode === 'admin' ? (
+            /* Admin 모드 - 관리자 메뉴 */
+            <>
+              <p className="text-sm font-semibold text-foreground px-2 py-2">
+                {t('admin.title', '관리자')}
+              </p>
+              <nav className="space-y-1">
+                <Link
+                  to="/admin"
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                    activePrinterTab === 'settings'
-                      ? "bg-primary text-primary-foreground"
+                    location.pathname === '/admin'
+                      ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
-                  <Settings className="h-4 w-4 shrink-0" />
-                  <span>{t('printerDetail.settings', '설비 설정')}</span>
-                </button>
+                  <Shield className="h-4 w-4 shrink-0" />
+                  <span>{t('admin.dashboard', '관리자 대시보드')}</span>
+                </Link>
+
+                <Link
+                  to="/admin/users"
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    location.pathname === '/admin/users'
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <UserIcon className="h-4 w-4 shrink-0" />
+                  <span>{t('admin.userStats', '사용자 통계')}</span>
+                </Link>
+
+                <Link
+                  to="/admin/subscriptions"
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    location.pathname === '/admin/subscriptions'
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <CreditCard className="h-4 w-4 shrink-0" />
+                  <span>{t('admin.subscriptions', '구독 현황')}</span>
+                </Link>
+
+                <Link
+                  to="/admin/printers"
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    location.pathname === '/admin/printers'
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <Printer className="h-4 w-4 shrink-0" />
+                  <span>{t('admin.printers', '프린터')}</span>
+                </Link>
               </nav>
             </>
           ) : (
-            /* Dashboard 모드 - 빈 메뉴 영역 */
-            <div className="px-2 py-4">
-              <p className="text-sm text-muted-foreground text-center">
-                {t('dashboard.sidebarPlaceholder', '메뉴 준비 중...')}
-              </p>
+            /* Dashboard 모드 - 프린터 빠른 선택 + 알림 */
+            <div className="flex flex-col gap-4">
+              {/* 프린터 빠른 선택 */}
+              <div className="px-2">
+                <div className="flex items-center justify-between px-2 py-2">
+                  <p className="text-sm font-semibold text-foreground">
+                    {t('dashboard.printerQuickSelect', '프린터')}
+                  </p>
+                </div>
+                {printers.length > 0 ? (
+                  <div className="space-y-2">
+                    {printers.slice(0, 4).map((printer) => (
+                      <div
+                        key={printer.id}
+                        onClick={() => onSelectPrinter?.(printer)}
+                        className={cn(
+                          "flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all",
+                          "bg-background border border-border/60 shadow-sm hover:border-border hover:shadow-md"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-2.5 h-2.5 rounded-full shrink-0",
+                          printer.isOnline ? "bg-green-500" : "bg-gray-400"
+                        )} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{printer.name}</p>
+                          {printer.model && (
+                            <p className="text-xs text-muted-foreground truncate">{printer.model}</p>
+                          )}
+                        </div>
+                        {printer.progress !== undefined && printer.progress > 0 && (
+                          <div className="text-xs font-medium text-blue-500">
+                            {printer.progress}%
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-6 text-center">
+                    <Printer className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                    <p className="text-xs text-muted-foreground">
+                      {t('dashboard.noRegisteredPrinters', '아직 등록된 프린터가 없습니다.')}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* 알림/경고 */}
+              <div className="px-2">
+                <div className="flex items-center justify-between px-2 py-2">
+                  <p className="text-sm font-semibold text-foreground">
+                    {t('dashboard.alerts', '알림')}
+                  </p>
+                  {alerts.length > 0 && (
+                    <span className="text-xs text-muted-foreground">{alerts.length}</span>
+                  )}
+                </div>
+                {alerts.length > 0 ? (
+                  <div className="space-y-2">
+                    {alerts.slice(0, 5).map((alert) => {
+                      const AlertIcon = alert.type === 'error' ? AlertCircle
+                        : alert.type === 'warning' ? AlertTriangle
+                        : alert.type === 'success' ? CheckCircle
+                        : Info;
+                      const alertColor = alert.type === 'error' ? 'text-red-500'
+                        : alert.type === 'warning' ? 'text-amber-500'
+                        : alert.type === 'success' ? 'text-green-500'
+                        : 'text-blue-500';
+
+                      return (
+                        <div
+                          key={alert.id}
+                          className="flex items-start gap-2 p-2.5 rounded-lg bg-muted/50 group"
+                        >
+                          <AlertIcon className={cn("h-4 w-4 shrink-0 mt-0.5", alertColor)} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">{alert.printerName}</p>
+                            <p className="text-xs text-muted-foreground line-clamp-2">{alert.message}</p>
+                          </div>
+                          {onDismissAlert && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDismissAlert(alert.id);
+                              }}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-6 text-center">
+                    <Bell className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                    <p className="text-xs text-muted-foreground">
+                      {t('dashboard.noAlerts', '새로운 알림이 없습니다')}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

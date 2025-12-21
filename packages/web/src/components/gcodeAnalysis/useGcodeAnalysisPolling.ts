@@ -187,15 +187,15 @@ export const convertAnalysisResultToReportData = (
         ...stat,
         description: stat.description || ISSUE_TYPE_LABELS[stat.type] || stat.type,
       })),
-      detailedIssues: issues_found.map((issue, idx) => ({
+      detailedIssues: (issues_found || []).map((issue, idx) => ({
         id: issue.id || `issue-${idx}`,
         type: issue.type,
         issueType: issue.type,
         severity: issue.severity,
         is_grouped: issue.is_grouped,
         count: issue.count,
-        lines: issue.lines,
-        line: issue.lines[0],
+        lines: issue.lines || [],
+        line: issue.lines?.[0] ?? 0,
         title: issue.title,
         description: issue.description,
         all_issues: issue.all_issues,  // gcode_context 포함

@@ -41,6 +41,10 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
   // ▶︎ WebRTC URL만 유지
   const [webrtcUrl, setWebrtcUrl] = useState<string | null>(null);
 
+  // 카메라 유형 (octoprint: WebRTC, external: 직접 URL)
+  const [cameraType, setCameraType] = useState<'octoprint' | 'external'>('octoprint');
+  const [externalCameraUrl, setExternalCameraUrl] = useState<string | null>(null);
+
   // 카메라 URL 설정 모달 상태
   const [showUrlModal, setShowUrlModal] = useState(false);
   const [cameraUrl, setCameraUrl] = useState('');
@@ -65,25 +69,27 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
     setWebrtcUrl(null);
   }, []);
 
-  // DB에서 입력 URL 조회
-  async function getCameraStreamInput(deviceUuid: string): Promise<string | null> {
+  // DB에서 카메라 설정 조회 (URL + 타입)
+  async function getCameraSettings(deviceUuid: string): Promise<{ streamUrl: string | null; cameraType: 'octoprint' | 'external' }> {
     try {
-      console.log('[CAM][DB] Fetching stream_url for device:', deviceUuid);
+      console.log('[CAM][DB] Fetching camera settings for device:', deviceUuid);
       const { data, error } = await supabase
         .from('cameras')
-        .select('stream_url')
+        .select('stream_url, camera_type')
         .eq('device_uuid', deviceUuid)
         .maybeSingle();
       if (error) {
-        console.warn('[CAM][DB] stream_url 조회 실패:', error.message);
-        return null;
+        console.warn('[CAM][DB] camera settings 조회 실패:', error.message);
+        return { streamUrl: null, cameraType: 'octoprint' };
       }
-      const streamUrl = (data as { stream_url?: string } | null)?.stream_url ?? null;
-      console.log('[CAM][DB] Retrieved stream_url:', streamUrl);
-      return streamUrl;
+      const camData = data as { stream_url?: string; camera_type?: string } | null;
+      const streamUrl = camData?.stream_url ?? null;
+      const type = (camData?.camera_type === 'external' ? 'external' : 'octoprint') as 'octoprint' | 'external';
+      console.log('[CAM][DB] Retrieved camera settings:', { streamUrl, cameraType: type });
+      return { streamUrl, cameraType: type };
     } catch (e) {
-      console.warn('[CAM][DB] stream_url 조회 예외:', e);
-      return null;
+      console.warn('[CAM][DB] camera settings 조회 예외:', e);
+      return { streamUrl: null, cameraType: 'octoprint' };
     }
   }
 
@@ -183,7 +189,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
     return () => { if (unsub) unsub(); };
   }, [cameraId]);
 
-  // ── Start: 라즈베리로 WebRTC 파이프라인 시작 명령 ────────────────────────────
+  // ── Start: 카메라 스트리밍 시작 ────────────────────────────
   const startStreaming = useCallback(async () => {
     if (!isConnected) {
       setStreamError(t('camera.serverConnectionRequired'));
@@ -194,8 +200,10 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
     setCameraStatus('starting');
 
     try {
-      // 입력(MJPEG/RTSP 등)
-      const input = await getCameraStreamInput(cameraId);
+      // 카메라 설정 조회 (URL + 타입)
+      const { streamUrl: input, cameraType: type } = await getCameraSettings(cameraId);
+      setCameraType(type);
+
       if (!input) {
         // URL이 없으면 모달 열기
         setIsStreaming(false);
@@ -203,6 +211,17 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
         setShowUrlModal(true);
         return;
       }
+
+      // 외부 카메라: 직접 URL 표시 (WebRTC 없음)
+      if (type === 'external') {
+        console.log('[CAM] External camera mode - direct URL display:', input);
+        setExternalCameraUrl(input);
+        setCameraStatus('online');
+        return;
+      }
+
+      // OctoPrint 플러그인: WebRTC 파이프라인 시작
+      console.log('[CAM] OctoPrint plugin mode - starting WebRTC pipeline');
 
       // 해상도 파싱
       const [w, h] = (resolution || '').split('x').map((v) => Number(v));
@@ -239,12 +258,17 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
   const stopStreaming = useCallback(async () => {
     setIsStreaming(false);
     cleanupVideo();
-    try {
-      await publishCameraStop(cameraId);
-    } catch (e) {
-      console.warn('[CAM][MQTT] stop error', e);
+    setExternalCameraUrl(null);
+
+    // OctoPrint 플러그인만 MQTT stop 명령 전송
+    if (cameraType === 'octoprint') {
+      try {
+        await publishCameraStop(cameraId);
+      } catch (e) {
+        console.warn('[CAM][MQTT] stop error', e);
+      }
     }
-  }, [cleanupVideo, cameraId]);
+  }, [cleanupVideo, cameraId, cameraType]);
 
   // 플랜별 자동 재연결 타이머 (무료: 5분, 프로/엔터: 무제한)
   useEffect(() => {
@@ -282,6 +306,7 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
   }, []);
 
   const showIframe = !!webrtcUrl && !webrtcUrl.endsWith('.m3u8');
+  const showExternalCamera = cameraType === 'external' && !!externalCameraUrl;
 
 
   return (
@@ -292,8 +317,18 @@ export const CameraFeed = ({ cameraId, isConnected, resolution }: CameraFeedProp
             {isStreaming ? (
               isConnected ? (
                 <div className="relative w-full h-full">
-                  {/* WebRTC(iframe)만 사용 */}
-                  {showIframe ? (
+                  {/* 외부 카메라: 직접 이미지/MJPEG 표시 */}
+                  {showExternalCamera ? (
+                    <img
+                      src={externalCameraUrl}
+                      alt="External camera feed"
+                      className="absolute inset-0 w-full h-full object-contain"
+                      onError={() => {
+                        setStreamError(t('camera.externalLoadFailed', '외부 카메라 스트림을 불러올 수 없습니다'));
+                      }}
+                    />
+                  ) : showIframe ? (
+                    /* OctoPrint 플러그인: WebRTC(iframe) 사용 */
                     <iframe
                       ref={iframeRef}
                       src={`${webrtcUrl!}?autoplay=1&muted=1`}

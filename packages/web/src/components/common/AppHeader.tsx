@@ -12,12 +12,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sun, Moon, Globe, MessageSquare, Printer, Sparkles, Rocket, Crown, Building2 } from "lucide-react";
+import { Sun, Moon, Globe, MessageSquare, Printer, Sparkles, Rocket, Crown, Building2, Shield } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import type { SubscriptionPlan } from "@shared/types/subscription";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useUserPlan } from "@shared/hooks/useUserPlan";
+import { useUserRole } from "@/hooks/useUserRole";
 
 // 플랜별 배지 스타일 설정 (밝고 투명한 색상)
 const planBadgeConfig: Record<SubscriptionPlan, {
@@ -76,6 +77,7 @@ export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, show
   const navigate = useNavigate();
   const { user } = useAuth();
   const { plan: userPlan } = useUserPlan(user?.id);
+  const { isAdmin } = useUserRole();
 
   const currentLanguage = i18n.language || 'ko';
 
@@ -91,6 +93,7 @@ export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, show
   // 현재 활성 탭
   const isAITools = location.pathname.includes('/ai-chat') || location.pathname.includes('/create');
   const isPrinter = location.pathname.includes('/dashboard') || location.pathname.includes('/printer');
+  const isAdminPage = location.pathname.includes('/admin');
 
   return (
     <header
@@ -139,6 +142,23 @@ export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, show
                 <Printer className="w-4 h-4 mr-2" />
                 {t('nav.printers', '프린터')}
               </Button>
+              {/* 관리자 탭 - 관리자만 표시 */}
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate('/admin')}
+                  className={cn(
+                    "rounded-full px-5 h-9 text-sm font-medium transition-colors",
+                    isAdminPage
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Shield className="w-4 h-4 mr-2" />
+                  {t('nav.admin', '관리자')}
+                </Button>
+              )}
             </div>
           </div>
         )}

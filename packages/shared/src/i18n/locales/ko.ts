@@ -195,7 +195,7 @@ export default {
     description: "텍스트와 이미지를 AI로 3D 모델로 변환하고, 프린터와 연동해 즉시 출력까지 진행하세요.",
     textTo3D: "텍스트 → 3D",
     imageTo3D: "이미지 → 3D",
-    textToImage: "텍스트 → 이미지",
+    loginToGenerate: "AI 모델을 생성하려면 로그인이 필요합니다. 로그인하시면 더 많은 기능을 이용하실 수 있습니다.",
     textPrompt: "텍스트 입력",
     textPromptPlaceholder: "생성하고 싶은 3D 모델을 설명해주세요...",
     imageUpload: "이미지 업로드",
@@ -569,6 +569,10 @@ export default {
     paidModels: "유료 모델",
     fastAndEfficient: "빠르고 효율적",
     fastResponse: "빠른 응답",
+    starterExperience: "Starter 체험",
+    trialRemaining: "체험 {{count}}회 남음",
+    trialLimitReached: "오늘 체험 한도 도달",
+    trialLimitDescription: "무료 플랜은 하루 3회까지 Gemini 3.0 Flash를 체험할 수 있습니다. 내일 다시 시도하거나 플랜을 업그레이드해주세요.",
     latestModel: "최신 모델",
     mostPowerful: "가장 강력한 모델",
     balancedPerformance: "균형 잡힌 성능",
@@ -598,7 +602,7 @@ export default {
     retryAnalysis: "다시 분석",
     llmAnalysisStarting: "LLM 분석 시작...",
     // 보고서 카드
-    gcodeAnalysisReport: "G-code 분석 보고서",
+    gcodeAnalysisReport: "G-code 보고서",
     score: "점수",
     issues: "이슈",
     layers: "레이어",
@@ -628,6 +632,24 @@ export default {
     revertFailed: "되돌리기 실패",
     revertNotFound: "수정된 코드를 찾을 수 없음",
     revertNotFoundDesc: "되돌릴 수정된 코드를 파일에서 찾을 수 없습니다.",
+    // G-code 파일 필수 체크
+    gcodeRequired: "G-code 파일 필요",
+    gcodeRequiredDescription: "G-code 분석을 위해 먼저 G-code 파일을 업로드해주세요.",
+    // 고급 문제진단 일일 한도 (무료 사용자)
+    troubleshootLimitReached: "오늘 고급 문제진단 한도 도달",
+    troubleshootLimitDescription: "무료 플랜은 하루 5회까지 고급 문제진단을 사용할 수 있습니다. 내일 다시 시도하거나 플랜을 업그레이드해주세요.",
+    // 빠른 테스트 버튼 (Quick Prompts)
+    quickPrompt: {
+      // G-code 분석 (blue)
+      gcodeOptimize: "출력 시간 줄이고 싶어",
+      gcodeCheck: "G-code 문제 확인해줘",
+      // 프린터 문제 진단 (emerald)
+      stringing: "실 같은 게 달려있어요",
+      warping: "베드에서 떨어져요",
+      // 3D 모델링 (purple)
+      modeling: "스마트폰 거치대 만들어줘",
+      modelingHook: "벽걸이 후크 만들어줘",
+    },
   },
   profile: {
     // UserSettings 페이지
@@ -761,6 +783,11 @@ export default {
     statistics: "통계",
     quickActions: "빠른 작업",
     sidebarPlaceholder: "메뉴 준비 중...",
+    // 사이드바 - 프린터 빠른 선택
+    printerQuickSelect: "프린터",
+    // 사이드바 - 알림
+    alerts: "알림",
+    noAlerts: "새로운 알림이 없습니다",
     // 프린터 상태
     status: {
       idle: "대기",
@@ -928,6 +955,9 @@ export default {
     selectFirmware: "펌웨어 선택",
     currentModel: "현재 모델",
     connection: "연결",
+    connectionType: "연결 방식",
+    local: "로컬",
+    server: "서버",
     cameraUrl: "카메라 URL",
     cameraUrlPlaceholder: "예: http://192.168.1.100/webcam",
     cameraUrlComingSoon: "카메라 URL 설정은 곧 제공됩니다.",
@@ -937,7 +967,7 @@ export default {
     loginRequired: "로그인이 필요합니다",
     loginRequiredDescription: "프린터 및 그룹 관리 기능을 사용하려면 로그인해주세요.",
     // 구독 플랜 Features
-    planFeature1: "최대 2대 프린터",
+    planFeature1: "최대 1대 프린터",
     planFeature2: "기본 모니터링",
     planFeature3: "이메일 알림",
     planFeature4: "커뮤니티 지원",
@@ -1061,7 +1091,11 @@ export default {
     newFileNamePlaceholder: "새 파일명을 입력하세요",
     extensionAutoAdded: "확장자는 자동으로 추가됩니다",
     copyAndCreate: "복사하여 생성",
-    fileCopied: "파일 복사 완료"
+    fileCopied: "파일 복사 완료",
+    // 설정 메뉴
+    settingsMenu: "설정",
+    settingsEquipment: "설비 설정",
+    settingsCamera: "카메라 설정"
   },
   camera: {
     title: "실시간 카메라 피드",
@@ -1075,7 +1109,7 @@ export default {
     startStreamingDesc: "실시간 카메라 피드를 시작하려면 버튼을 눌러주세요",
     startStreaming: "스트리밍 시작",
     startStream: "스트림 시작",
-    starting: "시작 중...",
+    starting: "연결 중...",
     streamStarting: "스트림 시작 중",
     streamStartingDesc: "카메라 스트림을 준비하고 있습니다.",
     streamStartFailed: "스트림 시작에 실패했습니다.",
@@ -1096,10 +1130,53 @@ export default {
     cameraUrl: "카메라 URL",
     urlExample: "예시",
     urlRequired: "카메라 URL을 입력해주세요.",
-    urlSaveFailed: "카메라 URL 저장에 실패했습니다.",
+    urlSaveFailed: "카메라 설정 저장에 실패했습니다.",
     urlSaved: "카메라 URL이 저장되었습니다.",
     error: "오류",
-    success: "성공"
+    success: "성공",
+    // 카메라 설정 페이지 - 카메라 유형
+    type: "카메라 유형",
+    typeOctoprint: "OctoPrint 플러그인",
+    typeOctoprintDesc: "라즈베리파이 + Factor 플러그인을 사용하는 경우. WebRTC로 스트리밍됩니다.",
+    typeExternal: "외부 카메라",
+    typeExternalDesc: "외부 접속 가능한 카메라 URL (MJPEG, HTTP 스트림 등)",
+    // 카메라 설정 섹션
+    octoprintSettings: "OctoPrint 플러그인 설정",
+    externalSettings: "외부 카메라 설정",
+    settingsDescription: "프린터에 연결된 카메라의 스트리밍 URL을 설정합니다",
+    settingsSaved: "카메라 설정이 저장되었습니다.",
+    // 스트림 URL 입력
+    streamUrl: "스트림 URL",
+    urlPlaceholderOctoprint: "http://192.168.0.100:8080/video (로컬 네트워크 URL)",
+    urlPlaceholderExternal: "https://camera.example.com/stream (외부 접속 URL)",
+    urlDescriptionOctoprint: "라즈베리파이에서 접근 가능한 카메라 URL을 입력하세요 (로컬 네트워크)",
+    urlDescriptionExternal: "외부에서 접근 가능한 카메라 URL을 입력하세요 (공개 URL)",
+    urlNotSet: "카메라 URL이 설정되지 않았습니다",
+    // 테스트 관련
+    test: "테스트",
+    testFailed: "카메라 테스트에 실패했습니다",
+    testRequired: "저장하려면 테스트를 통과해야 합니다",
+    testRequiredToSave: "저장하려면 카메라 테스트를 통과해야 합니다.",
+    connectionTimeout: "연결 시간이 초과되었습니다. 라즈베리파이가 연결되어 있는지 확인해주세요.",
+    streamNotFound: "스트림을 찾을 수 없습니다. 라즈베리파이 연결을 확인해주세요.",
+    streamNotReady: "라즈베리파이가 응답했지만 스트림이 준비되지 않았습니다. FFmpeg 상태를 확인해주세요.",
+    // 미리보기
+    preview: "미리보기",
+    previewNote: "라즈베리파이를 통해 WebRTC로 스트리밍됩니다. 장치가 연결되어 있어야 합니다.",
+    previewFailed: "미리보기를 불러올 수 없습니다. URL이 올바른지 확인하세요.",
+    externalPreviewNote: "외부 카메라 URL을 직접 표시합니다. MJPEG 또는 정적 이미지 URL이 지원됩니다.",
+    // 연결 상태
+    deviceNotConnected: "장치가 연결되지 않았습니다",
+    connectingToRaspberry: "라즈베리파이에 연결 중...",
+    testingConnection: "연결 테스트 진행 중",
+    waitingForStream: "스트림 대기 중...",
+    retry: "다시 시도",
+    externalLoadFailed: "외부 카메라 스트림을 불러올 수 없습니다",
+    loadSuccess: "로드 성공",
+    loadFailed: "로드 실패",
+    testing: "테스트 중",
+    loadingImage: "이미지 로딩 중...",
+    waitingForTest: "테스트 대기 중..."
   },
   printHistory: {
     title: "프린트 히스토리",
@@ -1262,7 +1339,7 @@ export default {
     loginRequired: "로그인이 필요하거나 분석 결과가 없습니다.",
 
     // 보고서
-    reportTitle: "G-code 분석 보고서",
+    reportTitle: "G-code 보고서",
     analysisResult: "분석 결과",
     overallScore: "Overall Score",
     qualityScore: "품질 점수",
@@ -1747,6 +1824,7 @@ export default {
     year: "년",
     popular: "인기",
     bestValue: "가성비 최고",
+    professional: "전문적",
     premium: "프리미엄",
     contactSales: "영업팀 문의",
     upgradeToPro: "프로 플랜으로 업그레이드",
@@ -1816,49 +1894,51 @@ export default {
       free: {
         name: "무료",
         description: "개인 사용자를 위한 기본 플랜",
-        feature1: "최대 1대 프린터 연결",
-        feature2: "무제한 웹 스트리밍",
-        feature3: "푸시 알림",
-        feature4: "커뮤니티 지원"
+        feature1: "기본 AI 모델",
+        feature2: "60분 이상 감지 간격",
+        feature3: "최대 1대 프린터 연결",
+        feature4: "월 5개 3D 모델링",
+        feature5: "API 일부 제한"
       },
       basic: {
         name: "무료",
         description: "개인 사용자를 위한 기본 플랜",
-        feature1: "최대 1대 프린터 연결",
-        feature2: "무제한 웹 스트리밍",
-        feature3: "푸시 알림",
-        feature4: "커뮤니티 지원"
+        feature1: "기본 AI 모델",
+        feature2: "60분 이상 감지 간격",
+        feature3: "최대 1대 프린터 연결",
+        feature4: "월 5개 3D 모델링",
+        feature5: "API 일부 제한"
       },
       starter: {
         name: "스타터",
         description: "개인 및 소규모 프로젝트를 위한 플랜",
-        feature1: "최대 2대 프린터 연결",
-        feature2: "AI 고급 모델 사용",
-        feature3: "기본 AI 어시스턴트",
-        feature4: "실시간 이상 감지"
+        feature1: "고급 AI 모델",
+        feature2: "30분 이상 감지 간격",
+        feature3: "최대 1대 프린터 연결",
+        feature4: "월 20개 3D 모델링",
+        feature5: "API 일부 제한"
       },
       pro: {
         name: "프로",
         description: "소규모 팀과 전문가를 위한 플랜",
-        feature1: "최대 5대 프린터 연결",
-        feature2: "무제한 웹 스트리밍",
-        feature3: "월 50개 AI 모델 생성",
-        feature4: "고급 분석 및 통계",
-        feature5: "API 접근 권한",
-        feature6: "우선 지원"
+        feature1: "고급 AI 모델",
+        feature2: "10분 이상 감지 간격",
+        feature3: "최대 5대 프린터 연결",
+        feature4: "월 50개 3D 모델링",
+        feature5: "API 전체 접근"
       },
       enterprise: {
         name: "엔터프라이즈",
         description: "대규모 조직을 위한 엔터프라이즈 플랜",
-        feature1: "무제한 프린터 연결",
-        feature2: "무제한 AI 모델 생성",
-        feature3: "고급 AI 어시스턴트",
-        feature4: "ERP/MES 연동",
-        feature5: "전담 지원 매니저",
-        feature6: "전용 Slack 채널"
+        feature1: "고급 AI 모델",
+        feature2: "실시간 이상 감지",
+        feature3: "무제한 프린터 연결",
+        feature4: "무제한 3D 모델링",
+        feature5: "API 전체 접근"
       }
     },
     comparison: {
+      feature: "항목",
       printerManagement: "프린터 관리",
       maxPrinters: "최대 프린터 연결",
       printersCount: "{{count}}대",
@@ -1866,14 +1946,25 @@ export default {
       realtimeMonitoring: "실시간 모니터링",
       remoteControl: "원격 제어",
       keyFeatures: "주요 기능",
-      aiModelGeneration: "AI 모델 생성",
+      aiModelGeneration: "3D 모델링 사용",
       modelsPerMonth: "월 {{count}}개",
       limited: "제한적",
       basicAiAssistant: "기본 AI 어시스턴트",
       advancedAiAssistant: "고급 AI 어시스턴트",
       anomalyDetection: "실시간 이상 감지",
+      anomalyDetectionInterval: "이상 감지 간격",
+      interval60min: "60분",
+      interval30min: "30분",
+      interval10min: "10분",
+      intervalMinutes: "{{count}}분",
+      realtime: "실시간",
       advancedAnalytics: "고급 분석 및 통계",
+      advancedAnalyticsChat: "고급 분석 및 대화",
+      basicModel: "기본 모델",
+      advancedModel: "고급 모델",
       apiAccess: "API 접근",
+      partialAccess: "일부 제한",
+      fullAccess: "전체",
       customerSupport: "고객 지원",
       supportType: "지원 방식",
       community: "커뮤니티",
@@ -2075,7 +2166,7 @@ export default {
     perMonth: "월",
     perYear: "년",
     nextBillingDate: "다음 결제일",
-    maxPrinters: "최대 2대 프린터 연결 가능",
+    maxPrinters: "최대 1대 프린터 연결 가능",
     upgradePlan: "플랜 업그레이드",
     viewBillingHistory: "결제 내역 확인",
     managePaymentMethod: "결제 수단 관리",

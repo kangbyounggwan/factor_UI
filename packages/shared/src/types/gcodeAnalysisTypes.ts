@@ -172,6 +172,7 @@ export type IssueType =
   | 'early_bed_off'
   | 'over_temperature'
   | 'under_extrusion'
+  | 'temp_zero_in_body'
   | 'other';
 
 /**
@@ -324,6 +325,7 @@ export const ISSUE_TYPE_LABELS: Record<string, string> = {
   early_bed_off: '조기 베드 차단 (Early Bed Off)',
   over_temperature: '과열 설정 (Over Temperature)',
   under_extrusion: '압출 부족 (Under Extrusion)',
+  temp_zero_in_body: '본체 내 온도 0 (Temp Zero in Body)',
   other: '기타 문제',
 };
 
@@ -375,6 +377,7 @@ export function calculateIssueStatistics(issues: IssueFound[]): IssueStatistics[
     early_bed_off: 'yellow',
     over_temperature: 'purple',
     under_extrusion: 'pink',
+    temp_zero_in_body: 'cyan',
     other: 'gray',
   };
 

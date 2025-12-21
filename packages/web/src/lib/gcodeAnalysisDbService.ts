@@ -379,6 +379,7 @@ export async function getAnalysisReportsList(
         total_issues_count,
         high_issues_count,
         print_time_formatted,
+        filament_length_mm,
         filament_weight_g,
         layer_count,
         created_at

@@ -1609,7 +1609,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>G-code 분석 보고서 - ${data.fileName || '분석 결과'}</title>
+  <title>G-code 보고서 - ${data.fileName || '분석 결과'}</title>
   <style>
     @page {
       size: A4;
@@ -1891,7 +1891,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
     <!-- 헤더 -->
     <div class="header">
       <div>
-        <h1>G-code 분석 보고서</h1>
+        <h1>G-code 보고서</h1>
         <p class="file-info">
           <span class="file-name">${data.fileName || '분석 결과'}</span>
           <span class="file-date">${data.analyzedAt || new Date().toLocaleString('ko-KR')}</span>

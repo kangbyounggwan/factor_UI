@@ -428,7 +428,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         console.warn('[Auth] Error ensuring notification settings:', err);
       }
 
-      // 3. 구독 정보 생성 (없으면) - 14일 무료 체험
+      // 3. 구독 정보 생성 (없으면) - Free 플랜 자동 할당
       try {
         const { data: existingSubscription } = await supabase
           .from('user_subscriptions')
@@ -438,20 +438,62 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
         if (!existingSubscription) {
           console.log('[Auth] Creating subscription for user:', userId);
-          const trialEndDate = new Date();
-          trialEndDate.setDate(trialEndDate.getDate() + 14);
+
+          // Free 플랜 ID 가져오기
+          const { data: freePlan } = await supabase
+            .from('subscription_plans')
+            .select('id')
+            .eq('plan_code', 'free')
+            .eq('is_active', true)
+            .single();
+
+          if (!freePlan) {
+            console.error('[Auth] Free plan not found in subscription_plans table');
+          }
+
+          // Free 플랜은 100년 후 만료 (실질적으로 무제한)
+          const freeEndDate = new Date();
+          freeEndDate.setFullYear(freeEndDate.getFullYear() + 100);
 
           await supabase.from('user_subscriptions').insert({
             user_id: userId,
+            plan_id: freePlan?.id || null,
             plan_name: PLAN_CODES.FREE,
-            status: SUBSCRIPTION_STATUS.TRIALING,
+            status: SUBSCRIPTION_STATUS.ACTIVE,
+            provider: 'paddle',
             current_period_start: new Date().toISOString(),
-            current_period_end: trialEndDate.toISOString(),
+            current_period_end: freeEndDate.toISOString(),
             cancel_at_period_end: false,
           });
         }
       } catch (err) {
         console.warn('[Auth] Error ensuring subscription:', err);
+      }
+
+      // 4. 사용량 정보 생성 (없으면)
+      try {
+        const { data: existingUsage } = await supabase
+          .from('user_usage')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (!existingUsage) {
+          console.log('[Auth] Creating user usage for user:', userId);
+          const now = new Date();
+          await supabase.from('user_usage').insert({
+            user_id: userId,
+            period_year: now.getFullYear(),
+            period_month: now.getMonth() + 1,
+            ai_model_generation: 0,
+            ai_image_generation: 0,
+            printer_count: 0,
+            storage_bytes: 0,
+            api_calls: 0,
+          });
+        }
+      } catch (err) {
+        console.warn('[Auth] Error ensuring user usage:', err);
       }
     };
 

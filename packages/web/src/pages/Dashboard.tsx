@@ -4,25 +4,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Monitor, Settings, ArrowRight, Activity, Thermometer, Clock, Lock, LogIn, Filter, Plus, Loader2 } from "lucide-react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Monitor, Settings, ArrowRight, Activity, Thermometer, Clock, Lock, LogIn, Plus, Loader2 } from "lucide-react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { SettingsContent } from "@/components/Settings/SettingsContent";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useUserPlan } from "@shared/hooks/useUserPlan";
 import { AppHeader } from "@/components/common/AppHeader";
-import { AppSidebar } from "@/components/common/AppSidebar";
+import { AppSidebar, type PrinterQuickItem } from "@/components/common/AppSidebar";
 import { supabase } from "@shared/integrations/supabase/client"
 import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { useToast } from "@/hooks/use-toast";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { onDashStatusMessage } from "@shared/services/mqttService";
 import { PrinterStatusBadge } from "@/components/Dashboard/PrinterStatusBadge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { computeDashboardSummary, publishDashboardSummary, useDashboardSummary } from "@shared/component/dashboardSummary";
 
 // Lazy load heavy components
@@ -287,12 +281,18 @@ const Home = () => {
   const { user, signOut } = useAuth();
   const { plan: userPlan } = useUserPlan(user?.id);
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [printers, setPrinters] = useState<PrinterOverview[]>([]); // localStorage 제거
   const [mqttStates, setMqttStates] = usePersistentState<MqttStateCache>('web:dashboard:mqtt_states', {}); // MQTT 상태만 저장
   const [groups, setGroups] = useState<PrinterGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const summary = useDashboardSummary();
+
+  // Settings 뷰 상태 (URL 파라미터 기반)
+  const settingsViewActive = searchParams.get('view') === 'settings';
+  const editPrinterId = searchParams.get('editPrinter') || undefined;
 
   // 사이드바 상태 (페이지 간 공유)
   const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
@@ -310,6 +310,18 @@ const Home = () => {
   // 프린터 설정 완료 핸들러
   const handleSetupSuccess = () => {
     // 프린터 목록 새로고침
+    loadPrinters(false);
+  };
+
+  // Settings 뷰 토글 핸들러
+  const handleOpenSettings = () => {
+    setSearchParams({ view: 'settings' });
+  };
+
+  // Settings 뷰 닫기 핸들러
+  const handleCloseSettings = () => {
+    setSearchParams({});
+    // 프린터 목록 새로고침 (설정에서 변경사항 반영)
     loadPrinters(false);
   };
 
@@ -432,42 +444,40 @@ const Home = () => {
 
   // MQTT 연결은 로그인 시 Auth.tsx에서 전역적으로 처리되므로 여기서는 생략
 
-  // MQTT: dash_status 수신 → 프린터 리스트에 반영 (실시간 연결 상태 모니터링)
+  // MQTT: dash_status 수신 → 프린터 리스트에 반영 (Heartbeat 패턴)
+  // lastActivity에 마지막 데이터 수신 시간만 기록하고, 별도 인터벌에서 타임아웃 체크
+  const lastActivityRef = useRef<Record<string, number>>({});
+
+  // Heartbeat 체크 인터벌 (2초마다 모든 프린터의 마지막 활동 시간 체크)
   useEffect(() => {
-    if (printers.length === 0) return; // 프린터가 없으면 실행 안 함
+    if (printers.length === 0) return;
 
-    console.log('[MQTT] 실시간 모니터링 시작 - 프린터 수:', printers.length);
+    const STALE_THRESHOLD = 5000; // 5초 이상 데이터 없으면 disconnected
+    const CHECK_INTERVAL = 2000; // 2초마다 체크
 
-    // 각 프린터별 타임아웃 추적 (5초 동안 데이터 없으면 disconnected)
-    const timeouts: Record<string, number> = {};
-    const TIMEOUT_DURATION = 5000; // 5초
+    const heartbeatInterval = setInterval(() => {
+      const now = Date.now();
 
-    // 타임아웃 설정/재설정 함수
-    const startTimeoutFor = (uuid?: string, currentState?: string) => {
-      if (!uuid) {
-        console.log('[MQTT] UUID 없음, 타임아웃 설정 건너뜀');
-        return;
-      }
+      setPrinters((prev) => {
+        let hasChanges = false;
+        const next = prev.map((p) => {
+          if (!p.device_uuid) return p;
 
-      // 기존 타임아웃 제거
-      if (timeouts[uuid]) {
-        console.log('[MQTT] 기존 타임아웃 제거:', uuid);
-        try { clearTimeout(timeouts[uuid]); } catch (err) { console.warn('clearTimeout failed:', err); }
-      }
+          const lastTime = lastActivityRef.current[p.device_uuid];
+          const isStale = !lastTime || (now - lastTime) > STALE_THRESHOLD;
 
-      console.log(`[MQTT] ${TIMEOUT_DURATION/1000}초 타임아웃 설정:`, uuid, '현재 상태:', currentState);
-      timeouts[uuid] = window.setTimeout(() => {
-        console.log('[MQTT] 타임아웃 실행:', uuid, '- 연결끊김으로 변경');
+          // 이미 disconnected이면 변경 없음
+          if (p.state === 'disconnected' && isStale) return p;
 
-        // printers 상태 업데이트
-        setPrinters((prev) => prev.map(p => {
-          if (p.device_uuid === uuid) {
-            console.log('[MQTT] 프린터 상태 업데이트:', uuid, p.state, '-> disconnected');
+          // 연결됨 → 연결끊김 전환
+          if (isStale && p.state !== 'disconnected') {
+            hasChanges = true;
+            console.log('[MQTT] Heartbeat 타임아웃:', p.device_uuid, p.state, '-> disconnected');
 
-            // localStorage에도 동시 저장
+            // localStorage에도 저장
             setMqttStates((prevStates) => ({
               ...prevStates,
-              [uuid]: {
+              [p.device_uuid!]: {
                 state: 'disconnected',
                 connected: false,
                 printing: false,
@@ -476,43 +486,40 @@ const Home = () => {
                 temperature: p.temperature,
                 print_time_left: p.print_time_left,
                 current_file: p.current_file,
-                last_updated: Date.now(),
+                last_updated: now,
               },
             }));
 
-            return { ...p, state: 'disconnected', connected: false, pending: false };
+            return { ...p, state: 'disconnected' as const, connected: false, pending: false };
           }
-          return p;
-        }));
-      }, TIMEOUT_DURATION);
-    };
 
-    // 초기 마운트 시 스냅샷 상태를 유지하고, 타임아웃만 시작
-    setPrinters((prev) => {
-      prev.forEach((p) => startTimeoutFor(p.device_uuid, p.state));
-      return prev;
-    });
+          return p;
+        });
+
+        return hasChanges ? next : prev;
+      });
+    }, CHECK_INTERVAL);
+
+    console.log('[MQTT] Heartbeat 모니터링 시작 - 프린터 수:', printers.length);
+
+    return () => {
+      console.log('[MQTT] Heartbeat 모니터링 종료');
+      clearInterval(heartbeatInterval);
+    };
+  }, [printers.length]);
+
+  // MQTT 메시지 수신 핸들러 (별도 useEffect)
+  useEffect(() => {
+    if (printers.length === 0) return;
 
     // MQTT 메시지 수신 핸들러
     const off = onDashStatusMessage((uuid, data) => {
-      console.log('[MQTT] 메시지 수신:', uuid);
-      console.log('[MQTT] 수신 데이터 상세:', {
-        uuid,
-        connected: data?.connected,
-        temperature_info: data?.temperature_info,
-        printer_status: data?.printer_status,
-        progress: data?.progress,
-        full_data: data
-      });
+      // 마지막 활동 시간만 갱신 (매우 가벼운 연산)
+      lastActivityRef.current[uuid] = Date.now();
 
       setPrinters((prev) => {
         const next = [...prev];
         const idx = next.findIndex(p => p.device_uuid === uuid);
-        console.log('[MQTT] 프린터 검색:', {
-          uuid,
-          found: idx >= 0,
-          printers: next.map(p => ({ id: p.id, name: p.name, device_uuid: p.device_uuid }))
-        });
         if (idx >= 0) {
           const bed = data?.temperature_info?.bed;
           const toolAny = data?.temperature_info?.tool;
@@ -528,11 +535,10 @@ const Home = () => {
             flags.error    ? 'error'    :
             (isConnected   ? 'idle'     : 'disconnected');
 
-          console.log('[MQTT] 프린터 상태 업데이트:', uuid, nextState, 'connected:', isConnected);
-          console.log('[MQTT] flags:', flags, 'bed:', bed, 'tool:', tool);
-
-          // 데이터 수신 시 타임아웃 재설정 (연결 상태 계속 모니터링)
-          startTimeoutFor(uuid, nextState);
+          // 상태 변경 시에만 로그 출력 (불필요한 로그 제거)
+          if (next[idx].state !== nextState) {
+            console.log('[MQTT] 상태 변경:', uuid, next[idx].state, '->', nextState);
+          }
 
           const updatedPrinter = {
             ...next[idx],
@@ -573,20 +579,21 @@ const Home = () => {
       });
     });
 
-    console.log('[MQTT] 핸들러 등록 완료');
+    console.log('[MQTT] 메시지 핸들러 등록 완료');
 
     return () => {
-      console.log('[MQTT] 클린업 - 모든 타임아웃 제거');
+      console.log('[MQTT] 메시지 핸들러 해제');
       off();
-      Object.values(timeouts).forEach(t => { try { clearTimeout(t); } catch (err) { console.warn('clearTimeout failed:', err); } });
     };
   }, [printers.length]);
 
   // 구독 로직은 로그인 시 shared에서 처리됨
 
   // 필터링된 프린터 목록
-  const filteredPrinters = selectedGroup === "all" 
-    ? printers 
+  const filteredPrinters = selectedGroup === "all"
+    ? printers
+    : selectedGroup === "ungrouped"
+    ? printers.filter(printer => !printer.group_id)
     : printers.filter(printer => printer.group_id === selectedGroup);
   // 요약 정보 발행: 필터 기준(필요 시 printers로 변경 가능)
   useEffect(() => {
@@ -618,6 +625,15 @@ const Home = () => {
         user={user}
         onSignOut={signOut}
         mode="dashboard"
+        printers={printers.map((p): PrinterQuickItem => ({
+          id: p.id,
+          name: p.name,
+          model: p.model,
+          isOnline: p.connected,
+          progress: p.printing ? p.completion : undefined,
+          currentJob: p.current_file,
+        }))}
+        onSelectPrinter={(printer) => navigate(`/printer/${printer.id}`)}
       />
 
       {/* Main Content */}
@@ -627,7 +643,17 @@ const Home = () => {
 
         {/* Dashboard Content */}
         <div className="flex-1 overflow-y-auto bg-background p-6">
-          <div className="max-w-7xl mx-auto space-y-6">
+          {/* Settings View */}
+          {settingsViewActive ? (
+            <div className="max-w-7xl mx-auto">
+              <SettingsContent
+                embedded={true}
+                onBack={handleCloseSettings}
+                editPrinterId={editPrinterId}
+              />
+            </div>
+          ) : (
+            <div className="max-w-7xl mx-auto space-y-6">
 
         {/* 로그인 안내 */}
         {!user && (
@@ -645,30 +671,96 @@ const Home = () => {
           </Alert>
         )}
 
-        {/* 그룹 필터링 */}
-        {user && groups.length > 0 && (
-          <div className="flex items-center gap-4">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">{t('dashboard.groupFilter')}</span>
-            <Select value={selectedGroup} onValueChange={setSelectedGroup}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('dashboard.allPrinters')}</SelectItem>
-                {groups.map((group) => (
-                  <SelectItem key={group.id} value={group.id}>
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="w-2 h-2 rounded-full"
-                        style={{ backgroundColor: group.color }}
-                      />
-                      {group.name}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        {/* 그룹 필터링 - 탭 스타일 */}
+        {user && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* 전체 프린터 탭 */}
+            <button
+              onClick={() => setSelectedGroup("all")}
+              className={`
+                inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
+                ${selectedGroup === "all"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent hover:border-border"
+                }
+              `}
+            >
+              <Monitor className="h-4 w-4" />
+              {t('dashboard.allPrinters')}
+              <span className={`
+                ml-1 px-1.5 py-0.5 rounded text-xs font-semibold
+                ${selectedGroup === "all"
+                  ? "bg-primary-foreground/20 text-primary-foreground"
+                  : "bg-muted-foreground/20 text-muted-foreground"
+                }
+              `}>
+                {printers.length}
+              </span>
+            </button>
+
+            {/* 그룹별 탭 */}
+            {groups.map((group) => {
+              const groupPrinterCount = printers.filter(p => p.group_id === group.id).length;
+              return (
+                <button
+                  key={group.id}
+                  onClick={() => setSelectedGroup(group.id)}
+                  className={`
+                    inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
+                    ${selectedGroup === group.id
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent hover:border-border"
+                    }
+                  `}
+                >
+                  <div
+                    className="w-3 h-3 rounded-full border-2 border-current"
+                    style={{
+                      backgroundColor: selectedGroup === group.id ? group.color : 'transparent',
+                      borderColor: group.color
+                    }}
+                  />
+                  {group.name}
+                  {groupPrinterCount > 0 && (
+                    <span className={`
+                      ml-1 px-1.5 py-0.5 rounded text-xs font-semibold
+                      ${selectedGroup === group.id
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : "bg-muted-foreground/20 text-muted-foreground"
+                      }
+                    `}>
+                      {groupPrinterCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+
+            {/* 그룹 없음 필터 (그룹이 없는 프린터가 있을 경우) */}
+            {printers.some(p => !p.group_id) && (
+              <button
+                onClick={() => setSelectedGroup("ungrouped")}
+                className={`
+                  inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
+                  ${selectedGroup === "ungrouped"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent hover:border-border"
+                  }
+                `}
+              >
+                <div className="w-3 h-3 rounded-full border-2 border-dashed border-current" />
+                {t('dashboard.printer.noGroup')}
+                <span className={`
+                  ml-1 px-1.5 py-0.5 rounded text-xs font-semibold
+                  ${selectedGroup === "ungrouped"
+                    ? "bg-primary-foreground/20 text-primary-foreground"
+                    : "bg-muted-foreground/20 text-muted-foreground"
+                  }
+                `}>
+                  {printers.filter(p => !p.group_id).length}
+                </span>
+              </button>
+            )}
           </div>
         )}
 
@@ -711,12 +803,13 @@ const Home = () => {
                 </span>
               )}
             </h2>
-            <Button asChild variant="outline" className="flex items-center gap-2">
-              <Link to="/settings">
-                <Settings className="h-4 w-4" />
-                {t('dashboard.manage')}
-              </Link>
-            </Button>
+            <button
+              onClick={handleOpenSettings}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer select-none bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/50 hover:border-border shadow-sm hover:shadow"
+            >
+              <Settings className="h-4 w-4" />
+              {t('dashboard.manage')}
+            </button>
           </div>
           
           {filteredPrinters.length === 0 ? (
@@ -756,7 +849,8 @@ const Home = () => {
           )}
         </div>
         {/* End space-y-4 프린터 목록 */}
-          </div>
+            </div>
+          )}
           {/* End max-w-7xl container */}
         </div>
         {/* End Dashboard Content */}

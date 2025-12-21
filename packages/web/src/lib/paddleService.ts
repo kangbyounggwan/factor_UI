@@ -16,6 +16,10 @@ const PADDLE_ENVIRONMENT = import.meta.env.VITE_PADDLE_ENVIRONMENT || 'sandbox';
 
 // 가격 ID 설정
 export const PADDLE_PRICES = {
+  starter: {
+    monthly: import.meta.env.VITE_PADDLE_PRICE_STARTER_MONTHLY || '',
+    yearly: import.meta.env.VITE_PADDLE_PRICE_STARTER_YEARLY || '',
+  },
   pro: {
     monthly: import.meta.env.VITE_PADDLE_PRICE_PRO_MONTHLY || '',
     yearly: import.meta.env.VITE_PADDLE_PRICE_PRO_YEARLY || '',
@@ -237,13 +241,13 @@ export const PLAN_DISPLAY_PRICES = {
     currency: 'USD',
   },
   starter: {
-    monthly: 9,
-    yearly: 90,
+    monthly: 7,
+    yearly: 70, // 연간 결제 시 2개월 무료
     currency: 'USD',
   },
   pro: {
-    monthly: 19,
-    yearly: 190, // 약 17% 할인
+    monthly: 15,
+    yearly: 150, // 연간 결제 시 2개월 무료
     currency: 'USD',
   },
   enterprise: {

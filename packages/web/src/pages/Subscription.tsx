@@ -52,78 +52,102 @@ interface SubscriptionPlan {
   color: string;
 }
 
-// 구독 플랜 상세 정보 (USD)
-const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string, currentPlanId?: string): SubscriptionPlan[] => [
-  {
-    id: "free",
-    name: t('subscription.plans.free.name'),
-    price: 0, // Free
-    interval: isYearly ? "year" : "month",
-    max_printers: 1,
-    description: t('subscription.plans.free.description'),
-    color: "bg-slate-500",
-    features: [
-      t('subscription.plans.free.feature1'),
-      t('subscription.plans.free.feature2'),
-      t('subscription.plans.free.feature3'),
-      t('subscription.plans.free.feature4')
-    ],
-    current: currentPlanId === 'free'
+// 한국 사용자 감지 (언어 또는 타임존 기반)
+const isKoreanUser = () => {
+  const lang = navigator.language || navigator.languages?.[0] || '';
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  return lang.startsWith('ko') || timezone === 'Asia/Seoul';
+};
+
+// 통화별 가격 설정
+const PRICES = {
+  USD: {
+    starter: { monthly: 7, yearly: 70 },
+    pro: { monthly: 15, yearly: 150 },
   },
-  {
-    id: "starter",
-    name: t('subscription.plans.starter.name'),
-    price: isYearly ? 90 : 9, // USD: $9/month, $90/year (Save ~17%)
-    interval: isYearly ? "year" : "month",
-    max_printers: 2,
-    description: t('subscription.plans.starter.description'),
-    color: "bg-blue-500",
-    features: [
-      t('subscription.plans.starter.feature1'),
-      t('subscription.plans.starter.feature2'),
-      t('subscription.plans.starter.feature3'),
-      t('subscription.plans.starter.feature4')
-    ],
-    current: currentPlanId === 'starter'
+  KRW: {
+    starter: { monthly: 9900, yearly: 99900 },
+    pro: { monthly: 22900, yearly: 229000 },
   },
-  {
-    id: "pro",
-    name: t('subscription.plans.pro.name'),
-    price: isYearly ? 190 : 19, // USD: $19/month, $190/year (Save ~17%)
-    interval: isYearly ? "year" : "month",
-    max_printers: 5,
-    description: t('subscription.plans.pro.description'),
-    color: "bg-primary",
-    features: [
-      t('subscription.plans.pro.feature1'),
-      t('subscription.plans.pro.feature2'),
-      t('subscription.plans.pro.feature3'),
-      t('subscription.plans.pro.feature4'),
-      t('subscription.plans.pro.feature5'),
-      t('subscription.plans.pro.feature6')
-    ],
-    popular: true,
-    current: currentPlanId === 'pro'
-  },
-  {
-    id: "enterprise",
-    name: t('subscription.plans.enterprise.name'),
-    price: -1, // Contact us
-    interval: isYearly ? "year" : "month",
-    max_printers: -1,
-    description: t('subscription.plans.enterprise.description'),
-    color: "bg-primary",
-    features: [
-      t('subscription.plans.enterprise.feature1'),
-      t('subscription.plans.enterprise.feature2'),
-      t('subscription.plans.enterprise.feature3'),
-      t('subscription.plans.enterprise.feature4'),
-      t('subscription.plans.enterprise.feature5'),
-      t('subscription.plans.enterprise.feature6')
-    ],
-    current: currentPlanId === 'enterprise'
-  }
-];
+};
+
+// 구독 플랜 상세 정보 (통화 감지)
+const getSubscriptionPlans = (isYearly: boolean, t: (key: string) => string, currentPlanId?: string, isKorea?: boolean): SubscriptionPlan[] => {
+  const currency = isKorea ? 'KRW' : 'USD';
+  const prices = PRICES[currency];
+
+  return [
+    {
+      id: "free",
+      name: t('subscription.plans.free.name'),
+      price: 0, // Free
+      interval: isYearly ? "year" : "month",
+      max_printers: 1,
+      description: t('subscription.plans.free.description'),
+      color: "bg-slate-500",
+      features: [
+        t('subscription.plans.free.feature1'),
+        t('subscription.plans.free.feature2'),
+        t('subscription.plans.free.feature3'),
+        t('subscription.plans.free.feature4'),
+        t('subscription.plans.free.feature5')
+      ],
+      current: currentPlanId === 'free'
+    },
+    {
+      id: "starter",
+      name: t('subscription.plans.starter.name'),
+      price: isYearly ? prices.starter.yearly : prices.starter.monthly,
+      interval: isYearly ? "year" : "month",
+      max_printers: 1,
+      description: t('subscription.plans.starter.description'),
+      color: "bg-amber-500",
+      features: [
+        t('subscription.plans.starter.feature1'),
+        t('subscription.plans.starter.feature2'),
+        t('subscription.plans.starter.feature3'),
+        t('subscription.plans.starter.feature4'),
+        t('subscription.plans.starter.feature5')
+      ],
+      popular: true, // 가성비 최고
+      current: currentPlanId === 'starter'
+    },
+    {
+      id: "pro",
+      name: t('subscription.plans.pro.name'),
+      price: isYearly ? prices.pro.yearly : prices.pro.monthly,
+      interval: isYearly ? "year" : "month",
+      max_printers: 5,
+      description: t('subscription.plans.pro.description'),
+      color: "bg-primary",
+      features: [
+        t('subscription.plans.pro.feature1'),
+        t('subscription.plans.pro.feature2'),
+        t('subscription.plans.pro.feature3'),
+        t('subscription.plans.pro.feature4'),
+        t('subscription.plans.pro.feature5')
+      ],
+      current: currentPlanId === 'pro'
+    },
+    {
+      id: "enterprise",
+      name: t('subscription.plans.enterprise.name'),
+      price: -1, // Contact us
+      interval: isYearly ? "year" : "month",
+      max_printers: -1,
+      description: t('subscription.plans.enterprise.description'),
+      color: "bg-primary",
+      features: [
+        t('subscription.plans.enterprise.feature1'),
+        t('subscription.plans.enterprise.feature2'),
+        t('subscription.plans.enterprise.feature3'),
+        t('subscription.plans.enterprise.feature4'),
+        t('subscription.plans.enterprise.feature5')
+      ],
+      current: currentPlanId === 'enterprise'
+    }
+  ];
+};
 
 const Subscription = () => {
   const navigate = useNavigate();
@@ -138,6 +162,15 @@ const Subscription = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [carouselIndex, setCarouselIndex] = useState(0); // 캐러셀 인덱스 (0: Free-Starter-Pro, 1: Starter-Pro-Enterprise)
   const tableRef = useRef<HTMLDivElement>(null);
+  const [isKorea] = useState(() => isKoreanUser()); // 한국 사용자 여부 (초기화 시 한 번만 체크)
+  const [dbPlans, setDbPlans] = useState<{
+    plan_code: string;
+    max_printers: number;
+    ai_generation_limit: number;
+    anomaly_detection_interval: number;
+    ai_model_type: string;
+    has_api_access: boolean;
+  }[]>([]); // DB에서 가져온 플랜 데이터
 
   // Paddle 초기화
   useEffect(() => {
@@ -171,6 +204,32 @@ const Subscription = () => {
   // Subscription 페이지는 이제 마케팅/정보 페이지입니다
   // 실제 구독 관리는 Settings 페이지에서 수행합니다
 
+  // DB에서 구독 플랜 정보 가져오기
+  useEffect(() => {
+    const loadDbPlans = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('subscription_plans')
+          .select('plan_code, max_printers, ai_generation_limit, anomaly_detection_interval, ai_model_type, has_api_access')
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true });
+
+        if (error) {
+          console.error('Error loading subscription plans:', error);
+          return;
+        }
+
+        if (data) {
+          setDbPlans(data);
+        }
+      } catch (error) {
+        console.error('Error loading subscription plans:', error);
+      }
+    };
+
+    loadDbPlans();
+  }, []);
+
   // DB에서 현재 플랜 가져오기
   useEffect(() => {
     const loadCurrentPlan = async () => {
@@ -203,7 +262,68 @@ const Subscription = () => {
     loadCurrentPlan();
   }, [user]);
 
-  const subscriptionPlans = getSubscriptionPlans(isYearly, t, currentPlanId);
+  const subscriptionPlans = getSubscriptionPlans(isYearly, t, currentPlanId, isKorea);
+
+  // DB 플랜 데이터 헬퍼 함수
+  const getDbPlanValue = (planCode: string) => {
+    return dbPlans.find(p => p.plan_code === planCode);
+  };
+
+  // 비교 테이블용 값 포맷팅 함수들
+  const formatAiModelType = (planCode: string) => {
+    const plan = getDbPlanValue(planCode);
+    if (!plan) return planCode === 'free' ? t('subscription.comparison.basicModel') : t('subscription.comparison.advancedModel');
+    return plan.ai_model_type === 'basic' ? t('subscription.comparison.basicModel') : t('subscription.comparison.advancedModel');
+  };
+
+  const formatAnomalyInterval = (planCode: string) => {
+    const plan = getDbPlanValue(planCode);
+    if (!plan) {
+      // 폴백 값
+      const fallback: Record<string, string> = { free: '60', starter: '30', pro: '10', enterprise: '0' };
+      const interval = fallback[planCode] || '60';
+      return interval === '0' ? t('subscription.comparison.realtime') : t('subscription.comparison.intervalMinutes', { count: parseInt(interval) });
+    }
+    const interval = plan.anomaly_detection_interval;
+    if (interval === 0) return t('subscription.comparison.realtime');
+    return t('subscription.comparison.intervalMinutes', { count: interval });
+  };
+
+  const formatMaxPrinters = (planCode: string) => {
+    const plan = getDbPlanValue(planCode);
+    if (!plan) {
+      const fallback: Record<string, number> = { free: 1, starter: 1, pro: 5, enterprise: -1 };
+      const count = fallback[planCode] ?? 1;
+      return count === -1 ? t('subscription.comparison.unlimited') : t('subscription.comparison.printersCount', { count });
+    }
+    return plan.max_printers === -1 ? t('subscription.comparison.unlimited') : t('subscription.comparison.printersCount', { count: plan.max_printers });
+  };
+
+  const formatAiGeneration = (planCode: string) => {
+    const plan = getDbPlanValue(planCode);
+    if (!plan) {
+      const fallback: Record<string, number> = { free: 5, starter: 20, pro: 50, enterprise: -1 };
+      const count = fallback[planCode] ?? 5;
+      return count === -1 ? t('subscription.comparison.unlimited') : t('subscription.comparison.modelsPerMonth', { count });
+    }
+    return plan.ai_generation_limit === -1 ? t('subscription.comparison.unlimited') : t('subscription.comparison.modelsPerMonth', { count: plan.ai_generation_limit });
+  };
+
+  const formatApiAccess = (planCode: string) => {
+    const plan = getDbPlanValue(planCode);
+    if (!plan) {
+      const fallback: Record<string, boolean> = { free: false, starter: true, pro: true, enterprise: true };
+      const hasAccess = fallback[planCode] ?? false;
+      // free/starter는 일부 제한, pro/enterprise는 전체 접근
+      if (planCode === 'free' || planCode === 'starter') return t('subscription.comparison.partialAccess');
+      return hasAccess ? t('subscription.comparison.fullAccess') : t('subscription.comparison.partialAccess');
+    }
+    // Pro와 Enterprise만 전체 접근
+    if (planCode === 'pro' || planCode === 'enterprise') {
+      return plan.has_api_access ? t('subscription.comparison.fullAccess') : t('subscription.comparison.partialAccess');
+    }
+    return t('subscription.comparison.partialAccess');
+  };
 
   // 로그인된 사용자일 때만 현재 플랜 표시
   const currentPlan = user ? subscriptionPlans.find(plan => plan.current) : null;
@@ -284,6 +404,9 @@ const Subscription = () => {
   const formatPrice = (price: number) => {
     if (price === 0) return t('subscription.free');
     if (price === -1) return t('subscription.contact');
+    if (isKorea) {
+      return `₩${price.toLocaleString('ko-KR')}`;
+    }
     return `$${price.toLocaleString('en-US')}`;
   };
 
@@ -313,7 +436,7 @@ const Subscription = () => {
         '@type': 'Offer',
         name: p.name,
         price: p.price,
-        priceCurrency: 'USD',
+        priceCurrency: isKorea ? 'KRW' : 'USD',
         availability: 'https://schema.org/InStock',
       }));
 
@@ -332,7 +455,7 @@ const Subscription = () => {
     script.id = 'subscription-jsonld';
     script.text = JSON.stringify(jsonLd);
     document.head.appendChild(script);
-  }, [subscriptionPlans]);
+  }, [subscriptionPlans, isKorea]);
 
   return (
     <div className="fixed inset-0 z-50 bg-background">
@@ -442,13 +565,18 @@ const Subscription = () => {
               </button>
             )}
 
-            {/* 플랜 카드 그리드 */}
+            {/* 플랜 카드 그리드 - carouselIndex 0: Free,Starter,Pro / carouselIndex 1: Starter,Pro,Enterprise */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 px-4 lg:px-8">
-              {subscriptionPlans.slice(carouselIndex, carouselIndex + 3).map((plan, index) => {
-                // 가운데 카드 부각: carouselIndex === 0이면 Starter(index 1), carouselIndex === 1이면 Pro(index 1)
-                const isCenterHighlighted = index === 1;
-                const isStarterCenter = carouselIndex === 0 && plan.id === 'starter';
-                const isProCenter = carouselIndex === 1 && plan.popular;
+              {(carouselIndex === 0
+                ? [subscriptionPlans[0], subscriptionPlans[1], subscriptionPlans[2]] // Free, Starter, Pro
+                : [subscriptionPlans[1], subscriptionPlans[2], subscriptionPlans[3]] // Starter, Pro, Enterprise
+              ).map((plan, index) => {
+                // 가운데 카드 부각
+                const isStarterHighlight = plan.id === 'starter';
+                const isProHighlight = plan.id === 'pro';
+                const isCenterCard = index === 1; // 가운데 카드
+                const isStarterCenter = isCenterCard && carouselIndex === 0; // carouselIndex 0일 때 Starter가 가운데
+                const isProCenter = isCenterCard && carouselIndex === 1; // carouselIndex 1일 때 Pro가 가운데
 
                 return (
               <Card
@@ -458,9 +586,9 @@ const Subscription = () => {
                     ? "border-2 border-amber-400/60 bg-gradient-to-br from-amber-50 via-yellow-50/90 to-orange-50 dark:from-amber-950/90 dark:via-yellow-900/70 dark:to-orange-950/80 ring-4 ring-amber-500/10 scale-[1.02] lg:scale-105"
                     : isProCenter
                     ? "border-2 border-blue-500/60 bg-gradient-to-br from-blue-50 via-blue-100/90 to-indigo-100 dark:from-blue-950/90 dark:via-blue-900/70 dark:to-indigo-950/80 ring-4 ring-blue-500/10 scale-[1.02] lg:scale-105"
-                    : plan.id === 'starter'
+                    : isStarterHighlight
                     ? "border-2 border-amber-400/60 bg-gradient-to-br from-amber-50 via-yellow-50/90 to-orange-50 dark:from-amber-950/90 dark:via-yellow-900/70 dark:to-orange-950/80 hover:border-amber-500/80 hover:shadow-lg hover:shadow-amber-500/20"
-                    : plan.popular
+                    : isProHighlight
                     ? "border-2 border-blue-500/60 bg-gradient-to-br from-blue-50 via-blue-100/90 to-indigo-100 dark:from-blue-950/90 dark:via-blue-900/70 dark:to-indigo-950/80 hover:border-blue-500/80 hover:shadow-lg hover:shadow-blue-500/20"
                     : plan.id === 'enterprise'
                     ? "border-2 border-purple-400/60 bg-gradient-to-br from-purple-50 via-violet-50/90 to-fuchsia-50 dark:from-slate-900 dark:via-purple-950/30 dark:to-slate-900 hover:border-purple-500/80 hover:shadow-lg hover:shadow-purple-500/20"
@@ -470,9 +598,9 @@ const Subscription = () => {
                   boxShadow: '0 8px 40px rgba(245, 158, 11, 0.25), 0 0 0 1px rgba(245, 158, 11, 0.1), inset 0 1px 2px rgba(255, 255, 255, 0.8)'
                 } : isProCenter ? {
                   boxShadow: '0 8px 40px rgba(37, 99, 235, 0.25), 0 0 0 1px rgba(37, 99, 235, 0.1), inset 0 1px 2px rgba(255, 255, 255, 0.8)'
-                } : plan.id === 'starter' ? {
+                } : isStarterHighlight ? {
                   boxShadow: '0 4px 20px rgba(245, 158, 11, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.6)'
-                } : plan.popular ? {
+                } : isProHighlight ? {
                   boxShadow: '0 4px 20px rgba(37, 99, 235, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.6)'
                 } : plan.id === 'enterprise' ? {
                   boxShadow: '0 4px 20px rgba(147, 51, 234, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.5)'
@@ -496,6 +624,15 @@ const Subscription = () => {
                   </div>
                 )}
 
+                {/* Pro Badge */}
+                {plan.id === 'pro' && (
+                  <div className="absolute top-4 right-4">
+                    <Badge className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3 py-1 text-xs font-semibold rounded-full shadow-lg shadow-blue-500/30 border border-blue-400/30">
+                      {t('subscription.professional') || 'Professional'}
+                    </Badge>
+                  </div>
+                )}
+
                 {/* Enterprise Badge */}
                 {plan.id === 'enterprise' && (
                   <div className="absolute top-4 right-4">
@@ -514,9 +651,9 @@ const Subscription = () => {
                   {/* 가격 */}
                   <div className="flex items-end gap-1.5 min-h-[50px] lg:min-h-[60px]">
                     <div className="flex items-start">
-                      <span className="text-lg lg:text-xl text-muted-foreground mr-0.5">$</span>
+                      <span className="text-lg lg:text-xl text-muted-foreground mr-0.5">{isKorea ? '₩' : '$'}</span>
                       <span className="text-4xl lg:text-5xl font-normal leading-none tracking-tight">
-                        {plan.price === 0 ? "0" : plan.price === -1 ? "" : plan.price.toLocaleString('en-US')}
+                        {plan.price === 0 ? "0" : plan.price === -1 ? "" : plan.price.toLocaleString(isKorea ? 'ko-KR' : 'en-US')}
                       </span>
                     </div>
                     {plan.price >= 0 && (
@@ -541,16 +678,35 @@ const Subscription = () => {
                   {/* Features */}
                   <div className="flex flex-col grow gap-2 mb-3 lg:mb-4">
                     <ul className="mb-2 flex flex-col gap-3 lg:gap-5">
-                      {plan.features.map((feature, index) => (
+                      {plan.features.map((feature, index) => {
+                        // 스타터/프로/엔터프라이즈의 1,2번째 기능 강조 (고급 AI 모델, 이상 감지 간격)
+                        const isHighlightFeature = plan.id !== 'free' && (index === 0 || index === 1);
+                        return (
                         <li key={index} className="relative">
                           <div className="flex items-start gap-2.5 lg:gap-3.5">
-                            <Check className="h-4 w-4 lg:h-5 lg:w-5 text-foreground flex-shrink-0 mt-0.5" strokeWidth={2} />
-                            <span className="text-xs lg:text-sm text-foreground font-normal leading-snug">
+                            <Check className={`h-4 w-4 lg:h-5 lg:w-5 flex-shrink-0 mt-0.5 ${
+                              isHighlightFeature
+                                ? plan.id === 'starter'
+                                  ? 'text-amber-500'
+                                  : plan.id === 'pro'
+                                  ? 'text-blue-500'
+                                  : 'text-purple-500'
+                                : 'text-foreground'
+                            }`} strokeWidth={isHighlightFeature ? 2.5 : 2} />
+                            <span className={`text-xs lg:text-sm leading-snug ${
+                              isHighlightFeature
+                                ? plan.id === 'starter'
+                                  ? 'text-amber-700 dark:text-amber-400 font-semibold'
+                                  : plan.id === 'pro'
+                                  ? 'text-blue-700 dark:text-blue-400 font-semibold'
+                                  : 'text-purple-700 dark:text-purple-400 font-semibold'
+                                : 'text-foreground font-normal'
+                            }`}>
                               {feature}
                             </span>
                           </div>
                         </li>
-                      ))}
+                      )})}
                     </ul>
                   </div>
 
@@ -558,14 +714,14 @@ const Subscription = () => {
                   <div className="mt-auto w-full">
                     <Button
                       className={`w-full h-12 lg:h-11 text-sm lg:text-sm font-semibold rounded-full transition-all duration-200 ${
-                        plan.popular
-                          ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 border border-blue-400/20"
+                        plan.current
+                          ? "opacity-50 cursor-not-allowed bg-muted text-foreground border-2 border-border"
                           : plan.id === 'starter'
                           ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg shadow-amber-500/25 hover:shadow-xl hover:shadow-amber-500/30 border border-amber-400/20"
-                          : plan.current
-                          ? "opacity-50 cursor-not-allowed bg-muted text-foreground border-2 border-border"
-                          : plan.price === -1
-                          ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg shadow-purple-500/25 hover:shadow-xl hover:shadow-purple-500/30 border border-purple-400/20"
+                          : plan.id === 'pro'
+                          ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 border border-blue-400/20"
+                          : plan.id === 'enterprise'
+                          ? "bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-700 hover:to-fuchsia-700 text-white shadow-lg shadow-purple-500/25 hover:shadow-xl hover:shadow-purple-500/30 border border-purple-400/20"
                           : "bg-foreground hover:bg-foreground/90 text-background border-2 border-foreground/10 hover:scale-[1.02]"
                       }`}
                       disabled={plan.current || isLoading === plan.id}
@@ -649,101 +805,56 @@ const Subscription = () => {
 
             {/* 비교 테이블 */}
             <div className="w-full overflow-x-auto -mx-4 lg:mx-0 rounded-2xl border-2 border-border/60 bg-card/50 backdrop-blur-sm shadow-lg">
-              <table className="w-full border-collapse min-w-[600px]">
+              <table className="w-full border-collapse min-w-[700px]">
                 <thead>
                   <tr className="border-b-2 border-border/60 bg-muted/40">
-                    <th className="text-left py-4 lg:py-5 px-4 lg:px-6 font-bold text-xs lg:text-sm min-w-[140px] lg:min-w-[200px] text-foreground"></th>
-                    <th className="text-center py-4 lg:py-5 px-2 lg:px-6 font-bold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px] text-sky-700 dark:text-sky-300">{t('subscription.plans.starter.name')}</th>
-                    <th className="text-center py-4 lg:py-5 px-2 lg:px-6 font-bold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px] bg-blue-500/10 text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{t('subscription.plans.pro.name')}</th>
-                    <th className="text-center py-4 lg:py-5 px-2 lg:px-6 font-bold text-xs lg:text-sm min-w-[100px] lg:min-w-[150px] text-purple-700 dark:text-purple-300">{t('subscription.plans.enterprise.name')}</th>
+                    <th className="text-left py-4 lg:py-5 px-4 lg:px-6 font-bold text-xs lg:text-sm min-w-[120px] lg:min-w-[180px] text-foreground">{t('subscription.comparison.feature')}</th>
+                    <th className="text-center py-4 lg:py-5 px-2 lg:px-4 font-bold text-xs lg:text-sm min-w-[80px] lg:min-w-[110px] text-slate-600 dark:text-slate-400">{t('subscription.plans.free.name')}</th>
+                    <th className="text-center py-4 lg:py-5 px-2 lg:px-4 font-bold text-xs lg:text-sm min-w-[80px] lg:min-w-[110px] text-amber-600 dark:text-amber-400">{t('subscription.plans.starter.name')}</th>
+                    <th className="text-center py-4 lg:py-5 px-2 lg:px-4 font-bold text-xs lg:text-sm min-w-[80px] lg:min-w-[110px] bg-blue-500/10 text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{t('subscription.plans.pro.name')}</th>
+                    <th className="text-center py-4 lg:py-5 px-2 lg:px-4 font-bold text-xs lg:text-sm min-w-[80px] lg:min-w-[110px] text-purple-700 dark:text-purple-300">{t('subscription.plans.enterprise.name')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {/* 프린터 관리 섹션 */}
-                  <tr className="border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/30">
-                    <td colSpan={4} className="py-3 lg:py-4 px-4 lg:px-6 font-bold text-xs lg:text-sm text-foreground">{t('subscription.comparison.printerManagement')}</td>
+                  {/* 1. 고급 분석 및 대화 */}
+                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.advancedAnalyticsChat')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm text-slate-600 dark:text-slate-400">{formatAiModelType('free')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm font-medium text-amber-600 dark:text-amber-400">{formatAiModelType('starter')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center bg-blue-500/5 text-xs lg:text-sm font-medium text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{formatAiModelType('pro')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm font-medium text-purple-700 dark:text-purple-300">{formatAiModelType('enterprise')}</td>
                   </tr>
+                  {/* 2. 이상 감지 간격 */}
+                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.anomalyDetectionInterval')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm text-slate-600 dark:text-slate-400">{formatAnomalyInterval('free')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm font-medium text-amber-600 dark:text-amber-400">{formatAnomalyInterval('starter')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center bg-blue-500/5 text-xs lg:text-sm font-medium text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{formatAnomalyInterval('pro')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm font-medium text-purple-700 dark:text-purple-300">{formatAnomalyInterval('enterprise')}</td>
+                  </tr>
+                  {/* 3. 최대 프린터 연결 */}
                   <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
                     <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.maxPrinters')}</td>
-                    <td className="py-4 lg:py-5 px-2 lg:px-6 text-center text-xs lg:text-sm font-semibold text-sky-700 dark:text-sky-300">{t('subscription.comparison.printersCount', { count: 2 })}</td>
-                    <td className="py-4 lg:py-5 px-2 lg:px-6 text-center bg-blue-500/5 text-xs lg:text-sm font-semibold text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{t('subscription.comparison.printersCount', { count: 5 })}</td>
-                    <td className="py-4 lg:py-5 px-2 lg:px-6 text-center text-xs lg:text-sm font-semibold text-purple-700 dark:text-purple-300">{t('subscription.comparison.unlimited')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm text-slate-600 dark:text-slate-400">{formatMaxPrinters('free')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm font-medium text-amber-600 dark:text-amber-400">{formatMaxPrinters('starter')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center bg-blue-500/5 text-xs lg:text-sm font-medium text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{formatMaxPrinters('pro')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm font-medium text-purple-700 dark:text-purple-300">{formatMaxPrinters('enterprise')}</td>
                   </tr>
-                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
-                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.realtimeMonitoring')}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 border-x-2 border-blue-500/20"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                  </tr>
-                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
-                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.remoteControl')}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 border-x-2 border-blue-500/20"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                  </tr>
-
-                  {/* 기능 섹션 */}
-                  <tr className="border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/30">
-                    <td colSpan={4} className="py-3 lg:py-4 px-4 lg:px-6 font-bold text-xs lg:text-sm text-foreground">{t('subscription.comparison.keyFeatures')}</td>
-                  </tr>
+                  {/* 4. 3D 모델링 사용 */}
                   <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
                     <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.aiModelGeneration')}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 text-xs lg:text-sm font-semibold text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{t('subscription.comparison.modelsPerMonth', { count: 50 })}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center text-xs lg:text-sm font-semibold text-purple-700 dark:text-purple-300">{t('subscription.comparison.unlimited')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm text-slate-600 dark:text-slate-400">{formatAiGeneration('free')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm font-medium text-amber-600 dark:text-amber-400">{formatAiGeneration('starter')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center bg-blue-500/5 text-xs lg:text-sm font-medium text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{formatAiGeneration('pro')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm font-medium text-purple-700 dark:text-purple-300">{formatAiGeneration('enterprise')}</td>
                   </tr>
-                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
-                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.basicAiAssistant')}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 border-x-2 border-blue-500/20"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                  </tr>
-                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
-                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.anomalyDetection')}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 border-x-2 border-blue-500/20"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                  </tr>
-                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
-                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.advancedAnalytics')}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center text-muted-foreground/60">-</td>
-                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 border-x-2 border-blue-500/20"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                  </tr>
-                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
-                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.advancedAiAssistant')}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center text-muted-foreground/60">-</td>
-                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 text-muted-foreground/60 border-x-2 border-blue-500/20">-</td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                  </tr>
-                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
-                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.apiAccess')}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center text-muted-foreground/60">-</td>
-                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 border-x-2 border-blue-500/20"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                  </tr>
-
-                  {/* 지원 섹션 */}
-                  <tr className="border-b border-border/60 bg-gradient-to-r from-muted/50 to-muted/30">
-                    <td colSpan={4} className="py-3 lg:py-4 px-4 lg:px-6 font-bold text-xs lg:text-sm text-foreground">{t('subscription.comparison.customerSupport')}</td>
-                  </tr>
-                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
-                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.supportType')}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center text-xs lg:text-sm text-sky-700 dark:text-sky-300">{t('subscription.comparison.community')}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 text-xs lg:text-sm font-medium text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{t('subscription.comparison.email24h')}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center text-xs lg:text-sm font-medium text-purple-700 dark:text-purple-300">{t('subscription.comparison.dedicatedManager')}</td>
-                  </tr>
-                  <tr className="border-b border-border/40 hover:bg-muted/30 transition-colors">
-                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.slackChannel')}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center text-muted-foreground/60">-</td>
-                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 text-muted-foreground/60 border-x-2 border-blue-500/20">-</td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
-                  </tr>
+                  {/* 5. API 접근 */}
                   <tr className="hover:bg-muted/30 transition-colors">
-                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.slaGuarantee')}</td>
-                    <td className="py-4 lg:py-5 px-6 text-center text-muted-foreground/60">-</td>
-                    <td className="py-4 lg:py-5 px-6 text-center bg-blue-500/5 text-muted-foreground/60 border-x-2 border-blue-500/20">-</td>
-                    <td className="py-4 lg:py-5 px-6 text-center"><Check className="h-4 w-4 lg:h-5 lg:w-5 mx-auto text-emerald-500" /></td>
+                    <td className="py-4 lg:py-5 px-4 lg:px-6 text-xs lg:text-sm font-medium">{t('subscription.comparison.apiAccess')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm text-slate-600 dark:text-slate-400">{formatApiAccess('free')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm font-medium text-amber-600 dark:text-amber-400">{formatApiAccess('starter')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center bg-blue-500/5 text-xs lg:text-sm font-medium text-blue-700 dark:text-blue-300 border-x-2 border-blue-500/20">{formatApiAccess('pro')}</td>
+                    <td className="py-4 lg:py-5 px-2 lg:px-4 text-center text-xs lg:text-sm font-medium text-purple-700 dark:text-purple-300">{formatApiAccess('enterprise')}</td>
                   </tr>
                 </tbody>
               </table>
