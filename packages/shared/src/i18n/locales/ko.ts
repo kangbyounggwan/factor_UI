@@ -1926,7 +1926,7 @@ export default {
         name: "스타터",
         description: "개인 및 소규모 프로젝트를 위한 플랜",
         feature1: "고급 AI 모델",
-        feature2: "30분 이상 감지 간격",
+        feature2: "60분 이상 감지 간격",
         feature3: "최대 1대 프린터 연결",
         feature4: "월 20개 3D 모델링",
         feature5: "API 일부 제한"

@@ -181,12 +181,12 @@ const markdownComponents = {
   ),
   // 리스트 스타일링
   ul: ({ children }: { children?: React.ReactNode }) => (
-    <ul className="list-disc list-inside space-y-2 my-4">
+    <ul className="list-disc pl-6 space-y-2 my-4">
       {children}
     </ul>
   ),
   ol: ({ children }: { children?: React.ReactNode }) => (
-    <ol className="list-decimal list-inside space-y-2 my-4">
+    <ol className="list-decimal pl-6 space-y-2 my-4">
       {children}
     </ol>
   ),
@@ -203,7 +203,7 @@ const markdownComponents = {
     }
 
     return (
-      <li className="my-1.5 leading-relaxed">
+      <li className="my-1.5 leading-relaxed [&>p]:inline [&>p]:my-0 [&>strong]:font-bold">
         {children}
       </li>
     );
@@ -247,18 +247,24 @@ interface SourceInfo {
 }
 
 /**
- * 마크다운에서 출처 링크를 추출하고 본문과 분리
+ * 마크다운에서 출처/참고 자료 링크를 추출하고 본문과 분리
  * GPT 스타일: 본문에서 출처를 제거하고 하단에 별도 섹션으로 표시
  */
 function extractSources(content: string): { cleanContent: string; sources: SourceInfo[] } {
   const sources: SourceInfo[] = [];
 
-  // 📚 출처: 또는 🔗 출처: 패턴 매칭 (여러 줄에 걸쳐 있을 수 있음)
-  // 예: 📚 출처: [Title1](url1), [Title2](url2)
+  // 📚 출처:, 🔗 출처:, 📚 참고 자료: 등 다양한 패턴 매칭
+  // 리스트 형식(- 또는 *)으로 여러 줄에 걸쳐 있을 수 있음
   const sourcePatterns = [
+    // "📚 참고 자료:" 뒤에 리스트 형식으로 나오는 경우 (여러 줄)
+    /📚\s*참고\s*자료:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    // "📚 출처:" 뒤에 리스트 형식으로 나오는 경우 (여러 줄)
+    /📚\s*출처:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    // 단일 줄 패턴들
     /📚\s*출처:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
+    /📚\s*참고\s*자료:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
     /🔗\s*출처:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
-    /\*\s*출처:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
+    /\*\*참고\s*자료:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
   ];
 
   let cleanContent = content;
@@ -280,7 +286,14 @@ function extractSources(content: string): { cleanContent: string; sources: Sourc
     });
   }
 
-  // 정리: 연속된 빈 줄 제거
+  // 정리: 잔여물 제거
+  // 빈 볼드 (**) 제거
+  cleanContent = cleanContent.replace(/\*\*\s*\*\*/g, '');
+  // 빈 줄만 있는 볼드 제거 (예: **\n**)
+  cleanContent = cleanContent.replace(/\*\*\s*\n\s*\*\*/g, '');
+  // 단독 ** 제거
+  cleanContent = cleanContent.replace(/^\s*\*\*\s*$/gm, '');
+  // 연속된 빈 줄 제거
   cleanContent = cleanContent.replace(/\n{3,}/g, '\n\n').trim();
 
   return { cleanContent, sources };

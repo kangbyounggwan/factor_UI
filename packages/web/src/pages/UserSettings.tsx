@@ -19,7 +19,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@shared/integrations/supabase/client";
-import { PLAN_FEATURES, type SubscriptionPlan } from "@shared/types/subscription";
+import { type SubscriptionPlan } from "@shared/types/subscription";
 import { getUserPaymentHistory, upsertUserSubscription, type PaymentHistory } from "@shared/services/supabaseService/subscription";
 import { getUserPaymentMethods, type PaymentMethod } from "@shared/services/supabaseService/paymentMethod";
 import {
@@ -134,11 +134,11 @@ const isKoreanUser = () => {
 // 통화별 가격 설정
 const PLAN_PRICES = {
   USD: {
-    starter: { monthly: 7, yearly: 70, monthlyEquivalent: 5.83 },
+    starter: { monthly: 3.5, yearly: 35, monthlyEquivalent: 2.92 },
     pro: { monthly: 15, yearly: 150, monthlyEquivalent: 12.50 },
   },
   KRW: {
-    starter: { monthly: 9900, yearly: 99900, monthlyEquivalent: 8325 },
+    starter: { monthly: 4900, yearly: 49000, monthlyEquivalent: 4083 },
     pro: { monthly: 22900, yearly: 229000, monthlyEquivalent: 19083 },
   },
 };
@@ -164,6 +164,9 @@ const UserSettings = () => {
   // Get tab from URL parameter, default to 'profile'
   const defaultTab = (searchParams.get('tab') || 'profile') as SettingsTab;
   const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab);
+
+  // URL 파라미터로 플랜 모달 자동 열기 (Subscription 페이지에서 업그레이드 클릭 시)
+  const shouldOpenPlanModal = searchParams.get('openPlanModal') === 'true';
 
   // Form states
   const [displayName, setDisplayName] = useState(
@@ -247,6 +250,17 @@ const UserSettings = () => {
     (paymentHistoryPage - 1) * ITEMS_PER_PAGE,
     paymentHistoryPage * ITEMS_PER_PAGE
   );
+
+  // URL 파라미터로 플랜 모달 자동 열기
+  useEffect(() => {
+    if (shouldOpenPlanModal && !loadingPlan) {
+      setShowChangePlanModal(true);
+      // URL에서 파라미터 제거 (뒤로가기 시 다시 열리지 않도록)
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('openPlanModal');
+      window.history.replaceState({}, '', newUrl.toString());
+    }
+  }, [shouldOpenPlanModal, loadingPlan]);
 
   // Load profile data from DB (including phone)
   useEffect(() => {
@@ -1287,87 +1301,95 @@ const UserSettings = () => {
                               <>
                                 <div className="flex items-center gap-2 text-sm">
                                   <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>{PLAN_FEATURES.free.maxPrinters}대의 3D 프린터 연결</span>
+                                  <span>기본 AI 모델</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
                                   <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>무제한 웹캠 스트리밍</span>
+                                  <span>60분 이상 감지 간격</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
                                   <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>기본 출력 모니터링</span>
+                                  <span>최대 1대 프린터 연결</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
                                   <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>커뮤니티 지원</span>
+                                  <span>월 5개 3D 모델링</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Check className="h-4 w-4 text-primary shrink-0" />
+                                  <span>API 일부 제한</span>
+                                </div>
+                              </>
+                            )}
+                            {currentPlan === 'starter' && (
+                              <>
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Check className="h-4 w-4 text-amber-500 shrink-0" />
+                                  <span className="font-medium text-amber-700 dark:text-amber-400">고급 AI 모델</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Check className="h-4 w-4 text-amber-500 shrink-0" />
+                                  <span className="font-medium text-amber-700 dark:text-amber-400">60분 이상 감지 간격</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Check className="h-4 w-4 text-primary shrink-0" />
+                                  <span>최대 1대 프린터 연결</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Check className="h-4 w-4 text-primary shrink-0" />
+                                  <span>월 20개 3D 모델링</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Check className="h-4 w-4 text-primary shrink-0" />
+                                  <span>API 일부 제한</span>
                                 </div>
                               </>
                             )}
                             {currentPlan === 'pro' && (
                               <>
                                 <div className="flex items-center gap-2 text-sm">
-                                  <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>최대 {PLAN_FEATURES.pro.maxPrinters}대의 3D 프린터 연결</span>
+                                  <Check className="h-4 w-4 text-blue-500 shrink-0" />
+                                  <span className="font-medium text-blue-700 dark:text-blue-400">고급 AI 모델</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Check className="h-4 w-4 text-blue-500 shrink-0" />
+                                  <span className="font-medium text-blue-700 dark:text-blue-400">10분 이상 감지 간격</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
                                   <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>무제한 웹캠 스트리밍</span>
+                                  <span>최대 5대 프린터 연결</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
                                   <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>월 {PLAN_FEATURES.pro.aiModelGeneration}회 AI 모델 생성</span>
+                                  <span>월 50개 3D 모델링</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
                                   <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>고급 분석 대시보드</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-sm">
-                                  <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>API 액세스</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-sm">
-                                  <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>이메일 우선 지원</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-sm">
-                                  <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>7일 로그 보관</span>
+                                  <span>API 전체 접근</span>
                                 </div>
                               </>
                             )}
                             {currentPlan === 'enterprise' && (
                               <>
                                 <div className="flex items-center gap-2 text-sm">
-                                  <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>무제한 3D 프린터 연결</span>
+                                  <Check className="h-4 w-4 text-purple-500 shrink-0" />
+                                  <span className="font-medium text-purple-700 dark:text-purple-400">고급 AI 모델</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Check className="h-4 w-4 text-purple-500 shrink-0" />
+                                  <span className="font-medium text-purple-700 dark:text-purple-400">실시간 이상 감지</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
                                   <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>무제한 AI 모델 생성</span>
+                                  <span>무제한 프린터 연결</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
                                   <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>AI 어시스턴트</span>
+                                  <span>무제한 3D 모델링</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
                                   <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>고급 분석 대시보드</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-sm">
-                                  <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>전용 API 지원</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-sm">
-                                  <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>24/7 전담 지원</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-sm">
-                                  <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>무제한 로그 보관</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-sm">
-                                  <Check className="h-4 w-4 text-primary shrink-0" />
-                                  <span>맞춤형 통합 지원</span>
+                                  <span>API 전체 접근</span>
                                 </div>
                               </>
                             )}
@@ -2505,19 +2527,23 @@ const UserSettings = () => {
               <div className="space-y-2 text-sm flex-1">
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>{PLAN_FEATURES.free.maxPrinters}대 프린터</span>
+                  <span>기본 AI 모델</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>웹캠 스트리밍</span>
+                  <span>60분 이상 감지 간격</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>기본 모니터링</span>
+                  <span>최대 1대 프린터 연결</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>커뮤니티 지원</span>
+                  <span>월 5개 3D 모델링</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-primary shrink-0" />
+                  <span>API 일부 제한</span>
                 </div>
               </div>
             </div>
@@ -2587,24 +2613,24 @@ const UserSettings = () => {
 
               <div className="space-y-2 text-sm flex-1">
                 <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>{PLAN_FEATURES.starter.maxPrinters}대 프린터</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>웹캠 스트리밍</span>
+                  <Check className="h-4 w-4 text-amber-500 shrink-0" />
+                  <span className="font-medium text-amber-700 dark:text-amber-400">고급 AI 모델</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-amber-500 shrink-0" />
-                  <span className="font-medium">무제한 AI 모델 생성</span>
+                  <span className="font-medium text-amber-700 dark:text-amber-400">60분 이상 감지 간격</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>출력 통계</span>
+                  <span>최대 1대 프린터 연결</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>커뮤니티 지원</span>
+                  <span>월 20개 3D 모델링</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-primary shrink-0" />
+                  <span>API 일부 제한</span>
                 </div>
               </div>
             </div>
@@ -2674,30 +2700,90 @@ const UserSettings = () => {
 
               <div className="space-y-2 text-sm flex-1">
                 <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>{PLAN_FEATURES.pro.maxPrinters}대 프린터</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>웹캠 스트리밍</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>월 50회 AI 생성</span>
+                  <Check className="h-4 w-4 text-blue-500 shrink-0" />
+                  <span className="font-medium text-blue-700 dark:text-blue-400">고급 AI 모델</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-blue-500 shrink-0" />
-                  <span className="font-medium">고급 분석</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-blue-500 shrink-0" />
-                  <span className="font-medium">API 액세스</span>
+                  <span className="font-medium text-blue-700 dark:text-blue-400">10분 이상 감지 간격</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary shrink-0" />
-                  <span>우선 지원</span>
+                  <span>최대 5대 프린터 연결</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-primary shrink-0" />
+                  <span>월 50개 3D 모델링</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-primary shrink-0" />
+                  <span>API 전체 접근</span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* 플랜별 세부 사항 비교 테이블 */}
+          <div className="mt-8 space-y-4">
+            <div className="text-center space-y-1">
+              <h3 className="text-lg font-bold">플랜별 세부 사항</h3>
+              <p className="text-xs text-muted-foreground">모든 기능을 자세히 비교해보세요</p>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-border/60 bg-card/50">
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-border/60 bg-muted/40">
+                    <th className="text-left py-3 px-3 font-bold min-w-[100px]">항목</th>
+                    <th className="text-center py-3 px-2 font-bold min-w-[70px] text-slate-600 dark:text-slate-400">무료</th>
+                    <th className="text-center py-3 px-2 font-bold min-w-[70px] text-amber-600 dark:text-amber-400">스타터</th>
+                    <th className="text-center py-3 px-2 font-bold min-w-[70px] bg-blue-500/10 text-blue-700 dark:text-blue-300 border-x border-blue-500/20">프로</th>
+                    <th className="text-center py-3 px-2 font-bold min-w-[70px] text-purple-700 dark:text-purple-300">엔터프라이즈</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* 1. 고급 분석 및 대화 */}
+                  <tr className="border-b border-border/40">
+                    <td className="py-3 px-3 font-medium">고급 분석 및 대화</td>
+                    <td className="py-3 px-2 text-center text-slate-600 dark:text-slate-400">기본 모델</td>
+                    <td className="py-3 px-2 text-center font-medium text-amber-600 dark:text-amber-400">고급 모델</td>
+                    <td className="py-3 px-2 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">고급 모델</td>
+                    <td className="py-3 px-2 text-center font-medium text-purple-700 dark:text-purple-300">고급 모델</td>
+                  </tr>
+                  {/* 2. 이상 감지 간격 */}
+                  <tr className="border-b border-border/40">
+                    <td className="py-3 px-3 font-medium">이상 감지 간격</td>
+                    <td className="py-3 px-2 text-center text-slate-600 dark:text-slate-400">60분</td>
+                    <td className="py-3 px-2 text-center font-medium text-amber-600 dark:text-amber-400">60분</td>
+                    <td className="py-3 px-2 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">10분</td>
+                    <td className="py-3 px-2 text-center font-medium text-purple-700 dark:text-purple-300">실시간</td>
+                  </tr>
+                  {/* 3. 최대 프린터 연결 */}
+                  <tr className="border-b border-border/40">
+                    <td className="py-3 px-3 font-medium">최대 프린터 연결</td>
+                    <td className="py-3 px-2 text-center text-slate-600 dark:text-slate-400">1대</td>
+                    <td className="py-3 px-2 text-center font-medium text-amber-600 dark:text-amber-400">1대</td>
+                    <td className="py-3 px-2 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">5대</td>
+                    <td className="py-3 px-2 text-center font-medium text-purple-700 dark:text-purple-300">무제한</td>
+                  </tr>
+                  {/* 4. 3D 모델링 사용 */}
+                  <tr className="border-b border-border/40">
+                    <td className="py-3 px-3 font-medium">3D 모델링 사용</td>
+                    <td className="py-3 px-2 text-center text-slate-600 dark:text-slate-400">월 20개</td>
+                    <td className="py-3 px-2 text-center font-medium text-amber-600 dark:text-amber-400">무제한</td>
+                    <td className="py-3 px-2 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">월 50개</td>
+                    <td className="py-3 px-2 text-center font-medium text-purple-700 dark:text-purple-300">무제한</td>
+                  </tr>
+                  {/* 5. API 접근 */}
+                  <tr>
+                    <td className="py-3 px-3 font-medium">API 접근</td>
+                    <td className="py-3 px-2 text-center text-slate-600 dark:text-slate-400">일부 제한</td>
+                    <td className="py-3 px-2 text-center font-medium text-amber-600 dark:text-amber-400">일부 제한</td>
+                    <td className="py-3 px-2 text-center bg-blue-500/5 font-medium text-blue-700 dark:text-blue-300 border-x border-blue-500/20">전체</td>
+                    <td className="py-3 px-2 text-center font-medium text-purple-700 dark:text-purple-300">전체</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </SheetContent>

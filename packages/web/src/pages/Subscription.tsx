@@ -280,7 +280,7 @@ const Subscription = () => {
     const plan = getDbPlanValue(planCode);
     if (!plan) {
       // 폴백 값
-      const fallback: Record<string, string> = { free: '60', starter: '30', pro: '10', enterprise: '0' };
+      const fallback: Record<string, string> = { free: '60', starter: '60', pro: '10', enterprise: '0' };
       const interval = fallback[planCode] || '60';
       return interval === '0' ? t('subscription.comparison.realtime') : t('subscription.comparison.intervalMinutes', { count: parseInt(interval) });
     }
@@ -391,9 +391,9 @@ const Subscription = () => {
       return;
     }
 
-    // 로그인한 사용자: UserSettings 구독 탭으로 이동
+    // 로그인한 사용자: UserSettings 구독 탭으로 이동 (플랜 모달 자동 열기)
     if (user) {
-      navigate('/user-settings?tab=subscription');
+      navigate('/user-settings?tab=subscription&openPlanModal=true');
       return;
     }
 
