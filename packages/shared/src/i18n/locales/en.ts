@@ -1586,7 +1586,9 @@ export default {
     ctaSubtitle: "Sign up now and experience professional 3D printer management",
     startFree: "Start Free",
     noCreditCard: "No credit card required",
-    cancelAnytime: "Cancel anytime"
+    cancelAnytime: "Cancel anytime",
+    // Footer
+    freeAiModelInfo: "🎁 10 free AI chats without login · Gemini 2.5 Flash Lite"
   },
   modelViewer: {
     modelRotation: "Model Rotation",
@@ -2530,11 +2532,19 @@ export default {
     starterExperience: "Starter Experience",
     trialRemaining: "{{count}} trials left",
     trialLimitReached: "Daily Trial Limit Reached",
-    trialLimitDescription: "Free plan allows up to 3 Gemini 3.0 Flash trials per day. Please try again tomorrow or upgrade your plan.",
+    trialLimitDescription: "Free plan allows up to 3 Gemini 3 Flash trials per day. Please try again tomorrow or upgrade your plan.",
+    trialExhausted: "Daily Trial Complete",
+    switchingToFreeModel: "Switching to free model (Gemini 2.5 Flash Lite). You can try again tomorrow.",
+    // Free usage guide
+    freeUsageGuide: {
+      anonymous: "🎁 10 free chats without login · Gemini 2.5 Flash Lite",
+      free: "Free: Unlimited Gemini 2.5 Flash Lite · 3 premium trials/day",
+    },
     latestModel: "Latest model",
     mostPowerful: "Most powerful model",
     balancedPerformance: "Balanced performance",
     mostIntelligent: "Most intelligent model",
+    webSearchEnabled: "Web search enabled",
     paidOnly: "Paid plans only",
     // Session management
     loadError: "Failed to load session",
@@ -2593,6 +2603,9 @@ export default {
     // G-code file required check
     gcodeRequired: "G-code File Required",
     gcodeRequiredDescription: "Please upload a G-code file first for analysis.",
+    // Anonymous user daily limit
+    anonymousLimitReached: "Daily Usage Limit Reached",
+    anonymousLimitDescription: "Non-logged in users can use up to 10 times per day. Login for more usage.",
     // Advanced troubleshoot daily limit (free users)
     troubleshootLimitReached: "Daily Troubleshoot Limit Reached",
     troubleshootLimitDescription: "Free plan allows up to 5 advanced troubleshoot sessions per day. Please try again tomorrow or upgrade your plan.",

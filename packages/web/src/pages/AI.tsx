@@ -74,7 +74,8 @@ import {
   Image as ImageFile,
   Shapes,
   Type,
-  Menu
+  Menu,
+  Activity
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AppHeader } from "@/components/common/AppHeader";
@@ -1186,7 +1187,7 @@ const AI = () => {
 
       {/* 왼쪽 사이드바 - 모델 아카이브 */}
       {sidebarOpen && (
-        <div className="w-[340px] border-r-2 border-border bg-background flex flex-col h-screen shrink-0">
+        <div className="w-80 border-r-2 border-border bg-background flex flex-col h-screen shrink-0">
           <Suspense fallback={<div className="w-full h-full bg-muted animate-pulse" />}>
             <AIArchiveSidebar
               activeTab={activeTab}
@@ -1225,20 +1226,40 @@ const AI = () => {
         </div>
       )}
 
-      {/* 메인 컨텐츠 */}
-      <div className="flex-1 flex flex-col min-w-0 relative transition-all duration-300">
-        {/* 사이드바 토글 버튼 - 닫혀있을 때만 표시 */}
+      {/* 토글 버튼 + 로고 - 사이드바 상태에 따라 위치 변경 */}
+      <div className={cn(
+        "absolute h-14 z-30 flex items-center gap-3 transition-all duration-300",
+        sidebarOpen ? "left-[21rem]" : "left-4"
+      )}>
         {!sidebarOpen && (
           <Button
             variant="ghost"
             size="icon"
-            className="fixed top-4 left-4 z-50 h-10 w-10 rounded-full bg-background/80 backdrop-blur-sm border shadow-sm"
+            className="h-9 w-9 rounded-full bg-background shadow-md border"
             onClick={toggleSidebar}
           >
             <Menu className="w-5 h-5" />
           </Button>
         )}
-        <AppHeader sidebarOpen={sidebarOpen} />
+        {/* FACTOR 로고 */}
+        <button
+          onClick={() => {
+            window.location.href = '/ai-chat';
+          }}
+          className="flex items-center space-x-2.5 cursor-pointer"
+        >
+          <div className="flex items-center justify-center w-8 h-8 bg-primary rounded-lg">
+            <Activity className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <span className="text-3xl font-bold font-orbitron text-primary tracking-wide">
+            FACTOR
+          </span>
+        </button>
+      </div>
+
+      {/* 메인 컨텐츠 */}
+      <div className="flex-1 flex flex-col min-w-0 relative transition-all duration-300">
+        <AppHeader sidebarOpen={sidebarOpen} onLoginRequired={() => setShowLoginPrompt(true)} />
         <div className="flex h-[calc(100vh-4rem)] overflow-hidden items-center justify-center">
           {/* 메인 작업 영역 - 85% 너비, 중앙 배치 */}
           <div className="w-[85%] h-[95%] flex flex-col">

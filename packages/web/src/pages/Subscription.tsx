@@ -62,11 +62,11 @@ const isKoreanUser = () => {
 // 통화별 가격 설정
 const PRICES = {
   USD: {
-    starter: { monthly: 7, yearly: 70 },
+    starter: { monthly: 3.5, yearly: 35 },
     pro: { monthly: 15, yearly: 150 },
   },
   KRW: {
-    starter: { monthly: 9900, yearly: 99900 },
+    starter: { monthly: 4900, yearly: 49000 },
     pro: { monthly: 22900, yearly: 229000 },
   },
 };

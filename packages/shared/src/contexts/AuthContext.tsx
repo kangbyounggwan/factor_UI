@@ -666,6 +666,12 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
     if (!isNativeMobile) {
       // 웹에서는 같은 창에서 OAuth 진행 (새 탭 열지 않음)
+      // 로그인 후 돌아갈 페이지 저장 (현재 페이지가 /auth가 아닌 경우에만)
+      const currentPath = window.location.pathname + window.location.search;
+      if (currentPath !== '/auth' && currentPath !== '/auth/callback') {
+        localStorage.setItem('auth_redirect_path', currentPath);
+      }
+
       const redirectUrl = (((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/auth/callback`);
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -801,6 +807,12 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       }
     } else {
       // 웹에서는 같은 창에서 OAuth 진행 (새 탭 열지 않음)
+      // 로그인 후 돌아갈 페이지 저장 (현재 페이지가 /auth가 아닌 경우에만)
+      const currentPath = window.location.pathname + window.location.search;
+      if (currentPath !== '/auth' && currentPath !== '/auth/callback') {
+        localStorage.setItem('auth_redirect_path', currentPath);
+      }
+
       const redirectUrl = (((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/auth/callback`);
 
       const { data, error } = await supabase.auth.signInWithOAuth({

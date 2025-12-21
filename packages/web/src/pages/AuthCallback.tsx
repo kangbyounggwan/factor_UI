@@ -52,11 +52,25 @@ const AuthCallback = () => {
             .maybeSingle();
 
           const needsSetup = !profile || !profile.display_name || !profile.phone;
-          console.log('[AuthCallback] Redirecting to:', needsSetup ? '/profile-setup' : '/dashboard');
-          navigate(needsSetup ? '/profile-setup' : '/dashboard', { replace: true });
+
+          // 저장된 리다이렉트 경로 확인 (프로필 설정이 필요 없는 경우에만)
+          const savedPath = localStorage.getItem('auth_redirect_path');
+          localStorage.removeItem('auth_redirect_path'); // 사용 후 제거
+
+          let redirectPath = '/dashboard';
+          if (needsSetup) {
+            redirectPath = '/profile-setup';
+          } else if (savedPath && savedPath !== '/auth' && savedPath !== '/auth/callback') {
+            redirectPath = savedPath;
+          }
+
+          console.log('[AuthCallback] Redirecting to:', redirectPath);
+          navigate(redirectPath, { replace: true });
         } catch (err) {
           console.error('[AuthCallback] Profile check error:', err);
-          navigate('/dashboard', { replace: true });
+          const savedPath = localStorage.getItem('auth_redirect_path');
+          localStorage.removeItem('auth_redirect_path');
+          navigate(savedPath || '/dashboard', { replace: true });
         }
       };
 

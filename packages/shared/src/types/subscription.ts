@@ -94,6 +94,8 @@ export interface SubscriptionPlanInfo {
   paddle_price_id_yearly?: string;
   max_printers: number;  // -1 = unlimited
   ai_generation_limit: number;  // -1 = unlimited
+  premium_model_daily_limit: number;  // -1 = unlimited (일일 유료 모델 체험 한도)
+  troubleshoot_daily_limit: number;  // -1 = unlimited (일일 고급 문제진단 한도)
   storage_limit_gb: number;  // -1 = unlimited
   webcam_reconnect_interval?: number;  // null = unlimited
   anomaly_detection_interval: number;  // 이상 감지 간격 (분), 0 = 실시간

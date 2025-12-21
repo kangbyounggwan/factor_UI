@@ -572,11 +572,19 @@ export default {
     starterExperience: "Starter 체험",
     trialRemaining: "체험 {{count}}회 남음",
     trialLimitReached: "오늘 체험 한도 도달",
-    trialLimitDescription: "무료 플랜은 하루 3회까지 Gemini 3.0 Flash를 체험할 수 있습니다. 내일 다시 시도하거나 플랜을 업그레이드해주세요.",
+    trialLimitDescription: "무료 플랜은 하루 3회까지 Gemini 3 Flash를 체험할 수 있습니다. 내일 다시 시도하거나 플랜을 업그레이드해주세요.",
+    trialExhausted: "오늘 체험 완료",
+    switchingToFreeModel: "무료 모델(Gemini 2.5 Flash Lite)로 전환합니다. 내일 다시 체험 가능합니다.",
+    // 무료 사용 안내
+    freeUsageGuide: {
+      anonymous: "🎁 로그인 없이 10회 무료 체험 · Gemini 2.5 Flash Lite",
+      free: "무료: Gemini 2.5 Flash Lite 무제한 · 유료 모델 체험 3회/일",
+    },
     latestModel: "최신 모델",
     mostPowerful: "가장 강력한 모델",
     balancedPerformance: "균형 잡힌 성능",
     mostIntelligent: "최고 지능 모델",
+    webSearchEnabled: "웹 검색 지원",
     paidOnly: "유료 플랜 전용",
     // 세션 관리
     loadError: "세션 로드 실패",
@@ -635,6 +643,9 @@ export default {
     // G-code 파일 필수 체크
     gcodeRequired: "G-code 파일 필요",
     gcodeRequiredDescription: "G-code 분석을 위해 먼저 G-code 파일을 업로드해주세요.",
+    // 익명 사용자 일일 한도
+    anonymousLimitReached: "일일 사용 한도 도달",
+    anonymousLimitDescription: "비로그인 사용자는 하루 10회까지 사용 가능합니다. 로그인하면 더 많이 사용할 수 있습니다.",
     // 고급 문제진단 일일 한도 (무료 사용자)
     troubleshootLimitReached: "오늘 고급 문제진단 한도 도달",
     troubleshootLimitDescription: "무료 플랜은 하루 5회까지 고급 문제진단을 사용할 수 있습니다. 내일 다시 시도하거나 플랜을 업그레이드해주세요.",
@@ -1750,7 +1761,9 @@ export default {
     ctaSubtitle: "지금 가입하고 전문적인 3D 프린터 관리를 경험해보세요",
     startFree: "무료로 시작하기",
     noCreditCard: "신용카드가 필요하지 않습니다",
-    cancelAnytime: "언제든 취소 가능"
+    cancelAnytime: "언제든 취소 가능",
+    // Footer
+    freeAiModelInfo: "🎁 로그인 없이 AI 채팅 10회 무료 체험 · Gemini 2.5 Flash Lite"
   },
   modelViewer: {
     modelRotation: "Model Rotation",

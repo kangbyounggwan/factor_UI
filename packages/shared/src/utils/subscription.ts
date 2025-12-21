@@ -330,49 +330,51 @@ export function getWebcamReconnectInterval(plan: SubscriptionPlan): number {
 
 // ============================================
 // 고급 문제진단 (Troubleshoot Advanced) 관련 함수
-// 무료 사용자: 1일 5회 사용 가능
+// 한도는 subscription_plans.troubleshoot_daily_limit에서 조회
 // ============================================
-
-const FREE_USER_TROUBLESHOOT_DAILY_LIMIT = 5;
 
 /**
  * 고급 문제진단 사용량 체크 (일별 리셋)
+ * DB에서 플랜별 한도를 조회하여 체크
  */
 export async function checkTroubleshootAdvancedUsage(
   userId: string
-): Promise<{ canUse: boolean; remaining: number; isFreePlan: boolean }> {
-  // 사용자의 현재 플랜 조회
-  const { data: subscription } = await supabase
-    .from('user_subscriptions')
-    .select('plan_name')
-    .eq('user_id', userId)
-    .in('status', ['active', 'trialing'])
-    .maybeSingle();
-
-  const planName = subscription?.plan_name || 'free';
-
-  // 유료 플랜 (starter, pro, enterprise)은 무제한
-  if (planName !== 'free') {
-    return { canUse: true, remaining: -1, isFreePlan: false };
-  }
-
-  // 무료 사용자: DB에서 오늘 사용량 체크
+): Promise<{ canUse: boolean; remaining: number; isFreePlan: boolean; dailyLimit: number }> {
+  // DB 함수 호출 - 플랜 조회 + 한도 체크를 한번에 수행
   const { data, error } = await supabase
     .rpc('check_troubleshoot_advanced_usage', { p_user_id: userId });
 
+  console.log('[Subscription] checkTroubleshootAdvancedUsage - Raw DB response:', {
+    userId,
+    data,
+    error
+  });
+
   if (error) {
     console.error('[Subscription] Error checking troubleshoot usage:', error);
-    // 에러 시 사용 불가 처리
-    return { canUse: false, remaining: 0, isFreePlan: true };
+    // 에러 시 기본값 반환 (사용 불가, 무료 플랜 가정)
+    return { canUse: false, remaining: 0, isFreePlan: true, dailyLimit: 5 };
   }
 
-  const todayUsage = data?.today_usage ?? 0;
-  const remaining = Math.max(0, FREE_USER_TROUBLESHOOT_DAILY_LIMIT - todayUsage);
+  const isFreePlan = data?.is_free_plan ?? true;
+  const dailyLimit = data?.daily_limit ?? 5;
+  const remaining = data?.remaining ?? 0;
+  const canUse = data?.can_use ?? false;
+
+  console.log('[Subscription] checkTroubleshootAdvancedUsage - Parsed values:', {
+    planCode: data?.plan_code,
+    todayUsage: data?.today_usage,
+    dailyLimit,
+    remaining,
+    canUse,
+    isFreePlan
+  });
 
   return {
-    canUse: remaining > 0,
-    remaining,
-    isFreePlan: true,
+    canUse,
+    remaining: dailyLimit === -1 ? -1 : remaining,
+    isFreePlan,
+    dailyLimit,
   };
 }
 
@@ -385,12 +387,21 @@ export async function incrementTroubleshootAdvancedUsage(
   const { data, error } = await supabase
     .rpc('increment_troubleshoot_advanced_usage', { p_user_id: userId });
 
+  console.log('[Subscription] incrementTroubleshootAdvancedUsage - DB response:', {
+    userId,
+    data,
+    error
+  });
+
   if (error) {
     console.error('[Subscription] Error incrementing troubleshoot usage:', error);
     return { success: false, newCount: -1 };
   }
 
-  return { success: true, newCount: data ?? 0 };
+  // DB 함수가 INTEGER를 반환
+  const result = { success: true, newCount: data ?? 0 };
+  console.log('[Subscription] incrementTroubleshootAdvancedUsage - Result:', result);
+  return result;
 }
 
 /**
@@ -403,49 +414,51 @@ export async function canUseTroubleshootAdvanced(userId: string): Promise<boolea
 
 // ============================================
 // 유료 모델 체험 (Premium Model Trial) 관련 함수
-// 무료 사용자: 1일 3회 사용 가능 (Gemini 3.0 Flash)
+// 한도는 subscription_plans.premium_model_daily_limit에서 조회
 // ============================================
-
-const FREE_USER_PREMIUM_MODEL_DAILY_LIMIT = 3;
 
 /**
  * 유료 모델 체험 사용량 체크 (일별 리셋)
+ * DB에서 플랜별 한도를 조회하여 체크
  */
 export async function checkPremiumModelTrialUsage(
   userId: string
-): Promise<{ canUse: boolean; remaining: number; isFreePlan: boolean }> {
-  // 사용자의 현재 플랜 조회
-  const { data: subscription } = await supabase
-    .from('user_subscriptions')
-    .select('plan_name')
-    .eq('user_id', userId)
-    .in('status', ['active', 'trialing'])
-    .maybeSingle();
-
-  const planName = subscription?.plan_name || 'free';
-
-  // 유료 플랜 (starter, pro, enterprise)은 무제한
-  if (planName !== 'free') {
-    return { canUse: true, remaining: -1, isFreePlan: false };
-  }
-
-  // 무료 사용자: DB에서 오늘 사용량 체크
+): Promise<{ canUse: boolean; remaining: number; isFreePlan: boolean; dailyLimit: number }> {
+  // DB 함수 호출 - 플랜 조회 + 한도 체크를 한번에 수행
   const { data, error } = await supabase
     .rpc('check_premium_model_trial_usage', { p_user_id: userId });
 
+  console.log('[Subscription] checkPremiumModelTrialUsage - Raw DB response:', {
+    userId,
+    data,
+    error
+  });
+
   if (error) {
     console.error('[Subscription] Error checking premium model trial usage:', error);
-    // 에러 시에도 사용 허용 (DB 함수가 아직 없을 수 있음)
-    return { canUse: true, remaining: FREE_USER_PREMIUM_MODEL_DAILY_LIMIT, isFreePlan: true };
+    // 에러 시 기본값 반환 (사용 허용, 무료 플랜 가정)
+    return { canUse: true, remaining: 3, isFreePlan: true, dailyLimit: 3 };
   }
 
-  const todayUsage = data?.today_usage ?? 0;
-  const remaining = Math.max(0, FREE_USER_PREMIUM_MODEL_DAILY_LIMIT - todayUsage);
+  const isFreePlan = data?.is_free_plan ?? true;
+  const dailyLimit = data?.daily_limit ?? 3;
+  const remaining = data?.remaining ?? 0;
+  const canUse = data?.can_use ?? true;
+
+  console.log('[Subscription] checkPremiumModelTrialUsage - Parsed values:', {
+    planCode: data?.plan_code,
+    todayUsage: data?.today_usage,
+    dailyLimit,
+    remaining,
+    canUse,
+    isFreePlan
+  });
 
   return {
-    canUse: remaining > 0,
-    remaining,
-    isFreePlan: true,
+    canUse,
+    remaining: dailyLimit === -1 ? -1 : remaining,
+    isFreePlan,
+    dailyLimit,
   };
 }
 
@@ -458,10 +471,145 @@ export async function incrementPremiumModelTrialUsage(
   const { data, error } = await supabase
     .rpc('increment_premium_model_trial_usage', { p_user_id: userId });
 
+  console.log('[Subscription] incrementPremiumModelTrialUsage - DB response:', {
+    userId,
+    data,
+    error
+  });
+
   if (error) {
     console.error('[Subscription] Error incrementing premium model trial usage:', error);
     return { success: false, newCount: -1 };
   }
 
-  return { success: true, newCount: data ?? 0 };
+  // DB 함수가 INTEGER를 반환
+  const result = { success: true, newCount: data ?? 0 };
+  console.log('[Subscription] incrementPremiumModelTrialUsage - Result:', result);
+  return result;
+}
+
+// ============================================
+// 익명 사용자 (Anonymous User) 일일 사용량 추적
+// localStorage 기반 - 일일 10회 제한
+// ============================================
+
+const ANON_DAILY_USAGE_KEY = 'factor_anon_daily_usage';
+const ANON_DAILY_LIMIT = 10; // 익명 사용자 일일 한도
+
+interface AnonDailyUsage {
+  date: string; // YYYY-MM-DD
+  count: number;
+}
+
+/**
+ * 오늘 날짜 문자열 반환 (YYYY-MM-DD)
+ */
+function getTodayString(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+/**
+ * 익명 사용자 일일 사용량 조회 (localStorage)
+ */
+function getAnonDailyUsage(): AnonDailyUsage {
+  if (typeof window === 'undefined') {
+    return { date: getTodayString(), count: 0 };
+  }
+
+  try {
+    const stored = localStorage.getItem(ANON_DAILY_USAGE_KEY);
+    if (!stored) {
+      return { date: getTodayString(), count: 0 };
+    }
+
+    const usage: AnonDailyUsage = JSON.parse(stored);
+
+    // 날짜가 변경되었으면 리셋
+    if (usage.date !== getTodayString()) {
+      return { date: getTodayString(), count: 0 };
+    }
+
+    return usage;
+  } catch {
+    return { date: getTodayString(), count: 0 };
+  }
+}
+
+/**
+ * 익명 사용자 일일 사용량 저장 (localStorage)
+ */
+function saveAnonDailyUsage(usage: AnonDailyUsage): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(ANON_DAILY_USAGE_KEY, JSON.stringify(usage));
+}
+
+/**
+ * 익명 사용자 사용량 체크
+ * @returns { canUse, remaining, dailyLimit, todayUsage }
+ */
+export function checkAnonymousUsage(): {
+  canUse: boolean;
+  remaining: number;
+  dailyLimit: number;
+  todayUsage: number;
+} {
+  const usage = getAnonDailyUsage();
+  const remaining = Math.max(0, ANON_DAILY_LIMIT - usage.count);
+  const canUse = usage.count < ANON_DAILY_LIMIT;
+
+  console.log('[Subscription] checkAnonymousUsage:', {
+    date: usage.date,
+    todayUsage: usage.count,
+    dailyLimit: ANON_DAILY_LIMIT,
+    remaining,
+    canUse
+  });
+
+  return {
+    canUse,
+    remaining,
+    dailyLimit: ANON_DAILY_LIMIT,
+    todayUsage: usage.count
+  };
+}
+
+/**
+ * 익명 사용자 사용량 증가
+ * @returns { success, newCount }
+ */
+export function incrementAnonymousUsage(): {
+  success: boolean;
+  newCount: number;
+} {
+  const usage = getAnonDailyUsage();
+
+  // 한도 초과 체크
+  if (usage.count >= ANON_DAILY_LIMIT) {
+    console.log('[Subscription] incrementAnonymousUsage - Limit exceeded:', {
+      count: usage.count,
+      limit: ANON_DAILY_LIMIT
+    });
+    return { success: false, newCount: usage.count };
+  }
+
+  // 사용량 증가
+  const newUsage: AnonDailyUsage = {
+    date: getTodayString(),
+    count: usage.count + 1
+  };
+  saveAnonDailyUsage(newUsage);
+
+  console.log('[Subscription] incrementAnonymousUsage - Success:', {
+    previousCount: usage.count,
+    newCount: newUsage.count
+  });
+
+  return { success: true, newCount: newUsage.count };
+}
+
+/**
+ * 익명 사용자가 AI를 사용할 수 있는지 확인 (간편 함수)
+ */
+export function canAnonymousUseAI(): boolean {
+  return checkAnonymousUsage().canUse;
 }

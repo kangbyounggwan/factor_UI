@@ -89,10 +89,10 @@ export function AIArchiveSidebar({
     const { t } = useTranslation();
 
     return (
-        <div className={`${isLeftSidebar ? 'w-full border-r-2' : 'w-[340px] border-l-2'} border-border bg-muted/5 flex flex-col overflow-hidden h-full`}>
+        <div className={`${isLeftSidebar ? 'w-full border-r-2' : 'w-80 border-l-2'} border-border bg-muted/5 flex flex-col overflow-hidden h-full`}>
             {/* 왼쪽 사이드바 모드일 때 상단 헤더 추가 */}
             {isLeftSidebar && (
-                <div className="h-14 px-3 flex items-center justify-between border-b border-border/50 shrink-0">
+                <div className="h-14 px-3 flex items-center border-b border-border/50 shrink-0">
                     <Button
                         variant="ghost"
                         size="icon"

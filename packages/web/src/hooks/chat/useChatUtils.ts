@@ -6,6 +6,21 @@
 
 import type { ChatToolType, ChatFileInfo } from "@shared/services/supabaseService/chat";
 
+// 참고 자료 타입
+export interface ReferenceInfo {
+  title: string;
+  url: string;
+  source?: string;
+  snippet?: string;
+}
+
+// 제안 액션 타입
+export interface SuggestedAction {
+  label: string;
+  action: string;
+  data?: Record<string, unknown>;
+}
+
 // 메시지 타입 정의
 export interface Message {
   id: string;
@@ -31,6 +46,10 @@ export interface Message {
   }[];
   analysisReportId?: string;
   gcodeContext?: string;
+  // API 응답에서 받은 참고 자료
+  references?: ReferenceInfo[];
+  // API 응답에서 받은 제안 액션
+  suggestedActions?: SuggestedAction[];
 }
 
 export type ChatMode = "general" | "troubleshoot" | "gcode" | "modeling";
@@ -96,12 +115,20 @@ export const createUserMessage = (
 /**
  * AI 응답 메시지 생성 (순수 함수)
  */
-export const createAssistantMessage = (content: string): Message => {
+export const createAssistantMessage = (
+  content: string,
+  options?: {
+    references?: ReferenceInfo[];
+    suggestedActions?: SuggestedAction[];
+  }
+): Message => {
   return {
     id: `assistant-${Date.now()}`,
     role: "assistant",
     content,
     timestamp: new Date(),
+    references: options?.references,
+    suggestedActions: options?.suggestedActions,
   };
 };
 

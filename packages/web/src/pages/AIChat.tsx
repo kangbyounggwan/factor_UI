@@ -55,8 +55,8 @@ import {
   getPlanInfo,
   checkTroubleshootAdvancedUsage,
   incrementTroubleshootAdvancedUsage,
-  checkPremiumModelTrialUsage,
-  incrementPremiumModelTrialUsage
+  checkAnonymousUsage,
+  incrementAnonymousUsage
 } from "@shared/utils/subscription";
 import { USAGE_TYPES, type SubscriptionPlanInfo } from "@shared/types/subscription";
 import { AppSidebar, type ChatSession, type ReportArchiveItem } from "@/components/common/AppSidebar";
@@ -195,6 +195,10 @@ interface Message {
   analysisReportId?: string;
   // G-code 컨텍스트 (코드 수정 에디터에서 사용, 앞뒤 30라인)
   gcodeContext?: string;
+  // API 응답에서 받은 참고 자료
+  references?: Array<{ title: string; url: string; source?: string; snippet?: string }>;
+  // API 응답에서 받은 제안 액션
+  suggestedActions?: Array<{ label: string; action: string; data?: Record<string, unknown> }>;
 }
 
 type ChatMode = "general" | "troubleshoot" | "gcode" | "modeling";
@@ -222,9 +226,6 @@ const AIChat = () => {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [_isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [selectedModel, setSelectedModel] = useState<{ provider: string; model: string }>({ provider: 'google', model: 'gemini-2.5-flash-lite' });
-
-  // 유료 모델 체험 남은 횟수 (무료 사용자: 3회/일)
-  const [premiumTrialRemaining, setPremiumTrialRemaining] = useState<number>(3);
 
   // 보고서 아카이브 상태
   const [reportArchive, setReportArchive] = useState<ReportArchiveItem[]>([]);
@@ -321,20 +322,6 @@ const AIChat = () => {
     };
     loadPlanInfo();
   }, [userPlan]);
-
-  // 유료 모델 체험 남은 횟수 로드 (무료 사용자만)
-  useEffect(() => {
-    const loadPremiumTrialUsage = async () => {
-      if (user?.id && userPlan === 'free') {
-        const result = await checkPremiumModelTrialUsage(user.id);
-        setPremiumTrialRemaining(result.remaining);
-      } else if (userPlan && userPlan !== 'free') {
-        // 유료 플랜은 무제한
-        setPremiumTrialRemaining(-1);
-      }
-    };
-    loadPremiumTrialUsage();
-  }, [user?.id, userPlan]);
 
   // gcodeFileContent 상태를 ref에 동기화 (콜백에서 최신 상태 참조)
   useEffect(() => {
@@ -945,6 +932,20 @@ const AIChat = () => {
     // 1. 입력 유효성 검사
     if (!canSendMessage(input, uploadedImages, gcodeFile, isLoading)) return;
 
+    // 1-0. 익명 사용자 일일 한도 체크 (10회)
+    if (!user) {
+      const anonUsage = checkAnonymousUsage();
+      if (!anonUsage.canUse) {
+        toast({
+          title: t('aiChat.anonymousLimitReached', '일일 사용 한도 도달'),
+          description: t('aiChat.anonymousLimitDescription', '비로그인 사용자는 하루 10회까지 사용 가능합니다. 로그인하면 더 많이 사용할 수 있습니다.'),
+          variant: 'destructive',
+        });
+        setShowLoginModal(true);
+        return;
+      }
+    }
+
     // 1-1. G-code 분석 도구 선택 시 G-code 파일 필수 체크
     if (selectedTool === 'gcode' && !gcodeFile) {
       toast({
@@ -1019,8 +1020,11 @@ const AIChat = () => {
       // 8. Chat API 호출
       const apiResult = await callChatAPI(currentInput, currentImages, currentGcodeFile, selectedTool);
 
-      // 9. AI 응답 메시지 생성 및 UI 반영
-      const assistantMessage = createAssistantMessage(apiResult.response);
+      // 9. AI 응답 메시지 생성 및 UI 반영 (참고 자료 및 제안 액션 포함)
+      const assistantMessage = createAssistantMessage(apiResult.response, {
+        references: apiResult.references,
+        suggestedActions: apiResult.suggestedActions,
+      });
       setMessages((prev) => [...prev, assistantMessage]);
 
       // 10. AI 응답 DB 저장
@@ -1047,11 +1051,9 @@ const AIChat = () => {
         await incrementTroubleshootAdvancedUsage(user.id);
       }
 
-      // 10-3. 유료 모델 체험 (Gemini 3.0 Flash) 사용량 증가 (무료 사용자만)
-      if (selectedModel.model === 'gemini-3.0-flash' && userPlan === 'free' && user?.id) {
-        await incrementPremiumModelTrialUsage(user.id);
-        // UI 업데이트
-        setPremiumTrialRemaining(prev => Math.max(0, prev - 1));
+      // 10-3. 익명 사용자 사용량 증가 (일일 10회)
+      if (!user && !apiResult.isFallback) {
+        incrementAnonymousUsage();
       }
 
       // 11. G-code 분석 후처리
@@ -1165,21 +1167,11 @@ const AIChat = () => {
     analysisId?: string;
     fileName?: string;
     segments?: any;
+    isFallback?: boolean; // 서버 연결 실패 시 true - 유료 모델 차감 안함
+    references?: Array<{ title: string; url: string; source?: string; snippet?: string }>;
+    suggestedActions?: Array<{ label: string; action: string; data?: Record<string, unknown> }>;
   }> => {
     const gcodeFileName = gcodeFile?.name;
-
-    // 유료 모델 체험 (Gemini 3.0 Flash) 사용량 체크 (무료 사용자만)
-    if (selectedModel.model === 'gemini-3.0-flash' && userPlan === 'free' && user?.id) {
-      const trialUsage = await checkPremiumModelTrialUsage(user.id);
-      if (!trialUsage.canUse) {
-        toast({
-          title: t('aiChat.trialLimitReached', '오늘 체험 한도 도달'),
-          description: t('aiChat.trialLimitDescription', '무료 플랜은 하루 3회까지 Gemini 3.0 Flash를 체험할 수 있습니다. 내일 다시 시도하거나 플랜을 업그레이드해주세요.'),
-          variant: "destructive"
-        });
-        throw new Error('PREMIUM_MODEL_TRIAL_LIMIT_REACHED');
-      }
-    }
 
     // 기본 요청 구성
     const baseRequest: Partial<ChatApiRequest> = {
@@ -1331,6 +1323,12 @@ const AIChat = () => {
     // 세그먼트는 response.segments 또는 response.tool_result.segments에 있을 수 있음
     const segments = response.segments || response.tool_result?.segments;
 
+    // 참고 자료 추출 (tool_result.data.references 또는 references)
+    const references = response.tool_result?.data?.references || response.references;
+
+    // 제안 액션 추출 (suggested_actions)
+    const suggestedActions = response.suggested_actions;
+
     // G-code 분석 정보와 함께 반환 (handleSubmit에서 처리)
     // analysis_id가 있으면 폴링 시작
     return {
@@ -1338,6 +1336,9 @@ const AIChat = () => {
       analysisId: response.analysis_id || undefined,
       fileName: gcodeFileName,
       segments: segments,
+      isFallback: response.is_fallback || false, // 서버 연결 실패 시 차감 안함
+      references: references,
+      suggestedActions: suggestedActions,
     };
   };
 
@@ -1496,6 +1497,12 @@ const AIChat = () => {
 
   // 도구 선택 핸들러
   const handleToolSelect = (toolId: string) => {
+    // 익명 사용자는 general 외 도구 사용 불가 - 로그인 모달 표시
+    if (!user && toolId !== 'general') {
+      setShowLoginModal(true);
+      return;
+    }
+
     // 3D 모델링 선택 시 create 페이지로 이동
     if (toolId === 'modeling') {
       navigate('/create');
@@ -1865,16 +1872,12 @@ const AIChat = () => {
             >
               <Cpu className="w-4 h-4" />
               {selectedModel.model === 'gemini-2.5-flash-lite' ? 'Gemini 2.5 Flash Lite' :
-                selectedModel.model === 'gemini-3.0-flash' ? (
-                  userPlan === 'free' ? `Gemini 3.0 Flash (${premiumTrialRemaining})` : 'Gemini 3.0 Flash'
-                ) :
-                  selectedModel.model === 'gemini-3.0-pro' ? 'Gemini 3.0 Pro' :
+                selectedModel.model === 'gemini-2.5-flash' ? 'Gemini 2.5 Flash' :
+                  selectedModel.model === 'gemini-2.5-pro' ? 'Gemini 2.5 Pro' :
                     selectedModel.model === 'gpt-4o-mini' ? 'GPT-4o mini' :
                       selectedModel.model === 'gpt-4o' ? 'GPT-4o' :
-                        selectedModel.model === 'gpt-5.1' ? 'GPT-5.1' :
-                          selectedModel.model === 'claude-3.5-sonnet' ? 'Claude 3.5 Sonnet' :
-                            selectedModel.model === 'claude-3.5-opus' ? 'Claude 3.5 Opus' :
-                              t('aiChat.model', '모델')}
+                        selectedModel.model === 'gpt-4.1' ? 'GPT-4.1' :
+                          t('aiChat.model', '모델')}
               <ChevronDown className="w-4 h-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -1895,6 +1898,7 @@ const AIChat = () => {
                 {selectedModel.provider === 'google' && <Check className="w-4 h-4 text-blue-500" />}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-64 p-2 rounded-2xl">
+                {/* 무료 모델 - 모든 사용자 */}
                 <DropdownMenuLabel className="text-xs text-muted-foreground px-3 py-1.5">{t('aiChat.freeModels', '무료 모델')}</DropdownMenuLabel>
                 <DropdownMenuItem
                   className={cn(
@@ -1910,52 +1914,46 @@ const AIChat = () => {
                   {selectedModel.provider === 'google' && selectedModel.model === 'gemini-2.5-flash-lite' && <Check className="w-4 h-4 text-blue-500" />}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
+                {/* 유료 모델 - Starter 이상 */}
                 <DropdownMenuLabel className="text-xs text-muted-foreground px-3 py-1.5">{t('aiChat.paidModels', '유료 모델')}</DropdownMenuLabel>
                 <DropdownMenuItem
                   className={cn(
                     "flex items-center gap-3 rounded-xl p-3",
-                    (userPlan === 'free' && premiumTrialRemaining <= 0) ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
-                    selectedModel.provider === 'google' && selectedModel.model === 'gemini-3.0-flash' && "bg-blue-500/10"
+                    (!userPlan || userPlan === 'free') ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
+                    selectedModel.provider === 'google' && selectedModel.model === 'gemini-2.5-flash' && "bg-blue-500/10"
                   )}
-                  disabled={userPlan === 'free' && premiumTrialRemaining <= 0}
-                  onClick={() => {
-                    if (userPlan !== 'free' || premiumTrialRemaining > 0) {
-                      setSelectedModel({ provider: 'google', model: 'gemini-3.0-flash' });
-                    }
-                  }}
+                  disabled={!userPlan || userPlan === 'free'}
+                  onClick={() => userPlan && userPlan !== 'free' && setSelectedModel({ provider: 'google', model: 'gemini-2.5-flash' })}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-foreground">Gemini 3.0 Flash</div>
-                    <div className="text-xs text-muted-foreground">
-                      {userPlan === 'free'
-                        ? t('aiChat.trialRemaining', '체험 {{count}}회 남음', { count: premiumTrialRemaining })
-                        : t('aiChat.starterExperience', 'Starter 체험')}
-                    </div>
+                    <div className="text-sm font-semibold text-foreground">Gemini 2.5 Flash</div>
+                    <div className="text-xs text-muted-foreground">{t('aiChat.starterAndAbove', 'Starter 이상')}</div>
                   </div>
-                  {selectedModel.provider === 'google' && selectedModel.model === 'gemini-3.0-flash' && <Check className="w-4 h-4 text-blue-500" />}
+                  {selectedModel.provider === 'google' && selectedModel.model === 'gemini-2.5-flash' && <Check className="w-4 h-4 text-blue-500" />}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className={cn(
                     "flex items-center gap-3 rounded-xl p-3",
-                    userPlan === 'free' ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
-                    selectedModel.provider === 'google' && selectedModel.model === 'gemini-3.0-pro' && "bg-blue-500/10"
+                    (!userPlan || userPlan === 'free') ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
+                    selectedModel.provider === 'google' && selectedModel.model === 'gemini-2.5-pro' && "bg-blue-500/10"
                   )}
-                  disabled={userPlan === 'free'}
-                  onClick={() => userPlan !== 'free' && setSelectedModel({ provider: 'google', model: 'gemini-3.0-pro' })}
+                  disabled={!userPlan || userPlan === 'free'}
+                  onClick={() => userPlan && userPlan !== 'free' && setSelectedModel({ provider: 'google', model: 'gemini-2.5-pro' })}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-foreground">Gemini 3.0 Pro</div>
+                    <div className="text-sm font-semibold text-foreground">Gemini 2.5 Pro</div>
                     <div className="text-xs text-muted-foreground">{t('aiChat.latestModel', '최신 모델')}</div>
                   </div>
-                  {selectedModel.provider === 'google' && selectedModel.model === 'gemini-3.0-pro' && <Check className="w-4 h-4 text-blue-500" />}
+                  {selectedModel.provider === 'google' && selectedModel.model === 'gemini-2.5-pro' && <Check className="w-4 h-4 text-blue-500" />}
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
 
-            {/* OpenAI */}
+            {/* OpenAI - Starter 이상 */}
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className={cn(
-                "flex items-center gap-3 cursor-pointer rounded-xl p-3",
+                "flex items-center gap-3 rounded-xl p-3",
+                (!userPlan || userPlan === 'free') ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
                 selectedModel.provider === 'openai' ? "bg-emerald-500/10" : "hover:bg-muted"
               )}>
                 <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
@@ -1963,18 +1961,19 @@ const AIChat = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-foreground">OpenAI</div>
-                  <div className="text-xs text-muted-foreground">GPT 모델</div>
+                  <div className="text-xs text-muted-foreground">{(!userPlan || userPlan === 'free') ? t('aiChat.starterAndAbove', 'Starter 이상') : 'GPT 모델'}</div>
                 </div>
                 {selectedModel.provider === 'openai' && <Check className="w-4 h-4 text-emerald-500" />}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-64 p-2 rounded-2xl">
-                <DropdownMenuLabel className="text-xs text-muted-foreground px-3 py-1.5">{t('aiChat.freeModels', '무료 모델')}</DropdownMenuLabel>
                 <DropdownMenuItem
                   className={cn(
-                    "flex items-center gap-3 cursor-pointer rounded-xl p-3 hover:bg-muted",
+                    "flex items-center gap-3 rounded-xl p-3",
+                    (!userPlan || userPlan === 'free') ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
                     selectedModel.provider === 'openai' && selectedModel.model === 'gpt-4o-mini' && "bg-emerald-500/10"
                   )}
-                  onClick={() => setSelectedModel({ provider: 'openai', model: 'gpt-4o-mini' })}
+                  disabled={!userPlan || userPlan === 'free'}
+                  onClick={() => userPlan && userPlan !== 'free' && setSelectedModel({ provider: 'openai', model: 'gpt-4o-mini' })}
                 >
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold text-foreground">GPT-4o mini</div>
@@ -1982,88 +1981,35 @@ const AIChat = () => {
                   </div>
                   {selectedModel.provider === 'openai' && selectedModel.model === 'gpt-4o-mini' && <Check className="w-4 h-4 text-emerald-500" />}
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-xs text-muted-foreground px-3 py-1.5">{t('aiChat.paidModels', '유료 모델')}</DropdownMenuLabel>
                 <DropdownMenuItem
                   className={cn(
                     "flex items-center gap-3 rounded-xl p-3",
-                    userPlan === 'free' ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
+                    (!userPlan || userPlan === 'free') ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
                     selectedModel.provider === 'openai' && selectedModel.model === 'gpt-4o' && "bg-emerald-500/10"
                   )}
-                  disabled={userPlan === 'free'}
-                  onClick={() => userPlan !== 'free' && setSelectedModel({ provider: 'openai', model: 'gpt-4o' })}
+                  disabled={!userPlan || userPlan === 'free'}
+                  onClick={() => userPlan && userPlan !== 'free' && setSelectedModel({ provider: 'openai', model: 'gpt-4o' })}
                 >
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold text-foreground">GPT-4o</div>
-                    <div className="text-xs text-muted-foreground">{t('aiChat.mostPowerful', '가장 강력한 모델')}</div>
+                    <div className="text-xs text-muted-foreground">{t('aiChat.webSearchEnabled', '웹 검색 지원')}</div>
                   </div>
                   {selectedModel.provider === 'openai' && selectedModel.model === 'gpt-4o' && <Check className="w-4 h-4 text-emerald-500" />}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className={cn(
                     "flex items-center gap-3 rounded-xl p-3",
-                    userPlan === 'free' ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
-                    selectedModel.provider === 'openai' && selectedModel.model === 'gpt-5.1' && "bg-emerald-500/10"
+                    (!userPlan || userPlan === 'free') ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
+                    selectedModel.provider === 'openai' && selectedModel.model === 'gpt-4.1' && "bg-emerald-500/10"
                   )}
-                  disabled={userPlan === 'free'}
-                  onClick={() => userPlan !== 'free' && setSelectedModel({ provider: 'openai', model: 'gpt-5.1' })}
+                  disabled={!userPlan || userPlan === 'free'}
+                  onClick={() => userPlan && userPlan !== 'free' && setSelectedModel({ provider: 'openai', model: 'gpt-4.1' })}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-foreground">GPT-5.1</div>
+                    <div className="text-sm font-semibold text-foreground">GPT-4.1</div>
                     <div className="text-xs text-muted-foreground">{t('aiChat.latestModel', '최신 모델')}</div>
                   </div>
-                  {selectedModel.provider === 'openai' && selectedModel.model === 'gpt-5.1' && <Check className="w-4 h-4 text-emerald-500" />}
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-
-            {/* Anthropic - 유료 플랜 전용 */}
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className={cn(
-                "flex items-center gap-3 rounded-xl p-3",
-                userPlan === 'free' ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
-                selectedModel.provider === 'anthropic' ? "bg-orange-500/10" : "hover:bg-muted"
-              )}>
-                <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
-                  <Cpu className="w-5 h-5 text-orange-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-foreground">Anthropic</div>
-                  <div className="text-xs text-muted-foreground">{userPlan === 'free' ? t('aiChat.paidOnly', '유료 플랜 전용') : 'Claude 모델'}</div>
-                </div>
-                {selectedModel.provider === 'anthropic' && <Check className="w-4 h-4 text-orange-500" />}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="w-64 p-2 rounded-2xl">
-                <DropdownMenuLabel className="text-xs text-muted-foreground px-3 py-1.5">{t('aiChat.paidModels', '유료 모델')}</DropdownMenuLabel>
-                <DropdownMenuItem
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl p-3",
-                    userPlan === 'free' ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
-                    selectedModel.provider === 'anthropic' && selectedModel.model === 'claude-3.5-sonnet' && "bg-orange-500/10"
-                  )}
-                  disabled={userPlan === 'free'}
-                  onClick={() => userPlan !== 'free' && setSelectedModel({ provider: 'anthropic', model: 'claude-3.5-sonnet' })}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-foreground">Claude 3.5 Sonnet</div>
-                    <div className="text-xs text-muted-foreground">{t('aiChat.balancedPerformance', '균형 잡힌 성능')}</div>
-                  </div>
-                  {selectedModel.provider === 'anthropic' && selectedModel.model === 'claude-3.5-sonnet' && <Check className="w-4 h-4 text-orange-500" />}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl p-3",
-                    userPlan === 'free' ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
-                    selectedModel.provider === 'anthropic' && selectedModel.model === 'claude-3.5-opus' && "bg-orange-500/10"
-                  )}
-                  disabled={userPlan === 'free'}
-                  onClick={() => userPlan !== 'free' && setSelectedModel({ provider: 'anthropic', model: 'claude-3.5-opus' })}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-foreground">Claude 3.5 Opus</div>
-                    <div className="text-xs text-muted-foreground">{t('aiChat.mostIntelligent', '최고 지능 모델')}</div>
-                  </div>
-                  {selectedModel.provider === 'anthropic' && selectedModel.model === 'claude-3.5-opus' && <Check className="w-4 h-4 text-orange-500" />}
+                  {selectedModel.provider === 'openai' && selectedModel.model === 'gpt-4.1' && <Check className="w-4 h-4 text-emerald-500" />}
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
@@ -2118,7 +2064,7 @@ const AIChat = () => {
       {/* 메인 컨텐츠 */}
       <div className="flex-1 flex flex-col min-w-0 relative transition-all duration-300">
         {/* 상단 헤더 - AppHeader 재사용 */}
-        <AppHeader sidebarOpen={sidebarOpen} />
+        <AppHeader sidebarOpen={sidebarOpen} onLoginRequired={() => setShowLoginModal(true)} />
 
         {archiveViewActive ? (
           // 아카이브 뷰 모드 - 열기/닫기 슬라이드 애니메이션
@@ -2420,7 +2366,11 @@ const AIChat = () => {
           </div>
         ) : messages.length === 0 ? (
           // Gemini 스타일 초기 화면
-          <div className="flex-1 flex flex-col items-center justify-center px-4">
+          <div className="flex-1 flex flex-col px-4">
+            {/* 상단 여백 */}
+            <div className="flex-1" />
+            {/* 메인 컨텐츠 (중앙 정렬) */}
+            <div className="flex flex-col items-center">
             {/* 인사말 */}
             <div className="text-center mb-8">
               {/* 스타카토 애니메이션 */}
@@ -2515,6 +2465,9 @@ const AIChat = () => {
                 </div>
               </div>
             </div>
+            </div>
+            {/* 하단 여백 */}
+            <div className="flex-1" />
           </div>
         ) : (
           // 채팅 화면 + 보고서 레이아웃
@@ -2670,6 +2623,23 @@ const AIChat = () => {
                             } else {
                               setGcodeSegments(null);
                             }
+                          }
+                        }}
+                        onSuggestedAction={(action) => {
+                          // 제안 액션 처리
+                          if (action.action === 'follow_up' && action.data?.question) {
+                            // 후속 질문: 입력창에 텍스트 설정
+                            setInput(action.data.question as string);
+                          } else if (action.action === 'open_link' && action.data?.url) {
+                            // 링크 열기
+                            window.open(action.data.url as string, '_blank');
+                          } else if (action.action === 'copy' && action.data?.text) {
+                            // 텍스트 복사
+                            navigator.clipboard.writeText(action.data.text as string);
+                            toast({
+                              title: t('common.copied', '복사됨'),
+                              description: t('common.copiedToClipboard', '클립보드에 복사되었습니다'),
+                            });
                           }
                         }}
                       />

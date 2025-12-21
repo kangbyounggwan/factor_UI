@@ -68,9 +68,10 @@ interface AppHeaderProps {
   leftContent?: React.ReactNode;
   rightContent?: React.ReactNode;
   showTabSwitch?: boolean;
+  onLoginRequired?: () => void; // 로그인이 필요할 때 호출되는 콜백
 }
 
-export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, showTabSwitch = true }: AppHeaderProps) => {
+export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, showTabSwitch = true, onLoginRequired }: AppHeaderProps) => {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
   const location = useLocation();
@@ -131,7 +132,13 @@ export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, show
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate('/dashboard')}
+                onClick={() => {
+                  if (!user && onLoginRequired) {
+                    onLoginRequired();
+                  } else {
+                    navigate('/dashboard');
+                  }
+                }}
                 className={cn(
                   "rounded-full px-5 h-9 text-sm font-medium transition-colors",
                   isPrinter

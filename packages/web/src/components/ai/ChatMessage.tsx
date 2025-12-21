@@ -6,12 +6,28 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Cpu, File } from "lucide-react";
+import { Cpu, File, ExternalLink, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CodeFixDiffCard } from "@/components/gcodeAnalysis/CodeFixDiffCard";
 import type { CodeFixInfo } from "@/components/gcodeAnalysis/CodeFixDiffCard";
 import { ReportCompletionCard } from "./ReportCompletionCard";
+import { Button } from "@/components/ui/button";
 import type { ChatFileInfo } from "@shared/services/supabaseService/chat";
+
+// 참고 자료 타입
+export interface ReferenceInfo {
+  title: string;
+  url: string;
+  source?: string; // 예: 'duckduckgo', 'google'
+  snippet?: string; // 검색 결과 요약
+}
+
+// 제안 액션 타입
+export interface SuggestedAction {
+  label: string;
+  action: string; // 예: 'follow_up', 'open_link', 'copy'
+  data?: Record<string, unknown>;
+}
 
 // 메시지 타입 정의
 export interface ChatMessageData {
@@ -33,6 +49,10 @@ export interface ChatMessageData {
   codeFixes?: CodeFixInfo[];
   gcodeContext?: string;
   analysisReportId?: string; // 연결된 보고서 ID (코드 수정 시 보고서 로드용)
+  // API 응답에서 받은 참고 자료
+  references?: ReferenceInfo[];
+  // API 응답에서 받은 제안 액션
+  suggestedActions?: SuggestedAction[];
 }
 
 interface ChatMessageProps {
@@ -48,6 +68,8 @@ interface ChatMessageProps {
   resolvedLines?: Set<number>;
   // 되돌리기 콜백 (수정코드 -> 원본코드로)
   onRevert?: (lineNumber: number, fixedCode: string, originalCode: string) => void;
+  // 제안 액션 클릭 콜백
+  onSuggestedAction?: (action: SuggestedAction) => void;
 }
 
 /**
@@ -277,6 +299,7 @@ const AssistantMessage: React.FC<{
   onReportCardClick?: (reportId: string) => void;
   resolvedLines?: Set<number>;
   onRevert?: (lineNumber: number, fixedCode: string, originalCode: string) => void;
+  onSuggestedAction?: (action: SuggestedAction) => void;
 }> = ({
   message,
   gcodeContent,
@@ -287,9 +310,15 @@ const AssistantMessage: React.FC<{
   onReportCardClick,
   resolvedLines,
   onRevert,
+  onSuggestedAction,
 }) => {
   // 출처 추출 및 본문 분리
   const { cleanContent, sources } = extractSources(message.content);
+
+  // API에서 받은 참고 자료가 있으면 그것을 사용, 없으면 본문에서 추출한 sources 사용
+  const displayReferences = message.references && message.references.length > 0
+    ? message.references
+    : sources;
 
   return (
   <>
@@ -313,29 +342,46 @@ const AssistantMessage: React.FC<{
       </ReactMarkdown>
     </div>
 
-    {/* 출처 섹션 - GPT 스타일 (하단 별도 표시) */}
-    {sources.length > 0 && (
+    {/* 참고 자료 섹션 - GPT 스타일 (하단 별도 표시) */}
+    {displayReferences.length > 0 && (
       <div className="pl-8 mt-6 pt-4 border-t border-border/50">
         <div className="flex items-center gap-2 mb-3 text-sm font-medium text-muted-foreground">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-          </svg>
-          <span>출처</span>
+          <ExternalLink className="w-4 h-4" />
+          <span>참고 자료</span>
         </div>
         <div className="flex flex-wrap gap-2">
-          {sources.map((source, idx) => (
+          {displayReferences.map((ref, idx) => (
             <a
               key={idx}
-              href={source.url}
+              href={ref.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-full transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-full transition-colors group"
+              title={'snippet' in ref && ref.snippet ? ref.snippet : undefined}
             >
-              <span className="max-w-[200px] truncate">{source.title}</span>
-              <svg className="w-3 h-3 flex-shrink-0 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
+              <span className="max-w-[200px] truncate">{ref.title}</span>
+              <ExternalLink className="w-3 h-3 flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
             </a>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {/* 제안 액션 버튼 */}
+    {message.suggestedActions && message.suggestedActions.length > 0 && onSuggestedAction && (
+      <div className="pl-8 mt-4">
+        <div className="flex flex-wrap gap-2">
+          {message.suggestedActions.map((action, idx) => (
+            <Button
+              key={idx}
+              variant="outline"
+              size="sm"
+              onClick={() => onSuggestedAction(action)}
+              className="rounded-full text-xs gap-1.5 hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors"
+            >
+              {action.label}
+              <ArrowRight className="w-3 h-3" />
+            </Button>
           ))}
         </div>
       </div>
@@ -390,6 +436,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onReportCardClick,
   resolvedLines,
   onRevert,
+  onSuggestedAction,
 }) => {
   return (
     <div
@@ -415,6 +462,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             onReportCardClick={onReportCardClick}
             resolvedLines={resolvedLines}
             onRevert={onRevert}
+            onSuggestedAction={onSuggestedAction}
           />
         )}
       </div>

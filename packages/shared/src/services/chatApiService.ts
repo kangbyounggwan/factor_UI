@@ -193,6 +193,8 @@ export interface ChatApiResponse {
   analysis_id?: string;
   stream_url?: string;
   segments?: GcodeAnalysisData['segments'];
+  // Fallback 응답 여부 (서버 연결 실패 시 true - 유료 모델 차감 안함)
+  is_fallback?: boolean;
 }
 
 // ============================================
@@ -255,8 +257,8 @@ function generateFallbackResponse(request: ChatApiRequest): ChatApiResponse {
         : `Hello! 👋 I'm FACTOR AI.\n\nI can help you with everything about 3D printing:\n\n**🔧 Printer Troubleshooting**\nDescribe your symptoms or upload photos of your prints\n\n**📊 G-code Analysis**\nUpload G-code files for detailed analysis\n\n**🎨 3D Modeling**\nGenerate 3D models from text descriptions\n\nHow can I help you?`;
     } else {
       responseText = isKorean
-        ? `FACTOR AI가 도와드릴게요!\n\n**입력하신 내용:** ${request.message}\n\n현재 AI 서버에 연결되지 않아 상세 응답이 불가능합니다.\n\n**사용 가능한 기능:**\n🔧 프린터 문제 진단 - 이미지 업로드\n📊 G-code 분석 - .gcode 파일 업로드\n🎨 3D 모델링 - 도구 선택 후 설명 입력\n\n잠시 후 다시 시도해주세요.`
-        : `FACTOR AI is here to help!\n\n**Your input:** ${request.message}\n\nDetailed response is currently unavailable as the AI server is not connected.\n\n**Available features:**\n🔧 Printer Troubleshooting - Upload images\n📊 G-code Analysis - Upload .gcode files\n🎨 3D Modeling - Select tool and describe\n\nPlease try again later.`;
+        ? `FACTOR AI가 도와드릴게요!\n\n**입력하신 내용:** ${request.message}\n\n현재 AI 서버에 연결되지 않아 상세 응답이 불가능합니다.\n\n✅ 유료 모델 체험은 차감되지 않습니다.\n\n잠시 후 다시 시도해주세요.`
+        : `FACTOR AI is here to help!\n\n**Your input:** ${request.message}\n\nDetailed response is currently unavailable as the AI server is not connected.\n\n✅ Premium model trial was not charged.\n\nPlease try again later.`;
     }
   }
 
@@ -269,6 +271,7 @@ function generateFallbackResponse(request: ChatApiRequest): ChatApiResponse {
             request.selected_tool === 'modelling' ? 'modelling_text' : 'general',
     confidence: 1.0,
     response: responseText,
+    is_fallback: true, // 서버 연결 실패 - 유료 모델 차감 안함
   };
 }
 
