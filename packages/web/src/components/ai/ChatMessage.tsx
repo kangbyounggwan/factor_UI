@@ -389,7 +389,7 @@ const AssistantMessage: React.FC<{
         <div className="flex flex-wrap gap-2">
           {displayReferences.map((ref, idx) => (
             <a
-              key={idx}
+              key={`ref-${idx}-${ref.url}`}
               href={ref.url}
               target="_blank"
               rel="noopener noreferrer"
@@ -410,7 +410,7 @@ const AssistantMessage: React.FC<{
         <div className="flex flex-wrap gap-2">
           {message.suggestedActions.map((action, idx) => (
             <Button
-              key={idx}
+              key={`action-${idx}-${action.label}`}
               variant="outline"
               size="sm"
               onClick={() => onSuggestedAction(action)}

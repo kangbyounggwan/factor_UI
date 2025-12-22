@@ -1329,7 +1329,9 @@ const AIChat = () => {
 
     // 참고 자료 추출 (tool_result.data.references 또는 response.references)
     // 각 솔루션별 출처는 마크다운 응답에 포함되어야 함 (백엔드에서 처리)
-    const references = response.tool_result?.data?.references || response.references;
+    // TroubleshootData만 references를 가지므로 타입 단언 사용
+    const toolData = response.tool_result?.data as { references?: typeof response.references } | null | undefined;
+    const references = toolData?.references || response.references;
 
     // 제안 액션 추출 (suggested_actions)
     const suggestedActions = response.suggested_actions;

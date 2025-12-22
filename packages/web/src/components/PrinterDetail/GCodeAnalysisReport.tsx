@@ -4188,7 +4188,7 @@ function AIResolutionPanel({
             <div className="space-y-2 text-sm">
               {solution.steps?.length > 0 && (
                 <ol className="list-decimal list-inside space-y-1 text-slate-600 dark:text-slate-400">
-                  {solution.steps.map((step, i) => <li key={i}>{step}</li>)}
+                  {solution.steps.map((step, i) => <li key={`solution-step-${i}-${step.slice(0, 20)}`}>{step}</li>)}
                 </ol>
               )}
             </div>
