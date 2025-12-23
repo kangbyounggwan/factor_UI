@@ -2609,6 +2609,9 @@ export default {
     // Advanced troubleshoot daily limit (free users)
     troubleshootLimitReached: "Daily Troubleshoot Limit Reached",
     troubleshootLimitDescription: "Free plan allows up to 5 advanced troubleshoot sessions per day. Please try again tomorrow or upgrade your plan.",
+    // 3D modeling login required
+    loginRequiredForModeling: "Login Required",
+    loginRequiredForModelingDescription: "3D model generation requires login. Sign in to try various AI tools for free.",
     // Quick Prompts
     quickPrompt: {
       // G-code analysis (blue)

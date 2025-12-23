@@ -649,6 +649,9 @@ export default {
     // 고급 문제진단 일일 한도 (무료 사용자)
     troubleshootLimitReached: "오늘 고급 문제진단 한도 도달",
     troubleshootLimitDescription: "무료 플랜은 하루 5회까지 고급 문제진단을 사용할 수 있습니다. 내일 다시 시도하거나 플랜을 업그레이드해주세요.",
+    // 3D 모델링 로그인 필요
+    loginRequiredForModeling: "로그인이 필요합니다",
+    loginRequiredForModelingDescription: "3D 모델 생성은 로그인 후 사용할 수 있습니다. 로그인하시면 다양한 AI 도구를 무료로 체험해보실 수 있습니다.",
     // 빠른 테스트 버튼 (Quick Prompts)
     quickPrompt: {
       // G-code 분석 (blue)

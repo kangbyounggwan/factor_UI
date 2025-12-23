@@ -5,6 +5,7 @@
  */
 
 import type { ChatToolType, ChatFileInfo } from "@shared/services/supabaseService/chat";
+import type { ReferenceImages } from "@shared/services/chatApiService";
 
 // 참고 자료 타입
 export interface ReferenceInfo {
@@ -20,6 +21,9 @@ export interface SuggestedAction {
   action: string;
   data?: Record<string, unknown>;
 }
+
+// re-export for convenience
+export type { ReferenceImages };
 
 // 메시지 타입 정의
 export interface Message {
@@ -50,6 +54,8 @@ export interface Message {
   references?: ReferenceInfo[];
   // API 응답에서 받은 제안 액션
   suggestedActions?: SuggestedAction[];
+  // API 응답에서 받은 참조 이미지 (문제진단)
+  referenceImages?: ReferenceImages;
 }
 
 export type ChatMode = "general" | "troubleshoot" | "gcode" | "modeling";
@@ -119,6 +125,7 @@ export const createAssistantMessage = (
   content: string,
   options?: {
     references?: ReferenceInfo[];
+    referenceImages?: ReferenceImages;
     suggestedActions?: SuggestedAction[];
   }
 ): Message => {
@@ -128,6 +135,7 @@ export const createAssistantMessage = (
     content,
     timestamp: new Date(),
     references: options?.references,
+    referenceImages: options?.referenceImages,
     suggestedActions: options?.suggestedActions,
   };
 };

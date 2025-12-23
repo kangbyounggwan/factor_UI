@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, Loader2, Wrench, Send, Trash2, Plus, MessageSquare, User, Bot } from "lucide-react";
+import { Upload, Loader2, Wrench, Send, Trash2, Plus, MessageSquare, User, Bot, ExternalLink, ImageIcon } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import {
   getManufacturers,
@@ -37,6 +37,7 @@ import {
   postTroubleshootingDiagnose,
   filesToBase64,
   type TroubleshootingResponse,
+  type ReferenceImages,
 } from "@shared/services/aiService";
 import type {
   TroubleshootingSession,
@@ -406,6 +407,7 @@ export const AITroubleshootingTab = ({ isProcessing = false }: AITroubleshooting
 
       // 4. AI 분석 - Python 서버 API 호출
       let aiResponse: string;
+      let referenceImages: ReferenceImages | undefined;
 
       try {
         // 이미지 파일들을 Base64로 변환
@@ -453,6 +455,11 @@ export const AITroubleshootingTab = ({ isProcessing = false }: AITroubleshooting
             aiResponse = `**이미지 분석:**\n${data.image_analysis}\n\n${aiResponse}`;
           }
 
+          // 참조 이미지 저장
+          if (data.reference_images && data.reference_images.images?.length > 0) {
+            referenceImages = data.reference_images;
+          }
+
           // 추가 질문 유도
           aiResponse += '\n\n추가 질문이 있으시면 말씀해주세요.';
         } else {
@@ -465,6 +472,11 @@ export const AITroubleshootingTab = ({ isProcessing = false }: AITroubleshooting
       }
 
       // 5. AI 응답 처리 (로그인 사용자만 DB 저장)
+      const messageMetadata: Record<string, unknown> = {};
+      if (referenceImages) {
+        messageMetadata.reference_images = referenceImages;
+      }
+
       if (user?.id && sessionId) {
         // 로그인 사용자: DB에 저장
         const assistantMessage = await addMessage(supabase, {
@@ -473,6 +485,7 @@ export const AITroubleshootingTab = ({ isProcessing = false }: AITroubleshooting
           content: aiResponse,
           token_count: estimateTokens(aiResponse),
           importance_score: 0.7, // AI 응답은 기본적으로 중요
+          metadata: messageMetadata,
         });
         setCurrentMessages(prev => [...prev, assistantMessage]);
 
@@ -491,7 +504,7 @@ export const AITroubleshootingTab = ({ isProcessing = false }: AITroubleshooting
           image_analysis: null,
           importance_score: 0.7,
           is_key_message: false,
-          metadata: {},
+          metadata: messageMetadata,
           created_at: new Date().toISOString(),
         };
         setCurrentMessages(prev => [...prev, tempAssistantMessage]);
@@ -727,6 +740,42 @@ export const AITroubleshootingTab = ({ isProcessing = false }: AITroubleshooting
                     {message.content && (
                       <div className="whitespace-pre-wrap text-sm leading-relaxed font-medium">
                         {message.content}
+                      </div>
+                    )}
+
+                    {/* 참조 이미지 표시 */}
+                    {message.role === 'assistant' &&
+                     message.metadata?.reference_images &&
+                     (message.metadata.reference_images as ReferenceImages)?.images?.length > 0 && (
+                      <div className="mt-4 pt-3 border-t border-border/50">
+                        <div className="flex items-center gap-2 mb-3">
+                          <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-xs font-semibold text-muted-foreground">참조 이미지</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {(message.metadata.reference_images as ReferenceImages).images.slice(0, 4).map((img, idx) => (
+                            <a
+                              key={`ref-img-${idx}-${img.source_url}`}
+                              href={img.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="group relative block rounded-lg overflow-hidden border border-border/50 hover:border-primary/50 transition-colors"
+                            >
+                              <img
+                                src={img.thumbnail_url}
+                                alt={img.title}
+                                className="w-full h-20 object-cover"
+                                loading="lazy"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+                                <span className="text-[10px] text-white line-clamp-2 font-medium">{img.title}</span>
+                              </div>
+                              <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <ExternalLink className="w-3 h-3 text-white" />
+                              </div>
+                            </a>
+                          ))}
+                        </div>
                       </div>
                     )}
 

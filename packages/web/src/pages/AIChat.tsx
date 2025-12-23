@@ -1019,9 +1019,10 @@ const AIChat = () => {
       // 8. Chat API 호출
       const apiResult = await callChatAPI(currentInput, currentImages, currentGcodeFile, selectedTool);
 
-      // 9. AI 응답 메시지 생성 및 UI 반영 (참고 자료 및 제안 액션 포함)
+      // 9. AI 응답 메시지 생성 및 UI 반영 (참고 자료, 참조 이미지 및 제안 액션 포함)
       const assistantMessage = createAssistantMessage(apiResult.response, {
         references: apiResult.references,
+        referenceImages: apiResult.referenceImages,
         suggestedActions: apiResult.suggestedActions,
       });
       setMessages((prev) => [...prev, assistantMessage]);
@@ -1139,8 +1140,13 @@ const AIChat = () => {
       }
     } catch (error) {
       // 14. 에러 처리
-      // AI 생성 한도 초과 에러는 이미 toast로 표시했으므로 에러 메시지 추가하지 않음
-      if (error instanceof Error && error.message === 'AI_GENERATION_LIMIT_REACHED') {
+      // 특정 에러는 이미 toast로 표시했으므로 에러 메시지 추가하지 않음
+      const skipErrorMessages = [
+        'AI_GENERATION_LIMIT_REACHED',
+        'LOGIN_REQUIRED_FOR_MODELING',
+        'TROUBLESHOOT_DAILY_LIMIT_REACHED'
+      ];
+      if (error instanceof Error && skipErrorMessages.includes(error.message)) {
         // toast 이미 표시됨 - 메시지 리스트에 추가하지 않음
       } else {
         const errorMsg = createErrorMessage(error, t);
@@ -1168,6 +1174,7 @@ const AIChat = () => {
     segments?: any;
     isFallback?: boolean; // 서버 연결 실패 시 true - 유료 모델 차감 안함
     references?: Array<{ title: string; url: string; source?: string; snippet?: string }>;
+    referenceImages?: { search_query?: string; total_count?: number; images: Array<{ title: string; thumbnail_url: string; source_url: string; width?: number; height?: number }> };
     suggestedActions?: Array<{ label: string; action: string; data?: Record<string, unknown> }>;
   }> => {
     const gcodeFileName = gcodeFile?.name;
@@ -1246,21 +1253,30 @@ const AIChat = () => {
 
       case 'modeling': {
         // 3. Text-to-3D 또는 Image-to-3D 모델링 요청
+        // 비로그인 사용자는 3D 모델링 사용 불가 - 로그인 유도
+        if (!user?.id) {
+          toast({
+            title: t('aiChat.loginRequiredForModeling', '로그인이 필요합니다'),
+            description: t('aiChat.loginRequiredForModelingDescription', '3D 모델 생성은 로그인 후 사용할 수 있습니다. 로그인하시면 다양한 AI 도구를 무료로 체험해보실 수 있습니다.'),
+            variant: "default"
+          });
+          setShowLoginModal(true);
+          throw new Error('LOGIN_REQUIRED_FOR_MODELING');
+        }
+
         // AI 모델 생성 한도 체크
-        if (user?.id) {
-          const usageCheck = await checkUsageLimit(user.id, USAGE_TYPES.AI_MODEL_GENERATION);
-          if (usageCheck && !usageCheck.can_use) {
-            toast({
-              title: t('ai.limitReached', 'AI 생성 한도 도달'),
-              description: t('ai.limitReachedDescription', {
-                limit: usageCheck.limit === -1 ? '∞' : usageCheck.limit,
-                plan: userPlan?.toUpperCase() || 'FREE'
-              }),
-              variant: "destructive"
-            });
-            // 사용량 한도 초과 시 에러 throw
-            throw new Error('AI_GENERATION_LIMIT_REACHED');
-          }
+        const usageCheck = await checkUsageLimit(user.id, USAGE_TYPES.AI_MODEL_GENERATION);
+        if (usageCheck && !usageCheck.can_use) {
+          toast({
+            title: t('ai.limitReached', 'AI 생성 한도 도달'),
+            description: t('ai.limitReachedDescription', {
+              limit: usageCheck.limit === -1 ? '∞' : usageCheck.limit,
+              plan: userPlan?.toUpperCase() || 'FREE'
+            }),
+            variant: "destructive"
+          });
+          // 사용량 한도 초과 시 에러 throw
+          throw new Error('AI_GENERATION_LIMIT_REACHED');
         }
 
         const attachments = [];
@@ -1327,11 +1343,23 @@ const AIChat = () => {
     // 세그먼트는 response.segments 또는 response.tool_result.segments에 있을 수 있음
     const segments = response.segments || response.tool_result?.segments;
 
+    // 전체 응답 데이터 로그 (디버깅용)
+    console.log('[AIChat] ========== FULL API RESPONSE ==========');
+    console.log('[AIChat] response:', response);
+    console.log('[AIChat] response.tool_result:', response.tool_result);
+    console.log('[AIChat] response.tool_result?.data:', response.tool_result?.data);
+    console.log('[AIChat] =========================================');
+
     // 참고 자료 추출 (tool_result.data.references 또는 response.references)
-    // 각 솔루션별 출처는 마크다운 응답에 포함되어야 함 (백엔드에서 처리)
-    // TroubleshootData만 references를 가지므로 타입 단언 사용
-    const toolData = response.tool_result?.data as { references?: typeof response.references } | null | undefined;
-    const references = toolData?.references || response.references;
+    // any 타입으로 먼저 받아서 실제 데이터 확인
+    const toolData = response.tool_result?.data as Record<string, unknown> | null | undefined;
+    const references = (toolData?.references || response.references) as typeof response.references;
+
+    // 참조 이미지 추출 (문제진단에서 검색된 이미지)
+    const toolResult = response.tool_result as Record<string, unknown> | undefined;
+    const referenceImages = (toolData?.reference_images || toolResult?.reference_images || response.reference_images) as typeof response.reference_images;
+
+    console.log('[AIChat] Extracted referenceImages:', referenceImages);
 
     // 제안 액션 추출 (suggested_actions)
     const suggestedActions = response.suggested_actions;
@@ -1345,6 +1373,7 @@ const AIChat = () => {
       segments: segments,
       isFallback: response.is_fallback || false, // 서버 연결 실패 시 차감 안함
       references: references,
+      referenceImages: referenceImages,
       suggestedActions: suggestedActions,
     };
   };

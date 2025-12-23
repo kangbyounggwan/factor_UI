@@ -3,16 +3,21 @@
  * - 사용자 메시지와 AI 메시지를 렌더링
  * - 마크다운 렌더링, 코드 수정 카드, 보고서 카드 포함
  */
-import React from "react";
+import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Cpu, File, ExternalLink, ArrowRight } from "lucide-react";
+import { Cpu, File, ExternalLink, ArrowRight, ImageIcon, X, ZoomIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CodeFixDiffCard } from "@/components/gcodeAnalysis/CodeFixDiffCard";
 import type { CodeFixInfo } from "@/components/gcodeAnalysis/CodeFixDiffCard";
 import { ReportCompletionCard } from "./ReportCompletionCard";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
 import type { ChatFileInfo } from "@shared/services/supabaseService/chat";
+import type { ReferenceImages, ReferenceImage } from "@shared/services/chatApiService";
 
 // 참고 자료 타입
 export interface ReferenceInfo {
@@ -53,6 +58,8 @@ export interface ChatMessageData {
   references?: ReferenceInfo[];
   // API 응답에서 받은 제안 액션
   suggestedActions?: SuggestedAction[];
+  // API 응답에서 받은 참조 이미지 (문제진단)
+  referenceImages?: ReferenceImages;
 }
 
 interface ChatMessageProps {
@@ -357,6 +364,9 @@ const AssistantMessage: React.FC<{
     ? message.references
     : sources;
 
+  // 이미지 확대 보기 상태
+  const [selectedImage, setSelectedImage] = useState<ReferenceImage | null>(null);
+
   return (
   <>
     {/* 역할 라벨 */}
@@ -403,6 +413,82 @@ const AssistantMessage: React.FC<{
         </div>
       </div>
     )}
+
+    {/* 참조 이미지 섹션 - 문제진단 결과 이미지 */}
+    {message.referenceImages && message.referenceImages.images && message.referenceImages.images.length > 0 && (
+      <div className="pl-8 mt-4 pt-4 border-t border-border/50">
+        <div className="flex items-center gap-2 mb-3 text-sm font-medium text-muted-foreground">
+          <ImageIcon className="w-4 h-4" />
+          <span>참조 이미지</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {message.referenceImages.images.slice(0, 8).map((img, idx) => (
+            <button
+              key={`ref-img-${idx}-${img.source_url}`}
+              onClick={() => setSelectedImage(img)}
+              className="group relative block rounded-lg overflow-hidden border border-border/50 hover:border-primary/50 transition-all hover:shadow-md text-left"
+            >
+              <img
+                src={img.thumbnail_url}
+                alt={img.title}
+                className="w-full h-24 object-cover"
+                loading="lazy"
+                onError={(e) => {
+                  // 이미지 로드 실패 시 숨김
+                  (e.target as HTMLImageElement).parentElement!.style.display = 'none';
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+                <span className="text-[10px] text-white line-clamp-2 font-medium leading-tight">{img.title}</span>
+              </div>
+              <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <ZoomIn className="w-3 h-3 text-white" />
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {/* 이미지 확대 보기 모달 */}
+    <Dialog open={!!selectedImage} onOpenChange={(open) => !open && setSelectedImage(null)}>
+      <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] p-0 overflow-hidden bg-black/95 border-none">
+        {selectedImage && (
+          <div className="relative flex flex-col h-full">
+            {/* 닫기 버튼 */}
+            <button
+              onClick={() => setSelectedImage(null)}
+              className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+            >
+              <X className="w-5 h-5 text-white" />
+            </button>
+
+            {/* 이미지 */}
+            <div className="flex-1 flex items-center justify-center p-4 min-h-0">
+              <img
+                src={selectedImage.thumbnail_url}
+                alt={selectedImage.title}
+                className="max-w-full max-h-[70vh] object-contain rounded-lg"
+              />
+            </div>
+
+            {/* 하단 정보 */}
+            <div className="p-4 bg-black/80 border-t border-white/10">
+              <h3 className="text-white font-medium text-sm mb-2 line-clamp-2">{selectedImage.title}</h3>
+              <a
+                href={selectedImage.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                원본 사이트에서 보기
+              </a>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
 
     {/* 제안 액션 버튼 */}
     {message.suggestedActions && message.suggestedActions.length > 0 && onSuggestedAction && (

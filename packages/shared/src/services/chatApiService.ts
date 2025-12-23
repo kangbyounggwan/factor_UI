@@ -80,6 +80,21 @@ export interface SourceReference {
   snippet?: string;
 }
 
+// 참조 이미지 타입
+export interface ReferenceImage {
+  title: string;
+  thumbnail_url: string;
+  source_url: string;
+  width?: number;
+  height?: number;
+}
+
+export interface ReferenceImages {
+  search_query?: string;
+  total_count?: number;
+  images: ReferenceImage[];
+}
+
 // 프린터 문제 진단 결과
 export interface TroubleshootData {
   problem?: {
@@ -100,6 +115,7 @@ export interface TroubleshootData {
     source_refs?: SourceReference[];
   };
   references?: SourceReference[];
+  reference_images?: ReferenceImages;
 }
 
 // G-code 분석 결과 (통합 Chat API 응답)
@@ -197,6 +213,8 @@ export interface ChatApiResponse {
   is_fallback?: boolean;
   // 참고 자료 (문제진단 등에서 웹 검색 결과)
   references?: SourceReference[];
+  // 참조 이미지 (문제진단에서 검색된 예시 이미지)
+  reference_images?: ReferenceImages;
 }
 
 // ============================================

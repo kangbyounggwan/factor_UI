@@ -472,9 +472,26 @@ export interface TroubleshootingRequest {
   anonymous_id?: string;  // 비로그인 사용자 추적용
 }
 
+// 참조 이미지 타입
+export interface ReferenceImage {
+  title: string;
+  thumbnail_url: string;
+  source_url: string;
+  width?: number;
+  height?: number;
+}
+
+// 참조 이미지 컬렉션 타입
+export interface ReferenceImages {
+  search_query?: string;
+  total_count?: number;
+  images: ReferenceImage[];
+}
+
 export interface TroubleshootingResponse {
   status: 'ok' | 'error';
   data?: {
+    diagnosis_id?: string;       // 진단 ID
     diagnosis: string;           // AI 진단 결과
     detected_issues?: string[];  // 감지된 문제들
     possible_causes?: string[];  // 가능한 원인들
@@ -482,6 +499,21 @@ export interface TroubleshootingResponse {
     confidence?: number;         // 신뢰도 (0-1)
     image_analysis?: string;     // 이미지 분석 결과
     follow_up_questions?: string[];  // 추가 질문
+    reference_images?: ReferenceImages;  // 참조 이미지들
+    verdict?: {                  // 판정 정보
+      severity?: string;
+      category?: string;
+      summary?: string;
+    };
+    problem?: {                  // 문제 상세
+      name?: string;
+      description?: string;
+      affected_area?: string;
+    };
+    expert_opinion?: {           // 전문가 의견
+      summary?: string;
+      details?: string;
+    };
   };
   error?: string;
   message?: string;
