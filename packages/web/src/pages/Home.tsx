@@ -145,7 +145,7 @@ const Home = () => {
               <Button
                 asChild
                 size="lg"
-                className="relative text-lg px-12 py-7 font-semibold text-white bg-gradient-to-r from-blue-600 via-purple-600 to-pink-500 bg-[length:200%_100%] animate-gradient-x hover:shadow-2xl hover:shadow-purple-500/40 hover:scale-105 transition-all duration-300 rounded-full border-0"
+                className="relative text-lg px-12 py-7 font-semibold text-white bg-gradient-to-r from-blue-600 via-purple-600 to-pink-500 hover:shadow-2xl hover:shadow-purple-500/40 hover:scale-105 transition-all duration-300 rounded-full border-0"
               >
                 <Link to="/ai-chat">
                   <Zap className="h-5 w-5 mr-2" />
