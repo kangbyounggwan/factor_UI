@@ -293,6 +293,7 @@ const Home = () => {
   // Settings 뷰 상태 (URL 파라미터 기반)
   const settingsViewActive = searchParams.get('view') === 'settings';
   const editPrinterId = searchParams.get('editPrinter') || undefined;
+  const openAddPrinter = searchParams.get('addPrinter') === 'true';
 
   // 사이드바 상태 (페이지 간 공유)
   const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
@@ -316,6 +317,11 @@ const Home = () => {
   // Settings 뷰 토글 핸들러
   const handleOpenSettings = () => {
     setSearchParams({ view: 'settings' });
+  };
+
+  // 프린터 추가 핸들러 (Settings 뷰 열면서 프린터 추가 모달 바로 열기)
+  const handleAddPrinter = () => {
+    setSearchParams({ view: 'settings', addPrinter: 'true' });
   };
 
   // Settings 뷰 닫기 핸들러
@@ -650,6 +656,7 @@ const Home = () => {
                 embedded={true}
                 onBack={handleCloseSettings}
                 editPrinterId={editPrinterId}
+                openAddPrinter={openAddPrinter}
               />
             </div>
           ) : (
@@ -824,11 +831,9 @@ const Home = () => {
                   }
                 </p>
                 {user && (
-                  <Button asChild>
-                    <Link to="/settings">
-                      <Plus className="h-4 w-4 mr-2" />
-                      {t('dashboard.addPrinter')}
-                    </Link>
+                  <Button onClick={handleAddPrinter}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    {t('dashboard.addPrinter')}
                   </Button>
                 )}
               </CardContent>

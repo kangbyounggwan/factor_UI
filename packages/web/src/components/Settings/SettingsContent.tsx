@@ -89,9 +89,10 @@ interface SettingsContentProps {
   embedded?: boolean;
   onBack?: () => void;
   editPrinterId?: string;
+  openAddPrinter?: boolean;
 }
 
-export const SettingsContent = ({ embedded = false, onBack, editPrinterId }: SettingsContentProps) => {
+export const SettingsContent = ({ embedded = false, onBack, editPrinterId, openAddPrinter = false }: SettingsContentProps) => {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -264,6 +265,13 @@ export const SettingsContent = ({ embedded = false, onBack, editPrinterId }: Set
       }
     }
   }, [editPrinterId, printers]);
+
+  // openAddPrinter가 true면 프린터 추가 모달 자동 열기
+  useEffect(() => {
+    if (openAddPrinter && !loading) {
+      handleAddPrinterClick();
+    }
+  }, [openAddPrinter, loading]);
 
   // 제조사 목록 로드
   useEffect(() => {
