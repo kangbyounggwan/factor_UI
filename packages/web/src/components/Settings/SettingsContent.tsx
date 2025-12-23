@@ -49,6 +49,7 @@ import { getUserPlan } from "@shared/services/supabaseService/subscription";
 import { canAddPrinterAsync, getPlanInfo, getMaxPrintersFromPlanInfo } from "@shared/utils/subscription";
 import type { SubscriptionPlan, SubscriptionPlanInfo } from "@shared/types/subscription";
 import { UpgradePrompt } from "@/components/Settings/UpgradePrompt";
+import { PrinterSetupModal } from "@/components/Dashboard/PrinterSetupModal";
 
 // 프린터 그룹 타입
 interface PrinterGroup {
@@ -136,15 +137,6 @@ export const SettingsContent = ({ embedded = false, onBack, editPrinterId, openA
     name: "",
     description: "",
     color: colorPalette[0]
-  });
-
-  const [newPrinter, setNewPrinter] = useState<Partial<PrinterConfig>>({
-    name: "",
-    model: "",
-    group_id: "",
-    ip_address: "",
-    port: 80,
-    firmware: "marlin"
   });
 
   // 데이터 로드
@@ -483,71 +475,6 @@ export const SettingsContent = ({ embedded = false, onBack, editPrinterId, openA
     }
 
     setShowAddPrinter(true);
-  };
-
-  const handleAddPrinter = async () => {
-    if (!user || !newPrinter.name || !newPrinter.ip_address) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('printers')
-        .insert([{
-          user_id: user.id,
-          name: newPrinter.name,
-          model: newPrinter.model || "Unknown",
-          group_id: newPrinter.group_id || null,
-          ip_address: newPrinter.ip_address,
-          port: newPrinter.port || 80,
-          firmware: newPrinter.firmware || "marlin",
-          device_uuid: newPrinter.device_uuid || null
-        }])
-        .select(`
-          *,
-          group:printer_groups(*)
-        `)
-        .single();
-
-      if (error) throw error;
-
-      const formattedPrinter: PrinterConfig = {
-        id: data.id,
-        name: data.name,
-        model: data.model,
-        group_id: data.group_id,
-        group: data.group?.[0] || undefined,
-        ip_address: data.ip_address,
-        port: data.port,
-        api_key: data.api_key,
-        firmware: data.firmware as "marlin" | "klipper" | "repetier" | "octoprint",
-        status: data.status as "connected" | "disconnected" | "error",
-        last_connected: data.last_connected ? new Date(data.last_connected) : undefined,
-        device_uuid: data.device_uuid
-      };
-
-      setPrinters([...printers, formattedPrinter]);
-      setNewPrinter({
-        name: "",
-        model: "",
-        group_id: "",
-        ip_address: "",
-        port: 80,
-        firmware: "marlin"
-      });
-      setShowAddPrinter(false);
-
-      toast({
-        title: t('settings.success'),
-        description: t('settings.printerAdded'),
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error('Error adding printer:', error);
-      toast({
-        title: t('settings.error'),
-        description: t('settings.addPrinterError'),
-        variant: "destructive",
-      });
-    }
   };
 
   const handleDeletePrinter = async (printerId: string) => {
@@ -923,120 +850,23 @@ export const SettingsContent = ({ embedded = false, onBack, editPrinterId, openA
         <section className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold">{t('settings.printerManagement')}</h2>
-            <Dialog open={showAddPrinter} onOpenChange={setShowAddPrinter}>
-              <Button
-                className="flex items-center gap-2"
-                onClick={handleAddPrinterClick}
-              >
-                <Plus className="h-4 w-4" />
-                {t('settings.addPrinter')}
-              </Button>
-              <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
-                <DialogHeader>
-                  <DialogTitle>{t('settings.newPrinter')}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">{t('settings.printerName')}</Label>
-                    <Input
-                      id="name"
-                      placeholder={t('settings.printerNamePlaceholder')}
-                      value={newPrinter.name || ""}
-                      onChange={(e) => setNewPrinter({...newPrinter, name: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="model">{t('settings.modelName')}</Label>
-                    <Input
-                      id="model"
-                      placeholder={t('settings.modelNamePlaceholder')}
-                      value={newPrinter.model || ""}
-                      onChange={(e) => setNewPrinter({...newPrinter, model: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="group">{t('settings.groupOptional')}</Label>
-                    <Select
-                      value={newPrinter.group_id || "none"}
-                      onValueChange={(value) => setNewPrinter({...newPrinter, group_id: value === "none" ? undefined : value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('settings.selectGroup')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">{t('settings.noGroup')}</SelectItem>
-                        {groups.map((group) => (
-                          <SelectItem key={group.id} value={group.id}>
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="w-2 h-2 rounded-full"
-                                style={{ backgroundColor: group.color }}
-                              />
-                              {group.name}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="ip">{t('settings.ipAddress')}</Label>
-                    <Input
-                      id="ip"
-                      placeholder={t('settings.ipAddressPlaceholder')}
-                      value={newPrinter.ip_address || ""}
-                      onChange={(e) => setNewPrinter({...newPrinter, ip_address: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="port">{t('settings.port')}</Label>
-                    <Input
-                      id="port"
-                      type="number"
-                      placeholder="80"
-                      value={newPrinter.port || 80}
-                      onChange={(e) => setNewPrinter({...newPrinter, port: parseInt(e.target.value)})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="firmware">{t('settings.firmware')}</Label>
-                    <Select
-                      value={newPrinter.firmware || "marlin"}
-                      onValueChange={(value) => setNewPrinter({...newPrinter, firmware: value as "marlin" | "klipper" | "repetier" | "octoprint"})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="marlin">Marlin</SelectItem>
-                        <SelectItem value="klipper">Klipper</SelectItem>
-                        <SelectItem value="repetier">Repetier</SelectItem>
-                        <SelectItem value="octoprint">OctoPrint</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="device_uuid">{t('settings.deviceUUID')}</Label>
-                    <Input
-                      id="device_uuid"
-                      placeholder={t('settings.deviceUUIDPlaceholder')}
-                      value={newPrinter.device_uuid || ""}
-                      onChange={(e) => setNewPrinter({...newPrinter, device_uuid: e.target.value})}
-                    />
-                    <p className="text-xs text-muted-foreground">{t('settings.deviceUUIDHelper')}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button onClick={handleAddPrinter} className="flex-1">
-                      {t('settings.add')}
-                    </Button>
-                    <Button variant="outline" onClick={() => setShowAddPrinter(false)} className="flex-1">
-                      {t('settings.cancel')}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <Button
+              className="flex items-center gap-2"
+              onClick={handleAddPrinterClick}
+            >
+              <Plus className="h-4 w-4" />
+              {t('settings.addPrinter')}
+            </Button>
           </div>
+
+          {/* 프린터 추가 모달 (통합 모달 사용) */}
+          <PrinterSetupModal
+            open={showAddPrinter}
+            onOpenChange={setShowAddPrinter}
+            mode="add"
+            groups={groups}
+            onSuccess={loadData}
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {printers.map((printer) => {
