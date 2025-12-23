@@ -245,7 +245,7 @@ const Home = () => {
               </Link>
             </Button>
             <Button asChild size="lg" className="text-lg px-8 py-6">
-              <Link to="/ai-chat">
+              <Link to="/gcode-analytics">
                 <FileSearch className="h-5 w-5 mr-2" />
                 {t('landing.gcodeAnalysis')}
               </Link>

@@ -72,7 +72,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   getChatSessions,
   getChatSession,
@@ -118,6 +118,8 @@ import {
 } from "@/lib/gcodeAnalysisDbService";
 import { saveSegmentData, loadFullSegmentDataByReportId } from "@/lib/gcodeSegmentService";
 import { extractGcodeContext } from "@/lib/api/gcode";
+import { supabase } from "@shared/integrations/supabase/client";
+import { downloadAndUploadReferenceImages } from "@shared/services/supabaseService/aiStorage";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -198,6 +200,18 @@ interface Message {
   references?: Array<{ title: string; url: string; source?: string; snippet?: string }>;
   // API 응답에서 받은 제안 액션
   suggestedActions?: Array<{ label: string; action: string; data?: Record<string, unknown> }>;
+  // API 응답에서 받은 참조 이미지 (Supabase에 저장된 URL 포함)
+  referenceImages?: {
+    search_query?: string;
+    total_count?: number;
+    images: Array<{
+      title: string;
+      thumbnail_url: string;  // Supabase에 저장된 URL 또는 원본 URL
+      source_url: string;     // 원본 소스 사이트 URL
+      width?: number;
+      height?: number;
+    }>;
+  };
 }
 
 type ChatMode = "general" | "troubleshoot" | "gcode" | "modeling";
@@ -208,6 +222,7 @@ const AIChat = () => {
   const { toast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const locationState = location.state as { openSidebar?: boolean } | null;
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -409,6 +424,16 @@ const AIChat = () => {
   useEffect(() => {
     loadReportArchive();
   }, [loadReportArchive]);
+
+  // URL 쿼리 파라미터로 아카이브 뷰 활성화 (예: /ai-chat?view=archive)
+  useEffect(() => {
+    const view = searchParams.get('view');
+    if (view === 'archive' && user?.id) {
+      setArchiveViewActive(true);
+      // URL에서 쿼리 파라미터 제거 (히스토리 교체)
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, user?.id, setSearchParams]);
 
   // 아카이브 시트용: 보고서 목록 로드
   const loadArchiveReports = useCallback(async () => {
@@ -649,11 +674,12 @@ const AIChat = () => {
           reportCard = reportCardCache[m.reportId];
         }
 
-        // metadata에서 codeFixes, gcodeContext 추출
+        // metadata에서 codeFixes, gcodeContext, referenceImages 추출
         const metadata = m.metadata as {
           codeFixes?: CodeFixInfo[];
           gcodeContext?: string;
           analysisReportId?: string;
+          referenceImages?: Message['referenceImages'];
         } | undefined;
 
         return {
@@ -668,6 +694,7 @@ const AIChat = () => {
           codeFixes: metadata?.codeFixes,
           gcodeContext: metadata?.gcodeContext,
           analysisReportId: metadata?.analysisReportId || m.reportId,
+          referenceImages: metadata?.referenceImages,  // 저장된 참조 이미지 복원
         };
       });
 
@@ -1027,11 +1054,50 @@ const AIChat = () => {
       });
       setMessages((prev) => [...prev, assistantMessage]);
 
-      // 10. AI 응답 DB 저장
+      // 10. 참조 이미지 Supabase 저장 및 메시지 업데이트 (로그인 사용자 + 세션 있을 때)
+      let storedReferenceImages: Message['referenceImages'] | undefined = apiResult.referenceImages;
+      if (user?.id && sessionId && apiResult.referenceImages?.images?.length) {
+        try {
+          console.log('[AIChat] Storing reference images to Supabase...');
+          const storedImages = await downloadAndUploadReferenceImages(
+            supabase,
+            user.id,
+            sessionId,
+            apiResult.referenceImages.images
+          );
+
+          // 저장된 URL로 referenceImages 업데이트
+          storedReferenceImages = {
+            search_query: apiResult.referenceImages.search_query,
+            total_count: apiResult.referenceImages.total_count,
+            images: storedImages.map(img => ({
+              title: img.title,
+              thumbnail_url: img.stored_url,  // Supabase URL 사용
+              source_url: img.source_url,
+              width: img.width,
+              height: img.height,
+            })),
+          };
+
+          // 메시지 상태 업데이트 (저장된 URL로)
+          setMessages(prev => prev.map(m =>
+            m.id === assistantMessage.id ? { ...m, referenceImages: storedReferenceImages } : m
+          ));
+          console.log('[AIChat] Reference images stored successfully');
+        } catch (error) {
+          console.error('[AIChat] Failed to store reference images:', error);
+          // 실패해도 원본 URL로 계속 진행
+        }
+      }
+
+      // 11. AI 응답 DB 저장 (저장된 참조 이미지 URL 포함)
       let savedDbMessageId: string | null = null;
       if (user?.id && sessionId) {
         const savedMsg = await saveChatMessage(sessionId, user.id, 'assistant', apiResult.response, {
-          metadata: { tool: toolType },
+          metadata: {
+            tool: toolType,
+            referenceImages: storedReferenceImages,  // 저장된 이미지 URL 포함
+          },
         });
         if (savedMsg?.id) {
           savedDbMessageId = savedMsg.id;
@@ -1041,22 +1107,22 @@ const AIChat = () => {
         }
       }
 
-      // 10-1. 모델링 성공 시 사용량 증가
+      // 11-1. 모델링 성공 시 사용량 증가
       if (selectedTool === 'modeling' && user?.id) {
         await incrementUsage(user.id, USAGE_TYPES.AI_MODEL_GENERATION);
       }
 
-      // 10-2. 문제진단 성공 시 사용량 증가 (모든 모델 포함)
+      // 11-2. 문제진단 성공 시 사용량 증가 (모든 모델 포함)
       if (selectedTool === 'troubleshoot' && user?.id) {
         await incrementTroubleshootAdvancedUsage(user.id);
       }
 
-      // 10-3. 익명 사용자 사용량 증가 (일일 10회)
+      // 11-3. 익명 사용자 사용량 증가 (일일 10회)
       if (!user && !apiResult.isFallback) {
         incrementAnonymousUsage();
       }
 
-      // 11. G-code 분석 후처리
+      // 12. G-code 분석 후처리
       if (apiResult.analysisId) {
         // 상태 초기화
         setReportPanelOpen(false);
@@ -1343,23 +1409,17 @@ const AIChat = () => {
     // 세그먼트는 response.segments 또는 response.tool_result.segments에 있을 수 있음
     const segments = response.segments || response.tool_result?.segments;
 
-    // 전체 응답 데이터 로그 (디버깅용)
-    console.log('[AIChat] ========== FULL API RESPONSE ==========');
-    console.log('[AIChat] response:', response);
-    console.log('[AIChat] response.tool_result:', response.tool_result);
-    console.log('[AIChat] response.tool_result?.data:', response.tool_result?.data);
-    console.log('[AIChat] =========================================');
-
     // 참고 자료 추출 (tool_result.data.references 또는 response.references)
-    // any 타입으로 먼저 받아서 실제 데이터 확인
     const toolData = response.tool_result?.data as Record<string, unknown> | null | undefined;
     const references = (toolData?.references || response.references) as typeof response.references;
 
     // 참조 이미지 추출 (문제진단에서 검색된 이미지)
-    const toolResult = response.tool_result as Record<string, unknown> | undefined;
-    const referenceImages = (toolData?.reference_images || toolResult?.reference_images || response.reference_images) as typeof response.reference_images;
+    const toolResultAny = response.tool_result as unknown as Record<string, unknown> | undefined;
+    const referenceImages = (toolData?.reference_images || toolResultAny?.reference_images || response.reference_images) as typeof response.reference_images;
 
-    console.log('[AIChat] Extracted referenceImages:', referenceImages);
+    if (referenceImages?.images?.length) {
+      console.log('[AIChat] Found reference images:', referenceImages.images.length);
+    }
 
     // 제안 액션 추출 (suggested_actions)
     const suggestedActions = response.suggested_actions;

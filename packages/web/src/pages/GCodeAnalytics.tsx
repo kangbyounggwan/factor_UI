@@ -722,7 +722,8 @@ const GCodeAnalytics = () => {
                   setShowLoginPrompt(true);
                   return;
                 }
-                navigate('/gcode-analytics/archive');
+                // AI Chat 페이지로 이동하면서 아카이브 뷰 활성화
+                navigate('/ai-chat?view=archive');
               }}
             >
               <Archive className="h-4 w-4 mr-2" />

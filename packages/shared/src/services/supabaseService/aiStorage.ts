@@ -541,6 +541,145 @@ export async function uploadTroubleshootingImage(
 }
 
 /**
+ * 참조 이미지 타입 (문제진단 API 응답)
+ */
+export interface ReferenceImageInput {
+  title: string;
+  thumbnail_url: string;
+  source_url: string;
+  width?: number;
+  height?: number;
+}
+
+/**
+ * 저장된 참조 이미지 타입
+ */
+export interface StoredReferenceImage {
+  title: string;
+  stored_url: string;      // Supabase에 저장된 URL
+  source_url: string;      // 원본 소스 URL
+  width?: number;
+  height?: number;
+}
+
+/**
+ * 외부 URL에서 참조 이미지를 다운로드하여 Supabase Storage에 저장
+ * 경로: ai-models/{userId}/reference-images/{sessionId}/{index}_{hash}.jpg
+ */
+export async function downloadAndUploadReferenceImage(
+  supabase: SupabaseClient,
+  userId: string,
+  sessionId: string,
+  imageUrl: string,
+  index: number
+): Promise<string | null> {
+  try {
+    console.log(`[aiStorage] Downloading reference image ${index}:`, imageUrl);
+
+    // 이미지 다운로드
+    const response = await fetch(imageUrl, {
+      mode: 'cors',
+      credentials: 'omit',
+      headers: {
+        'Accept': 'image/*',
+      }
+    });
+
+    if (!response.ok) {
+      console.warn(`[aiStorage] Failed to download image ${index}: ${response.status}`);
+      return null;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+
+    // 빈 이미지 체크
+    if (arrayBuffer.byteLength < 100) {
+      console.warn(`[aiStorage] Image ${index} too small, skipping`);
+      return null;
+    }
+
+    // Content-Type에서 이미지 타입 추출 (기본값: image/jpeg)
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    const imageBlob = new Blob([arrayBuffer], { type: contentType });
+
+    // 확장자 결정
+    let ext = 'jpg';
+    if (contentType.includes('png')) ext = 'png';
+    else if (contentType.includes('gif')) ext = 'gif';
+    else if (contentType.includes('webp')) ext = 'webp';
+
+    // URL 해시 생성 (짧은 식별자)
+    const urlHash = imageUrl.split('/').pop()?.substring(0, 12) || Date.now().toString();
+    const sanitizedHash = urlHash.replace(/[^a-zA-Z0-9]/g, '');
+
+    const path = `${userId}/reference-images/${sessionId}/${index}_${sanitizedHash}.${ext}`;
+
+    // Supabase Storage에 업로드
+    const { error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(path, imageBlob, {
+        contentType: contentType,
+        cacheControl: '86400', // 24시간 캐시
+        upsert: true
+      });
+
+    if (error) {
+      console.error(`[aiStorage] Failed to upload reference image ${index}:`, error);
+      return null;
+    }
+
+    // Public URL 생성
+    const { data: urlData } = supabase.storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(path);
+
+    console.log(`[aiStorage] Reference image ${index} uploaded:`, urlData.publicUrl);
+    return urlData.publicUrl;
+  } catch (error) {
+    console.error(`[aiStorage] Error processing reference image ${index}:`, error);
+    return null;
+  }
+}
+
+/**
+ * 여러 참조 이미지를 병렬로 다운로드하여 Supabase Storage에 저장
+ * @returns 저장된 이미지 정보 배열 (실패한 이미지는 원본 URL 유지)
+ */
+export async function downloadAndUploadReferenceImages(
+  supabase: SupabaseClient,
+  userId: string,
+  sessionId: string,
+  images: ReferenceImageInput[]
+): Promise<StoredReferenceImage[]> {
+  console.log(`[aiStorage] Processing ${images.length} reference images for session ${sessionId}`);
+
+  const results = await Promise.all(
+    images.map(async (img, index) => {
+      const storedUrl = await downloadAndUploadReferenceImage(
+        supabase,
+        userId,
+        sessionId,
+        img.thumbnail_url,
+        index
+      );
+
+      return {
+        title: img.title,
+        stored_url: storedUrl || img.thumbnail_url, // 실패시 원본 URL 유지
+        source_url: img.source_url,
+        width: img.width,
+        height: img.height,
+      };
+    })
+  );
+
+  const successCount = results.filter(r => !r.stored_url.includes('brave.com')).length;
+  console.log(`[aiStorage] Successfully stored ${successCount}/${images.length} reference images`);
+
+  return results;
+}
+
+/**
  * Python AI 서버의 GCode URL에서 GCode를 다운로드하고 Supabase Storage에 업로드
  */
 export async function downloadAndUploadGCode(

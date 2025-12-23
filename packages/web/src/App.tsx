@@ -45,6 +45,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const GCodeAPITest = lazy(() => import("./pages/GCodeAPITest"));
+const GCodeAnalytics = lazy(() => import("./pages/GCodeAnalytics"));
 
 const queryClient = new QueryClient();
 
@@ -159,6 +160,11 @@ const AppContent = () => {
             <Route path="/terms" element={<TermsOfService />} />
             <Route path="/refund" element={<RefundPolicy />} />
             <Route path="/test/gcode-api" element={<GCodeAPITest />} />
+            <Route path="/gcode-analytics" element={
+              <ProtectedRoute>
+                <GCodeAnalytics />
+              </ProtectedRoute>
+            } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
