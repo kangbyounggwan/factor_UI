@@ -48,7 +48,7 @@ export async function createReportShare(
       .eq('user_id', userId)
       .eq('report_id', reportId)
       .eq('is_public', true)
-      .single();
+      .maybeSingle();
 
     // 기존 링크가 있고 만료되지 않았으면 재사용
     if (existing) {
