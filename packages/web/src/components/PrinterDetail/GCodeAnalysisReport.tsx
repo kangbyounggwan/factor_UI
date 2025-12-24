@@ -59,6 +59,8 @@ import {
   XCircle,
   Download,
   Save,
+  Share2,
+  Copy,
 } from 'lucide-react';
 import { GCodeViewerModal } from './GCodeViewerModal';
 import { GCodePath3DFromAPI } from './GCodePath3DFromAPI';
@@ -68,6 +70,8 @@ import { resolveIssue, type IssueResolveResponse } from '@/lib/api/gcode';
 import type { SegmentMetadata } from '@/lib/gcodeSegmentService';
 import { supabase } from '@shared/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { createReportShare } from '@/lib/sharedReportService';
+import { useAuth } from '@shared/contexts/AuthContext';
 
 // ============================================================================
 // G-code 분석 보고서 데이터 타입 정의
@@ -1138,6 +1142,9 @@ interface GCodeAnalysisReportProps {
   };
   // 코드 수정 클릭 시 에디터로 이동 콜백
   onViewCodeFix?: (fix: { line_number: number | null; original: string | null; fixed: string | null }) => void;
+  // 공유 관련 (외부 제어용)
+  onShare?: () => void;  // 외부에서 공유 핸들러 제공 시 사용
+  showShareButton?: boolean;  // 공유 버튼 표시 여부 (기본: true)
 }
 
 import { updateGCodeFileContent } from '@/lib/gcodeAnalysisDbService';
@@ -1168,9 +1175,12 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   onSaveModifiedGCode,
   initialSegments,
   onViewCodeFix,
+  onShare: externalOnShare,
+  showShareButton = true,
 }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const { theme, resolvedTheme } = useTheme();
   const isDarkMode = theme === 'dark' || resolvedTheme === 'dark';
   const { metrics, support, speedDistribution, temperature, analysis, overallScore } = data;
@@ -1215,6 +1225,11 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   // 에디터 탭 라인 점프 상태
   const [jumpToLine, setJumpToLine] = useState<number | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
+
+  // 공유 관련 상태
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
 
   // 온도 차트 데이터 생성
   const temperatureChartData = useMemo(() => {
@@ -2041,6 +2056,91 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
     `;
   };
 
+  // 공유 핸들러
+  const handleShare = async () => {
+    // 외부 핸들러가 있으면 그것을 사용
+    if (externalOnShare) {
+      externalOnShare();
+      return;
+    }
+
+    // 내부 공유 로직
+    if (!user?.id) {
+      toast({
+        title: t('gcodeAnalytics.shareFailed', '공유 실패'),
+        description: t('gcodeAnalytics.loginRequired', '로그인이 필요합니다.'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!data.reportId) {
+      toast({
+        title: t('gcodeAnalytics.shareFailed', '공유 실패'),
+        description: t('gcodeAnalytics.saveFirst', '먼저 보고서를 저장해주세요.'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSharing(true);
+    try {
+      const { shareUrl: url, error } = await createReportShare(
+        user.id,
+        data.reportId,
+        { title: data.fileName }
+      );
+
+      if (error || !url) {
+        toast({
+          title: t('gcodeAnalytics.shareFailed', '공유 실패'),
+          description: error?.message || t('gcodeAnalytics.shareError', '공유 링크를 생성할 수 없습니다.'),
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setShareUrl(url);
+
+      // 클립보드에 복사
+      await navigator.clipboard.writeText(url);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+
+      toast({
+        title: t('gcodeAnalytics.shareSuccess', '공유 링크 생성'),
+        description: t('gcodeAnalytics.linkCopied', '링크가 클립보드에 복사되었습니다.'),
+      });
+    } catch (err) {
+      console.error('[GCodeAnalysisReport] Share error:', err);
+      toast({
+        title: t('gcodeAnalytics.shareFailed', '공유 실패'),
+        description: t('gcodeAnalytics.shareError', '공유 링크를 생성할 수 없습니다.'),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  // 클립보드 복사 (이미 생성된 URL)
+  const handleCopyShareUrl = async () => {
+    if (!shareUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+
+      toast({
+        title: t('gcodeAnalytics.copied', '복사됨'),
+        description: t('gcodeAnalytics.linkCopied', '링크가 클립보드에 복사되었습니다.'),
+      });
+    } catch (err) {
+      console.error('[GCodeAnalysisReport] Copy error:', err);
+    }
+  };
+
   // 인쇄 핸들러
   const handlePrint = () => {
     const printContent = generatePrintableHTML();
@@ -2094,8 +2194,41 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
             ))}
           </div>
 
-          {/* 오른쪽: 인쇄 버튼 + 닫기 버튼 */}
+          {/* 오른쪽: 공유 버튼 + 인쇄 버튼 + 닫기 버튼 */}
           <div className="flex items-center gap-1">
+            {/* 공유 버튼 - reportId가 있을 때만 (저장된 보고서) */}
+            {showShareButton && data.reportId && (
+              shareUrl ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopyShareUrl}
+                  className="h-8 px-3 rounded-full text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+                  title={isCopied ? t('gcodeAnalytics.copied', '복사됨') : t('gcodeAnalytics.copyLink', '링크 복사')}
+                >
+                  {isCopied ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleShare}
+                  disabled={isSharing}
+                  className="h-8 px-3 rounded-full text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+                  title={t('gcodeAnalytics.share', '공유')}
+                >
+                  {isSharing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Share2 className="h-4 w-4" />
+                  )}
+                </Button>
+              )
+            )}
             <Button
               variant="ghost"
               size="sm"

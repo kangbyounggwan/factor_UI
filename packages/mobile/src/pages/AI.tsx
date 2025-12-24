@@ -129,7 +129,7 @@ const AI = () => {
   };
 
   const [currentStep, setCurrentStep] = useState<Step>("select-input");
-  const [inputType, setInputType] = useState<"text" | "image" | "text-to-image">("text");
+  const [inputType, setInputType] = useState<"text" | "image">("text");
   const [textPrompt, setTextPrompt] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -454,7 +454,7 @@ const AI = () => {
             setGeneratedModel({
               id: model.id,
               name: model.model_name || 'Untitled Model',
-              type: model.generation_type === 'text_to_3d' ? 'text' : model.generation_type === 'image_to_3d' ? 'image' : 'text-to-image',
+              type: model.generation_type === 'image_to_3d' ? 'image' : 'text',
               prompt: model.prompt || '',
               status: 'completed',
               thumbnail: model.thumbnail_url || '/placeholder.svg',
@@ -851,7 +851,7 @@ const AI = () => {
     try {
       let result;
 
-      if (inputType === "text" || inputType === "text-to-image") {
+      if (inputType === "text") {
         // 1. DB에 레코드 생성 (status: processing)
         const dbModel = await createAIModel(supabase, {
           generation_type: 'text_to_3d',
@@ -1196,7 +1196,7 @@ const AI = () => {
         setGeneratedModel({
           id: model.id,
           name: model.model_name || 'Untitled Model',
-          type: model.generation_type === 'text_to_3d' ? 'text' : model.generation_type === 'image_to_3d' ? 'image' : 'text-to-image',
+          type: model.generation_type === 'image_to_3d' ? 'image' : 'text',
           prompt: model.prompt || '',
           status: 'completed',
           thumbnail: model.thumbnail_url || '/placeholder.svg',
@@ -1298,27 +1298,7 @@ const AI = () => {
           </CardContent>
         </Card>
 
-        <Card
-          className={`cursor-pointer transition-all hover:shadow-lg ${
-            inputType === "text-to-image" ? "ring-2 ring-primary" : ""
-          }`}
-          onClick={() => {
-            setInputType("text-to-image");
-            setCurrentStep("create-prompt");
-          }}
-        >
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2.5 bg-primary/10 rounded-lg">
-              <CameraIcon className="w-7 h-7 text-primary" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-base">{t('ai.textToImage')}</h3>
-              <p className="text-sm text-muted-foreground">{t('ai.textToImageDesc')}</p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          </CardContent>
-        </Card>
-      </div>
+        </div>
     </div>
   );
 
@@ -1330,7 +1310,7 @@ const AI = () => {
         <Button variant="ghost" size="sm" onClick={() => setCurrentStep("select-input")}>
           ← {t('common.back')}
         </Button>
-        <Badge variant="outline">{inputType === "text" ? t('ai.textTo3D') : inputType === "image" ? t('ai.imageTo3D') : t('ai.textToImage')}</Badge>
+        <Badge variant="outline">{inputType === "text" ? t('ai.textTo3D') : t('ai.imageTo3D')}</Badge>
       </div>
 
       <div className="text-center space-y-2">
@@ -1383,7 +1363,7 @@ const AI = () => {
       )}
 
       {/* 텍스트 입력 */}
-      {(inputType === "text" || inputType === "text-to-image") && (
+      {inputType === "text" && (
         <div className="space-y-3">
           <Textarea
             placeholder={t('ai.textPromptPlaceholder')}
@@ -1871,8 +1851,7 @@ const AI = () => {
                           setGeneratedModel({
                             id: newModel.id,
                             name: newModel.model_name,
-                            type: newModel.generation_type === 'text_to_3d' ? 'text' :
-                                  newModel.generation_type === 'image_to_3d' ? 'image' : 'text-to-image',
+                            type: newModel.generation_type === 'image_to_3d' ? 'image' : 'text',
                             prompt: newModel.prompt || '',
                             status: 'completed',
                             thumbnail: newModel.thumbnail_url || '/placeholder.svg',

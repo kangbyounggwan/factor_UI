@@ -141,7 +141,10 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCo
       // 2. Supabase Storage에 파일 업로드 (뷰어용)
       // 구조: user_id/gcode_file/device_id/filename.gcode
       const deviceFolder = deviceUuid || 'unknown';
-      const filePath = `${user.id}/gcode_file/${deviceFolder}/${file.name}`;
+      // 파일명 sanitize: 한글/특수문자를 안전한 문자로 변환
+      const timestamp = Date.now();
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath = `${user.id}/gcode_file/${deviceFolder}/${timestamp}_${sanitizedName}`;
       // GCode 파일을 text/x-gcode Blob으로 변환 (Supabase Storage에서 허용된 MIME 타입)
       const fileBlob = new Blob([arrayBuf], { type: 'text/x-gcode' });
       const { error: storageError } = await supabase.storage

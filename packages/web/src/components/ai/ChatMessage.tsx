@@ -6,7 +6,7 @@
 import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Cpu, File, ExternalLink, ArrowRight, ImageIcon, X, ZoomIn } from "lucide-react";
+import { Cpu, File, ExternalLink, ArrowRight, ImageIcon, X, ZoomIn, Link2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CodeFixDiffCard } from "@/components/gcodeAnalysis/CodeFixDiffCard";
 import type { CodeFixInfo } from "@/components/gcodeAnalysis/CodeFixDiffCard";
@@ -447,6 +447,49 @@ const AssistantMessage: React.FC<{
             </button>
           ))}
         </div>
+      </div>
+    )}
+
+    {/* 참조 링크 섹션 - 참조 이미지가 있을 때만 표시 (트러블슈팅 응답) */}
+    {message.referenceImages && message.referenceImages.images && message.referenceImages.images.length > 0 && (
+      <div className="pl-8 mt-4 pt-4 border-t border-border/50">
+        <div className="flex items-center gap-2 mb-3 text-sm font-medium text-muted-foreground">
+          <Link2 className="w-4 h-4" />
+          <span>참조 링크</span>
+        </div>
+        {message.references && message.references.length > 0 ? (
+          <div className="space-y-2">
+            {message.references.map((ref, idx) => (
+              <a
+                key={`ref-link-${idx}-${ref.url}`}
+                href={ref.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-3 p-3 rounded-lg border border-border/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
+              >
+                <ExternalLink className="w-4 h-4 mt-0.5 text-muted-foreground group-hover:text-primary shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-foreground group-hover:text-primary line-clamp-1">
+                    {ref.title}
+                  </div>
+                  {ref.snippet && (
+                    <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                      {ref.snippet}
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground/70 mt-1 truncate">
+                    {ref.source || new URL(ref.url).hostname}
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-muted-foreground text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>참조 링크가 없습니다</span>
+          </div>
+        )}
       </div>
     )}
 

@@ -42,6 +42,7 @@ const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
 const PaymentFail = lazy(() => import("./pages/PaymentFail"));
 const SupportedPrinters = lazy(() => import("./pages/SupportedPrinters"));
 const AI = lazy(() => import("./pages/AI"));
+const AIChat = lazy(() => import("./pages/AIChat"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Admin = lazy(() => import("./pages/Admin"));
 const DeviceRegister = lazy(() => import("./pages/DeviceRegister"));
@@ -282,7 +283,7 @@ const AppContent = () => {
     !isSettingsSubPage;
 
   // 고정 레이아웃 페이지들 (h-full/h-screen 사용): 자체적으로 스크롤 관리, padding 불필요
-  const fixedLayoutPaths = ["/create", "/user-settings"];
+  const fixedLayoutPaths = ["/create", "/user-settings", "/ai-chat"];
 
   const shouldApplyPadding = shouldShowBottomNav && !fixedLayoutPaths.includes(location.pathname);
 
@@ -385,6 +386,9 @@ const AppContent = () => {
               <ProtectedRoute>
                 <AI />
               </ProtectedRoute>
+            } />
+            <Route path="/ai-chat" element={
+              <AIChat />
             } />
             <Route path="/admin" element={
               <AdminRoute>

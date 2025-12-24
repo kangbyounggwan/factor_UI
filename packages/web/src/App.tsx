@@ -46,6 +46,7 @@ const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const GCodeAPITest = lazy(() => import("./pages/GCodeAPITest"));
 const GCodeAnalytics = lazy(() => import("./pages/GCodeAnalytics"));
+const SharedReport = lazy(() => import("./pages/SharedReport"));
 
 const queryClient = new QueryClient();
 
@@ -70,7 +71,9 @@ const AppContent = () => {
     '/dashboard',
     '/create',
     '/printer',
-    '/admin'
+    '/admin',
+    '/gcode-analytics',
+    '/shared'
   ];
 
   // 현재 경로가 Header를 숨겨야 하는 경로인지 확인
@@ -85,7 +88,9 @@ const AppContent = () => {
     // '/ai-troubleshooting', // TODO: AI 고장 해결 - 개발 중
     '/user-settings',
     '/admin',
-    '/auth'
+    '/auth',
+    '/gcode-analytics',
+    '/shared'
   ];
 
   // 현재 경로가 Footer를 숨겨야 하는 경로인지 확인
@@ -165,6 +170,7 @@ const AppContent = () => {
                 <GCodeAnalytics />
               </ProtectedRoute>
             } />
+            <Route path="/shared/report/:shareId" element={<SharedReport />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

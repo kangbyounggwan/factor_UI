@@ -3,7 +3,7 @@
  * Python 백엔드 API와 연동하여 G-code 분석 수행
  */
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -39,8 +39,10 @@ import {
   TrendingUp,
   ChevronDown,
   ChevronUp,
+  Share2,
+  Copy,
+  Check,
 } from "lucide-react";
-import { AIPageHeader } from "@/components/ai/AIPageHeader";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -48,6 +50,12 @@ import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
 import { analyzeGCodeWithSegments, type GCodeAnalysisResponse } from "@/lib/api/gcode";
 import { GCodePath3DFromAPI } from "@/components/PrinterDetail/GCodePath3DFromAPI";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { AppSidebar, type ChatSession, type ReportArchiveItem } from "@/components/common/AppSidebar";
+import { AppHeader } from "@/components/common/AppHeader";
+import { useSidebarState } from "@/hooks/useSidebarState";
+import { getChatSessions } from "@shared/services/supabaseService/chat";
+import { getAnalysisReportsList, convertDbReportToUiData } from "@/lib/gcodeAnalysisDbService";
+import { createReportShare } from "@/lib/sharedReportService";
 
 // ============================================================================
 // 3D 뷰어 컴포넌트
@@ -303,10 +311,19 @@ function convertApiResultToReportData(
 const GCodeAnalytics = () => {
   const { t } = useTranslation();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
   const isDarkMode = resolvedTheme === 'dark';
+
+  // 사이드바 상태
+  const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
+
+  // 채팅 세션 상태 (사이드바용)
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+
+  // 보고서 아카이브 상태 (사이드바용)
+  const [reportArchive, setReportArchive] = useState<ReportArchiveItem[]>([]);
 
   // 파일 상태
   const [fileName, setFileName] = useState<string | null>(null);
@@ -345,6 +362,11 @@ const GCodeAnalytics = () => {
   // 저장 상태
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+
+  // 공유 상태
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
 
   // 스토리지 업로드 정보
   const [uploadedFileInfo, setUploadedFileInfo] = useState<{
@@ -409,6 +431,80 @@ const GCodeAnalytics = () => {
       setIsSaving(false);
     }
   }, [user?.id, reportData, fileName, uploadedFileInfo, apiResult, toast, t]);
+
+  // 공유 링크 생성
+  const handleShare = useCallback(async () => {
+    if (!user?.id) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
+    if (!reportData?.reportId) {
+      toast({
+        title: t('gcodeAnalytics.shareFailed', '공유 실패'),
+        description: t('gcodeAnalytics.saveFirst', '먼저 보고서를 저장해주세요.'),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSharing(true);
+    try {
+      const { shareUrl: url, error } = await createReportShare(
+        user.id,
+        reportData.reportId,
+        { title: fileName }
+      );
+
+      if (error || !url) {
+        toast({
+          title: t('gcodeAnalytics.shareFailed', '공유 실패'),
+          description: error?.message || t('gcodeAnalytics.shareError', '공유 링크를 생성할 수 없습니다.'),
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setShareUrl(url);
+
+      // 클립보드에 복사
+      await navigator.clipboard.writeText(url);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+
+      toast({
+        title: t('gcodeAnalytics.shareSuccess', '공유 링크 생성'),
+        description: t('gcodeAnalytics.linkCopied', '링크가 클립보드에 복사되었습니다.'),
+      });
+    } catch (err) {
+      console.error('[GCodeAnalytics] Share error:', err);
+      toast({
+        title: t('gcodeAnalytics.shareFailed', '공유 실패'),
+        description: t('gcodeAnalytics.shareError', '공유 링크를 생성할 수 없습니다.'),
+        variant: "destructive",
+      });
+    } finally {
+      setIsSharing(false);
+    }
+  }, [user?.id, reportData?.reportId, fileName, toast, t]);
+
+  // 클립보드 복사 (이미 생성된 URL)
+  const handleCopyShareUrl = useCallback(async () => {
+    if (!shareUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+
+      toast({
+        title: t('gcodeAnalytics.copied', '복사됨'),
+        description: t('gcodeAnalytics.linkCopied', '링크가 클립보드에 복사되었습니다.'),
+      });
+    } catch (err) {
+      console.error('[GCodeAnalytics] Copy error:', err);
+    }
+  }, [shareUrl, toast, t]);
 
   // 분석 실행 - 실제 API 호출
   const runAnalysis = useCallback(async (file: File) => {
@@ -700,74 +796,172 @@ const GCodeAnalytics = () => {
     currentFileRef.current = null;
   }, []);
 
+  // 채팅 세션 및 보고서 로드 (사이드바용)
+  useEffect(() => {
+    const loadSidebarData = async () => {
+      if (!user?.id) return;
+
+      try {
+        // 채팅 세션 로드
+        const sessions = await getChatSessions(user.id, 10);
+        setChatSessions(sessions.map(s => ({
+          id: s.id,
+          title: s.title,
+          created_at: s.created_at,
+          last_message_at: s.last_message_at,
+          tool_type: s.tool_type,
+        })));
+
+        // 보고서 아카이브 로드
+        const { data: reports } = await getAnalysisReportsList(user.id, { limit: 5 });
+        if (reports) {
+          setReportArchive(reports.map(r => ({
+            id: r.id,
+            fileName: r.file_name,
+            overallScore: r.overall_score,
+            overallGrade: r.overall_grade,
+            createdAt: r.created_at,
+          })));
+        }
+      } catch (error) {
+        console.error('Failed to load sidebar data:', error);
+      }
+    };
+
+    loadSidebarData();
+  }, [user?.id]);
+
+  // 사이드바 핸들러
+  const handleNewChat = useCallback(() => {
+    navigate('/ai-chat');
+  }, [navigate]);
+
+  const handleLoadSession = useCallback((session: ChatSession) => {
+    navigate(`/ai-chat?session=${session.id}`);
+  }, [navigate]);
+
+  const handleSelectReport = useCallback((report: ReportArchiveItem) => {
+    navigate(`/ai-chat?view=archive&reportId=${report.id}`);
+  }, [navigate]);
+
+  const handleDeleteReport = useCallback(async (reportId: string) => {
+    // 삭제 후 목록 새로고침
+    setReportArchive(prev => prev.filter(r => r.id !== reportId));
+  }, []);
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col bg-background relative overflow-hidden">
-      {/* 배경 장식 제거됨 - 깔끔한 배경 유지 */}
-
-      {/* 헤더 */}
-      <AIPageHeader
-        icon={FileCode2}
-        title={t('gcodeAnalytics.title')}
-        subtitle={t('gcodeAnalytics.subtitle')}
-        rightContent={
-          <div className="flex items-center gap-2">
-            {/* 아카이브 버튼 */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                // 비로그인 사용자는 로그인 모달 표시
-                if (!user?.id) {
-                  setShowLoginPrompt(true);
-                  return;
-                }
-                // AI Chat 페이지로 이동하면서 아카이브 뷰 활성화
-                navigate('/ai-chat?view=archive');
-              }}
-            >
-              <Archive className="h-4 w-4 mr-2" />
-              {t('gcodeAnalytics.archive')}
-            </Button>
-
-            {fileName && (
-              <>
-                <Button variant="outline" size="sm" onClick={handleNewFile}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  {t('gcodeAnalytics.newFile')}
-                </Button>
-
-                {/* 저장 버튼 (분석 완료 시) */}
-                {reportData && !isSaved && (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={handleSaveReport}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4 mr-2" />
-                    )}
-                    {isSaving ? t('gcodeAnalytics.saving') : t('gcodeAnalytics.save')}
-                  </Button>
-                )}
-
-                {/* 저장 완료 표시 */}
-                {isSaved && (
-                  <Badge variant="secondary" className="gap-1">
-                    <CheckCircle className="h-3 w-3" />
-                    {t('gcodeAnalytics.saved')}
-                  </Badge>
-                )}
-              </>
-            )}
-          </div>
-        }
+    <div className="h-screen bg-background flex">
+      {/* 사이드바 */}
+      <AppSidebar
+        isOpen={sidebarOpen}
+        onToggle={toggleSidebar}
+        sessions={chatSessions}
+        onNewChat={handleNewChat}
+        onLoadSession={handleLoadSession}
+        user={user}
+        onLoginClick={() => setShowLoginPrompt(true)}
+        onSignOut={signOut}
+        mode="chat"
+        reports={reportArchive}
+        onSelectReport={handleSelectReport}
+        onDeleteReport={handleDeleteReport}
       />
 
-      {/* 메인 컨텐츠 */}
+      {/* 메인 콘텐츠 */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* 상단 헤더 */}
+        <AppHeader
+          sidebarOpen={sidebarOpen}
+          rightContent={
+            <div className="flex items-center gap-2">
+              {/* 아카이브 버튼 */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (!user?.id) {
+                    setShowLoginPrompt(true);
+                    return;
+                  }
+                  navigate('/ai-chat?view=archive');
+                }}
+              >
+                <Archive className="h-4 w-4 mr-2" />
+                {t('gcodeAnalytics.archive')}
+              </Button>
+
+              {fileName && (
+                <>
+                  <Button variant="outline" size="sm" onClick={handleNewFile}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    {t('gcodeAnalytics.newFile')}
+                  </Button>
+
+                  {reportData && !isSaved && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleSaveReport}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-2" />
+                      )}
+                      {isSaving ? t('gcodeAnalytics.saving') : t('gcodeAnalytics.save')}
+                    </Button>
+                  )}
+
+                  {isSaved && (
+                    <>
+                      <Badge variant="secondary" className="gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        {t('gcodeAnalytics.saved')}
+                      </Badge>
+
+                      {/* 공유 버튼 - 저장된 보고서만 */}
+                      {shareUrl ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleCopyShareUrl}
+                          className="gap-2"
+                        >
+                          {isCopied ? (
+                            <Check className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                          {isCopied ? t('gcodeAnalytics.copied', '복사됨') : t('gcodeAnalytics.copyLink', '링크 복사')}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleShare}
+                          disabled={isSharing}
+                          className="gap-2"
+                        >
+                          {isSharing ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Share2 className="h-4 w-4" />
+                          )}
+                          {t('gcodeAnalytics.share', '공유')}
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          }
+        />
+
+        {/* 페이지 콘텐츠 */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* 메인 컨텐츠 */}
       <div className="flex-1 p-4 lg:p-6 overflow-hidden max-w-[1920px] mx-auto w-full">
         {!gcodeContent ? (
           /* 업로드 영역 */
@@ -1308,13 +1502,15 @@ const GCodeAnalytics = () => {
         )}
       </div>
 
-      {/* 로그인 프롬프트 모달 */}
-      <LoginPromptModal
-        open={showLoginPrompt}
-        onOpenChange={setShowLoginPrompt}
-        title={t('auth.loginRequired', '로그인이 필요합니다')}
-        description={t('gcodeAnalytics.loginToAnalyze', 'G-code 분석 기능을 이용하려면 로그인이 필요합니다.')}
-      />
+          {/* 로그인 프롬프트 모달 */}
+          <LoginPromptModal
+            open={showLoginPrompt}
+            onOpenChange={setShowLoginPrompt}
+            title={t('auth.loginRequired', '로그인이 필요합니다')}
+            description={t('gcodeAnalytics.loginToAnalyze', 'G-code 분석 기능을 이용하려면 로그인이 필요합니다.')}
+          />
+        </div>
+      </div>
     </div>
   );
 };

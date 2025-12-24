@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, Sparkles, Settings, User } from "lucide-react";
+import { Home, Sparkles, Settings, User, MessageCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { useSafeAreaStyle, useKeyboardVisible } from "@/hooks/usePlatform";
@@ -29,6 +29,11 @@ export function BottomNavigation() {
       path: "/dashboard",
       icon: Home,
       label: t("nav.dashboard", "Dashboard"),
+    },
+    {
+      path: "/ai-chat",
+      icon: MessageCircle,
+      label: t("nav.aiChat", "AI Chat"),
     },
     {
       path: "/create",
