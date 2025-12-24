@@ -13,7 +13,7 @@ import { convertDbReportToUiData } from '@/lib/gcodeAnalysisDbService';
 import type { GCodeAnalysisReport as GCodeAnalysisReportType } from '@shared/types/gcodeAnalysisDbTypes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, AlertTriangle, ArrowLeft, Eye, Calendar, ExternalLink } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, Eye, Calendar, ExternalLink, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function SharedReportPage() {
@@ -110,16 +110,12 @@ export default function SharedReportPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link to="/" className="flex items-center gap-2">
-                <img
-                  src="/images/factorlogo-white.png"
-                  alt="FACTOR"
-                  className="h-8 hidden dark:block"
-                />
-                <img
-                  src="/images/factorlogo-black.png"
-                  alt="FACTOR"
-                  className="h-8 dark:hidden"
-                />
+                <div className="flex items-center justify-center w-8 h-8 bg-primary rounded-lg">
+                  <Activity className="w-5 h-5 text-primary-foreground" />
+                </div>
+                <span className="text-xl font-bold font-orbitron text-primary tracking-wide">
+                  FACTOR
+                </span>
               </Link>
               <div className="h-6 w-px bg-border" />
               <div className="text-sm text-muted-foreground">

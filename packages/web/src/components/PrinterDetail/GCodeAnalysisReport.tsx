@@ -2102,14 +2102,30 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
 
       setShareUrl(url);
 
-      // 클립보드에 복사
-      await navigator.clipboard.writeText(url);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
+      // 클립보드에 복사 (fallback 포함)
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(url);
+        } else {
+          // fallback: textarea 사용
+          const textarea = document.createElement('textarea');
+          textarea.value = url;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+        }
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+      } catch (clipErr) {
+        console.warn('[GCodeAnalysisReport] Clipboard copy failed:', clipErr);
+      }
 
       toast({
         title: t('gcodeAnalytics.shareSuccess', '공유 링크 생성'),
-        description: t('gcodeAnalytics.linkCopied', '링크가 클립보드에 복사되었습니다.'),
+        description: url,
       });
     } catch (err) {
       console.error('[GCodeAnalysisReport] Share error:', err);
@@ -2128,7 +2144,19 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
     if (!shareUrl) return;
 
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        // fallback: textarea 사용
+        const textarea = document.createElement('textarea');
+        textarea.value = shareUrl;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
 
@@ -2274,7 +2302,8 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
       {/* 뷰어 탭 - 3D G-code 시각화 */}
       {currentPanelTab === 'viewer' && (
         <div className={cn(
-          "flex-1 flex flex-col overflow-hidden min-h-[400px]",
+          "flex flex-col",
+          embedded ? "min-h-[500px]" : "min-h-[800px]",
           isDarkMode ? "bg-slate-900" : "bg-slate-100"
         )}>
           {/* 로딩 상태 */}
@@ -2328,7 +2357,10 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
           {segmentLayers && segmentMetadata && !viewerLoading && !viewerError && (
             <>
               {/* 3D Canvas */}
-              <div className="flex-1 relative">
+              <div className={cn(
+                "relative",
+                embedded ? "h-[500px]" : "h-[70vh] min-h-[600px]"
+              )}>
                 <Canvas
                   camera={{
                     position: [
@@ -2842,7 +2874,10 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
           </div>
         </div >
 
-        <div className="p-6 space-y-6 min-h-[500px]">
+        <div className={cn(
+          "p-6 space-y-6",
+          embedded ? "min-h-[400px]" : "min-h-[600px]"
+        )}>
           {/* ================================================================ */}
           {/* TAB 1: 출력 정보 (Print Info) */}
           {/* ================================================================ */}
