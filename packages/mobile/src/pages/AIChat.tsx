@@ -33,11 +33,13 @@ import {
   MessageSquarePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ChatMessage, LoadingMessage, type ChatMessageData, type ReferenceInfo, type SuggestedAction } from "@/components/ai/ChatMessage";
 import {
   sendChatMessage,
   imagesToAttachments,
   formatChatResponse,
   type ChatApiRequest,
+  type ChatApiResponse,
 } from "@shared/services/chatApiService";
 import { useUserPlan } from "@shared/hooks/useUserPlan";
 import {
@@ -57,13 +59,9 @@ import {
   type ChatToolType,
 } from "@shared/services/supabaseService/chat";
 
-// 메시지 타입
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-  images?: string[];
+// 메시지 타입 (ChatMessageData 확장)
+interface Message extends ChatMessageData {
+  // ChatMessageData와 동일한 타입 사용
 }
 
 // 도구 정의
@@ -338,11 +336,29 @@ const AIChat = () => {
       const response = await sendChatMessage(request);
       const formattedContent = formatChatResponse(response);
 
+      // 참조 정보 변환
+      const references: ReferenceInfo[] | undefined = response.references?.map(ref => ({
+        title: ref.title,
+        url: ref.url,
+        source: ref.source,
+        snippet: ref.snippet,
+      }));
+
+      // 제안 액션 변환
+      const suggestedActions: SuggestedAction[] | undefined = response.suggested_actions?.map(action => ({
+        label: action.label,
+        action: action.action,
+        data: action.data,
+      }));
+
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: formattedContent,
         timestamp: new Date(),
+        references,
+        suggestedActions,
+        referenceImages: response.reference_images,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -400,6 +416,16 @@ const AIChat = () => {
 
     setSelectedTool(toolId === selectedTool ? null : toolId);
     setShowToolSheet(false);
+  };
+
+  // 제안 액션 처리
+  const handleSuggestedAction = (action: SuggestedAction) => {
+    if (action.action === 'follow_up' && action.data?.prompt) {
+      setInput(action.data.prompt as string);
+      textareaRef.current?.focus();
+    } else if (action.action === 'open_link' && action.data?.url) {
+      window.open(action.data.url as string, '_blank');
+    }
   };
 
   // 새 대화 시작
@@ -651,45 +677,13 @@ const AIChat = () => {
           <ScrollArea ref={scrollAreaRef} className="flex-1">
             <div className="px-4 py-4 space-y-4">
               {messages.map((message) => (
-                <div
+                <ChatMessage
                   key={message.id}
-                  className={cn(
-                    "flex",
-                    message.role === 'user' ? 'justify-end' : 'justify-start'
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "max-w-[85%] rounded-2xl px-4 py-3",
-                      message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    )}
-                  >
-                    {/* 이미지 표시 */}
-                    {message.images && message.images.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {message.images.map((img, idx) => (
-                          <img
-                            key={idx}
-                            src={img}
-                            alt=""
-                            className="w-20 h-20 rounded-lg object-cover"
-                          />
-                        ))}
-                      </div>
-                    )}
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                  </div>
-                </div>
+                  message={message}
+                  onSuggestedAction={handleSuggestedAction}
+                />
               ))}
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-muted rounded-2xl px-4 py-3">
-                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                  </div>
-                </div>
-              )}
+              {isLoading && <LoadingMessage />}
             </div>
           </ScrollArea>
 

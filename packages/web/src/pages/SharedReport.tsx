@@ -151,8 +151,8 @@ export default function SharedReportPage() {
         </div>
       </header>
 
-      {/* 보고서 콘텐츠 */}
-      <main className="container mx-auto px-4 py-8">
+      {/* 보고서 콘텐츠 - 넓은 레이아웃 */}
+      <main className="w-full max-w-[1600px] mx-auto px-4 lg:px-8 py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold mb-2">
             {shareData?.title || reportData.fileName || t('shared.analysisReport', 'Analysis Report')}

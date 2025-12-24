@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, Sparkles, Settings, User, MessageCircle } from "lucide-react";
+import { Home, Settings, User, MessageCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { useSafeAreaStyle, useKeyboardVisible } from "@/hooks/usePlatform";
@@ -28,27 +28,22 @@ export function BottomNavigation() {
     {
       path: "/dashboard",
       icon: Home,
-      label: t("nav.dashboard", "Dashboard"),
+      label: t("nav.dashboard", "대시보드"),
     },
     {
       path: "/ai-chat",
       icon: MessageCircle,
-      label: t("nav.aiChat", "AI Chat"),
-    },
-    {
-      path: "/create",
-      icon: Sparkles,
-      label: t("nav.aiStudio", "AI Studio"),
+      label: t("nav.aiChat", "AI 도구"),
     },
     {
       path: "/settings",
       icon: Settings,
-      label: t("nav.settings", "Settings"),
+      label: t("nav.settings", "설정"),
     },
     {
       path: "/user-settings",
       icon: User,
-      label: t("nav.profile", "Profile"),
+      label: t("nav.profile", "프로필"),
     },
   ];
 
