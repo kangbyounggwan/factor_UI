@@ -8,13 +8,14 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { GCodeAnalysisReport, type GCodeAnalysisData } from '@/components/PrinterDetail/GCodeAnalysisReport';
-import { getSharedReport, type SharedReport } from '@/lib/sharedReportService';
+import { getSharedReport, loadSharedReportLayers, type SharedReport } from '@/lib/sharedReportService';
 import { convertDbReportToUiData } from '@/lib/gcodeAnalysisDbService';
 import type { GCodeAnalysisReport as GCodeAnalysisReportType } from '@shared/types/gcodeAnalysisDbTypes';
+import type { LayerSegmentData, TemperatureData } from '@/lib/api/gcode';
+import type { SegmentMetadata } from '@/lib/gcodeSegmentService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, AlertTriangle, ArrowLeft, Eye, Calendar, ExternalLink, Activity } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 export default function SharedReportPage() {
   const { shareId } = useParams<{ shareId: string }>();
@@ -23,9 +24,15 @@ export default function SharedReportPage() {
   const [error, setError] = useState<string | null>(null);
   const [shareData, setShareData] = useState<SharedReport | null>(null);
   const [reportData, setReportData] = useState<GCodeAnalysisData | null>(null);
+  // 3D 뷰어용 세그먼트 데이터
+  const [segmentData, setSegmentData] = useState<{
+    layers: LayerSegmentData[];
+    metadata?: SegmentMetadata;
+    temperatures?: TemperatureData[];
+  } | null>(null);
 
   useEffect(() => {
-    async function loadSharedReport() {
+    async function loadSharedReportData() {
       if (!shareId) {
         setError('Invalid share link');
         setLoading(false);
@@ -46,6 +53,23 @@ export default function SharedReportPage() {
         // DB 보고서 데이터를 UI 데이터로 변환
         const uiData = convertDbReportToUiData(data.report as unknown as GCodeAnalysisReportType);
         setReportData(uiData);
+
+        // 세그먼트 데이터가 있으면 레이어 데이터도 로드
+        if (data.segmentData?.layersStoragePath) {
+          console.log('[SharedReportPage] Loading segment layers from:', data.segmentData.layersStoragePath);
+          const { data: layers, error: layersError } = await loadSharedReportLayers(data.segmentData.layersStoragePath);
+
+          if (!layersError && layers) {
+            setSegmentData({
+              layers: layers as LayerSegmentData[],
+              metadata: data.segmentData.metadata as SegmentMetadata,
+              temperatures: data.segmentData.temperatures as TemperatureData[],
+            });
+            console.log('[SharedReportPage] Segment data loaded:', layers.length, 'layers');
+          } else {
+            console.error('[SharedReportPage] Failed to load layers:', layersError);
+          }
+        }
       } catch (err) {
         console.error('[SharedReportPage] Error:', err);
         setError('Failed to load report');
@@ -54,7 +78,7 @@ export default function SharedReportPage() {
       }
     }
 
-    loadSharedReport();
+    loadSharedReportData();
   }, [shareId]);
 
   // 로딩 중
@@ -162,6 +186,8 @@ export default function SharedReportPage() {
         <GCodeAnalysisReport
           data={reportData}
           embedded={false}
+          initialSegments={segmentData || undefined}
+          showShareButton={false}
         />
       </main>
 

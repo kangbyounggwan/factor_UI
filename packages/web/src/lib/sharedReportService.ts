@@ -90,6 +90,13 @@ export async function createReportShare(
   }
 }
 
+// 세그먼트 데이터 타입 (3D 뷰어용)
+export interface SharedSegmentData {
+  metadata: Record<string, unknown>;
+  temperatures: Record<string, unknown>[];
+  layersStoragePath: string | null;
+}
+
 /**
  * 공유 ID로 보고서 조회 (공개 접근)
  */
@@ -97,6 +104,7 @@ export async function getSharedReport(shareId: string): Promise<{
   data: {
     share: SharedReport;
     report: Record<string, unknown>;
+    segmentData?: SharedSegmentData;
   } | null;
   error: Error | null;
 }> {
@@ -176,6 +184,27 @@ export async function getSharedReport(shareId: string): Promise<{
       return { data: null, error: new Error('Report not found') };
     }
 
+    // 세그먼트 데이터 조회 (3D 뷰어용)
+    let segmentData: SharedSegmentData | undefined;
+
+    const { data: segment, error: segmentError } = await supabase
+      .from('gcode_segment_data')
+      .select('metadata, temperatures, layers_storage_path, status')
+      .eq('report_id', share.report_id)
+      .eq('status', 'ready')
+      .maybeSingle();
+
+    if (!segmentError && segment) {
+      segmentData = {
+        metadata: segment.metadata as Record<string, unknown>,
+        temperatures: segment.temperatures as Record<string, unknown>[],
+        layersStoragePath: segment.layers_storage_path,
+      };
+      console.log('[sharedReportService] Segment data found for report:', share.report_id);
+    } else {
+      console.log('[sharedReportService] No segment data for report:', share.report_id);
+    }
+
     // 조회수 증가
     await supabase.rpc('increment_report_share_view_count', { p_share_id: shareId });
 
@@ -183,12 +212,37 @@ export async function getSharedReport(shareId: string): Promise<{
       data: {
         share: share as SharedReport,
         report: report as Record<string, unknown>,
+        segmentData,
       },
       error: null,
     };
   } catch (err) {
     console.error('[sharedReportService] Get shared report exception:', err);
     return { data: null, error: err as Error };
+  }
+}
+
+/**
+ * 공유 보고서의 레이어 데이터 로드 (Storage에서)
+ */
+export async function loadSharedReportLayers(storagePath: string): Promise<{
+  data: Record<string, unknown>[] | null;
+  error: Error | null;
+}> {
+  try {
+    const { data, error } = await supabase.storage
+      .from('gcode-segments')
+      .download(storagePath);
+
+    if (error) throw error;
+
+    const text = await data.text();
+    const layers = JSON.parse(text) as Record<string, unknown>[];
+
+    return { data: layers, error: null };
+  } catch (error) {
+    console.error('[sharedReportService] Load layers error:', error);
+    return { data: null, error: error as Error };
   }
 }
 
