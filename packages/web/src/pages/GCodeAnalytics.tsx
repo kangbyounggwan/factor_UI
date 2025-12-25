@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { useTheme } from 'next-themes';
-import { GCodeAnalysisReport, type GCodeAnalysisData } from "@/components/PrinterDetail/GCodeAnalysisReport";
+import { GCodeAnalysisReport, type GCodeAnalysisData } from "@/components/ai/GCodeAnalytics";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { analyzeGCodeFile, GCodeAnalysisError, pollAnalysisProgress } from "@/lib/gcodeAnalysisService";
@@ -807,9 +807,8 @@ const GCodeAnalytics = () => {
         setChatSessions(sessions.map(s => ({
           id: s.id,
           title: s.title,
-          created_at: s.created_at,
-          last_message_at: s.last_message_at,
-          tool_type: s.tool_type,
+          timestamp: new Date(s.last_message_at || s.created_at),
+          messages: [],
         })));
 
         // 보고서 아카이브 로드
@@ -820,7 +819,7 @@ const GCodeAnalytics = () => {
             fileName: r.file_name,
             overallScore: r.overall_score,
             overallGrade: r.overall_grade,
-            createdAt: r.created_at,
+            createdAt: new Date(r.created_at),
           })));
         }
       } catch (error) {
@@ -962,545 +961,545 @@ const GCodeAnalytics = () => {
         {/* 페이지 콘텐츠 */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* 메인 컨텐츠 */}
-      <div className="flex-1 p-4 lg:p-6 overflow-hidden max-w-[1920px] mx-auto w-full">
-        {!gcodeContent ? (
-          /* 업로드 영역 */
-          <div className="h-full flex items-center justify-center">
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={cn(
-                "w-full max-w-2xl aspect-video rounded-3xl border-2 border-dashed transition-all cursor-pointer",
-                "flex flex-col items-center justify-center gap-6 p-8",
-                isDragging
-                  ? "border-primary bg-primary/5 scale-[1.02]"
-                  : "border-slate-300 dark:border-border/50 bg-white/50 dark:bg-muted/30 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-muted/30 shadow-sm"
-              )}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".gcode,.gc,.g,.nc,.ngc"
-                className="hidden"
-                onChange={handleFileSelect}
-              />
-
-              <div className="w-24 h-24 rounded-full bg-slate-100 dark:bg-muted flex items-center justify-center shadow-inner">
-                <FileCode2 className="h-10 w-10 text-slate-500 dark:text-muted-foreground" />
-              </div>
-
-              <div className="text-center space-y-2">
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-foreground">{t('gcodeAnalytics.dragDropTitle')}</h2>
-                <p className="text-slate-500 dark:text-muted-foreground font-medium">
-                  {t('gcodeAnalytics.clickToSelect')}
-                </p>
-                <p className="text-xs text-slate-400 dark:text-muted-foreground">
-                  {t('gcodeAnalytics.supportedFormats')}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  {t('gcodeAnalytics.aiAnalysis')}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  {t('gcodeAnalytics.realtimeProgress')}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  {t('gcodeAnalytics.detailedReport')}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* 분석 결과 영역 */
-          <div className="h-full flex gap-4 lg:gap-6">
-            {/* 왼쪽: 3D 뷰어 (50%) */}
-            <div className="flex-1 min-w-0 bg-card rounded-2xl border border-border/50 shadow-lg flex flex-col overflow-hidden">
-              {/* 뷰어 헤더 */}
-              <div className="p-4 border-b border-border/50 flex items-center justify-between bg-muted/20">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <FileCode2 className="h-5 w-5 text-primary" />
-                  {t('gcodeAnalytics.preview3d')}
-                </h3>
-
-                <Badge variant="outline" className="bg-background font-mono text-xs">
-                  {fileName}
-                </Badge>
-              </div>
-
-              {/* 뷰어 컨텐츠 */}
-              <div className="flex-1 relative bg-black/5 dark:bg-black/80 min-h-[400px]">
-                {segmentData && segmentData.segments ? (
-                  /* API 기반 3D 렌더링 */
-                  <>
-                    <Canvas
-                      shadows
-                      camera={{
-                        position: viewMode === '2D'
-                          ? [128, 300, 128]  // 2D: 위에서 수직으로 내려다봄 (Top View)
-                          : [256 + 100, 150, 256 + 100],  // 3D: 대각선 시점
-                        fov: 50,
-                        near: 0.1,
-                        far: 2000
-                      }}
-                      gl={{
-                        preserveDrawingBuffer: true,
-                        powerPreference: 'high-performance',
-                      }}
-                      key={viewMode}  // viewMode가 변경되면 Canvas 재생성
-                    >
-                      <color attach="background" args={[isDarkMode ? '#1a1a1a' : '#f5f5f5']} />
-                      <ambientLight intensity={isDarkMode ? 0.6 : 0.8} />
-                      <directionalLight position={[100, 150, 100]} intensity={isDarkMode ? 1.2 : 1.0} castShadow />
-                      <pointLight position={[128, 100, 128]} intensity={0.5} />
-
-                      {/* 베드 */}
-                      <BedPlate size={{ x: 256, y: 256 }} isDarkMode={isDarkMode} />
-
-                      {/* G-code 경로 (API 세그먼트 데이터) */}
-                      <GCodePath3DFromAPI
-                        layers={segmentData.segments.layers}
-                        maxLayer={currentLayer}
-                        isDarkMode={isDarkMode}
-                        showCurrentLayer={showCurrentLayer}
-                        showPreviousLayers={showPreviousLayers}
-                        showWipePath={showWipePath}
-                        showTravelPath={showTravelPath}
-                        showSupports={showSupports}
-                      />
-
-                      {/* 그리드 */}
-                      <gridHelper
-                        args={[256, 25.6, isDarkMode ? '#444444' : '#cccccc', isDarkMode ? '#333333' : '#dddddd']}
-                        position={[128, 0, 128]}
-                      />
-
-                      {/* 카메라 컨트롤 */}
-                      <OrbitControls
-                        ref={orbitControlsRef}
-                        enableDamping
-                        dampingFactor={0.05}
-                        target={viewMode === '2D' ? [128, 0, 128] : [128, 30, 128]}
-                        minDistance={50}
-                        maxDistance={500}
-                        enableRotate={viewMode === '3D'}  // 2D 모드에서는 회전 비활성화
-                        maxPolarAngle={viewMode === '2D' ? 0 : Math.PI}  // 2D 모드에서는 수평 고정
-                      />
-                    </Canvas>
-
-                    {/* 좌상단: 2D/3D 전환 버튼 */}
-                    <div className="absolute top-4 left-4 flex gap-1 bg-background/90 backdrop-blur-sm rounded-md p-1 border border-border/50 shadow-lg">
-                      <Button
-                        variant={viewMode === '2D' ? 'default' : 'ghost'}
-                        size="sm"
-                        className="h-8 px-3 text-xs gap-1.5"
-                        onClick={() => setViewMode('2D')}
-                      >
-                        <Grid3x3 className="h-3.5 w-3.5" />
-                        2D
-                      </Button>
-                      <Button
-                        variant={viewMode === '3D' ? 'default' : 'ghost'}
-                        size="sm"
-                        className="h-8 px-3 text-xs gap-1.5"
-                        onClick={() => setViewMode('3D')}
-                      >
-                        <Box className="h-3.5 w-3.5" />
-                        3D
-                      </Button>
-                    </div>
-
-                    {/* 우상단: 범례 - 아코디언 */}
-                    <div className="absolute top-4 right-4 bg-background/90 backdrop-blur-sm rounded-md border border-border/50 shadow-lg overflow-hidden">
-                      {/* 범례 헤더 */}
-                      <button
-                        onClick={() => setIsLegendExpanded(!isLegendExpanded)}
-                        className="w-full flex items-center justify-between p-2 hover:bg-muted/50 transition-colors"
-                      >
-                        <span className="text-xs font-semibold text-foreground">범례</span>
-                        {isLegendExpanded ? (
-                          <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-                        ) : (
-                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                        )}
-                      </button>
-
-                      {/* 범례 내용 */}
-                      {isLegendExpanded && (
-                        <div className="p-2 pt-0 space-y-1">
-                          <button
-                            onClick={() => setShowCurrentLayer(!showCurrentLayer)}
-                            className={cn(
-                              "w-full flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded p-1 transition-all",
-                              !showCurrentLayer && "opacity-40"
-                            )}
-                          >
-                            <div className="w-6 h-0.5 rounded" style={{ backgroundColor: isDarkMode ? '#ff6600' : '#ff0000' }}></div>
-                            <span className="text-xs text-foreground">현재 레이어</span>
-                          </button>
-                          <button
-                            onClick={() => setShowPreviousLayers(!showPreviousLayers)}
-                            className={cn(
-                              "w-full flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded p-1 transition-all",
-                              !showPreviousLayers && "opacity-40"
-                            )}
-                          >
-                            <div className="w-6 h-0.5 rounded opacity-30" style={{ backgroundColor: isDarkMode ? '#00ffff' : '#2563eb' }}></div>
-                            <span className="text-xs text-foreground">이전 레이어</span>
-                          </button>
-                          {/* Wipe 데이터가 있을 때만 표시 */}
-                          {segmentData.segments.layers.some(layer => layer.wipeData && layer.wipeCount && layer.wipeCount > 0) && (
-                            <button
-                              onClick={() => setShowWipePath(!showWipePath)}
-                              className={cn(
-                                "w-full flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded p-1 transition-all",
-                                !showWipePath && "opacity-40"
-                              )}
-                            >
-                              <div className="w-6 h-0.5 rounded opacity-50" style={{ backgroundColor: isDarkMode ? '#ff00ff' : '#cc00cc' }}></div>
-                              <span className="text-xs text-foreground">Wipe (노즐 닦기)</span>
-                            </button>
-                          )}
-                          <button
-                            onClick={() => setShowTravelPath(!showTravelPath)}
-                            className={cn(
-                              "w-full flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded p-1 transition-all",
-                              !showTravelPath && "opacity-40"
-                            )}
-                          >
-                            <div className="w-6 h-0.5 rounded opacity-10" style={{ backgroundColor: isDarkMode ? '#999999' : '#aaaaaa' }}></div>
-                            <span className="text-xs text-foreground">이동 경로</span>
-                          </button>
-                          {/* Supports 데이터가 있을 때만 표시 */}
-                          {segmentData.segments.layers.some(layer => layer.supportData && layer.supportCount && layer.supportCount > 0) && (
-                            <button
-                              onClick={() => setShowSupports(!showSupports)}
-                              className={cn(
-                                "w-full flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded p-1 transition-all",
-                                !showSupports && "opacity-40"
-                              )}
-                            >
-                              <div className="w-6 h-0.5 rounded opacity-40" style={{ backgroundColor: isDarkMode ? '#ffff00' : '#ffa500' }}></div>
-                              <span className="text-xs text-foreground">서포트</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 하단: 레이어 슬라이더 (화살표 버튼 추가) */}
-                    <div className="absolute bottom-4 left-4 right-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 border border-border/50 shadow-lg">
-                      <div className="flex items-center gap-3">
-                        {/* 이전 레이어 버튼 */}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          onClick={() => setCurrentLayer(Math.max(0, currentLayer - 1))}
-                          disabled={currentLayer === 0}
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-
-                        {/* 레이어 정보 */}
-                        <span className="text-sm font-medium whitespace-nowrap min-w-[100px] text-center">
-                          레이어: {currentLayer + 1} / {segmentData.segments.metadata.layerCount}
-                        </span>
-
-                        {/* 슬라이더 */}
-                        <Slider
-                          value={[currentLayer]}
-                          onValueChange={(value) => setCurrentLayer(value[0])}
-                          max={segmentData.segments.metadata.layerCount - 1}
-                          step={1}
-                          className="flex-1"
-                        />
-
-                        {/* 다음 레이어 버튼 */}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          onClick={() => setCurrentLayer(Math.min(segmentData.segments.metadata.layerCount - 1, currentLayer + 1))}
-                          disabled={currentLayer === segmentData.segments.metadata.layerCount - 1}
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-
-                        {/* 온도 표시 - 항상 표시 (마지막 온도 값 유지) */}
-                        {segmentData.segments.temperatures && segmentData.segments.temperatures.length > 0 && (() => {
-                          // 현재 레이어 또는 이전 레이어의 온도 찾기
-                          let nozzleTemp: number | null = null;
-                          let bedTemp: number | null = null;
-
-                          // 현재 레이어 이하의 온도 데이터를 역순으로 검색하여 마지막 온도 값 찾기
-                          for (let i = currentLayer; i >= 0; i--) {
-                            const temp = segmentData.segments.temperatures.find(t => t.layer === i);
-                            if (temp) {
-                              if (nozzleTemp === null && temp.nozzleTemp !== null) {
-                                nozzleTemp = temp.nozzleTemp;
-                              }
-                              if (bedTemp === null && temp.bedTemp !== null) {
-                                bedTemp = temp.bedTemp;
-                              }
-                              // 둘 다 찾았으면 종료
-                              if (nozzleTemp !== null && bedTemp !== null) break;
-                            }
-                          }
-
-                          // 온도 데이터가 하나라도 있으면 표시
-                          if (nozzleTemp !== null || bedTemp !== null) {
-                            return (
-                              <div className="flex items-center gap-3 ml-2 pl-3 border-l border-border">
-                                <Thermometer className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                                {nozzleTemp !== null && (
-                                  <div className="flex items-center gap-1">
-                                    <div className="w-2 h-2 rounded-full bg-red-500" title="노즐" />
-                                    <span className="text-xs font-medium">{nozzleTemp}°C</span>
-                                  </div>
-                                )}
-                                {bedTemp !== null && (
-                                  <div className="flex items-center gap-1">
-                                    <div className="w-2 h-2 rounded-full bg-orange-500" title="베드" />
-                                    <span className="text-xs font-medium">{bedTemp}°C</span>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }
-                          return null;
-                        })()}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  /* 로딩 중 또는 데이터 없음 */
-                  <div className="h-full flex items-center justify-center">
-                    <div className="text-center space-y-2">
-                      <Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">3D 모델 로딩 중...</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 온도 차트 섹션 - 3D 뷰어 아래 */}
-              {segmentData && segmentData.segments.temperatures && segmentData.segments.temperatures.length > 0 && (
-                <div className="border-t bg-background/95 backdrop-blur p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">레이어별 온도 변화</span>
-                    </div>
-                    {/* 범례 - 클릭하여 토글 */}
-                    <div className="flex items-center gap-4 text-xs">
-                      <button
-                        onClick={() => setShowNozzleLine(!showNozzleLine)}
-                        className={cn(
-                          "flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity",
-                          !showNozzleLine && "opacity-40"
-                        )}
-                      >
-                        <div className="w-3 h-[2px] bg-red-500 rounded" />
-                        <span className="text-muted-foreground">노즐</span>
-                      </button>
-                      <button
-                        onClick={() => setShowBedLine(!showBedLine)}
-                        className={cn(
-                          "flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity",
-                          !showBedLine && "opacity-40"
-                        )}
-                      >
-                        <div className="w-3 h-[2px] bg-orange-500 rounded" />
-                        <span className="text-muted-foreground">베드</span>
-                      </button>
-                    </div>
-                  </div>
-                  <div className="h-[150px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={segmentData.segments.temperatures}
-                        margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
-                      >
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke={isDarkMode ? '#374151' : '#e5e7eb'}
-                          vertical={false}
-                        />
-                        <XAxis
-                          dataKey="layer"
-                          tick={{ fontSize: 10, fill: isDarkMode ? '#9ca3af' : '#6b7280' }}
-                          axisLine={{ stroke: isDarkMode ? '#4b5563' : '#d1d5db' }}
-                          tickLine={false}
-                          interval="preserveStartEnd"
-                          tickFormatter={(value) => `L${value}`}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 10, fill: isDarkMode ? '#9ca3af' : '#6b7280' }}
-                          axisLine={{ stroke: isDarkMode ? '#4b5563' : '#d1d5db' }}
-                          tickLine={false}
-                          width={35}
-                          domain={['auto', 'auto']}
-                          tickFormatter={(value) => `${value}°`}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                            border: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`,
-                            borderRadius: '6px',
-                            fontSize: '12px',
-                          }}
-                          labelStyle={{ color: isDarkMode ? '#f3f4f6' : '#111827' }}
-                          formatter={(value: number | null, name: string) => {
-                            if (value === null) return ['N/A', name === 'nozzleTemp' ? '노즐' : '베드'];
-                            return [`${value}°C`, name === 'nozzleTemp' ? '노즐' : '베드'];
-                          }}
-                          labelFormatter={(label) => `레이어 ${label}`}
-                        />
-                        {/* 현재 레이어 위치 표시 */}
-                        <ReferenceLine
-                          x={currentLayer}
-                          stroke={isDarkMode ? '#60a5fa' : '#3b82f6'}
-                          strokeWidth={2}
-                          strokeDasharray="4 4"
-                        />
-                        {/* 노즐 온도 라인 */}
-                        {showNozzleLine && (
-                          <Line
-                            type="stepAfter"
-                            dataKey="nozzleTemp"
-                            stroke="#ef4444"
-                            strokeWidth={2}
-                            dot={false}
-                            activeDot={{ r: 4, fill: '#ef4444' }}
-                            connectNulls
-                          />
-                        )}
-                        {/* 베드 온도 라인 */}
-                        {showBedLine && (
-                          <Line
-                            type="stepAfter"
-                            dataKey="bedTemp"
-                            stroke="#f97316"
-                            strokeWidth={2}
-                            dot={false}
-                            activeDot={{ r: 4, fill: '#f97316' }}
-                            connectNulls
-                          />
-                        )}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 오른쪽: 분석 보고서 (50%) */}
-            <div className="flex-1 min-w-0 bg-card rounded-2xl border border-border/50 shadow-lg flex flex-col overflow-hidden">
-              {/* 보고서 컨텐츠 */}
-              <div className="flex-1 overflow-auto">
-                {isAnalyzing ? (
-                  /* 분석 중 - 실시간 진행 상황 표시 */
-                  <div className="h-full flex flex-col items-center justify-center gap-6 p-8">
-                    <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-                      <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                    </div>
-
-                    <div className="text-center space-y-4 w-full max-w-md">
-                      <p className="text-lg font-semibold">{t('gcodeAnalytics.analyzing')}</p>
-                      <p className="text-xs text-muted-foreground">
-                        💡 이번 업데이트로 더 정확한 분석을 위해 고도화된 모델을 채택했어요. 시간이 조금 오래 걸립니다...
-                      </p>
-
-                      {/* 진행률 바 */}
-                      <div className="space-y-2">
-                        <Progress value={analysisProgress?.progress || 0} className="h-3" />
-                        <div className="flex justify-between text-sm text-muted-foreground">
-                          <span>{analysisProgress?.progress || 0}%</span>
-                          <span>{analysisProgress?.status || 'pending'}</span>
-                        </div>
-                      </div>
-
-                      {/* 현재 단계 메시지 */}
-                      <div className="bg-muted/50 rounded-lg p-4 text-sm min-h-[5rem] flex items-center justify-center">
-                        <div className="text-muted-foreground w-full">
-                          {analysisProgress?.message ? (
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              components={{
-                                p: ({ children }) => <p className="mb-1 last:mb-0 leading-relaxed">{children}</p>,
-                                strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-                                em: ({ children }) => <em className="italic">{children}</em>,
-                                code: ({ children }) => <code className="bg-muted-foreground/20 rounded px-1">{children}</code>,
-                              }}
-                            >
-                              {analysisProgress.message}
-                            </ReactMarkdown>
-                          ) : (
-                            '분석 준비 중...'
-                          )}
-                        </div>
-                      </div>
-
-                      {/* 단계 표시 */}
-                      <div className="flex justify-center gap-2 flex-wrap">
-                        {['파싱', '요약', '이슈 분석', '패치 생성', '완료'].map((step, idx) => {
-                          const progress = analysisProgress?.progress || 0;
-                          const isActive = progress >= idx * 20 && progress < (idx + 1) * 20;
-                          const isDone = progress >= (idx + 1) * 20;
-                          return (
-                            <Badge
-                              key={step}
-                              variant={isDone ? 'default' : isActive ? 'secondary' : 'outline'}
-                              className={cn(
-                                "text-xs",
-                                isActive && "animate-pulse"
-                              )}
-                            >
-                              {step}
-                            </Badge>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                ) : analysisError ? (
-                  /* 분석 오류 */
-                  <div className="h-full flex flex-col items-center justify-center gap-4 p-8">
-                    <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center">
-                      <span className="text-4xl">!</span>
-                    </div>
-                    <div className="text-center space-y-2">
-                      <p className="text-lg font-semibold text-red-500">분석 실패</p>
-                      <p className="text-sm text-muted-foreground max-w-md">
-                        {analysisError}
-                      </p>
-                    </div>
-                    <Button onClick={handleReanalyze} variant="outline">
-                      다시 시도
-                    </Button>
-                  </div>
-                ) : reportData ? (
-                  /* 분석 완료 - 상세 보고서 */
-                  <GCodeAnalysisReport
-                    data={{
-                      ...reportData,
-                      gcodeContent: gcodeContent || undefined
-                    }}
-                    className="w-full"
+          <div className="flex-1 p-4 lg:p-6 overflow-hidden max-w-[1920px] mx-auto w-full">
+            {!gcodeContent ? (
+              /* 업로드 영역 */
+              <div className="h-full flex items-center justify-center">
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={cn(
+                    "w-full max-w-2xl aspect-video rounded-3xl border-2 border-dashed transition-all cursor-pointer",
+                    "flex flex-col items-center justify-center gap-6 p-8",
+                    isDragging
+                      ? "border-primary bg-primary/5 scale-[1.02]"
+                      : "border-slate-300 dark:border-border/50 bg-white/50 dark:bg-muted/30 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-muted/30 shadow-sm"
+                  )}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".gcode,.gc,.g,.nc,.ngc"
+                    className="hidden"
+                    onChange={handleFileSelect}
                   />
-                ) : null}
+
+                  <div className="w-24 h-24 rounded-full bg-slate-100 dark:bg-muted flex items-center justify-center shadow-inner">
+                    <FileCode2 className="h-10 w-10 text-slate-500 dark:text-muted-foreground" />
+                  </div>
+
+                  <div className="text-center space-y-2">
+                    <h2 className="text-2xl font-bold text-slate-900 dark:text-foreground">{t('gcodeAnalytics.dragDropTitle')}</h2>
+                    <p className="text-slate-500 dark:text-muted-foreground font-medium">
+                      {t('gcodeAnalytics.clickToSelect')}
+                    </p>
+                    <p className="text-xs text-slate-400 dark:text-muted-foreground">
+                      {t('gcodeAnalytics.supportedFormats')}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      {t('gcodeAnalytics.aiAnalysis')}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      {t('gcodeAnalytics.realtimeProgress')}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      {t('gcodeAnalytics.detailedReport')}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              /* 분석 결과 영역 */
+              <div className="h-full flex gap-4 lg:gap-6">
+                {/* 왼쪽: 3D 뷰어 (50%) */}
+                <div className="flex-1 min-w-0 bg-card rounded-2xl border border-border/50 shadow-lg flex flex-col overflow-hidden">
+                  {/* 뷰어 헤더 */}
+                  <div className="p-4 border-b border-border/50 flex items-center justify-between bg-muted/20">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <FileCode2 className="h-5 w-5 text-primary" />
+                      {t('gcodeAnalytics.preview3d')}
+                    </h3>
+
+                    <Badge variant="outline" className="bg-background font-mono text-xs">
+                      {fileName}
+                    </Badge>
+                  </div>
+
+                  {/* 뷰어 컨텐츠 */}
+                  <div className="flex-1 relative bg-black/5 dark:bg-black/80 min-h-[400px]">
+                    {segmentData && segmentData.segments ? (
+                      /* API 기반 3D 렌더링 */
+                      <>
+                        <Canvas
+                          shadows
+                          camera={{
+                            position: viewMode === '2D'
+                              ? [128, 300, 128]  // 2D: 위에서 수직으로 내려다봄 (Top View)
+                              : [256 + 100, 150, 256 + 100],  // 3D: 대각선 시점
+                            fov: 50,
+                            near: 0.1,
+                            far: 2000
+                          }}
+                          gl={{
+                            preserveDrawingBuffer: true,
+                            powerPreference: 'high-performance',
+                          }}
+                          key={viewMode}  // viewMode가 변경되면 Canvas 재생성
+                        >
+                          <color attach="background" args={[isDarkMode ? '#1a1a1a' : '#f5f5f5']} />
+                          <ambientLight intensity={isDarkMode ? 0.6 : 0.8} />
+                          <directionalLight position={[100, 150, 100]} intensity={isDarkMode ? 1.2 : 1.0} castShadow />
+                          <pointLight position={[128, 100, 128]} intensity={0.5} />
+
+                          {/* 베드 */}
+                          <BedPlate size={{ x: 256, y: 256 }} isDarkMode={isDarkMode} />
+
+                          {/* G-code 경로 (API 세그먼트 데이터) */}
+                          <GCodePath3DFromAPI
+                            layers={segmentData.segments.layers}
+                            maxLayer={currentLayer}
+                            isDarkMode={isDarkMode}
+                            showCurrentLayer={showCurrentLayer}
+                            showPreviousLayers={showPreviousLayers}
+                            showWipePath={showWipePath}
+                            showTravelPath={showTravelPath}
+                            showSupports={showSupports}
+                          />
+
+                          {/* 그리드 */}
+                          <gridHelper
+                            args={[256, 25.6, isDarkMode ? '#444444' : '#cccccc', isDarkMode ? '#333333' : '#dddddd']}
+                            position={[128, 0, 128]}
+                          />
+
+                          {/* 카메라 컨트롤 */}
+                          <OrbitControls
+                            ref={orbitControlsRef}
+                            enableDamping
+                            dampingFactor={0.05}
+                            target={viewMode === '2D' ? [128, 0, 128] : [128, 30, 128]}
+                            minDistance={50}
+                            maxDistance={500}
+                            enableRotate={viewMode === '3D'}  // 2D 모드에서는 회전 비활성화
+                            maxPolarAngle={viewMode === '2D' ? 0 : Math.PI}  // 2D 모드에서는 수평 고정
+                          />
+                        </Canvas>
+
+                        {/* 좌상단: 2D/3D 전환 버튼 */}
+                        <div className="absolute top-4 left-4 flex gap-1 bg-background/90 backdrop-blur-sm rounded-md p-1 border border-border/50 shadow-lg">
+                          <Button
+                            variant={viewMode === '2D' ? 'default' : 'ghost'}
+                            size="sm"
+                            className="h-8 px-3 text-xs gap-1.5"
+                            onClick={() => setViewMode('2D')}
+                          >
+                            <Grid3x3 className="h-3.5 w-3.5" />
+                            2D
+                          </Button>
+                          <Button
+                            variant={viewMode === '3D' ? 'default' : 'ghost'}
+                            size="sm"
+                            className="h-8 px-3 text-xs gap-1.5"
+                            onClick={() => setViewMode('3D')}
+                          >
+                            <Box className="h-3.5 w-3.5" />
+                            3D
+                          </Button>
+                        </div>
+
+                        {/* 우상단: 범례 - 아코디언 */}
+                        <div className="absolute top-4 right-4 bg-background/90 backdrop-blur-sm rounded-md border border-border/50 shadow-lg overflow-hidden">
+                          {/* 범례 헤더 */}
+                          <button
+                            onClick={() => setIsLegendExpanded(!isLegendExpanded)}
+                            className="w-full flex items-center justify-between p-2 hover:bg-muted/50 transition-colors"
+                          >
+                            <span className="text-xs font-semibold text-foreground">범례</span>
+                            {isLegendExpanded ? (
+                              <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                            )}
+                          </button>
+
+                          {/* 범례 내용 */}
+                          {isLegendExpanded && (
+                            <div className="p-2 pt-0 space-y-1">
+                              <button
+                                onClick={() => setShowCurrentLayer(!showCurrentLayer)}
+                                className={cn(
+                                  "w-full flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded p-1 transition-all",
+                                  !showCurrentLayer && "opacity-40"
+                                )}
+                              >
+                                <div className="w-6 h-0.5 rounded" style={{ backgroundColor: isDarkMode ? '#ff6600' : '#ff0000' }}></div>
+                                <span className="text-xs text-foreground">현재 레이어</span>
+                              </button>
+                              <button
+                                onClick={() => setShowPreviousLayers(!showPreviousLayers)}
+                                className={cn(
+                                  "w-full flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded p-1 transition-all",
+                                  !showPreviousLayers && "opacity-40"
+                                )}
+                              >
+                                <div className="w-6 h-0.5 rounded opacity-30" style={{ backgroundColor: isDarkMode ? '#00ffff' : '#2563eb' }}></div>
+                                <span className="text-xs text-foreground">이전 레이어</span>
+                              </button>
+                              {/* Wipe 데이터가 있을 때만 표시 */}
+                              {segmentData.segments.layers.some(layer => layer.wipeData && layer.wipeCount && layer.wipeCount > 0) && (
+                                <button
+                                  onClick={() => setShowWipePath(!showWipePath)}
+                                  className={cn(
+                                    "w-full flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded p-1 transition-all",
+                                    !showWipePath && "opacity-40"
+                                  )}
+                                >
+                                  <div className="w-6 h-0.5 rounded opacity-50" style={{ backgroundColor: isDarkMode ? '#ff00ff' : '#cc00cc' }}></div>
+                                  <span className="text-xs text-foreground">Wipe (노즐 닦기)</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setShowTravelPath(!showTravelPath)}
+                                className={cn(
+                                  "w-full flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded p-1 transition-all",
+                                  !showTravelPath && "opacity-40"
+                                )}
+                              >
+                                <div className="w-6 h-0.5 rounded opacity-10" style={{ backgroundColor: isDarkMode ? '#999999' : '#aaaaaa' }}></div>
+                                <span className="text-xs text-foreground">이동 경로</span>
+                              </button>
+                              {/* Supports 데이터가 있을 때만 표시 */}
+                              {segmentData.segments.layers.some(layer => layer.supportData && layer.supportCount && layer.supportCount > 0) && (
+                                <button
+                                  onClick={() => setShowSupports(!showSupports)}
+                                  className={cn(
+                                    "w-full flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded p-1 transition-all",
+                                    !showSupports && "opacity-40"
+                                  )}
+                                >
+                                  <div className="w-6 h-0.5 rounded opacity-40" style={{ backgroundColor: isDarkMode ? '#ffff00' : '#ffa500' }}></div>
+                                  <span className="text-xs text-foreground">서포트</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 하단: 레이어 슬라이더 (화살표 버튼 추가) */}
+                        <div className="absolute bottom-4 left-4 right-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 border border-border/50 shadow-lg">
+                          <div className="flex items-center gap-3">
+                            {/* 이전 레이어 버튼 */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={() => setCurrentLayer(Math.max(0, currentLayer - 1))}
+                              disabled={currentLayer === 0}
+                            >
+                              <ChevronLeft className="h-4 w-4" />
+                            </Button>
+
+                            {/* 레이어 정보 */}
+                            <span className="text-sm font-medium whitespace-nowrap min-w-[100px] text-center">
+                              레이어: {currentLayer + 1} / {segmentData.segments.metadata.layerCount}
+                            </span>
+
+                            {/* 슬라이더 */}
+                            <Slider
+                              value={[currentLayer]}
+                              onValueChange={(value) => setCurrentLayer(value[0])}
+                              max={segmentData.segments.metadata.layerCount - 1}
+                              step={1}
+                              className="flex-1"
+                            />
+
+                            {/* 다음 레이어 버튼 */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={() => setCurrentLayer(Math.min(segmentData.segments.metadata.layerCount - 1, currentLayer + 1))}
+                              disabled={currentLayer === segmentData.segments.metadata.layerCount - 1}
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+
+                            {/* 온도 표시 - 항상 표시 (마지막 온도 값 유지) */}
+                            {segmentData.segments.temperatures && segmentData.segments.temperatures.length > 0 && (() => {
+                              // 현재 레이어 또는 이전 레이어의 온도 찾기
+                              let nozzleTemp: number | null = null;
+                              let bedTemp: number | null = null;
+
+                              // 현재 레이어 이하의 온도 데이터를 역순으로 검색하여 마지막 온도 값 찾기
+                              for (let i = currentLayer; i >= 0; i--) {
+                                const temp = segmentData.segments.temperatures.find(t => t.layer === i);
+                                if (temp) {
+                                  if (nozzleTemp === null && temp.nozzleTemp !== null) {
+                                    nozzleTemp = temp.nozzleTemp;
+                                  }
+                                  if (bedTemp === null && temp.bedTemp !== null) {
+                                    bedTemp = temp.bedTemp;
+                                  }
+                                  // 둘 다 찾았으면 종료
+                                  if (nozzleTemp !== null && bedTemp !== null) break;
+                                }
+                              }
+
+                              // 온도 데이터가 하나라도 있으면 표시
+                              if (nozzleTemp !== null || bedTemp !== null) {
+                                return (
+                                  <div className="flex items-center gap-3 ml-2 pl-3 border-l border-border">
+                                    <Thermometer className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                    {nozzleTemp !== null && (
+                                      <div className="flex items-center gap-1">
+                                        <div className="w-2 h-2 rounded-full bg-red-500" title="노즐" />
+                                        <span className="text-xs font-medium">{nozzleTemp}°C</span>
+                                      </div>
+                                    )}
+                                    {bedTemp !== null && (
+                                      <div className="flex items-center gap-1">
+                                        <div className="w-2 h-2 rounded-full bg-orange-500" title="베드" />
+                                        <span className="text-xs font-medium">{bedTemp}°C</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      /* 로딩 중 또는 데이터 없음 */
+                      <div className="h-full flex items-center justify-center">
+                        <div className="text-center space-y-2">
+                          <Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground" />
+                          <p className="text-sm text-muted-foreground">3D 모델 로딩 중...</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 온도 차트 섹션 - 3D 뷰어 아래 */}
+                  {segmentData && segmentData.segments.temperatures && segmentData.segments.temperatures.length > 0 && (
+                    <div className="border-t bg-background/95 backdrop-blur p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">레이어별 온도 변화</span>
+                        </div>
+                        {/* 범례 - 클릭하여 토글 */}
+                        <div className="flex items-center gap-4 text-xs">
+                          <button
+                            onClick={() => setShowNozzleLine(!showNozzleLine)}
+                            className={cn(
+                              "flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity",
+                              !showNozzleLine && "opacity-40"
+                            )}
+                          >
+                            <div className="w-3 h-[2px] bg-red-500 rounded" />
+                            <span className="text-muted-foreground">노즐</span>
+                          </button>
+                          <button
+                            onClick={() => setShowBedLine(!showBedLine)}
+                            className={cn(
+                              "flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity",
+                              !showBedLine && "opacity-40"
+                            )}
+                          >
+                            <div className="w-3 h-[2px] bg-orange-500 rounded" />
+                            <span className="text-muted-foreground">베드</span>
+                          </button>
+                        </div>
+                      </div>
+                      <div className="h-[150px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={segmentData.segments.temperatures}
+                            margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke={isDarkMode ? '#374151' : '#e5e7eb'}
+                              vertical={false}
+                            />
+                            <XAxis
+                              dataKey="layer"
+                              tick={{ fontSize: 10, fill: isDarkMode ? '#9ca3af' : '#6b7280' }}
+                              axisLine={{ stroke: isDarkMode ? '#4b5563' : '#d1d5db' }}
+                              tickLine={false}
+                              interval="preserveStartEnd"
+                              tickFormatter={(value) => `L${value}`}
+                            />
+                            <YAxis
+                              tick={{ fontSize: 10, fill: isDarkMode ? '#9ca3af' : '#6b7280' }}
+                              axisLine={{ stroke: isDarkMode ? '#4b5563' : '#d1d5db' }}
+                              tickLine={false}
+                              width={35}
+                              domain={['auto', 'auto']}
+                              tickFormatter={(value) => `${value}°`}
+                            />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                border: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`,
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                              }}
+                              labelStyle={{ color: isDarkMode ? '#f3f4f6' : '#111827' }}
+                              formatter={(value: number | null, name: string) => {
+                                if (value === null) return ['N/A', name === 'nozzleTemp' ? '노즐' : '베드'];
+                                return [`${value}°C`, name === 'nozzleTemp' ? '노즐' : '베드'];
+                              }}
+                              labelFormatter={(label) => `레이어 ${label}`}
+                            />
+                            {/* 현재 레이어 위치 표시 */}
+                            <ReferenceLine
+                              x={currentLayer}
+                              stroke={isDarkMode ? '#60a5fa' : '#3b82f6'}
+                              strokeWidth={2}
+                              strokeDasharray="4 4"
+                            />
+                            {/* 노즐 온도 라인 */}
+                            {showNozzleLine && (
+                              <Line
+                                type="stepAfter"
+                                dataKey="nozzleTemp"
+                                stroke="#ef4444"
+                                strokeWidth={2}
+                                dot={false}
+                                activeDot={{ r: 4, fill: '#ef4444' }}
+                                connectNulls
+                              />
+                            )}
+                            {/* 베드 온도 라인 */}
+                            {showBedLine && (
+                              <Line
+                                type="stepAfter"
+                                dataKey="bedTemp"
+                                stroke="#f97316"
+                                strokeWidth={2}
+                                dot={false}
+                                activeDot={{ r: 4, fill: '#f97316' }}
+                                connectNulls
+                              />
+                            )}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 오른쪽: 분석 보고서 (50%) */}
+                <div className="flex-1 min-w-0 bg-card rounded-2xl border border-border/50 shadow-lg flex flex-col overflow-hidden">
+                  {/* 보고서 컨텐츠 */}
+                  <div className="flex-1 overflow-auto">
+                    {isAnalyzing ? (
+                      /* 분석 중 - 실시간 진행 상황 표시 */
+                      <div className="h-full flex flex-col items-center justify-center gap-6 p-8">
+                        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                        </div>
+
+                        <div className="text-center space-y-4 w-full max-w-md">
+                          <p className="text-lg font-semibold">{t('gcodeAnalytics.analyzing')}</p>
+                          <p className="text-xs text-muted-foreground">
+                            💡 이번 업데이트로 더 정확한 분석을 위해 고도화된 모델을 채택했어요. 시간이 조금 오래 걸립니다...
+                          </p>
+
+                          {/* 진행률 바 */}
+                          <div className="space-y-2">
+                            <Progress value={analysisProgress?.progress || 0} className="h-3" />
+                            <div className="flex justify-between text-sm text-muted-foreground">
+                              <span>{analysisProgress?.progress || 0}%</span>
+                              <span>{analysisProgress?.status || 'pending'}</span>
+                            </div>
+                          </div>
+
+                          {/* 현재 단계 메시지 */}
+                          <div className="bg-muted/50 rounded-lg p-4 text-sm min-h-[5rem] flex items-center justify-center">
+                            <div className="text-muted-foreground w-full">
+                              {analysisProgress?.message ? (
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkGfm]}
+                                  components={{
+                                    p: ({ children }) => <p className="mb-1 last:mb-0 leading-relaxed">{children}</p>,
+                                    strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                                    em: ({ children }) => <em className="italic">{children}</em>,
+                                    code: ({ children }) => <code className="bg-muted-foreground/20 rounded px-1">{children}</code>,
+                                  }}
+                                >
+                                  {analysisProgress.message}
+                                </ReactMarkdown>
+                              ) : (
+                                '분석 준비 중...'
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 단계 표시 */}
+                          <div className="flex justify-center gap-2 flex-wrap">
+                            {['파싱', '요약', '이슈 분석', '패치 생성', '완료'].map((step, idx) => {
+                              const progress = analysisProgress?.progress || 0;
+                              const isActive = progress >= idx * 20 && progress < (idx + 1) * 20;
+                              const isDone = progress >= (idx + 1) * 20;
+                              return (
+                                <Badge
+                                  key={step}
+                                  variant={isDone ? 'default' : isActive ? 'secondary' : 'outline'}
+                                  className={cn(
+                                    "text-xs",
+                                    isActive && "animate-pulse"
+                                  )}
+                                >
+                                  {step}
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    ) : analysisError ? (
+                      /* 분석 오류 */
+                      <div className="h-full flex flex-col items-center justify-center gap-4 p-8">
+                        <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center">
+                          <span className="text-4xl">!</span>
+                        </div>
+                        <div className="text-center space-y-2">
+                          <p className="text-lg font-semibold text-red-500">분석 실패</p>
+                          <p className="text-sm text-muted-foreground max-w-md">
+                            {analysisError}
+                          </p>
+                        </div>
+                        <Button onClick={handleReanalyze} variant="outline">
+                          다시 시도
+                        </Button>
+                      </div>
+                    ) : reportData ? (
+                      /* 분석 완료 - 상세 보고서 */
+                      <GCodeAnalysisReport
+                        data={{
+                          ...reportData,
+                          gcodeContent: gcodeContent || undefined
+                        }}
+                        className="w-full"
+                      />
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
           {/* 로그인 프롬프트 모달 */}
           <LoginPromptModal

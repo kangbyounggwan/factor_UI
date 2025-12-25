@@ -3,6 +3,7 @@ export * from "./utils/imageValidation";
 // stlThumbnail is NOT exported here to avoid bundling Three.js in the main bundle
 // Import directly from "@shared/utils/stlThumbnail" where needed
 export * from "./utils/printerStatus";
+export * from "./utils/ai";
 export * from "./component/websocket";
 
 // i18n

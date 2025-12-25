@@ -46,7 +46,7 @@ const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const GCodeAPITest = lazy(() => import("./pages/GCodeAPITest"));
 const GCodeAnalytics = lazy(() => import("./pages/GCodeAnalytics"));
-const SharedReport = lazy(() => import("./pages/SharedReport"));
+const SharedReport = lazy(() => import("@/components/ai/GCodeAnalytics/SharedReportPage"));
 
 const queryClient = new QueryClient();
 

@@ -9,11 +9,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 // Lazy load heavy components to reduce initial bundle size
 const ModelViewer = lazy(() => import("@/components/ai/ModelViewer"));
-const GCodeViewer = lazy(() => import("@/components/ai/GCodeViewer"));
-const GCodePreview = lazy(() => import("@/components/ai/GCodePreview"));
-const TextTo3DForm = lazy(() => import("@/components/ai/TextTo3DForm"));
-const ImageTo3DForm = lazy(() => import("@/components/ai/ImageTo3DForm"));
-const ModelPreview = lazy(() => import("@/components/ai/ModelPreview"));
+const GCodeViewer = lazy(() => import("@/components/ai/ModelGenerate/GCodeViewer"));
+const GCodePreview = lazy(() => import("@/components/ai/ModelGenerate/GCodePreview"));
+const TextTo3DForm = lazy(() => import("@/components/ai/ModelGenerate/TextTo3DForm"));
+const ImageTo3DForm = lazy(() => import("@/components/ai/ModelGenerate/ImageTo3DForm"));
+const ModelPreview = lazy(() => import("@/components/ai/ModelGenerate/ModelPreview"));
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,8 +25,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 // Lazy load refactored components
-const PrintSettingsDialog = lazy(() => import("@/components/ai/PrintSettingsDialog").then(m => ({ default: m.PrintSettingsDialog })));
-const AIArchiveSidebar = lazy(() => import("@/components/ai/AIArchiveSidebar").then(m => ({ default: m.AIArchiveSidebar })));
+const PrintSettingsDialog = lazy(() => import("@/components/ai/ModelGenerate/PrintSettingsDialog").then(m => ({ default: m.PrintSettingsDialog })));
+const AIModelArchiveSidebar = lazy(() => import("@/components/ai/ModelGenerate/AIModelArchiveSidebar").then(m => ({ default: m.AIModelArchiveSidebar })));
 
 // Load dialog components lazily
 import {
@@ -1189,7 +1189,7 @@ const AI = () => {
       {sidebarOpen && (
         <div className="w-80 border-r-2 border-border bg-background flex flex-col h-screen shrink-0">
           <Suspense fallback={<div className="w-full h-full bg-muted animate-pulse" />}>
-            <AIArchiveSidebar
+            <AIModelArchiveSidebar
               activeTab={activeTab}
               setActiveTab={setActiveTab}
               archiveViewMode={archiveViewMode}

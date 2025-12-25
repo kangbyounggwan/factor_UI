@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Info, CheckCircle2, X, FileCode, Trash2, Edit3, Check, XCircle, Undo2, Wrench, Link2, Link2Off, Zap, ShieldAlert, ChevronRight, Clock, Layers, ThumbsUp, ThumbsDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { DetailedIssue, PatchSuggestion } from './GCodeAnalysisReport';
+import type { DetailedIssue, PatchSuggestion } from '@/components/ai/GCodeAnalytics';
 import type { IssueEditItem, PatchFeedback } from '@shared/types/gcodeAnalysisDbTypes';
 import { saveIssueEdit } from '@/lib/gcodeAnalysisDbService';
 import { useAuth } from '@shared/contexts/AuthContext';

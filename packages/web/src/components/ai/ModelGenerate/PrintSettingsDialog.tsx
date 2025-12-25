@@ -8,7 +8,7 @@ import { Printer, RefreshCw, File as FileIcon, Download } from "lucide-react";
 import { Suspense, lazy } from "react";
 import { useTranslation } from "react-i18next";
 
-const GCodePreview = lazy(() => import("@/components/ai/GCodePreview"));
+const GCodePreview = lazy(() => import("./GCodePreview"));
 
 export interface PrinterData {
     id: string;

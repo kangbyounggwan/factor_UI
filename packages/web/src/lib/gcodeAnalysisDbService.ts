@@ -20,7 +20,7 @@ import type {
   GCodeIssueEditUpdate,
   IssueEditItem,
 } from '@shared/types/gcodeAnalysisDbTypes';
-import type { GCodeAnalysisData } from '@/components/PrinterDetail/GCodeAnalysisReport';
+import type { GCodeAnalysisData } from '@/components/ai/GCodeAnalytics';
 import type { AnalysisResult } from '@shared/types/gcodeAnalysisTypes';
 
 export const GCODE_BUCKET = 'gcode-files';

@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { GCodeAnalysisReport, type GCodeAnalysisData } from '@/components/PrinterDetail/GCodeAnalysisReport';
+import { GCodeAnalysisReport, type GCodeAnalysisData } from './GCodeAnalysisReport';
 import { getSharedReport, loadSharedReportLayers, type SharedReport } from '@/lib/sharedReportService';
 import { convertDbReportToUiData } from '@/lib/gcodeAnalysisDbService';
 import type { GCodeAnalysisReport as GCodeAnalysisReportType } from '@shared/types/gcodeAnalysisDbTypes';
@@ -62,8 +62,8 @@ export default function SharedReportPage() {
           if (!layersError && layers) {
             setSegmentData({
               layers: layers as LayerSegmentData[],
-              metadata: data.segmentData.metadata as SegmentMetadata,
-              temperatures: data.segmentData.temperatures as TemperatureData[],
+              metadata: data.segmentData.metadata as unknown as SegmentMetadata,
+              temperatures: data.segmentData.temperatures as unknown as TemperatureData[],
             });
             console.log('[SharedReportPage] Segment data loaded:', layers.length, 'layers');
           } else {

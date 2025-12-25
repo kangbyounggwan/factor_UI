@@ -102,12 +102,12 @@ import {
   prepareFileInfos,
   canSendMessage,
 } from "@/hooks/chat";
-import { GCodeAnalysisReport, type AIResolveStartInfo, type AIResolveCompleteInfo, type GCodeAnalysisData } from "@/components/PrinterDetail/GCodeAnalysisReport";
+import { GCodeAnalysisReport, type AIResolveStartInfo, type AIResolveCompleteInfo, type GCodeAnalysisData } from "@/components/ai/GCodeAnalytics";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import {
   useGcodeAnalysisPolling,
   type ReportCardData,
-} from "@/components/gcodeAnalysis/useGcodeAnalysisPolling";
+} from "@/components/ai/GCodeAnalytics/useGcodeAnalysisPolling";
 import {
   convertDbReportToUiData,
   getAnalysisReportById,
@@ -143,27 +143,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { formatDistanceToNow } from "date-fns";
-import { ko, enUS } from "date-fns/locale";
-import {
-  Search,
-  Filter,
-  SortDesc,
-  Clock,
-  Layers,
-  AlertTriangle,
-  CheckCircle,
-  ChevronLeft as ChevronLeftIcon,
-  ArrowLeft,
-  Ruler,
-  Trash2,
-} from "lucide-react";
-import type {
-  GCodeAnalysisReportListItem,
-  AnalysisReportFilters,
-  AnalysisReportSortOption,
-  OverallGrade,
-} from "@shared/types/gcodeAnalysisDbTypes";
+import { GCodeAnalyticsArchive } from "@/components/ai/GCodeAnalytics";
 
 // 코드 수정 정보 타입
 interface CodeFixInfo {
@@ -256,23 +236,6 @@ const AIChat = () => {
   // 아카이브 뷰 상태 (메인 콘텐츠 영역에 표시)
   const [archiveViewActive, setArchiveViewActive] = useState(false);
   const [archiveClosing, setArchiveClosing] = useState(false);
-  const [archiveReports, setArchiveReports] = useState<GCodeAnalysisReportListItem[]>([]);
-  const [archiveTotalCount, setArchiveTotalCount] = useState(0);
-  const [archiveCurrentPage, setArchiveCurrentPage] = useState(1);
-  const [archiveIsLoading, setArchiveIsLoading] = useState(false);
-  const [archiveSearchQuery, setArchiveSearchQuery] = useState("");
-  const [archiveGradeFilter, setArchiveGradeFilter] = useState<OverallGrade | "all">("all");
-  const [archiveSortOption, setArchiveSortOption] = useState<AnalysisReportSortOption>({
-    field: "created_at",
-    direction: "desc",
-  });
-  const [archiveSelectedReport, setArchiveSelectedReport] = useState<GCodeAnalysisData | null>(null);
-  const [archiveSelectedReportName, setArchiveSelectedReportName] = useState<string>("");
-  const [archiveIsLoadingDetail, setArchiveIsLoadingDetail] = useState(false);
-  const [archiveDeleteDialogOpen, setArchiveDeleteDialogOpen] = useState(false);
-  const [archiveReportToDelete, setArchiveReportToDelete] = useState<string | null>(null);
-  const ARCHIVE_PAGE_SIZE = 12;
-  const dateLocale = i18n.language === "ko" ? ko : enUS;
 
   // G-code 분석 폴링 훅 사용
   const {
@@ -435,91 +398,6 @@ const AIChat = () => {
     }
   }, [searchParams, user?.id, setSearchParams]);
 
-  // 아카이브 시트용: 보고서 목록 로드
-  const loadArchiveReports = useCallback(async () => {
-    if (!user?.id) return;
-
-    setArchiveIsLoading(true);
-    try {
-      const filters: AnalysisReportFilters = {
-        status: "completed",
-      };
-
-      if (archiveGradeFilter !== "all") {
-        filters.grade = archiveGradeFilter;
-      }
-
-      const offset = (archiveCurrentPage - 1) * ARCHIVE_PAGE_SIZE;
-
-      const { data, count } = await getAnalysisReportsList(user.id, {
-        filters,
-        sort: archiveSortOption,
-        limit: ARCHIVE_PAGE_SIZE,
-        offset,
-      });
-
-      // 검색어 필터링 (클라이언트 사이드)
-      const filtered = archiveSearchQuery
-        ? data.filter((r) =>
-            r.file_name?.toLowerCase().includes(archiveSearchQuery.toLowerCase())
-          )
-        : data;
-
-      setArchiveReports(filtered);
-      setArchiveTotalCount(count);
-    } catch (err) {
-      console.error("[AIChat] Archive load error:", err);
-    } finally {
-      setArchiveIsLoading(false);
-    }
-  }, [user?.id, archiveCurrentPage, archiveGradeFilter, archiveSortOption, archiveSearchQuery]);
-
-  // 아카이브 뷰 활성화 시 로드
-  useEffect(() => {
-    if (archiveViewActive) {
-      loadArchiveReports();
-    }
-  }, [archiveViewActive, loadArchiveReports]);
-
-  // 아카이브 보고서 상세 보기
-  const handleArchiveViewReport = async (reportId: string, fileName?: string) => {
-    setArchiveIsLoadingDetail(true);
-    setArchiveSelectedReportName(fileName || t("gcodeAnalytics.reportTitle"));
-
-    try {
-      const { data, error } = await getAnalysisReportById(reportId);
-
-      if (error || !data) {
-        toast({
-          title: t("gcodeAnalytics.reportLoadFailed"),
-          description: error?.message || t("gcodeAnalytics.reportNotFound"),
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const uiData = convertDbReportToUiData(data);
-
-      // G-code 컨텐츠가 없고 스토리지 경로가 있고 이슈가 있으면 다운로드 (에디터용)
-      if (!uiData.gcodeContent && data.file_storage_path && data.total_issues_count > 0) {
-        try {
-          const content = await downloadGCodeContent(data.file_storage_path);
-          if (content) {
-            uiData.gcodeContent = content;
-          }
-        } catch (downloadErr) {
-          console.error("[AIChat] G-code download error:", downloadErr);
-        }
-      }
-
-      setArchiveSelectedReport(uiData);
-    } catch (err) {
-      console.error("[AIChat] Archive view error:", err);
-    } finally {
-      setArchiveIsLoadingDetail(false);
-    }
-  };
-
   // 아카이브 뷰 토글 (닫을 때 애니메이션 적용)
   const handleArchiveToggle = () => {
     if (archiveViewActive) {
@@ -528,65 +406,12 @@ const AIChat = () => {
       setTimeout(() => {
         setArchiveClosing(false);
         setArchiveViewActive(false);
-        setArchiveSelectedReport(null);
       }, 200); // duration-200과 동일
     } else {
       // 열기
       setArchiveViewActive(true);
     }
   };
-
-  // 아카이브 보고서 삭제
-  const handleArchiveDelete = async () => {
-    if (!archiveReportToDelete) return;
-
-    try {
-      const { error } = await deleteAnalysisReport(archiveReportToDelete);
-      if (error) {
-        toast({
-          title: t("gcodeAnalytics.deleteFailed"),
-          description: error.message,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      toast({
-        title: t("gcodeAnalytics.deleteSuccess"),
-        description: t("gcodeAnalytics.reportDeleted"),
-      });
-
-      // 목록 새로고침
-      loadArchiveReports();
-      // 사이드바 보고서 목록도 새로고침
-      loadReportArchive();
-    } catch (err) {
-      console.error("[AIChat] Archive delete error:", err);
-    } finally {
-      setArchiveDeleteDialogOpen(false);
-      setArchiveReportToDelete(null);
-    }
-  };
-
-  // 아카이브 등급 배지 색상
-  const getArchiveGradeBadgeColor = (grade?: OverallGrade) => {
-    switch (grade) {
-      case "A":
-        return "bg-green-500 text-white";
-      case "B":
-        return "bg-blue-500 text-white";
-      case "C":
-        return "bg-yellow-500 text-white";
-      case "D":
-        return "bg-orange-500 text-white";
-      case "F":
-        return "bg-red-500 text-white";
-      default:
-        return "bg-slate-500 text-white";
-    }
-  };
-
-  const archiveTotalPages = Math.ceil(archiveTotalCount / ARCHIVE_PAGE_SIZE);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -625,7 +450,6 @@ const AIChat = () => {
     // 아카이브 뷰가 열려있으면 닫기
     if (archiveViewActive) {
       setArchiveViewActive(false);
-      setArchiveSelectedReport(null);
     }
 
     try {
@@ -736,6 +560,67 @@ const AIChat = () => {
     } catch (e) {
       toast({
         title: t('aiChat.deleteError', '세션 삭제 실패'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // 보고서 아카이브 상세 보기 핸들러
+  const handleArchiveViewReport = async (reportId: string, fileName: string) => {
+    try {
+      // 1. 보고서 데이터 가져오기
+      const { data: report, error } = await getAnalysisReportById(reportId);
+
+      if (error || !report) {
+        toast({
+          title: t('aiChat.reportLoadError', '보고서 로드 실패'),
+          description: t('aiChat.reportLoadErrorDesc', '보고서를 불러오는 중 오류가 발생했습니다.'),
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // 2. UI 데이터로 변환
+      const uiData = convertDbReportToUiData(report);
+
+      // 3. 상태 업데이트
+      setGcodeReportData(uiData);
+      setActiveReportId(reportId);
+
+      // 4. G-code 파일 내용 로드 (스토리지 경로가 있는 경우)
+      if (report.file_storage_path) {
+        setEditorLoading(true);
+        try {
+          const content = await downloadGCodeContent(report.file_storage_path);
+          if (content) {
+            setGcodeFileContent(content);
+            setEditorContent(content);
+          }
+        } catch (e) {
+          console.error('[AIChat] Failed to load G-code content:', e);
+        } finally {
+          setEditorLoading(false);
+        }
+      }
+
+      // 5. 세그먼트 데이터 로드
+      try {
+        const { data: segments } = await loadFullSegmentDataByReportId(reportId);
+        if (segments) {
+          setGcodeSegments(segments);
+        }
+      } catch (e) {
+        console.warn('[AIChat] Failed to load segments:', e);
+      }
+
+      // 6. 패널 열기
+      setReportPanelOpen(true);
+      setReportPanelTab('report');
+
+    } catch (e) {
+      console.error('Failed to load archive report:', e);
+      toast({
+        title: t('aiChat.reportLoadError', '보고서 로드 실패'),
         variant: 'destructive',
       });
     }
@@ -2162,304 +2047,14 @@ const AIChat = () => {
         {/* 상단 헤더 - AppHeader 재사용 */}
         <AppHeader sidebarOpen={sidebarOpen} onLoginRequired={() => setShowLoginModal(true)} />
 
-        {archiveViewActive ? (
-          // 아카이브 뷰 모드 - 열기/닫기 슬라이드 애니메이션
-          <div className={cn(
-            "flex-1 flex flex-col overflow-hidden",
-            archiveClosing
-              ? "animate-out slide-out-to-top duration-200 ease-in fill-mode-forwards"
-              : "animate-in slide-in-from-top duration-300 ease-out"
-          )}>
-            {archiveSelectedReport ? (
-              // 아카이브 보고서 상세 보기
-              <>
-                <div className="bg-background/95 backdrop-blur-sm border-b shrink-0">
-                <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setArchiveSelectedReport(null)}
-                    className="gap-2"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    {t("gcodeAnalytics.backToList")}
-                  </Button>
-                  <span className="text-sm text-muted-foreground truncate">
-                    {archiveSelectedReportName}
-                  </span>
-                </div>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <div className="max-w-6xl mx-auto p-4 h-full">
-                  <GCodeAnalysisReport data={archiveSelectedReport} />
-                </div>
-              </div>
-            </>
-          ) : (
-            // 아카이브 목록
-            <>
-              {/* 아카이브 헤더 */}
-              <div className="bg-background/95 backdrop-blur-sm border-b shrink-0">
-                <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">
-                    {t("gcodeAnalytics.reportArchiveTitle", "보고서 아카이브")}
-                  </h2>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleArchiveToggle}
-                    className="h-8 w-8 rounded-full hover:bg-muted"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* 필터 바 */}
-              <div className="bg-background/95 backdrop-blur-sm shrink-0">
-                <div className="max-w-7xl mx-auto px-4 py-3">
-                  <div className="flex flex-wrap items-center gap-3">
-                    {/* 검색 */}
-                    <div className="relative flex-1 min-w-[200px] max-w-sm">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder={t("gcodeAnalytics.searchPlaceholder")}
-                        value={archiveSearchQuery}
-                        onChange={(e) => setArchiveSearchQuery(e.target.value)}
-                        className="pl-9"
-                      />
-                    </div>
-
-                    {/* 정렬 */}
-                    <Select
-                      value={`${archiveSortOption.field}-${archiveSortOption.direction}`}
-                      onValueChange={(v) => {
-                        const [field, direction] = v.split("-") as [
-                          typeof archiveSortOption.field,
-                          "asc" | "desc"
-                        ];
-                        setArchiveSortOption({ field, direction });
-                      }}
-                    >
-                      <SelectTrigger className="w-[160px]">
-                        <SortDesc className="h-4 w-4 mr-2" />
-                        <SelectValue placeholder={t("gcodeAnalytics.sort")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="created_at-desc">{t("gcodeAnalytics.sortNewest")}</SelectItem>
-                        <SelectItem value="created_at-asc">{t("gcodeAnalytics.sortOldest")}</SelectItem>
-                        <SelectItem value="overall_score-desc">{t("gcodeAnalytics.sortScoreHigh")}</SelectItem>
-                        <SelectItem value="overall_score-asc">{t("gcodeAnalytics.sortScoreLow")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              {/* 아카이브 목록 */}
-              <div className="flex-1 overflow-y-auto">
-                <div className="max-w-7xl mx-auto px-4 py-6">
-                  {archiveIsLoading ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {[...Array(8)].map((_, i) => (
-                        <Card key={i} className="overflow-hidden">
-                          <CardHeader className="pb-2">
-                            <Skeleton className="h-4 w-3/4" />
-                            <Skeleton className="h-3 w-1/2 mt-2" />
-                          </CardHeader>
-                          <CardContent>
-                            <Skeleton className="h-20 w-full" />
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : archiveReports.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-center">
-                      <FileCode2 className="h-16 w-16 text-muted-foreground/50 mb-4" />
-                      <h3 className="text-lg font-medium">{t("gcodeAnalytics.noReports")}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {t("gcodeAnalytics.noReportsDesc")}
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {archiveReports.map((report) => (
-                          <Card
-                            key={report.id}
-                            className="overflow-hidden cursor-pointer transition-all hover:shadow-md h-full flex flex-col"
-                            onClick={() => handleArchiveViewReport(report.id, report.file_name)}
-                          >
-                            <CardHeader className="pb-2 shrink-0">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <CardTitle className="text-sm font-medium truncate">
-                                    {report.file_name || t("gcodeAnalytics.noName")}
-                                  </CardTitle>
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    {formatDistanceToNow(new Date(report.created_at), {
-                                      addSuffix: true,
-                                      locale: dateLocale,
-                                    })}
-                                  </p>
-                                </div>
-                                {report.overall_grade && (
-                                  <Badge
-                                    className={cn(
-                                      "text-xs font-bold",
-                                      getArchiveGradeBadgeColor(report.overall_grade)
-                                    )}
-                                  >
-                                    {report.overall_grade}
-                                  </Badge>
-                                )}
-                              </div>
-                            </CardHeader>
-
-                            <CardContent className="pt-2 flex-1 flex flex-col">
-                              {/* 점수 */}
-                              {report.overall_score !== undefined && (
-                                <div className="mb-3">
-                                  <div className="flex items-center justify-between text-xs mb-1">
-                                    <span className="text-muted-foreground">
-                                      {t("gcodeAnalytics.qualityScore")}
-                                    </span>
-                                    <span className="font-semibold">{report.overall_score}/100</span>
-                                  </div>
-                                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                                    <div
-                                      className={cn(
-                                        "h-full transition-all",
-                                        report.overall_score >= 80
-                                          ? "bg-green-500"
-                                          : report.overall_score >= 60
-                                          ? "bg-yellow-500"
-                                          : report.overall_score >= 40
-                                          ? "bg-orange-500"
-                                          : "bg-red-500"
-                                      )}
-                                      style={{ width: `${report.overall_score}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* 메타 정보 */}
-                              <div className="grid grid-cols-2 gap-2 text-xs mt-auto">
-                                {report.print_time_formatted && (
-                                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                                    <Clock className="h-3.5 w-3.5" />
-                                    <span className="truncate">{report.print_time_formatted}</span>
-                                  </div>
-                                )}
-                                {report.layer_count && (
-                                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                                    <Layers className="h-3.5 w-3.5" />
-                                    <span>{report.layer_count} layers</span>
-                                  </div>
-                                )}
-                                {report.filament_length_mm !== undefined && report.filament_length_mm > 0 && (
-                                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                                    <Ruler className="h-3.5 w-3.5" />
-                                    <span>{(report.filament_length_mm / 1000).toFixed(1)}m</span>
-                                  </div>
-                                )}
-                                {report.total_issues_count > 0 ? (
-                                  <div className="flex items-center gap-1.5 text-orange-500">
-                                    <AlertTriangle className="h-3.5 w-3.5" />
-                                    <span>{report.total_issues_count} issues</span>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-1.5 text-green-500">
-                                    <CheckCircle className="h-3.5 w-3.5" />
-                                    <span>{t("gcodeAnalytics.noIssues")}</span>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* 삭제 버튼 */}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="w-full mt-3 text-muted-foreground hover:text-destructive"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setArchiveReportToDelete(report.id);
-                                  setArchiveDeleteDialogOpen(true);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                {t("gcodeAnalytics.delete")}
-                              </Button>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-
-                      {/* 페이지네이션 */}
-                      {archiveTotalPages > 1 && (
-                        <div className="flex items-center justify-center gap-2 mt-8">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={archiveCurrentPage === 1}
-                            onClick={() => setArchiveCurrentPage((p) => p - 1)}
-                          >
-                            <ChevronLeftIcon className="h-4 w-4" />
-                          </Button>
-                          <span className="text-sm text-muted-foreground px-4">
-                            {archiveCurrentPage} / {archiveTotalPages}
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={archiveCurrentPage === archiveTotalPages}
-                            onClick={() => setArchiveCurrentPage((p) => p + 1)}
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* 상세 로딩 오버레이 */}
-              {archiveIsLoadingDetail && (
-                <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
-                  <div className="flex flex-col items-center gap-3">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="text-sm text-muted-foreground">
-                      {t("gcodeAnalytics.loadingReport")}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* 삭제 확인 다이얼로그 */}
-              <AlertDialog open={archiveDeleteDialogOpen} onOpenChange={setArchiveDeleteDialogOpen}>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>{t("gcodeAnalytics.deleteReportTitle")}</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t("gcodeAnalytics.deleteReportDesc")}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t("gcodeAnalytics.cancel")}</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleArchiveDelete}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      {t("gcodeAnalytics.delete")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </>
-          )}
-          </div>
+        {archiveViewActive && user?.id ? (
+          // 아카이브 뷰 모드 - GCodeAnalyticsArchive 컴포넌트 사용
+          <GCodeAnalyticsArchive
+            userId={user.id}
+            onClose={handleArchiveToggle}
+            onReportDeleted={loadReportArchive}
+            isClosing={archiveClosing}
+          />
         ) : messages.length === 0 ? (
           // Gemini 스타일 초기 화면
           <div className="flex-1 flex flex-col px-4">
@@ -2467,120 +2062,120 @@ const AIChat = () => {
             <div className="flex-1" />
             {/* 메인 컨텐츠 (중앙 정렬) */}
             <div className="flex flex-col items-center">
-            {/* 인사말 */}
-            <div className="text-center mb-8">
-              {/* 스타카토 애니메이션 */}
-              <div className="flex justify-center gap-1.5 mb-4">
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '450ms' }} />
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 whitespace-pre-line">
-                {t('aiChat.askAnything', '출력하다가\n뭔가 이상할 때')}
-              </h1>
-              <p className="text-xl sm:text-2xl font-medium text-muted-foreground">
-                {t('aiChat.greeting', '지금 어떤 문제가 생겼는지 그대로 보여주세요')}
-              </p>
-            </div>
-
-            {/* 중앙 입력창 */}
-            <div className="w-full max-w-2xl mb-6">
-              {/* 업로드된 미리보기 */}
-              <FilePreviewList
-                images={uploadedImages}
-                gcodeFile={gcodeFile}
-                onRemoveImage={removeImage}
-                onRemoveGcode={removeGcodeFile}
-                className="mb-3 px-2"
-              />
-
-              {renderInputBox(
-                selectedTool === "troubleshoot"
-                  ? t('aiChat.troubleshootPlaceholder', '문제 상황에 대한 이미지와 증상 내용이 있으면 더 좋아요')
-                  : selectedTool === "gcode"
-                    ? t('aiChat.gcodePlaceholder', 'G-code 파일을 업로드하거나 문제 내용을 붙여넣어보세요')
-                    : selectedTool === "modeling"
-                      ? t('aiChat.modelingPlaceholder', '만들고 싶은 3D 모델을 설명해주세요')
-                      : t('aiChat.defaultPlaceholder', 'FACTOR AI에게 물어보세요')
-              )}
-
-              {/* 빠른 테스트 버튼 - 도구별 활용 예시 (첫째 줄 3개, 둘째 줄 2개) */}
-              <div className="flex flex-col items-center gap-2 mt-10">
-                {/* 첫째 줄: G-code 2개 + 프린터 문제 진단 1개 */}
-                <div className="flex flex-wrap justify-center gap-2">
-                  <button
-                    onClick={() => {
-                      if (!user) {
-                        setShowLoginModal(true);
-                        return;
-                      }
-                      setSelectedTool('gcode');
-                      setInput(t('aiChat.quickPrompt.gcodeOptimize', '출력 시간 줄이고 싶은데 G-code 봐줘'));
-                    }}
-                    className="px-4 py-2 text-sm bg-blue-500/10 hover:bg-blue-500/20 rounded-full border border-blue-500/30 transition-colors text-blue-600 dark:text-blue-400"
-                  >
-                    {t('aiChat.quickPrompt.gcodeOptimize', '출력 시간 줄이고 싶어')}
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (!user) {
-                        setShowLoginModal(true);
-                        return;
-                      }
-                      setSelectedTool('gcode');
-                      setInput(t('aiChat.quickPrompt.gcodeCheck', '이 G-code 문제 있는지 확인해줘'));
-                    }}
-                    className="px-4 py-2 text-sm bg-blue-500/10 hover:bg-blue-500/20 rounded-full border border-blue-500/30 transition-colors text-blue-600 dark:text-blue-400"
-                  >
-                    {t('aiChat.quickPrompt.gcodeCheck', 'G-code 문제 확인해줘')}
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (!user) {
-                        setShowLoginModal(true);
-                        return;
-                      }
-                      setSelectedTool('troubleshoot');
-                      setInput(t('aiChat.quickPrompt.stringing', '출력물에 실 같은 게 달려있어요'));
-                    }}
-                    className="px-4 py-2 text-sm bg-emerald-500/10 hover:bg-emerald-500/20 rounded-full border border-emerald-500/30 transition-colors text-emerald-600 dark:text-emerald-400"
-                  >
-                    {t('aiChat.quickPrompt.stringing', '실 같은 게 달려있어요')}
-                  </button>
+              {/* 인사말 */}
+              <div className="text-center mb-8">
+                {/* 스타카토 애니메이션 */}
+                <div className="flex justify-center gap-1.5 mb-4">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '450ms' }} />
                 </div>
+                <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 whitespace-pre-line">
+                  {t('aiChat.askAnything', '출력하다가\n뭔가 이상할 때')}
+                </h1>
+                <p className="text-xl sm:text-2xl font-medium text-muted-foreground">
+                  {t('aiChat.greeting', '지금 어떤 문제가 생겼는지 그대로 보여주세요')}
+                </p>
+              </div>
 
-                {/* 둘째 줄: 프린터 문제 진단 1개 + 3D 모델링 1개 */}
-                <div className="flex flex-wrap justify-center gap-2">
-                  <button
-                    onClick={() => {
-                      if (!user) {
-                        setShowLoginModal(true);
-                        return;
-                      }
-                      setSelectedTool('troubleshoot');
-                      setInput(t('aiChat.quickPrompt.warping', '첫 레이어가 베드에서 떨어져요'));
-                    }}
-                    className="px-4 py-2 text-sm bg-emerald-500/10 hover:bg-emerald-500/20 rounded-full border border-emerald-500/30 transition-colors text-emerald-600 dark:text-emerald-400"
-                  >
-                    {t('aiChat.quickPrompt.warping', '베드에서 떨어져요')}
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (!user) {
-                        setShowLoginModal(true);
-                        return;
-                      }
-                      const prompt = t('aiChat.quickPrompt.modeling', '스마트폰 거치대 만들어줘');
-                      navigate('/create', { state: { prompt } });
-                    }}
-                    className="px-4 py-2 text-sm bg-purple-500/10 hover:bg-purple-500/20 rounded-full border border-purple-500/30 transition-colors text-purple-600 dark:text-purple-400"
-                  >
-                    {t('aiChat.quickPrompt.modeling', '스마트폰 거치대 만들어줘')}
-                  </button>
+              {/* 중앙 입력창 */}
+              <div className="w-full max-w-2xl mb-6">
+                {/* 업로드된 미리보기 */}
+                <FilePreviewList
+                  images={uploadedImages}
+                  gcodeFile={gcodeFile}
+                  onRemoveImage={removeImage}
+                  onRemoveGcode={removeGcodeFile}
+                  className="mb-3 px-2"
+                />
+
+                {renderInputBox(
+                  selectedTool === "troubleshoot"
+                    ? t('aiChat.troubleshootPlaceholder', '문제 상황에 대한 이미지와 증상 내용이 있으면 더 좋아요')
+                    : selectedTool === "gcode"
+                      ? t('aiChat.gcodePlaceholder', 'G-code 파일을 업로드하거나 문제 내용을 붙여넣어보세요')
+                      : selectedTool === "modeling"
+                        ? t('aiChat.modelingPlaceholder', '만들고 싶은 3D 모델을 설명해주세요')
+                        : t('aiChat.defaultPlaceholder', 'FACTOR AI에게 물어보세요')
+                )}
+
+                {/* 빠른 테스트 버튼 - 도구별 활용 예시 (첫째 줄 3개, 둘째 줄 2개) */}
+                <div className="flex flex-col items-center gap-2 mt-10">
+                  {/* 첫째 줄: G-code 2개 + 프린터 문제 진단 1개 */}
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <button
+                      onClick={() => {
+                        if (!user) {
+                          setShowLoginModal(true);
+                          return;
+                        }
+                        setSelectedTool('gcode');
+                        setInput(t('aiChat.quickPrompt.gcodeOptimize', '출력 시간 줄이고 싶은데 G-code 봐줘'));
+                      }}
+                      className="px-4 py-2 text-sm bg-blue-500/10 hover:bg-blue-500/20 rounded-full border border-blue-500/30 transition-colors text-blue-600 dark:text-blue-400"
+                    >
+                      {t('aiChat.quickPrompt.gcodeOptimize', '출력 시간 줄이고 싶어')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!user) {
+                          setShowLoginModal(true);
+                          return;
+                        }
+                        setSelectedTool('gcode');
+                        setInput(t('aiChat.quickPrompt.gcodeCheck', '이 G-code 문제 있는지 확인해줘'));
+                      }}
+                      className="px-4 py-2 text-sm bg-blue-500/10 hover:bg-blue-500/20 rounded-full border border-blue-500/30 transition-colors text-blue-600 dark:text-blue-400"
+                    >
+                      {t('aiChat.quickPrompt.gcodeCheck', 'G-code 문제 확인해줘')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!user) {
+                          setShowLoginModal(true);
+                          return;
+                        }
+                        setSelectedTool('troubleshoot');
+                        setInput(t('aiChat.quickPrompt.stringing', '출력물에 실 같은 게 달려있어요'));
+                      }}
+                      className="px-4 py-2 text-sm bg-emerald-500/10 hover:bg-emerald-500/20 rounded-full border border-emerald-500/30 transition-colors text-emerald-600 dark:text-emerald-400"
+                    >
+                      {t('aiChat.quickPrompt.stringing', '실 같은 게 달려있어요')}
+                    </button>
+                  </div>
+
+                  {/* 둘째 줄: 프린터 문제 진단 1개 + 3D 모델링 1개 */}
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <button
+                      onClick={() => {
+                        if (!user) {
+                          setShowLoginModal(true);
+                          return;
+                        }
+                        setSelectedTool('troubleshoot');
+                        setInput(t('aiChat.quickPrompt.warping', '첫 레이어가 베드에서 떨어져요'));
+                      }}
+                      className="px-4 py-2 text-sm bg-emerald-500/10 hover:bg-emerald-500/20 rounded-full border border-emerald-500/30 transition-colors text-emerald-600 dark:text-emerald-400"
+                    >
+                      {t('aiChat.quickPrompt.warping', '베드에서 떨어져요')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!user) {
+                          setShowLoginModal(true);
+                          return;
+                        }
+                        const prompt = t('aiChat.quickPrompt.modeling', '스마트폰 거치대 만들어줘');
+                        navigate('/create', { state: { prompt } });
+                      }}
+                      className="px-4 py-2 text-sm bg-purple-500/10 hover:bg-purple-500/20 rounded-full border border-purple-500/30 transition-colors text-purple-600 dark:text-purple-400"
+                    >
+                      {t('aiChat.quickPrompt.modeling', '스마트폰 거치대 만들어줘')}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
             </div>
             {/* 하단 여백 */}
             <div className="flex-1" />
@@ -2900,183 +2495,183 @@ const AIChat = () => {
                 )}
                 {/* 보고서 내용 - 높이 100% 설정 */}
                 {gcodeReportData && reportPanelOpen && (
-                <div className="h-full rounded-2xl overflow-hidden">
-                  <GCodeAnalysisReport
-                    data={gcodeReportData}
-                    embedded={true}
-                    onClose={() => {
-                      setReportPanelOpen(false);
-                      setActiveReportId(null);
-                      setReportPanelTab('report'); // 탭 상태 초기화
-                      // 에디터 상태 초기화
-                      setEditorContent(undefined);
-                      setEditorFixInfo(undefined);
-                    }}
-                    initialSegments={gcodeSegments || undefined}
-                    onAIResolveStart={handleAIResolveStart}
-                    onAIResolveComplete={handleAIResolveComplete}
-                    onAIResolveError={handleAIResolveError}
-                    isAIResolving={isAIResolving}
-                    activeTab={reportPanelTab}
-                    onTabChange={setReportPanelTab}
-                    editorContent={editorContent}
-                    editorLoading={editorLoading}
-                    editorFixInfo={editorFixInfo}
-                    onViewCodeFix={(fix) => {
-                      // AI 해결 응답의 메시지에서 gcodeContext를 찾아서 에디터 탭으로 이동
-                      const resolveMessage = messages.find(m => m.codeFixes && m.gcodeContext);
-                      if (resolveMessage?.gcodeContext && fix.line_number) {
-                        // 에디터 탭으로 전환하고 수정 정보 설정
-                        setEditorContent(resolveMessage.gcodeContext);
-                        setEditorFixInfo({
-                          lineNumber: fix.line_number,
-                          original: fix.original || '',
-                          fixed: fix.fixed || '',
-                        });
-                        setReportPanelTab('editor');
-                      } else {
-                        toast({
-                          title: t('aiChat.noGcodeData', 'G-code 데이터 없음'),
-                          description: t('aiChat.noGcodeDataDesc', '연결된 G-code 데이터를 찾을 수 없습니다. AI 해결하기를 먼저 실행해주세요.'),
-                          variant: 'destructive',
-                        });
-                      }
-                    }}
-                    onEditorApplyFix={(lineNumber, originalCode, fixedCode, _contextContent) => {
-                      // 로컬 상태에만 저장 (스토리지 저장 X) - 수정본 저장 시 한 번에 처리
-                      // 1. 대기 중인 패치에 추가
-                      setPendingPatches(prev => new Map(prev).set(lineNumber, { originalCode, fixedCode }));
-
-                      // 2. 해결된 라인 추적 (UI 표시용)
-                      setResolvedLines(prev => new Set(prev).add(lineNumber));
-
-                      toast({
-                        title: t('aiChat.patchQueued', '패치 대기 중'),
-                        description: t('aiChat.patchQueuedDesc', '수정본 저장 시 적용됩니다.'),
-                      });
-                    }}
-                    appliedPatchCount={resolvedLines.size}
-                    revertLineNumber={revertLineNumber}
-                    onRevertComplete={() => {
-                      // 되돌리기 완료 시 상태 초기화
-                      if (revertLineNumber !== undefined) {
-                        // 대기 중인 패치에서 제거
-                        setPendingPatches(prev => {
-                          const newMap = new Map(prev);
-                          newMap.delete(revertLineNumber);
-                          return newMap;
-                        });
-                        setResolvedLines(prev => {
-                          const newSet = new Set(prev);
-                          newSet.delete(revertLineNumber);
-                          return newSet;
-                        });
-                        setRevertLineNumber(undefined);
-                      }
-                    }}
-                    onSaveModifiedGCode={async () => {
-                      // 모든 대기 중인 패치를 병합하여 저장 + 다운로드
-                      if (pendingPatches.size === 0) {
-                        toast({
-                          title: t('aiChat.noPendingPatches', '적용할 패치 없음'),
-                          description: t('aiChat.noPendingPatchesDesc', '저장할 수정사항이 없습니다.'),
-                          variant: 'destructive',
-                        });
-                        return;
-                      }
-
-                      if (!gcodeReportData?.storagePath) {
-                        toast({
-                          title: t('aiChat.noStoragePath', '저장 경로 없음'),
-                          description: t('aiChat.noStoragePathDesc', 'G-code 파일의 저장 경로를 찾을 수 없습니다.'),
-                          variant: 'destructive',
-                        });
-                        return;
-                      }
-
-                      try {
-                        // 1. 전체 G-code 파일 로드
-                        let fullContent = gcodeFileContentRef.current;
-                        if (!fullContent) {
-                          fullContent = await downloadGCodeContent(gcodeReportData.storagePath);
-                          if (fullContent) {
-                            gcodeFileContentRef.current = fullContent;
-                            setGcodeFileContent(fullContent);
-                          }
-                        }
-
-                        if (!fullContent) {
+                  <div className="h-full rounded-2xl overflow-hidden">
+                    <GCodeAnalysisReport
+                      data={gcodeReportData}
+                      embedded={true}
+                      onClose={() => {
+                        setReportPanelOpen(false);
+                        setActiveReportId(null);
+                        setReportPanelTab('report'); // 탭 상태 초기화
+                        // 에디터 상태 초기화
+                        setEditorContent(undefined);
+                        setEditorFixInfo(undefined);
+                      }}
+                      initialSegments={gcodeSegments || undefined}
+                      onAIResolveStart={handleAIResolveStart}
+                      onAIResolveComplete={handleAIResolveComplete}
+                      onAIResolveError={handleAIResolveError}
+                      isAIResolving={isAIResolving}
+                      activeTab={reportPanelTab}
+                      onTabChange={setReportPanelTab}
+                      editorContent={editorContent}
+                      editorLoading={editorLoading}
+                      editorFixInfo={editorFixInfo}
+                      onViewCodeFix={(fix) => {
+                        // AI 해결 응답의 메시지에서 gcodeContext를 찾아서 에디터 탭으로 이동
+                        const resolveMessage = messages.find(m => m.codeFixes && m.gcodeContext);
+                        if (resolveMessage?.gcodeContext && fix.line_number) {
+                          // 에디터 탭으로 전환하고 수정 정보 설정
+                          setEditorContent(resolveMessage.gcodeContext);
+                          setEditorFixInfo({
+                            lineNumber: fix.line_number,
+                            original: fix.original || '',
+                            fixed: fix.fixed || '',
+                          });
+                          setReportPanelTab('editor');
+                        } else {
                           toast({
-                            title: t('aiChat.loadFailed', '파일 로드 실패'),
-                            description: t('aiChat.loadFailedDesc', 'G-code 파일을 불러올 수 없습니다.'),
+                            title: t('aiChat.noGcodeData', 'G-code 데이터 없음'),
+                            description: t('aiChat.noGcodeDataDesc', '연결된 G-code 데이터를 찾을 수 없습니다. AI 해결하기를 먼저 실행해주세요.'),
+                            variant: 'destructive',
+                          });
+                        }
+                      }}
+                      onEditorApplyFix={(lineNumber, originalCode, fixedCode, _contextContent) => {
+                        // 로컬 상태에만 저장 (스토리지 저장 X) - 수정본 저장 시 한 번에 처리
+                        // 1. 대기 중인 패치에 추가
+                        setPendingPatches(prev => new Map(prev).set(lineNumber, { originalCode, fixedCode }));
+
+                        // 2. 해결된 라인 추적 (UI 표시용)
+                        setResolvedLines(prev => new Set(prev).add(lineNumber));
+
+                        toast({
+                          title: t('aiChat.patchQueued', '패치 대기 중'),
+                          description: t('aiChat.patchQueuedDesc', '수정본 저장 시 적용됩니다.'),
+                        });
+                      }}
+                      appliedPatchCount={resolvedLines.size}
+                      revertLineNumber={revertLineNumber}
+                      onRevertComplete={() => {
+                        // 되돌리기 완료 시 상태 초기화
+                        if (revertLineNumber !== undefined) {
+                          // 대기 중인 패치에서 제거
+                          setPendingPatches(prev => {
+                            const newMap = new Map(prev);
+                            newMap.delete(revertLineNumber);
+                            return newMap;
+                          });
+                          setResolvedLines(prev => {
+                            const newSet = new Set(prev);
+                            newSet.delete(revertLineNumber);
+                            return newSet;
+                          });
+                          setRevertLineNumber(undefined);
+                        }
+                      }}
+                      onSaveModifiedGCode={async () => {
+                        // 모든 대기 중인 패치를 병합하여 저장 + 다운로드
+                        if (pendingPatches.size === 0) {
+                          toast({
+                            title: t('aiChat.noPendingPatches', '적용할 패치 없음'),
+                            description: t('aiChat.noPendingPatchesDesc', '저장할 수정사항이 없습니다.'),
                             variant: 'destructive',
                           });
                           return;
                         }
 
-                        // 2. 모든 패치 적용
-                        const lines = fullContent.split('\n');
-                        let appliedCount = 0;
-
-                        for (const [lineNumber, patch] of pendingPatches) {
-                          const originalCodeTrimmed = patch.originalCode.trim();
-                          let found = false;
-
-                          // 먼저 정확한 라인 번호에서 찾기
-                          const targetIndex = lineNumber - 1;
-                          if (targetIndex >= 0 && targetIndex < lines.length) {
-                            if (lines[targetIndex].trim() === originalCodeTrimmed) {
-                              lines[targetIndex] = patch.fixedCode;
-                              found = true;
-                            }
-                          }
-
-                          // 전체에서 검색
-                          if (!found) {
-                            for (let i = 0; i < lines.length; i++) {
-                              if (lines[i].trim() === originalCodeTrimmed) {
-                                lines[i] = patch.fixedCode;
-                                found = true;
-                                break;
-                              }
-                            }
-                          }
-
-                          if (found) appliedCount++;
+                        if (!gcodeReportData?.storagePath) {
+                          toast({
+                            title: t('aiChat.noStoragePath', '저장 경로 없음'),
+                            description: t('aiChat.noStoragePathDesc', 'G-code 파일의 저장 경로를 찾을 수 없습니다.'),
+                            variant: 'destructive',
+                          });
+                          return;
                         }
 
-                        const mergedContent = lines.join('\n');
+                        try {
+                          // 1. 전체 G-code 파일 로드
+                          let fullContent = gcodeFileContentRef.current;
+                          if (!fullContent) {
+                            fullContent = await downloadGCodeContent(gcodeReportData.storagePath);
+                            if (fullContent) {
+                              gcodeFileContentRef.current = fullContent;
+                              setGcodeFileContent(fullContent);
+                            }
+                          }
 
-                        // 3. 파일 다운로드 (원본 DB는 덮어쓰지 않음)
-                        const blob = new Blob([mergedContent], { type: 'text/plain;charset=utf-8' });
-                        const url = URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.href = url;
-                        const baseName = (gcodeReportData.fileName || 'gcode').replace(/\.gcode$/i, '');
-                        link.download = `${baseName}_modified.gcode`;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        URL.revokeObjectURL(url);
+                          if (!fullContent) {
+                            toast({
+                              title: t('aiChat.loadFailed', '파일 로드 실패'),
+                              description: t('aiChat.loadFailedDesc', 'G-code 파일을 불러올 수 없습니다.'),
+                              variant: 'destructive',
+                            });
+                            return;
+                          }
 
-                        // 4. 대기 패치 초기화 (다운로드 후 패치 상태 리셋)
-                        setPendingPatches(new Map());
+                          // 2. 모든 패치 적용
+                          const lines = fullContent.split('\n');
+                          let appliedCount = 0;
 
-                        toast({
-                          title: t('aiChat.saveSuccess', '저장 완료'),
-                          description: t('aiChat.saveSuccessDesc', `${appliedCount}개 패치가 적용되어 저장되었습니다.`),
-                        });
-                      } catch (err) {
-                        console.error('[AIChat] Failed to save modified gcode:', err);
-                        toast({
-                          title: t('aiChat.patchSaveFailed', '패치 저장 실패'),
-                          description: String(err),
-                          variant: 'destructive',
-                        });
-                      }
-                    }}
-                  />
-                </div>
+                          for (const [lineNumber, patch] of pendingPatches) {
+                            const originalCodeTrimmed = patch.originalCode.trim();
+                            let found = false;
+
+                            // 먼저 정확한 라인 번호에서 찾기
+                            const targetIndex = lineNumber - 1;
+                            if (targetIndex >= 0 && targetIndex < lines.length) {
+                              if (lines[targetIndex].trim() === originalCodeTrimmed) {
+                                lines[targetIndex] = patch.fixedCode;
+                                found = true;
+                              }
+                            }
+
+                            // 전체에서 검색
+                            if (!found) {
+                              for (let i = 0; i < lines.length; i++) {
+                                if (lines[i].trim() === originalCodeTrimmed) {
+                                  lines[i] = patch.fixedCode;
+                                  found = true;
+                                  break;
+                                }
+                              }
+                            }
+
+                            if (found) appliedCount++;
+                          }
+
+                          const mergedContent = lines.join('\n');
+
+                          // 3. 파일 다운로드 (원본 DB는 덮어쓰지 않음)
+                          const blob = new Blob([mergedContent], { type: 'text/plain;charset=utf-8' });
+                          const url = URL.createObjectURL(blob);
+                          const link = document.createElement('a');
+                          link.href = url;
+                          const baseName = (gcodeReportData.fileName || 'gcode').replace(/\.gcode$/i, '');
+                          link.download = `${baseName}_modified.gcode`;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          URL.revokeObjectURL(url);
+
+                          // 4. 대기 패치 초기화 (다운로드 후 패치 상태 리셋)
+                          setPendingPatches(new Map());
+
+                          toast({
+                            title: t('aiChat.saveSuccess', '저장 완료'),
+                            description: t('aiChat.saveSuccessDesc', `${appliedCount}개 패치가 적용되어 저장되었습니다.`),
+                          });
+                        } catch (err) {
+                          console.error('[AIChat] Failed to save modified gcode:', err);
+                          toast({
+                            title: t('aiChat.patchSaveFailed', '패치 저장 실패'),
+                            description: String(err),
+                            variant: 'destructive',
+                          });
+                        }
+                      }}
+                    />
+                  </div>
                 )}
               </div>
             )}

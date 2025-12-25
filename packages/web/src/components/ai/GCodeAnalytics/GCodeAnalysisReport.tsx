@@ -1,7 +1,5 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -37,7 +35,6 @@ import {
   Power,
   FileCode,
   ChevronDown,
-  ChevronUp,
   ChevronRight,
   ChevronLeft,
   X,
@@ -51,7 +48,6 @@ import {
   Eye,
   EyeOff,
   Grid3x3,
-  Edit3,
   Wrench,
   Check,
   Trash2,
@@ -62,8 +58,8 @@ import {
   Share2,
   Copy,
 } from 'lucide-react';
-import { GCodeViewerModal } from './GCodeViewerModal';
-import { GCodePath3DFromAPI } from './GCodePath3DFromAPI';
+import { GCodeViewerModal } from '@/components/PrinterDetail/GCodeViewerModal';
+import { GCodePath3DFromAPI } from '@/components/PrinterDetail/GCodePath3DFromAPI';
 import { loadFullSegmentDataByReportId } from '@/lib/gcodeSegmentService';
 import type { LayerSegmentData, TemperatureData } from '@/lib/api/gcode';
 import { resolveIssue, type IssueResolveResponse } from '@/lib/api/gcode';
@@ -72,6 +68,15 @@ import { supabase } from '@shared/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { createReportShare } from '@/lib/sharedReportService';
 import { useAuth } from '@shared/contexts/AuthContext';
+import { generatePrintableHTML as generatePrintableHTMLExternal, openPrintWindow } from './GCodeReportPrintable';
+import {
+  stripLineNumber,
+  parseMarkedLine,
+  toLineNumber,
+} from '@shared/utils/ai/gcodeAnalytics';
+import { PatchSuggestionsSection } from './PatchSuggestionsSection';
+import { CollapsibleSection } from './CollapsibleSection';
+import { AIResolutionPanel } from './AIResolutionPanel';
 
 // ============================================================================
 // G-code 분석 보고서 데이터 타입 정의
@@ -333,6 +338,74 @@ export interface ExpectedImprovement {
   label: string;
   value: string;
   progress: number;  // 0-100
+}
+
+// ============================================================================
+// Severity 스타일 공통 유틸리티 (중복 제거)
+// ============================================================================
+
+export type SeverityLevel = 'critical' | 'high' | 'medium' | 'low' | 'info';
+
+// Badge 스타일 (공통)
+const severityBadgeStyles: Record<SeverityLevel, string> = {
+  critical: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300',
+  high: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300',
+  medium: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300',
+  low: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300',
+  info: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
+};
+
+// 카드 배경/테두리 스타일 (DiagnosisSummaryCard용)
+const severityCardStyles: Record<SeverityLevel, { bg: string; border: string; icon: string }> = {
+  critical: {
+    bg: 'bg-rose-50 dark:bg-rose-950/20',
+    border: 'border-rose-100 dark:border-rose-900/30',
+    icon: 'text-rose-600 dark:text-rose-400',
+  },
+  high: {
+    bg: 'bg-red-50 dark:bg-red-950/20',
+    border: 'border-red-100 dark:border-red-900/30',
+    icon: 'text-red-600 dark:text-red-400',
+  },
+  medium: {
+    bg: 'bg-orange-50 dark:bg-orange-950/20',
+    border: 'border-orange-100 dark:border-orange-900/30',
+    icon: 'text-orange-600 dark:text-orange-400',
+  },
+  low: {
+    bg: 'bg-amber-50 dark:bg-amber-950/20',
+    border: 'border-amber-100 dark:border-amber-900/30',
+    icon: 'text-amber-600 dark:text-amber-400',
+  },
+  info: {
+    bg: 'bg-blue-50 dark:bg-blue-950/20',
+    border: 'border-blue-100 dark:border-blue-900/30',
+    icon: 'text-blue-600 dark:text-blue-400',
+  },
+};
+
+// 이슈 스트립 스타일 (DetailedIssueCard용)
+const severityStripStyles: Record<SeverityLevel, { strip: string; icon: string }> = {
+  critical: { strip: 'bg-rose-600', icon: 'text-rose-600' },
+  high: { strip: 'bg-red-500', icon: 'text-red-500' },
+  medium: { strip: 'bg-orange-500', icon: 'text-orange-500' },
+  low: { strip: 'bg-amber-400', icon: 'text-amber-500' },
+  info: { strip: 'bg-blue-400', icon: 'text-blue-500' },
+};
+
+// Severity 라벨 훅 (번역 포함) - 공통 유틸리티
+type SeverityLevelWithNone = SeverityLevel | 'none';
+
+function useSeverityLabels(): Record<SeverityLevelWithNone, string> {
+  const { t } = useTranslation();
+  return {
+    none: t('gcodeAnalytics.severityNone', '없음'),
+    info: t('gcodeAnalytics.severityInfo', '정보'),
+    low: t('gcodeAnalytics.severityLow', '낮음'),
+    medium: t('gcodeAnalytics.severityMedium', '중간'),
+    high: t('gcodeAnalytics.severityHigh', '높음'),
+    critical: t('gcodeAnalytics.severityCritical', '치명적'),
+  };
 }
 
 // ============================================================================
@@ -736,29 +809,19 @@ const EmbeddedGCodeEditor: React.FC<EmbeddedGCodeEditorProps> = ({
       appliedFixLines: new Set(appliedFixLines)
     }));
 
-    // 라인 번호에서 실제 코드만 추출 (예: "678902: M104 S193.6" -> "M104 S193.6")
-    const extractCode = (lineWithNumber: string) => {
-      const match = lineWithNumber.match(/^\d+:\s*(.*)$/);
-      return match ? match[1] : lineWithNumber;
-    };
-
-    const fixedCode = extractCode(fixFixed);
+    // 공유 유틸리티를 사용하여 라인 번호 제거
+    const fixedCode = stripLineNumber(fixFixed);
 
     // 해당 라인 수정
     const newLines = [...lines];
     const currentLine = newLines[targetIdx];
 
-    // 마커 형식 체크: ">>> 682077: M104 S193.6 <<< [문제 라인]"
-    const markedMatch = currentLine.match(/^>>>\s*(\d+):\s*.*?<<<.*$/);
-    // 일반 형식 체크: "682077: M104 S193.6"
-    const normalMatch = currentLine.match(/^(\d+):\s*/);
+    // 공유 유틸리티를 사용하여 마커/일반 라인 파싱
+    const parsed = parseMarkedLine(currentLine);
 
-    if (markedMatch) {
-      // 마커 형식 -> 일반 형식으로 변환하면서 수정된 코드 적용
-      newLines[targetIdx] = `${markedMatch[1]}: ${fixedCode}`;
-    } else if (normalMatch) {
-      // 일반 형식 유지
-      newLines[targetIdx] = `${normalMatch[1]}: ${fixedCode}`;
+    if (parsed.lineNumber) {
+      // 마커 형식이든 일반 형식이든 라인 번호가 있으면 일반 형식으로 변환
+      newLines[targetIdx] = `${parsed.lineNumber}: ${fixedCode}`;
     } else {
       // 라인 번호가 없는 경우 fixLineNumber 사용
       newLines[targetIdx] = `${fixLineNumber}: ${fixedCode}`;
@@ -773,17 +836,12 @@ const EmbeddedGCodeEditor: React.FC<EmbeddedGCodeEditorProps> = ({
 
     // 콜백 호출
     if (onEditorApplyFix) {
-      const originalCode = extractCode(fixOriginal);
+      const originalCode = stripLineNumber(fixOriginal);
       // 저장용 콘텐츠에서 라인 번호 제거 (순수 G-code만 저장)
       const contentForSave = newLines.map(line => {
-        // 마커 형식: ">>> 123: G1 X100 <<< [문제 라인]" -> "G1 X100"
-        const markerMatch = line.match(/^>>>\s*\d+:\s*(.*?)\s*<<<.*$/);
-        if (markerMatch) return markerMatch[1];
-        // 일반 형식: "123: G1 X100" -> "G1 X100"
-        const normalMatch = line.match(/^\s*\d+:\s*(.*)$/);
-        if (normalMatch) return normalMatch[1];
-        // 라인 번호 없는 경우 그대로
-        return line;
+        // 공유 유틸리티를 사용하여 마커/일반 라인에서 코드만 추출
+        const parsed = parseMarkedLine(line);
+        return parsed.code;
       }).join('\n');
       onEditorApplyFix(fixLineNumber, originalCode, fixedCode, contentForSave);
     }
@@ -875,26 +933,23 @@ const EmbeddedGCodeEditor: React.FC<EmbeddedGCodeEditorProps> = ({
           isDarkMode ? "bg-slate-900" : "bg-white"
         )}>
         {lines.map((line, idx) => {
-          // 라인 번호 추출 (컨텍스트 모드에서는 라인에 번호가 포함됨)
+          // 공유 유틸리티를 사용하여 라인 번호 추출
           // 일반 형식: "    678902: G1 X100" (앞에 4칸 공백)
           // 문제 라인 표시 형식: ">>> 678902: M104 S193.6  <<< [문제 라인]"
-          const normalLineMatch = line.match(/^\s*(\d+):\s*(.*)/);
-          const markedLineMatch = line.match(/^>>>\s*(\d+):\s*(.*?)\s*<<<.*$/);
-
-          const lineNumberMatch = markedLineMatch || normalLineMatch;
+          const parsed = parseMarkedLine(line);
           // G-code 라인 번호 (줄 번호 컬럼에 표시)
-          const gcodeLineNumber = lineNumberMatch ? lineNumberMatch[1] : '';
+          const gcodeLineNumber = parsed.lineNumber || '';
           // G-code 명령어만 (코드 내용에 표시)
-          const codeOnly = lineNumberMatch ? lineNumberMatch[2] : line;
+          const codeOnly = parsed.code;
 
           // 문제 라인 마커가 있는지 확인
-          const isMarkedProblemLine = !!markedLineMatch;
+          const isMarkedProblemLine = parsed.isMarked;
 
           // 수정 대상 라인인지 확인
           const isFixTargetLine = (fixLineNumber !== undefined && editorFixInfo) &&
-            (parseInt(gcodeLineNumber) === fixLineNumber ||
-             isMarkedProblemLine ||
-             (fixOriginal && codeOnly.trim() === fixOriginal.replace(/^\d+:\s*/, '').trim()));
+            (toLineNumber(gcodeLineNumber) === fixLineNumber ||
+              isMarkedProblemLine ||
+              (fixOriginal && codeOnly.trim() === stripLineNumber(fixOriginal).trim()));
 
           // 이미 적용된 라인인지 확인
           const isAlreadyApplied = appliedFixLines.has(idx);
@@ -1020,7 +1075,7 @@ const EmbeddedGCodeEditor: React.FC<EmbeddedGCodeEditorProps> = ({
                                 : "bg-rose-50 text-rose-700 border-rose-100"
                             )}>
                               <span className="text-rose-400 select-none">-</span>
-                              {highlightGCode(fixOriginal?.replace(/^\d+:\s*/, '') || '')}
+                              {highlightGCode(fixOriginal ? stripLineNumber(fixOriginal) : '')}
                             </div>
                           </div>
                         </div>
@@ -1052,7 +1107,7 @@ const EmbeddedGCodeEditor: React.FC<EmbeddedGCodeEditorProps> = ({
                                 : "bg-amber-50 text-amber-900 border-amber-200"
                             )}>
                               <span className="text-amber-500 font-bold select-none">~</span>
-                              {highlightGCode(fixFixed?.replace(/^\d+:\s*/, '') || '')}
+                              {highlightGCode(fixFixed ? stripLineNumber(fixFixed) : '')}
                             </div>
                           </div>
                         </div>
@@ -1269,9 +1324,22 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
         const lastLayer = initialSegments.layers[layerCount - 1];
         setSegmentMetadata({
           layerCount,
-          totalExtrusionPaths: initialSegments.layers.reduce((sum, l) => sum + (l.extrusionCount || 0), 0),
-          totalTravelPaths: initialSegments.layers.reduce((sum, l) => sum + (l.travelCount || 0), 0),
-          maxZ: lastLayer?.z || 0,
+          boundingBox: {
+            minX: 0,
+            maxX: 250, // Default fallback
+            minY: 0,
+            maxY: 250, // Default fallback
+            minZ: 0,
+            maxZ: lastLayer?.z || 0,
+          },
+          totalFilament: 0,
+          printTime: 0,
+          layerHeight: 0.2, // Default fallback
+          firstLayerHeight: 0.2, // Default fallback
+          estimatedTime: '',
+          filamentType: null,
+          slicer: 'Unknown',
+          slicerVersion: null,
         });
         setCurrentLayer(layerCount - 1);
       }
@@ -1312,8 +1380,9 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   const handleIssueClickToEditor = (lineNumber: number | string | undefined) => {
     if (!lineNumber) return;
 
-    const targetLine = typeof lineNumber === 'string' ? parseInt(lineNumber, 10) : lineNumber;
-    if (isNaN(targetLine) || targetLine <= 0) return;
+    // 공유 유틸리티를 사용하여 라인 번호 변환
+    const targetLine = toLineNumber(lineNumber);
+    if (targetLine <= 0) return;
 
     console.log('[GCodeAnalysisReport] Issue clicked, jumping to line:', targetLine);
 
@@ -1471,591 +1540,6 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  // PDF/인쇄용 HTML 생성 함수
-  const generatePrintableHTML = (): string => {
-    const issues = data.detailedAnalysis?.detailedIssues || [];
-    const patches = data.detailedAnalysis?.patchSuggestions || [];
-    const printingInfo = data.detailedAnalysis?.printingInfo;
-    const issueStats = data.detailedAnalysis?.issueStatistics || [];
-
-    // 심각도별 카운트 계산
-    const severityCounts = {
-      critical: issues.filter(i => i.severity === 'critical').length,
-      high: issues.filter(i => i.severity === 'high').length,
-      medium: issues.filter(i => i.severity === 'medium').length,
-      low: issues.filter(i => i.severity === 'low').length,
-      info: issues.filter(i => i.severity === 'info').length,
-    };
-    const totalIssues = severityCounts.critical + severityCounts.high + severityCounts.medium + severityCounts.low + severityCounts.info;
-
-    // 등급별 색상
-    const getGradeColor = (grade: string) => {
-      switch (grade) {
-        case 'A': return '#22c55e';
-        case 'B': return '#3b82f6';
-        case 'C': return '#eab308';
-        case 'D': return '#f97316';
-        case 'F': return '#ef4444';
-        default: return '#6b7280';
-      }
-    };
-
-    // 심각도별 색상
-    const getSeverityColor = (severity: string) => {
-      switch (severity) {
-        case 'critical': return { bg: '#ffe4e6', text: '#be123c', border: '#e11d48' };
-        case 'high': return { bg: '#fee2e2', text: '#dc2626', border: '#ef4444' };
-        case 'medium': return { bg: '#ffedd5', text: '#ea580c', border: '#f97316' };
-        case 'low': return { bg: '#fef9c3', text: '#ca8a04', border: '#eab308' };
-        case 'info': return { bg: '#dbeafe', text: '#2563eb', border: '#3b82f6' };
-        default: return { bg: '#f3f4f6', text: '#6b7280', border: '#9ca3af' };
-      }
-    };
-
-    // SVG 도넛 차트 생성 (서포트 비율)
-    const generateDonutChart = (percentage: number) => {
-      const radius = 40;
-      const circumference = 2 * Math.PI * radius;
-      const strokeDasharray = (percentage / 100) * circumference;
-
-      return `
-        <svg width="110" height="110" viewBox="0 0 100 100" style="display:block;margin:0 auto;">
-          <circle cx="50" cy="50" r="${radius}" fill="none" stroke="#e2e8f0" stroke-width="12"/>
-          <circle cx="50" cy="50" r="${radius}" fill="none" stroke="#8b5cf6" stroke-width="12"
-            stroke-dasharray="${strokeDasharray} ${circumference}"
-            stroke-linecap="round"
-            transform="rotate(-90 50 50)"/>
-          <text x="50" y="50" text-anchor="middle" dominant-baseline="middle"
-            font-size="18" font-weight="900" fill="#0f172a">${percentage.toFixed(1)}%</text>
-        </svg>
-      `;
-    };
-
-    // SVG 파이 차트 생성 (심각도 분포)
-    const generateSeverityPieChart = () => {
-      if (totalIssues === 0) return '<p style="color:#64748b;font-size:9pt;text-align:center;">이슈 없음</p>';
-
-      const colors: Record<string, string> = {
-        critical: '#be123c',
-        high: '#ef4444',
-        medium: '#f97316',
-        low: '#eab308',
-        info: '#3b82f6'
-      };
-      const radius = 35;
-      let cumulativeAngle = 0;
-      const segments: string[] = [];
-
-      const severities = [
-        { key: 'critical', count: severityCounts.critical },
-        { key: 'high', count: severityCounts.high },
-        { key: 'medium', count: severityCounts.medium },
-        { key: 'low', count: severityCounts.low },
-        { key: 'info', count: severityCounts.info },
-      ];
-
-      // 활성 세그먼트가 하나뿐인 경우 (100%) - 원으로 그리기
-      const activeSegments = severities.filter(s => s.count > 0);
-      if (activeSegments.length === 1) {
-        const singleKey = activeSegments[0].key;
-        return `
-          <svg width="90" height="90" viewBox="0 0 100 100" style="display:block;margin:0 auto;">
-            <circle cx="50" cy="50" r="${radius}" fill="${colors[singleKey]}" stroke="white" stroke-width="1"/>
-          </svg>
-        `;
-      }
-
-      severities.forEach(({ key, count }) => {
-        if (count === 0) return;
-        const angle = (count / totalIssues) * 360;
-        const startRad = (cumulativeAngle - 90) * Math.PI / 180;
-        const endRad = (cumulativeAngle + angle - 90) * Math.PI / 180;
-
-        const x1 = 50 + radius * Math.cos(startRad);
-        const y1 = 50 + radius * Math.sin(startRad);
-        const x2 = 50 + radius * Math.cos(endRad);
-        const y2 = 50 + radius * Math.sin(endRad);
-
-        const largeArcFlag = angle > 180 ? 1 : 0;
-
-        segments.push(`<path d="M 50 50 L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2} Z" fill="${colors[key]}" stroke="white" stroke-width="1"/>`);
-        cumulativeAngle += angle;
-      });
-
-      return `
-        <svg width="90" height="90" viewBox="0 0 100 100" style="display:block;margin:0 auto;">
-          ${segments.join('')}
-        </svg>
-      `;
-    };
-
-    // SVG 세로 바 차트 생성 (이슈 유형별 통계)
-    const generateIssueStatsChart = () => {
-      if (issueStats.length === 0) return '';
-
-      const maxCount = Math.max(...issueStats.map(s => s.count));
-      const topStats = issueStats.slice(0, 5); // 상위 5개만
-      const barWidth = 36;
-      const gap = 12;
-      const chartWidth = topStats.length * (barWidth + gap);
-      const chartHeight = 120;
-      const maxBarHeight = 70;
-
-      return `
-        <svg width="100%" height="${chartHeight}" viewBox="0 0 ${chartWidth} ${chartHeight}" style="display:block;margin:0 auto;">
-          ${topStats.map((stat, index) => {
-        const x = index * (barWidth + gap) + gap / 2;
-        const barHeight = maxCount > 0 ? (stat.count / maxCount) * maxBarHeight : 0;
-        const barY = chartHeight - 35 - barHeight;
-        const label = stat.label.length > 8 ? stat.label.substring(0, 8) + '..' : stat.label;
-        return `
-              <rect x="${x}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="3" fill="${stat.color || '#8b5cf6'}"/>
-              <text x="${x + barWidth / 2}" y="${barY - 5}" text-anchor="middle" font-size="10" font-weight="700" fill="#0f172a">${stat.count}</text>
-              <text x="${x + barWidth / 2}" y="${chartHeight - 20}" text-anchor="middle" font-size="8" fill="#475569">${label}</text>
-            `;
-      }).join('')}
-          <line x1="0" y1="${chartHeight - 35}" x2="${chartWidth}" y2="${chartHeight - 35}" stroke="#e2e8f0" stroke-width="1"/>
-        </svg>
-      `;
-    };
-
-    return `
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <title>G-code 보고서 - ${data.fileName || '분석 결과'}</title>
-  <style>
-    @page {
-      size: A4;
-      margin: 15mm;
-    }
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 11pt;
-      line-height: 1.5;
-      color: #1e293b;
-      background: white;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-    .container {
-      max-width: 210mm;
-      margin: 0 auto;
-      padding: 10mm 0;
-    }
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 2px solid #334155;
-      padding-bottom: 15px;
-      margin-bottom: 20px;
-    }
-    .header h1 {
-      font-size: 22pt;
-      font-weight: 700;
-      color: #0f172a;
-      letter-spacing: -0.025em;
-    }
-    .header .file-info {
-      font-size: 10pt;
-      color: #64748b;
-      margin-top: 5px;
-    }
-    .header .file-name {
-      font-weight: 600;
-      color: #334155;
-    }
-    .header .file-date {
-      display: block;
-      margin-top: 3px;
-    }
-    .score-box {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .score-value {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .score-value .label {
-      font-size: 9pt;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      white-space: nowrap;
-    }
-    .score-value .number {
-      font-size: 32pt;
-      font-weight: 900;
-      color: #0f172a;
-      line-height: 1;
-    }
-    .grade-badge {
-      width: 44px;
-      height: 44px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22pt;
-      font-weight: 900;
-      color: white;
-    }
-    .section {
-      margin-bottom: 25px;
-      page-break-inside: avoid;
-    }
-    .section-title {
-      font-size: 14pt;
-      font-weight: 700;
-      color: #1e293b;
-      border-bottom: 1px solid #e2e8f0;
-      padding-bottom: 8px;
-      margin-bottom: 15px;
-    }
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-      margin-bottom: 15px;
-    }
-    .metric-card {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 12px;
-      text-align: center;
-    }
-    .metric-card .label {
-      font-size: 8pt;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 5px;
-    }
-    .metric-card .value {
-      font-size: 16pt;
-      font-weight: 900;
-      color: #0f172a;
-    }
-    .metric-card .sub {
-      font-size: 9pt;
-      color: #64748b;
-    }
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 15px;
-    }
-    .info-box {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 15px;
-    }
-    .info-box h4 {
-      font-size: 10pt;
-      font-weight: 600;
-      color: #64748b;
-      margin-bottom: 10px;
-    }
-    .info-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 5px 0;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    .info-row:last-child {
-      border-bottom: none;
-    }
-    .info-row .label {
-      font-size: 10pt;
-      color: #475569;
-    }
-    .info-row .value {
-      font-size: 12pt;
-      font-weight: 700;
-      color: #0f172a;
-    }
-    .issue-item {
-      background: white;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      padding: 12px;
-      margin-bottom: 8px;
-      page-break-inside: avoid;
-    }
-    .issue-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-    .issue-type {
-      font-size: 10pt;
-      font-weight: 600;
-      color: #334155;
-    }
-    .issue-meta {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-    .severity-badge {
-      font-size: 8pt;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 4px;
-      text-transform: uppercase;
-    }
-    .layer-badge {
-      font-size: 8pt;
-      color: #64748b;
-      background: #f1f5f9;
-      padding: 2px 6px;
-      border-radius: 3px;
-    }
-    .issue-desc {
-      font-size: 10pt;
-      color: #475569;
-      margin-bottom: 5px;
-    }
-    .issue-suggestion {
-      font-size: 9pt;
-      color: #059669;
-      background: #ecfdf5;
-      padding: 6px 10px;
-      border-radius: 4px;
-      border-left: 3px solid #10b981;
-    }
-    .patch-item {
-      background: #fffbeb;
-      border: 1px solid #fcd34d;
-      border-radius: 6px;
-      padding: 12px;
-      margin-bottom: 8px;
-      page-break-inside: avoid;
-    }
-    .patch-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-    .patch-action {
-      font-size: 9pt;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 4px;
-      text-transform: uppercase;
-    }
-    .patch-action.remove { background: #fee2e2; color: #dc2626; }
-    .patch-action.modify { background: #dbeafe; color: #2563eb; }
-    .patch-action.insert { background: #dcfce7; color: #16a34a; }
-    .patch-code {
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      font-size: 9pt;
-      background: #1e293b;
-      color: #e2e8f0;
-      padding: 8px 10px;
-      border-radius: 4px;
-      margin: 5px 0;
-      overflow-x: auto;
-    }
-    .patch-reason {
-      font-size: 9pt;
-      color: #78350f;
-    }
-    .summary-box {
-      background: #f0f9ff;
-      border: 1px solid #bae6fd;
-      border-radius: 8px;
-      padding: 15px;
-      margin-bottom: 15px;
-    }
-    .summary-box p {
-      font-size: 10pt;
-      color: #0c4a6e;
-      line-height: 1.6;
-    }
-    .footer {
-      margin-top: 30px;
-      padding-top: 15px;
-      border-top: 1px solid #e2e8f0;
-      text-align: center;
-      font-size: 9pt;
-      color: #94a3b8;
-    }
-    .page-break {
-      page-break-before: always;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <!-- 헤더 -->
-    <div class="header">
-      <div>
-        <h1>G-code 보고서</h1>
-        <p class="file-info">
-          <span class="file-name">${data.fileName || '분석 결과'}</span>
-          <span class="file-date">${data.analyzedAt || new Date().toLocaleString('ko-KR')}</span>
-        </p>
-      </div>
-      ${overallScore ? `
-      <div class="score-box">
-        <div class="score-value">
-          <span class="label">OVERALL SCORE</span>
-          <span class="number">${overallScore.value}</span>
-        </div>
-        <div class="grade-badge" style="background-color: ${getGradeColor(overallScore.grade)}">${overallScore.grade}</div>
-      </div>
-      ` : ''}
-    </div>
-
-    <!-- 섹션 1: 출력 정보 -->
-    <div class="section">
-      <h2 class="section-title">출력 정보</h2>
-      
-      <div class="metrics-grid">
-        <div class="metric-card">
-          <p class="label">예상 출력 시간</p>
-          <p class="value">${metrics.printTime.value}</p>
-        </div>
-        <div class="metric-card">
-          <p class="label">필라멘트</p>
-          <p class="value">${metrics.filamentUsage.length}</p>
-          ${metrics.filamentUsage.weight ? `<p class="sub">${metrics.filamentUsage.weight}</p>` : ''}
-        </div>
-        <div class="metric-card">
-          <p class="label">레이어</p>
-          <p class="value">${metrics.layerCount.value.toLocaleString()}</p>
-          ${metrics.layerCount.layerHeight ? `<p class="sub">${metrics.layerCount.layerHeight}mm</p>` : ''}
-        </div>
-        <div class="metric-card">
-          <p class="label">리트렉션</p>
-          <p class="value">${metrics.retractionCount.value.toLocaleString()}</p>
-          <p class="sub">회</p>
-        </div>
-      </div>
-
-      <div class="info-grid">
-        <div class="info-box">
-          <h4>온도 설정</h4>
-          <div class="info-row">
-            <span class="label">노즐</span>
-            <span class="value">${temperature.nozzle}°C</span>
-          </div>
-          <div class="info-row">
-            <span class="label">베드</span>
-            <span class="value">${temperature.bed}°C</span>
-          </div>
-        </div>
-        <div class="info-box">
-          <h4>서포트 비율</h4>
-          ${generateDonutChart(support.percentage)}
-        </div>
-        <div class="info-box">
-          <h4>이슈 심각도</h4>
-          ${generateSeverityPieChart()}
-          <div style="display:flex;justify-content:center;gap:8px;margin-top:8px;font-size:8pt;">
-            <span style="color:#ef4444;">■ HIGH ${severityCounts.high}</span>
-            <span style="color:#f97316;">■ MED ${severityCounts.medium}</span>
-            <span style="color:#eab308;">■ LOW ${severityCounts.low}</span>
-          </div>
-        </div>
-      </div>
-
-      ${issueStats.length > 0 ? `
-      <div class="info-box" style="margin-top:15px;">
-        <h4>이슈 유형별 분포</h4>
-        ${generateIssueStatsChart()}
-      </div>
-      ` : ''}
-      </div>
-    </div>
-
-    ${printingInfo?.overview || printingInfo?.summary_text ? `
-    <div class="summary-box">
-      <p>${printingInfo.overview || printingInfo.summary_text}</p>
-    </div>
-    ` : ''}
-
-    <!-- 섹션 2: 문제점 및 이상 상황 -->
-    ${issues.length > 0 ? `
-    <div class="section ${issues.length > 5 ? 'page-break' : ''}">
-      <h2 class="section-title">문제점 및 이상 상황 (${issues.length}건)</h2>
-      ${issues.map(issue => {
-      const colors = getSeverityColor(issue.severity);
-      return `
-        <div class="issue-item" style="border-left: 4px solid ${colors.border}">
-          <div class="issue-header">
-            <span class="issue-type">${issue.issueType.replace(/_/g, ' ').toUpperCase()}</span>
-            <div class="issue-meta">
-              ${issue.layer !== undefined ? `<span class="layer-badge">Layer ${issue.layer}</span>` : ''}
-              <span class="severity-badge" style="background: ${colors.bg}; color: ${colors.text}">${issue.severity}</span>
-            </div>
-          </div>
-          <p class="issue-desc">${issue.description}</p>
-          ${issue.suggestion ? `<p class="issue-suggestion">${issue.suggestion}</p>` : ''}
-        </div>
-        `;
-    }).join('')}
-    </div>
-    ` : ''}
-
-    <!-- 섹션 3: 최적화 방안 및 패치 제안 -->
-    ${patches.length > 0 ? `
-    <div class="section page-break">
-      <h2 class="section-title">G-code 패치 제안 (${patches.length}건)</h2>
-      ${patches.map(patch => `
-        <div class="patch-item">
-          <div class="patch-header">
-            <span>Line ${patch.line}</span>
-            <span class="patch-action ${patch.action}">${patch.action}</span>
-          </div>
-          ${patch.action === 'remove' && patch.original ? `<div class="patch-code">- ${patch.original}</div>` : ''}
-          ${(patch.action === 'insert' || patch.action === 'insert_after') && patch.modified ? `<div class="patch-code" style="background:#14532d;color:#86efac">+ ${patch.modified}</div>` : ''}
-          ${patch.action === 'modify' ? `
-            ${patch.original ? `<div class="patch-code">- ${patch.original}</div>` : ''}
-            ${patch.modified ? `<div class="patch-code" style="background:#14532d;color:#86efac">+ ${patch.modified}</div>` : ''}
-          ` : ''}
-          <p class="patch-reason">${patch.reason}</p>
-        </div>
-      `).join('')}
-    </div>
-    ` : ''}
-
-    <!-- 푸터 -->
-    <div class="footer">
-      <p>FACTOR 3D Printer Farm • G-code Quality Analysis Report</p>
-      <p>Generated on ${new Date().toLocaleString('ko-KR')}</p>
-    </div>
-  </div>
-
-  <script>
-    window.onload = function() {
-      window.print();
-      window.onafterprint = function() {
-        window.close();
-      };
-    };
-  </script>
-</body>
-</html>
-    `;
-  };
-
   // 공유 핸들러
   const handleShare = async () => {
     // 외부 핸들러가 있으면 그것을 사용
@@ -2171,12 +1655,15 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
 
   // 인쇄 핸들러
   const handlePrint = () => {
-    const printContent = generatePrintableHTML();
-    const printWindow = window.open('', '_blank', 'width=800,height=600');
-    if (printWindow) {
-      printWindow.document.write(printContent);
-      printWindow.document.close();
-    } else {
+    const printContent = generatePrintableHTMLExternal({
+      data,
+      overallScore,
+      metrics,
+      support,
+      temperature,
+    });
+
+    if (!openPrintWindow(printContent)) {
       // 팝업이 차단된 경우 대체 방법
       toast({
         title: t('gcodeAnalytics.printError', '인쇄 오류'),
@@ -2765,539 +2252,516 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
 
       {/* 보고서 내용 - PDF 캡처 대상 (report 탭일 때) */}
       {currentPanelTab === 'report' && (
-      <ScrollArea className="flex-1 overflow-auto">
-      <div ref={reportRef}>
-        {/* 헤더 - Premium Gradient Design */}
-        <div className={cn(
-          "relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-800 dark:from-slate-950 dark:to-slate-900 text-white",
-          embedded ? "px-5 py-6" : "px-8 py-10"
-        )}>
-          {/* Background decoration */}
-          <div className="absolute top-0 right-0 p-10 opacity-10 pointer-events-none">
-            <Target className="w-64 h-64" />
-          </div>
-
-          <div className="relative z-10 flex items-start justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-white/10 text-white/80 border border-white/10">
-                  AI Powered Analysis
-                </span>
-                {data.analyzedAt && (
-                  <span className="text-xs text-white/50 font-body">
-                    {data.analyzedAt}
-                  </span>
-                )}
-              </div>
-              <h1 className={cn(
-                "font-title font-bold tracking-tight text-white drop-shadow-sm",
-                embedded ? "text-2xl lg:text-3xl" : "text-4xl lg:text-5xl"
-              )}>
-                {t('gcodeAnalytics.reportTitle')}
-              </h1>
-              <p className="text-white/70 text-base max-w-xl font-body leading-relaxed">
-                {data.fileName ? (
-                  <>Analysis report for <span className="text-white font-semibold underline decoration-white/30 underline-offset-4">{data.fileName}</span></>
-                ) : t('gcodeAnalytics.analysisResult')}
-              </p>
-            </div>
-
-            {overallScore && (
-              <div className="flex flex-col items-end">
-                <div className="flex items-center gap-4 bg-white/5 backdrop-blur-sm border border-white/10 p-4 rounded-2xl shadow-xl">
-                  <div className="text-right">
-                    <p className="text-xs text-white/60 uppercase tracking-widest font-heading font-semibold mb-0.5">{t('gcodeAnalytics.overallScore')}</p>
-                    <p className="text-4xl font-score font-black text-white leading-none">{overallScore.value}</p>
-                  </div>
-                  <div className={cn(
-                    "w-16 h-16 rounded-xl flex items-center justify-center text-4xl font-score font-black text-white shadow-lg ring-4 ring-white/10",
-                    overallScore.grade === 'A' && "bg-gradient-to-br from-emerald-400 to-emerald-600",
-                    overallScore.grade === 'B' && "bg-gradient-to-br from-blue-400 to-blue-600",
-                    overallScore.grade === 'C' && "bg-gradient-to-br from-yellow-400 to-yellow-600",
-                    overallScore.grade === 'D' && "bg-gradient-to-br from-orange-400 to-orange-600",
-                    overallScore.grade === 'F' && "bg-gradient-to-br from-red-400 to-red-600"
-                  )}>
-                    {overallScore.grade}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div >
-
-        {/* 탭 네비게이션 - Modern Style */}
-        <div className="bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
-          <div className="px-6 flex gap-8">
-            <button
-              onClick={() => setActiveTab('info')}
-              className={cn(
-                "py-4 text-sm font-heading font-medium border-b-2 transition-all duration-200 relative",
-                activeTab === 'info'
-                  ? "border-violet-600 text-violet-700 dark:text-violet-400 dark:border-violet-400"
-                  : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-              )}
-            >
-              {t('gcodeAnalytics.tabInfo')}
-            </button>
-            <button
-              onClick={() => setActiveTab('issues')}
-              className={cn(
-                "py-4 text-sm font-heading font-medium border-b-2 transition-all duration-200",
-                activeTab === 'issues'
-                  ? "border-violet-600 text-violet-700 dark:text-violet-400 dark:border-violet-400"
-                  : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-              )}
-            >
-              <div className="flex items-center gap-2">
-                {t('gcodeAnalytics.tabIssues')}
-                <span className={cn(
-                  "ml-1 px-2 py-0.5 rounded-full text-[10px] font-black leading-none",
-                  activeTab === 'issues'
-                    ? "bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
-                )}>
-                  {analysis.warnings.length + (data.detailedAnalysis?.detailedIssues?.reduce((acc, curr) => acc + (curr.count || 1), 0) || 0)}
-                </span>
-              </div>
-            </button>
-            <button
-              onClick={() => setActiveTab('optimization')}
-              className={cn(
-                "py-4 text-sm font-heading font-medium border-b-2 transition-all duration-200",
-                activeTab === 'optimization'
-                  ? "border-violet-600 text-violet-700 dark:text-violet-400 dark:border-violet-400"
-                  : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-              )}
-            >
-              {t('gcodeAnalytics.tabOptimization')}
-            </button>
-          </div>
-        </div >
-
-        <div className={cn(
-          "p-6 space-y-6",
-          embedded ? "min-h-[400px]" : "min-h-[600px]"
-        )}>
-          {/* ================================================================ */}
-          {/* TAB 1: 출력 정보 (Print Info) */}
-          {/* ================================================================ */}
-          {activeTab === 'info' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              {/* 주요 메트릭 카드 */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* 출력 시간 */}
-                <MetricCard
-                  icon={<Clock className="h-5 w-5" />}
-                  label={t('gcodeAnalytics.printTime')}
-                  value={metrics.printTime.value}
-                  color="blue"
-                />
-
-                {/* 필라멘트 사용량 */}
-                <MetricCard
-                  icon={<Box className="h-5 w-5" />}
-                  label={t('gcodeAnalytics.filament')}
-                  value={metrics.filamentUsage.length}
-                  subValue={metrics.filamentUsage.weight}
-                  color="green"
-                />
-
-                {/* 레이어 수 */}
-                <MetricCard
-                  icon={<Layers className="h-5 w-5" />}
-                  label={t('gcodeAnalytics.layer')}
-                  value={metrics.layerCount.value.toLocaleString()}
-                  subValue={metrics.layerCount.layerHeight ? `${metrics.layerCount.layerHeight}mm` : undefined}
-                  color="purple"
-                />
-
-                {/* 리트렉션 횟수 */}
-                <MetricCard
-                  icon={<Repeat2 className="h-5 w-5" />}
-                  label={t('gcodeAnalytics.retraction')}
-                  value={`${metrics.retractionCount.value.toLocaleString()} ${t('gcodeAnalytics.retractionCount', '회')}`}
-                  color="orange"
-                />
+        <ScrollArea className="flex-1 overflow-auto">
+          <div ref={reportRef}>
+            {/* 헤더 - Premium Gradient Design */}
+            <div className={cn(
+              "relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-800 dark:from-slate-950 dark:to-slate-900 text-white",
+              embedded ? "px-5 py-6" : "px-8 py-10"
+            )}>
+              {/* Background decoration */}
+              <div className="absolute top-0 right-0 p-10 opacity-10 pointer-events-none">
+                <Target className="w-64 h-64" />
               </div>
 
-              {/* 차트 및 온도 섹션 */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {/* 서포트 비율 - 도넛 차트 */}
-                <div className="bg-slate-50 dark:bg-slate-800/35 backdrop-blur rounded-xl p-5 border border-slate-200 dark:border-slate-700/65 flex flex-col">
-                  <h3 className="text-base font-heading font-semibold text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
-                    <Target className="h-5 w-5" />
-                    {t('gcodeAnalytics.supportRatio')}
-                  </h3>
-                  <div className="flex-grow flex items-center justify-center">
-                    <div className="relative w-40 h-40">
-                      {/* 도넛 차트 배경 */}
-                      <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                        <circle
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="10"
-                          className="text-slate-200 dark:text-slate-700"
-                        />
-                        <circle
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="10"
-                          strokeLinecap="round"
-                          strokeDasharray={`${(support.percentage / 100) * 251.2} 251.2`}
-                          className="text-primary"
-                        />
-                      </svg>
-                      {/* 중앙 텍스트 */}
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-3xl font-heading font-bold text-slate-900 dark:text-white">{support.percentage.toFixed(1)}%</span>
-                        {support.volume && (
-                          <span className="text-xs font-body text-slate-500 dark:text-slate-400">{support.volume}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  {/* 서포트 비율 해석 - 하단 고정 */}
-                  <div className="mt-auto">
-                    <InterpretationBadge {...getSupportInterpretation(support.percentage)} />
-                  </div>
-                </div>
-
-
-                {/* 속도 분포 - 바 차트 (speedDistribution이 있을 때만 표시) */}
-                {speedDistribution && (
-                  <div className="bg-slate-50 dark:bg-slate-800/35 backdrop-blur rounded-xl p-5 border border-slate-200 dark:border-slate-700/65 flex flex-col">
-                    <h3 className="text-base font-heading font-semibold text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
-                      <Activity className="h-5 w-5" />
-                      {t('gcodeAnalytics.speedDistribution')}
-                    </h3>
-                    <div className="flex-grow space-y-3">
-                      {(() => {
-                        // 속도 중 최댓값을 기준으로 바 크기 계산
-                        const speeds = [
-                          speedDistribution.travel,
-                          speedDistribution.infill,
-                          speedDistribution.perimeter,
-                          speedDistribution.support,
-                        ].filter((v): v is number => v !== undefined);
-                        const maxSpeed = Math.max(...speeds);
-
-                        return (
-                          <>
-                            <SpeedBar label={t('gcodeAnalytics.travel')} value={speedDistribution.travel} maxValue={maxSpeed} color="blue" />
-                            <SpeedBar label={t('gcodeAnalytics.infill')} value={speedDistribution.infill} maxValue={maxSpeed} color="green" />
-                            <SpeedBar label={t('gcodeAnalytics.perimeter')} value={speedDistribution.perimeter} maxValue={maxSpeed} color="purple" />
-                            {speedDistribution.support !== undefined && (
-                              <SpeedBar label={t('gcodeAnalytics.support')} value={speedDistribution.support} maxValue={maxSpeed} color="orange" />
-                            )}
-                          </>
-                        );
-                      })()}
-                    </div>
-                    {/* 속도 분포 해석 - 하단 고정 */}
-                    <div className="mt-auto">
-                      <InterpretationBadge {...getSpeedInterpretation(speedDistribution)} />
-                    </div>
-                  </div>
-                )}
-
-                {/* 온도 설정 */}
-                <div className="bg-slate-50 dark:bg-slate-800/35 backdrop-blur rounded-xl p-5 border border-slate-200 dark:border-slate-700/65 flex flex-col">
-                  <h3 className="text-base font-heading font-semibold text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
-                    <Thermometer className="h-5 w-5" />
-                    {t('gcodeAnalytics.temperatureSettings')}
-                  </h3>
-                  <div className="flex-grow space-y-4">
-                    <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-700/30 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-red-500" />
-                        <span className="text-base font-body text-slate-700 dark:text-white">{t('gcodeAnalytics.nozzle')}</span>
-                      </div>
-                      <span className="text-xl font-heading font-bold text-slate-900 dark:text-white">{typeof temperature.nozzle === 'number' ? temperature.nozzle.toFixed(1) : temperature.nozzle}°C</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-700/30 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-orange-500" />
-                        <span className="text-base font-body text-slate-700 dark:text-white">{t('gcodeAnalytics.bed')}</span>
-                      </div>
-                      <span className="text-xl font-heading font-bold text-slate-900 dark:text-white">{typeof temperature.bed === 'number' ? temperature.bed.toFixed(1) : temperature.bed}°C</span>
-                    </div>
-                    {temperature.firstLayer && (
-                      <div className="pt-2 border-t border-slate-200 dark:border-slate-700/50">
-                        <p className="text-sm text-slate-500 mb-2">{t('gcodeAnalytics.firstLayerSettings')}</p>
-                        <div className="grid grid-cols-2 gap-2 text-sm text-slate-700 dark:text-white">
-                          {temperature.firstLayer.nozzle && (
-                            <span>{t('gcodeAnalytics.nozzle')}: {typeof temperature.firstLayer.nozzle === 'number' ? temperature.firstLayer.nozzle.toFixed(1) : temperature.firstLayer.nozzle}°C</span>
-                          )}
-                          {temperature.firstLayer.bed && (
-                            <span>{t('gcodeAnalytics.bed')}: {typeof temperature.firstLayer.bed === 'number' ? temperature.firstLayer.bed.toFixed(1) : temperature.firstLayer.bed}°C</span>
-                          )}
-                        </div>
-                      </div>
+              <div className="relative z-10 flex items-start justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-white/10 text-white/80 border border-white/10">
+                      AI Powered Analysis
+                    </span>
+                    {data.analyzedAt && (
+                      <span className="text-xs text-white/50 font-body">
+                        {data.analyzedAt}
+                      </span>
                     )}
                   </div>
-                  {/* 온도 설정 해석 - 하단 고정 */}
-                  <div className="mt-auto">
-                    {(() => {
-                      const tempInterpretation = getTemperatureInterpretation(temperature);
-                      return (
-                        <div className={cn(
-                          "mt-3 p-2 rounded-lg border text-xs",
-                          tempInterpretation.status === 'good' && "bg-emerald-50 dark:bg-emerald-500/20 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300",
-                          tempInterpretation.status === 'warning' && "bg-yellow-50 dark:bg-yellow-500/20 border-yellow-200 dark:border-yellow-500/30 text-yellow-700 dark:text-yellow-300",
-                          tempInterpretation.status === 'bad' && "bg-red-50 dark:bg-red-500/20 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300"
-                        )}>
-                          <div className="flex items-start gap-2">
-                            {tempInterpretation.status === 'good' ? (
-                              <CheckCircle2 className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                            ) : (
-                              <AlertTriangle className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                  <h1 className={cn(
+                    "font-title font-bold tracking-tight text-white drop-shadow-sm",
+                    embedded ? "text-2xl lg:text-3xl" : "text-4xl lg:text-5xl"
+                  )}>
+                    {t('gcodeAnalytics.reportTitle')}
+                  </h1>
+                  <p className="text-white/70 text-base max-w-xl font-body leading-relaxed">
+                    {data.fileName ? (
+                      <>Analysis report for <span className="text-white font-semibold underline decoration-white/30 underline-offset-4">{data.fileName}</span></>
+                    ) : t('gcodeAnalytics.analysisResult')}
+                  </p>
+                </div>
+
+                {overallScore && (
+                  <div className="flex flex-col items-end">
+                    <div className="flex items-center gap-4 bg-white/5 backdrop-blur-sm border border-white/10 p-4 rounded-2xl shadow-xl">
+                      <div className="text-right">
+                        <p className="text-xs text-white/60 uppercase tracking-widest font-heading font-semibold mb-0.5">{t('gcodeAnalytics.overallScore')}</p>
+                        <p className="text-4xl font-score font-black text-white leading-none">{overallScore.value}</p>
+                      </div>
+                      <div className={cn(
+                        "w-16 h-16 rounded-xl flex items-center justify-center text-4xl font-score font-black text-white shadow-lg ring-4 ring-white/10",
+                        overallScore.grade === 'A' && "bg-gradient-to-br from-emerald-400 to-emerald-600",
+                        overallScore.grade === 'B' && "bg-gradient-to-br from-blue-400 to-blue-600",
+                        overallScore.grade === 'C' && "bg-gradient-to-br from-yellow-400 to-yellow-600",
+                        overallScore.grade === 'D' && "bg-gradient-to-br from-orange-400 to-orange-600",
+                        overallScore.grade === 'F' && "bg-gradient-to-br from-red-400 to-red-600"
+                      )}>
+                        {overallScore.grade}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div >
+
+            {/* 탭 네비게이션 - Modern Style */}
+            <div className="bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
+              <div className="px-6 flex gap-8">
+                <button
+                  onClick={() => setActiveTab('info')}
+                  className={cn(
+                    "py-4 text-sm font-heading font-medium border-b-2 transition-all duration-200 relative",
+                    activeTab === 'info'
+                      ? "border-violet-600 text-violet-700 dark:text-violet-400 dark:border-violet-400"
+                      : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  )}
+                >
+                  {t('gcodeAnalytics.tabInfo')}
+                </button>
+                <button
+                  onClick={() => setActiveTab('issues')}
+                  className={cn(
+                    "py-4 text-sm font-heading font-medium border-b-2 transition-all duration-200",
+                    activeTab === 'issues'
+                      ? "border-violet-600 text-violet-700 dark:text-violet-400 dark:border-violet-400"
+                      : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    {t('gcodeAnalytics.tabIssues')}
+                    <span className={cn(
+                      "ml-1 px-2 py-0.5 rounded-full text-[10px] font-black leading-none",
+                      activeTab === 'issues'
+                        ? "bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                    )}>
+                      {analysis.warnings.length + (data.detailedAnalysis?.detailedIssues?.reduce((acc, curr) => acc + (curr.count || 1), 0) || 0)}
+                    </span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setActiveTab('optimization')}
+                  className={cn(
+                    "py-4 text-sm font-heading font-medium border-b-2 transition-all duration-200",
+                    activeTab === 'optimization'
+                      ? "border-violet-600 text-violet-700 dark:text-violet-400 dark:border-violet-400"
+                      : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  )}
+                >
+                  {t('gcodeAnalytics.tabOptimization')}
+                </button>
+              </div>
+            </div >
+
+            <div className={cn(
+              "p-6 space-y-6",
+              embedded ? "min-h-[400px]" : "min-h-[600px]"
+            )}>
+              {/* ================================================================ */}
+              {/* TAB 1: 출력 정보 (Print Info) */}
+              {/* ================================================================ */}
+              {activeTab === 'info' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  {/* 주요 메트릭 카드 */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* 출력 시간 */}
+                    <MetricCard
+                      icon={<Clock className="h-5 w-5" />}
+                      label={t('gcodeAnalytics.printTime')}
+                      value={metrics.printTime.value}
+                      color="blue"
+                    />
+
+                    {/* 필라멘트 사용량 */}
+                    <MetricCard
+                      icon={<Box className="h-5 w-5" />}
+                      label={t('gcodeAnalytics.filament')}
+                      value={metrics.filamentUsage.length}
+                      subValue={metrics.filamentUsage.weight}
+                      color="green"
+                    />
+
+                    {/* 레이어 수 */}
+                    <MetricCard
+                      icon={<Layers className="h-5 w-5" />}
+                      label={t('gcodeAnalytics.layer')}
+                      value={metrics.layerCount.value.toLocaleString()}
+                      subValue={metrics.layerCount.layerHeight ? `${metrics.layerCount.layerHeight}mm` : undefined}
+                      color="purple"
+                    />
+
+                    {/* 리트렉션 횟수 */}
+                    <MetricCard
+                      icon={<Repeat2 className="h-5 w-5" />}
+                      label={t('gcodeAnalytics.retraction')}
+                      value={`${metrics.retractionCount.value.toLocaleString()} ${t('gcodeAnalytics.retractionCount', '회')}`}
+                      color="orange"
+                    />
+                  </div>
+
+                  {/* 차트 및 온도 섹션 */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {/* 서포트 비율 - 도넛 차트 */}
+                    <div className="bg-slate-50 dark:bg-slate-800/35 backdrop-blur rounded-xl p-5 border border-slate-200 dark:border-slate-700/65 flex flex-col">
+                      <h3 className="text-base font-heading font-semibold text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
+                        <Target className="h-5 w-5" />
+                        {t('gcodeAnalytics.supportRatio')}
+                      </h3>
+                      <div className="flex-grow flex items-center justify-center">
+                        <div className="relative w-40 h-40">
+                          {/* 도넛 차트 배경 */}
+                          <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r="40"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="10"
+                              className="text-slate-200 dark:text-slate-700"
+                            />
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r="40"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="10"
+                              strokeLinecap="round"
+                              strokeDasharray={`${(support.percentage / 100) * 251.2} 251.2`}
+                              className="text-primary"
+                            />
+                          </svg>
+                          {/* 중앙 텍스트 */}
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-3xl font-heading font-bold text-slate-900 dark:text-white">{support.percentage.toFixed(1)}%</span>
+                            {support.volume && (
+                              <span className="text-xs font-body text-slate-500 dark:text-slate-400">{support.volume}</span>
                             )}
-                            <div>
-                              <span className="block">{t(tempInterpretation.textKey)}</span>
-                              <span className="block mt-1 text-slate-500 dark:text-slate-400">
-                                {t('gcodeAnalytics.estimatedMaterial')}: <span className="text-slate-900 dark:text-white font-medium">{t(tempInterpretation.materialGuessKey)}</span>
-                              </span>
-                            </div>
                           </div>
                         </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-              </div>
-
-              {/* 양호 항목 (출력 정보 탭에 포함) */}
-              {analysis.goodPoints.length > 0 && (
-                <AnalysisSection
-                  title={t('gcodeAnalytics.highQuality')}
-                  icon={<CheckCircle2 className="h-5 w-5" />}
-                  items={analysis.goodPoints}
-                  variant="success"
-                />
-              )}
-
-              {/* 프린팅 정보 요약 (출력 정보 탭에 포함) */}
-              {data.detailedAnalysis?.printingInfo && (
-                <div className="bg-white/80 dark:bg-slate-800/40 backdrop-blur-sm rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm custom-scrollbar">
-                  <div className="flex items-center gap-3 mb-5 border-b border-slate-100 dark:border-slate-700/50 pb-4">
-                    <div className="p-2 bg-indigo-50 dark:bg-indigo-500/20 rounded-xl text-indigo-600 dark:text-indigo-400">
-                      <Info className="h-5 w-5" />
+                      </div>
+                      {/* 서포트 비율 해석 - 하단 고정 */}
+                      <div className="mt-auto">
+                        <InterpretationBadge {...getSupportInterpretation(support.percentage)} />
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-lg font-heading font-bold text-slate-900 dark:text-white">
-                        {t('gcodeAnalytics.diagnosisSummary')}
+
+
+                    {/* 속도 분포 - 바 차트 (speedDistribution이 있을 때만 표시) */}
+                    {speedDistribution && (
+                      <div className="bg-slate-50 dark:bg-slate-800/35 backdrop-blur rounded-xl p-5 border border-slate-200 dark:border-slate-700/65 flex flex-col">
+                        <h3 className="text-base font-heading font-semibold text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
+                          <Activity className="h-5 w-5" />
+                          {t('gcodeAnalytics.speedDistribution')}
+                        </h3>
+                        <div className="flex-grow space-y-3">
+                          {(() => {
+                            // 속도 중 최댓값을 기준으로 바 크기 계산
+                            const speeds = [
+                              speedDistribution.travel,
+                              speedDistribution.infill,
+                              speedDistribution.perimeter,
+                              speedDistribution.support,
+                            ].filter((v): v is number => v !== undefined);
+                            const maxSpeed = Math.max(...speeds);
+
+                            return (
+                              <>
+                                <SpeedBar label={t('gcodeAnalytics.travel')} value={speedDistribution.travel} maxValue={maxSpeed} color="blue" />
+                                <SpeedBar label={t('gcodeAnalytics.infill')} value={speedDistribution.infill} maxValue={maxSpeed} color="green" />
+                                <SpeedBar label={t('gcodeAnalytics.perimeter')} value={speedDistribution.perimeter} maxValue={maxSpeed} color="purple" />
+                                {speedDistribution.support !== undefined && (
+                                  <SpeedBar label={t('gcodeAnalytics.support')} value={speedDistribution.support} maxValue={maxSpeed} color="orange" />
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                        {/* 속도 분포 해석 - 하단 고정 */}
+                        <div className="mt-auto">
+                          <InterpretationBadge {...getSpeedInterpretation(speedDistribution)} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 온도 설정 */}
+                    <div className="bg-slate-50 dark:bg-slate-800/35 backdrop-blur rounded-xl p-5 border border-slate-200 dark:border-slate-700/65 flex flex-col">
+                      <h3 className="text-base font-heading font-semibold text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
+                        <Thermometer className="h-5 w-5" />
+                        {t('gcodeAnalytics.temperatureSettings')}
                       </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Detailed Analysis & Insights</p>
-                    </div>
-                  </div>
-
-                  {/* 진단 요약 설명 (diagnosisSummary에서 이동) */}
-                  {(data.detailedAnalysis?.diagnosisSummary?.keyIssue?.description || data.detailedAnalysis?.llmSummary) && (
-                    <div className="mb-6 p-4 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800/30">
-                      <p className="text-sm font-body text-slate-700 dark:text-slate-300 leading-relaxed">
-                        {data.detailedAnalysis?.diagnosisSummary?.keyIssue?.description || data.detailedAnalysis?.llmSummary}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* 온도 분석 */}
-                    {data.detailedAnalysis.printingInfo.temperature_analysis && (
-                      <div>
-                        <p className="text-xs font-heading font-bold uppercase text-slate-400 dark:text-slate-500 mb-2 tracking-wider">{t('gcodeAnalytics.temperatureAnalysis')}</p>
-                        <p className="text-sm font-body text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700/50">
-                          {data.detailedAnalysis.printingInfo.temperature_analysis}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* 속도 분석 */}
-                    {data.detailedAnalysis.printingInfo.speed_analysis && (
-                      <div>
-                        <p className="text-xs font-heading font-bold uppercase text-slate-400 dark:text-slate-500 mb-2 tracking-wider">{t('gcodeAnalytics.speedAnalysis')}</p>
-                        <p className="text-sm font-body text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700/50">
-                          {data.detailedAnalysis.printingInfo.speed_analysis}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* 재료 사용 */}
-                    {data.detailedAnalysis.printingInfo.material_usage && (
-                      <div className="md:col-span-2">
-                        <p className="text-xs font-heading font-bold uppercase text-slate-400 dark:text-slate-500 mb-2 tracking-wider">{t('gcodeAnalytics.materialUsage')}</p>
-                        <p className="text-sm font-body text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700/50">
-                          {data.detailedAnalysis.printingInfo.material_usage}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 권장사항 */}
-                  {data.detailedAnalysis.printingInfo.recommendations && data.detailedAnalysis.printingInfo.recommendations.length > 0 && (
-                    <div className="mt-6 pt-5 border-t border-slate-200 dark:border-slate-700/50">
-                      <p className="text-xs font-heading font-bold uppercase text-blue-500 dark:text-blue-400 mb-3 tracking-wider flex items-center gap-2">
-                        <TrendingUp className="h-3 w-3" />
-                        {t('gcodeAnalytics.recommendations')}
-                      </p>
-                      <ul className="space-y-2">
-                        {data.detailedAnalysis.printingInfo.recommendations.map((rec, idx) => (
-                          <li key={idx} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300 bg-blue-50/50 dark:bg-blue-900/10 p-3 rounded-lg">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0"></span>
-                            {rec}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ================================================================ */}
-          {/* TAB 2: 문제점 및 이상 상황 (Issues) */}
-          {/* ================================================================ */}
-          {activeTab === 'issues' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              {/* 진단 요약 카드 */}
-              {data.detailedAnalysis?.diagnosisSummary && (
-                <DiagnosisSummaryCard summary={data.detailedAnalysis.diagnosisSummary} detailedIssues={data.detailedAnalysis?.detailedIssues} />
-              )}
-
-              {/* 위험 경고 */}
-              {analysis.warnings.length > 0 && (
-                <AnalysisSection
-                  title={t('gcodeAnalytics.dangerWarning')}
-                  icon={<AlertTriangle className="h-5 w-5" />}
-                  items={analysis.warnings}
-                  variant="danger"
-                />
-              )}
-
-              {/* 주의사항 */}
-              {analysis.cautions.length > 0 && (
-                <AnalysisSection
-                  title={t('gcodeAnalytics.cautions')}
-                  icon={<Info className="h-5 w-5" />}
-                  items={analysis.cautions}
-                  variant="warning"
-                />
-              )}
-
-              {/* 문제 유형별 통계 */}
-              {data.detailedAnalysis?.issueStatistics && data.detailedAnalysis.issueStatistics.length > 0 && (
-                <IssueStatisticsChart statistics={data.detailedAnalysis.issueStatistics} />
-              )}
-
-              {/* 상세 이슈 목록 */}
-              {data.detailedAnalysis?.detailedIssues && data.detailedAnalysis.detailedIssues.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-slate-900 dark:text-white font-heading font-semibold">
-                    <ListChecks className="h-5 w-5 text-slate-500 dark:text-slate-400" />
-                    {t('gcodeAnalytics.detailedIssueAnalysis')}
-                  </div>
-                  <div className="divide-y divide-slate-200 dark:divide-slate-600/60 rounded-xl border border-slate-200 dark:border-slate-600/65 overflow-hidden bg-slate-50 dark:bg-slate-800/35">
-                    {data.detailedAnalysis.detailedIssues.map((issue, index) => (
-                      <DetailedIssueCard
-                        key={index}
-                        issue={issue}
-                        index={index}
-                        isExpanded={expandedIssueIndices.has(index)}
-                        onToggle={() => {
-                          setExpandedIssueIndices(prev => {
-                            const newSet = new Set(prev);
-                            if (newSet.has(index)) {
-                              newSet.delete(index);
-                            } else {
-                              newSet.add(index);
-                            }
-                            return newSet;
-                          });
-                        }}
-                        gcodeContent={data.gcodeContent}
-                        onSaveGCode={handleSaveGCode}
-                        fileName={data.fileName}
-                        allIssues={data.detailedAnalysis?.detailedIssues || []}
-                        patches={data.detailedAnalysis?.patchSuggestions || []}
-                        reportId={data.reportId}
-                        metrics={data.metrics}
-                        analysisId={data.analysisId}
-                        onAIResolveStart={onAIResolveStart}
-                        onAIResolveComplete={onAIResolveComplete}
-                        onAIResolveError={onAIResolveError}
-                        isAIResolving={isAIResolving}
-                        groupCount={issue.count}
-                        groupLines={issue.lines}
-                        onLineClick={handleIssueClickToEditor}
-                        resolvedLines={resolvedIssueLines}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-10 text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/10 rounded-xl border border-slate-300 dark:border-slate-800 border-dashed font-body">
-                  발견된 상세 문제가 없습니다.
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ================================================================ */}
-          {/* TAB 3: 최적화 방안 (Optimization) */}
-          {/* ================================================================ */}
-          {activeTab === 'optimization' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              {/* AI 최적화 제안 (AnalysisSection 활용) */}
-              {analysis.suggestions.length > 0 && (
-                <AnalysisSection
-                  title="AI 최적화 제안"
-                  icon={<TrendingUp className="h-5 w-5" />}
-                  items={analysis.suggestions}
-                  variant="info"
-                />
-              )}
-
-              {/* 예상 개선 효과 (solutionGuides 중복 제거, 개선 효과만 표시) */}
-              {data.detailedAnalysis?.expectedImprovements && data.detailedAnalysis.expectedImprovements.length > 0 && (
-                <div className="bg-green-50 dark:bg-green-500/5 border border-green-200 dark:border-green-500/20 rounded-xl p-6">
-                  <h3 className="text-xl font-title font-bold text-green-600 dark:text-green-300 mb-5 flex items-center gap-2">
-                    <TrendingUp className="h-6 w-6" />
-                    예상 개선 효과
-                  </h3>
-                  <div className="space-y-4">
-                    {data.detailedAnalysis.expectedImprovements.map((imp, index) => (
-                      <div key={index}>
-                        <div className="flex items-center justify-between text-base mb-1">
-                          <span className="font-body text-slate-600 dark:text-slate-400">{imp.label}</span>
-                          <span className="font-score font-black text-green-600 dark:text-green-400">{imp.value}</span>
+                      <div className="flex-grow space-y-4">
+                        <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-700/30 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-red-500" />
+                            <span className="text-base font-body text-slate-700 dark:text-white">{t('gcodeAnalytics.nozzle')}</span>
+                          </div>
+                          <span className="text-xl font-heading font-bold text-slate-900 dark:text-white">{typeof temperature.nozzle === 'number' ? temperature.nozzle.toFixed(1) : temperature.nozzle}°C</span>
                         </div>
-                        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                          <div
-                            className="bg-green-500 h-2 rounded-full transition-all duration-500"
-                            style={{ width: `${imp.progress}%` }}
+                        <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-700/30 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-orange-500" />
+                            <span className="text-base font-body text-slate-700 dark:text-white">{t('gcodeAnalytics.bed')}</span>
+                          </div>
+                          <span className="text-xl font-heading font-bold text-slate-900 dark:text-white">{typeof temperature.bed === 'number' ? temperature.bed.toFixed(1) : temperature.bed}°C</span>
+                        </div>
+                        {temperature.firstLayer && (
+                          <div className="pt-2 border-t border-slate-200 dark:border-slate-700/50">
+                            <p className="text-sm text-slate-500 mb-2">{t('gcodeAnalytics.firstLayerSettings')}</p>
+                            <div className="grid grid-cols-2 gap-2 text-sm text-slate-700 dark:text-white">
+                              {temperature.firstLayer.nozzle && (
+                                <span>{t('gcodeAnalytics.nozzle')}: {typeof temperature.firstLayer.nozzle === 'number' ? temperature.firstLayer.nozzle.toFixed(1) : temperature.firstLayer.nozzle}°C</span>
+                              )}
+                              {temperature.firstLayer.bed && (
+                                <span>{t('gcodeAnalytics.bed')}: {typeof temperature.firstLayer.bed === 'number' ? temperature.firstLayer.bed.toFixed(1) : temperature.firstLayer.bed}°C</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      {/* 온도 설정 해석 - 하단 고정 */}
+                      <div className="mt-auto">
+                        {(() => {
+                          const tempInterpretation = getTemperatureInterpretation(temperature);
+                          return (
+                            <div className={cn(
+                              "mt-3 p-2 rounded-lg border text-xs",
+                              tempInterpretation.status === 'good' && "bg-emerald-50 dark:bg-emerald-500/20 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300",
+                              tempInterpretation.status === 'warning' && "bg-yellow-50 dark:bg-yellow-500/20 border-yellow-200 dark:border-yellow-500/30 text-yellow-700 dark:text-yellow-300",
+                              tempInterpretation.status === 'bad' && "bg-red-50 dark:bg-red-500/20 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300"
+                            )}>
+                              <div className="flex items-start gap-2">
+                                {tempInterpretation.status === 'good' ? (
+                                  <CheckCircle2 className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                                ) : (
+                                  <AlertTriangle className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                                )}
+                                <div>
+                                  <span className="block">{t(tempInterpretation.textKey)}</span>
+                                  <span className="block mt-1 text-slate-500 dark:text-slate-400">
+                                    {t('gcodeAnalytics.estimatedMaterial')}: <span className="text-slate-900 dark:text-white font-medium">{t(tempInterpretation.materialGuessKey)}</span>
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 양호 항목 (출력 정보 탭에 포함) */}
+                  {analysis.goodPoints.length > 0 && (
+                    <AnalysisSection
+                      title={t('gcodeAnalytics.highQuality')}
+                      icon={<CheckCircle2 className="h-5 w-5" />}
+                      items={analysis.goodPoints}
+                      variant="success"
+                    />
+                  )}
+
+                  {/* 프린팅 정보 요약 (출력 정보 탭에 포함) */}
+                  {data.detailedAnalysis?.printingInfo && (
+                    <div className="bg-white/80 dark:bg-slate-800/40 backdrop-blur-sm rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm custom-scrollbar">
+                      <div className="flex items-center gap-3 mb-5 border-b border-slate-100 dark:border-slate-700/50 pb-4">
+                        <div className="p-2 bg-indigo-50 dark:bg-indigo-500/20 rounded-xl text-indigo-600 dark:text-indigo-400">
+                          <Info className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-heading font-bold text-slate-900 dark:text-white">
+                            {t('gcodeAnalytics.diagnosisSummary')}
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Detailed Analysis & Insights</p>
+                        </div>
+                      </div>
+
+                      {/* 진단 요약 설명 (diagnosisSummary에서 이동) */}
+                      {(data.detailedAnalysis?.diagnosisSummary?.keyIssue?.description || data.detailedAnalysis?.llmSummary) && (
+                        <div className="mb-6 p-4 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800/30">
+                          <p className="text-sm font-body text-slate-700 dark:text-slate-300 leading-relaxed">
+                            {data.detailedAnalysis?.diagnosisSummary?.keyIssue?.description || data.detailedAnalysis?.llmSummary}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* 온도 분석 */}
+                        {data.detailedAnalysis.printingInfo.temperature_analysis && (
+                          <div>
+                            <p className="text-xs font-heading font-bold uppercase text-slate-400 dark:text-slate-500 mb-2 tracking-wider">{t('gcodeAnalytics.temperatureAnalysis')}</p>
+                            <p className="text-sm font-body text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700/50">
+                              {data.detailedAnalysis.printingInfo.temperature_analysis}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* 속도 분석 */}
+                        {data.detailedAnalysis.printingInfo.speed_analysis && (
+                          <div>
+                            <p className="text-xs font-heading font-bold uppercase text-slate-400 dark:text-slate-500 mb-2 tracking-wider">{t('gcodeAnalytics.speedAnalysis')}</p>
+                            <p className="text-sm font-body text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700/50">
+                              {data.detailedAnalysis.printingInfo.speed_analysis}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* 재료 사용 */}
+                        {data.detailedAnalysis.printingInfo.material_usage && (
+                          <div className="md:col-span-2">
+                            <p className="text-xs font-heading font-bold uppercase text-slate-400 dark:text-slate-500 mb-2 tracking-wider">{t('gcodeAnalytics.materialUsage')}</p>
+                            <p className="text-sm font-body text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700/50">
+                              {data.detailedAnalysis.printingInfo.material_usage}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 권장사항 */}
+                      {data.detailedAnalysis.printingInfo.recommendations && data.detailedAnalysis.printingInfo.recommendations.length > 0 && (
+                        <div className="mt-6 pt-5 border-t border-slate-200 dark:border-slate-700/50">
+                          <p className="text-xs font-heading font-bold uppercase text-blue-500 dark:text-blue-400 mb-3 tracking-wider flex items-center gap-2">
+                            <TrendingUp className="h-3 w-3" />
+                            {t('gcodeAnalytics.recommendations')}
+                          </p>
+                          <ul className="space-y-2">
+                            {data.detailedAnalysis.printingInfo.recommendations.map((rec, idx) => (
+                              <li key={idx} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300 bg-blue-50/50 dark:bg-blue-900/10 p-3 rounded-lg">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0"></span>
+                                {rec}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ================================================================ */}
+              {/* TAB 2: 문제점 및 이상 상황 (Issues) */}
+              {/* ================================================================ */}
+              {activeTab === 'issues' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  {/* 진단 요약 카드 */}
+                  {data.detailedAnalysis?.diagnosisSummary && (
+                    <DiagnosisSummaryCard summary={data.detailedAnalysis.diagnosisSummary} detailedIssues={data.detailedAnalysis?.detailedIssues} />
+                  )}
+
+                  {/* 위험 경고 */}
+                  {analysis.warnings.length > 0 && (
+                    <AnalysisSection
+                      title={t('gcodeAnalytics.dangerWarning')}
+                      icon={<AlertTriangle className="h-5 w-5" />}
+                      items={analysis.warnings}
+                      variant="danger"
+                    />
+                  )}
+
+                  {/* 주의사항 */}
+                  {analysis.cautions.length > 0 && (
+                    <AnalysisSection
+                      title={t('gcodeAnalytics.cautions')}
+                      icon={<Info className="h-5 w-5" />}
+                      items={analysis.cautions}
+                      variant="warning"
+                    />
+                  )}
+
+                  {/* 문제 유형별 통계 */}
+                  {data.detailedAnalysis?.issueStatistics && data.detailedAnalysis.issueStatistics.length > 0 && (
+                    <IssueStatisticsChart statistics={data.detailedAnalysis.issueStatistics} />
+                  )}
+
+                  {/* 상세 이슈 목록 */}
+                  {data.detailedAnalysis?.detailedIssues && data.detailedAnalysis.detailedIssues.length > 0 ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-slate-900 dark:text-white font-heading font-semibold">
+                        <ListChecks className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+                        {t('gcodeAnalytics.detailedIssueAnalysis')}
+                      </div>
+                      <div className="divide-y divide-slate-200 dark:divide-slate-600/60 rounded-xl border border-slate-200 dark:border-slate-600/65 overflow-hidden bg-slate-50 dark:bg-slate-800/35">
+                        {data.detailedAnalysis.detailedIssues.map((issue, index) => (
+                          <DetailedIssueCard
+                            key={index}
+                            issue={issue}
+                            index={index}
+                            isExpanded={expandedIssueIndices.has(index)}
+                            onToggle={() => {
+                              setExpandedIssueIndices(prev => {
+                                const newSet = new Set(prev);
+                                if (newSet.has(index)) {
+                                  newSet.delete(index);
+                                } else {
+                                  newSet.add(index);
+                                }
+                                return newSet;
+                              });
+                            }}
+                            gcodeContent={data.gcodeContent}
+                            onSaveGCode={handleSaveGCode}
+                            fileName={data.fileName}
+                            allIssues={data.detailedAnalysis?.detailedIssues || []}
+                            patches={data.detailedAnalysis?.patchSuggestions || []}
+                            reportId={data.reportId}
+                            metrics={data.metrics}
+                            analysisId={data.analysisId}
+                            onAIResolveStart={onAIResolveStart}
+                            onAIResolveComplete={onAIResolveComplete}
+                            onAIResolveError={onAIResolveError}
+                            isAIResolving={isAIResolving}
+                            groupCount={issue.count}
+                            groupLines={issue.lines}
+                            onLineClick={handleIssueClickToEditor}
+                            resolvedLines={resolvedIssueLines}
                           />
-                        </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-10 text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/10 rounded-xl border border-slate-300 dark:border-slate-800 border-dashed font-body">
+                      발견된 상세 문제가 없습니다.
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* 패치 제안 */}
-              {data.detailedAnalysis?.patchSuggestions && data.detailedAnalysis.patchSuggestions.length > 0 && (
-                <PatchSuggestionsSection patches={data.detailedAnalysis.patchSuggestions} />
+              {/* ================================================================ */}
+              {/* TAB 3: 최적화 방안 (Optimization) */}
+              {/* ================================================================ */}
+              {activeTab === 'optimization' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  {/* AI 최적화 제안 (AnalysisSection 활용) */}
+                  {analysis.suggestions.length > 0 && (
+                    <AnalysisSection
+                      title="AI 최적화 제안"
+                      icon={<TrendingUp className="h-5 w-5" />}
+                      items={analysis.suggestions}
+                      variant="info"
+                    />
+                  )}
+
+                  {/* 예상 개선 효과 */}
+                  <ExpectedImprovementsSection improvements={data.detailedAnalysis?.expectedImprovements || []} />
+
+                  {/* 패치 제안 */}
+                  {data.detailedAnalysis?.patchSuggestions && data.detailedAnalysis.patchSuggestions.length > 0 && (
+                    <PatchSuggestionsSection patches={data.detailedAnalysis.patchSuggestions} />
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
-      </div>
-      </ScrollArea>
+          </div>
+        </ScrollArea>
       )}
     </div>
   );
@@ -3470,185 +2934,6 @@ function AnalysisSection({ title, icon, items, variant }: AnalysisSectionProps) 
   );
 }
 
-// ============================================================================
-// AI 상세 분석 섹션 컴포넌트
-// ============================================================================
-
-interface DetailedAnalysisSectionProps {
-  detailedAnalysis: NonNullable<GCodeAnalysisData['detailedAnalysis']>;
-  gcodeContent?: string;
-  onSaveGCode?: (newContent: string) => Promise<void>;
-  fileName?: string;
-  metrics?: GCodeAnalysisData['metrics'];
-  analysisId?: string;
-  onAIResolveStart?: (info: AIResolveStartInfo) => void;
-  onAIResolveComplete?: (info: AIResolveCompleteInfo) => void;
-  onAIResolveError?: (error: string) => void;
-  isAIResolving?: boolean;
-  onLineClick?: (line: number | string) => void;
-}
-
-function DetailedAnalysisSection({ detailedAnalysis, gcodeContent, onSaveGCode, fileName, metrics, analysisId, onAIResolveStart, onAIResolveComplete, onAIResolveError, isAIResolving, onLineClick }: DetailedAnalysisSectionProps) {
-  const [expandedIssue, setExpandedIssue] = useState<number | null>(null);
-  const [showAllIssues, setShowAllIssues] = useState(false);
-
-  const {
-    diagnosisSummary,
-    issueStatistics,
-    detailedIssues,
-    patchSuggestions,
-    expectedImprovements,
-    llmSummary,
-    llmRecommendation
-  } = detailedAnalysis;
-
-  // 백엔드에서 그룹화된 이슈를 그대로 사용
-  // 새 구조: lines, count, is_grouped가 항상 존재
-  const groupedIssues = useMemo(() => {
-    if (!detailedIssues || detailedIssues.length === 0) return [];
-
-    return detailedIssues.map(issue => ({
-      issue,
-      // 새 구조: lines 배열이 항상 존재 (레거시 폴백 포함)
-      lines: issue.lines || (issue.line !== undefined ? [issue.line] : []),
-      count: issue.count || 1,
-    }));
-  }, [detailedIssues]);
-
-  // 표시할 이슈 수 제한
-  const displayedIssues = showAllIssues
-    ? groupedIssues
-    : groupedIssues?.slice(0, 5);
-
-  return (
-    <div className="space-y-6 pt-6 border-t border-slate-200 dark:border-slate-700/50">
-      {/* 섹션 헤더 */}
-      <div className="flex items-center gap-3">
-        <div className="p-2 bg-violet-100 dark:bg-violet-500/20 rounded-lg">
-          <Zap className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-        </div>
-        <div>
-          <h2 className="text-lg font-title font-bold text-slate-900 dark:text-white">AI 상세 분석 결과</h2>
-          <p className="text-xs font-body text-slate-500 dark:text-slate-400">LLM이 분석한 G-code 문제점 및 해결 방안</p>
-        </div>
-      </div>
-
-      {/* 진단 요약 카드 */}
-      {diagnosisSummary && (
-        <DiagnosisSummaryCard summary={diagnosisSummary} detailedIssues={detailedIssues} />
-      )}
-
-      {/* 문제 유형별 통계 */}
-      {issueStatistics && issueStatistics.length > 0 && (
-        <IssueStatisticsChart statistics={issueStatistics} />
-      )}
-
-      {/* 예상 개선 효과 */}
-      {expectedImprovements && expectedImprovements.length > 0 && (
-        <div className="bg-green-50 dark:bg-green-500/5 border border-green-200 dark:border-green-500/20 rounded-xl p-6">
-          <h3 className="text-xl font-title font-bold text-green-600 dark:text-green-300 mb-5 flex items-center gap-2">
-            <TrendingUp className="h-6 w-6" />
-            예상 개선 효과
-          </h3>
-          <div className="space-y-4">
-            {expectedImprovements.map((imp, index) => (
-              <div key={index}>
-                <div className="flex items-center justify-between text-base mb-1">
-                  <span className="font-body text-slate-600 dark:text-slate-400">{imp.label}</span>
-                  <span className="font-score font-black text-green-600 dark:text-green-400">{imp.value}</span>
-                </div>
-                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                  <div
-                    className="bg-green-500 h-2 rounded-full transition-all duration-500"
-                    style={{ width: `${imp.progress}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 상세 이슈 목록 */}
-      {detailedIssues && detailedIssues.length > 0 && (
-        <div className="bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-200 dark:border-slate-700/50 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700/50 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ListChecks className="h-5 w-5 text-slate-500 dark:text-slate-400" />
-              <h3 className="font-heading font-semibold text-slate-900 dark:text-white">발견된 문제 상세 분석</h3>
-              <span className="text-xs font-score font-black bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-300 px-2 py-0.5 rounded-full">
-                {groupedIssues.reduce((sum, g) => sum + g.count, 0)}건 ({groupedIssues.length}종류)
-              </span>
-            </div>
-            {groupedIssues.length > 5 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAllIssues(!showAllIssues)}
-                className="font-body text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              >
-                {showAllIssues ? '접기' : `모두 보기 (${groupedIssues.length})`}
-                {showAllIssues ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
-              </Button>
-            )}
-          </div>
-          <div className="divide-y divide-slate-200 dark:divide-slate-700/30">
-            {displayedIssues?.map((groupedIssue, index) => (
-              <DetailedIssueCard
-                key={index}
-                issue={groupedIssue.issue}
-                index={index}
-                isExpanded={expandedIssue === index}
-                onToggle={() => setExpandedIssue(expandedIssue === index ? null : index)}
-                gcodeContent={gcodeContent}
-                onSaveGCode={onSaveGCode}
-                fileName={fileName}
-                allIssues={detailedIssues}
-                patches={patchSuggestions || []}
-                analysisId={analysisId}
-                onAIResolveStart={onAIResolveStart}
-                onAIResolveComplete={onAIResolveComplete}
-                onAIResolveError={onAIResolveError}
-                isAIResolving={isAIResolving}
-                groupCount={groupedIssue.count}
-                groupLines={groupedIssue.lines}
-                onLineClick={onLineClick}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 패치 제안 */}
-      {patchSuggestions && patchSuggestions.length > 0 && (
-        <PatchSuggestionsSection patches={patchSuggestions} />
-      )}
-
-      {/* LLM 요약 텍스트 */}
-      {llmSummary && (
-        <div className="bg-slate-50 dark:bg-slate-800/30 rounded-xl p-5 border border-slate-200 dark:border-slate-700/50">
-          <h3 className="text-sm font-heading font-semibold text-slate-600 dark:text-slate-400 mb-3 flex items-center gap-2">
-            <Info className="h-4 w-4" />
-            분석 요약
-          </h3>
-          <p className="text-sm font-body text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{llmSummary}</p>
-        </div>
-      )}
-
-      {/* LLM 권장사항 */}
-      {llmRecommendation && (
-        <div className="bg-blue-50 dark:bg-blue-500/10 rounded-xl p-5 border border-blue-200 dark:border-blue-500/30">
-          <h3 className="text-sm font-heading font-semibold text-blue-600 dark:text-blue-400 mb-3 flex items-center gap-2">
-            <TrendingUp className="h-4 w-4" />
-            권장사항
-          </h3>
-          <p className="text-sm font-body text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{llmRecommendation}</p>
-        </div>
-      )}
-    </div>
-  );
-};
-
 // 진단 요약 카드
 function DiagnosisSummaryCard({ summary, detailedIssues }: { summary: DiagnosisSummary; detailedIssues?: DetailedIssue[] }) {
   const { t } = useTranslation();
@@ -3658,48 +2943,10 @@ function DiagnosisSummaryCard({ summary, detailedIssues }: { summary: DiagnosisS
     ? detailedIssues.reduce((total, issue) => total + (issue.count || 1), 0)
     : summary.totalIssues;
 
-  const severityStyles = {
-    critical: {
-      bg: 'bg-rose-50 dark:bg-rose-950/20',
-      border: 'border-rose-100 dark:border-rose-900/30',
-      icon: 'text-rose-600 dark:text-rose-400',
-      badge: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
-    },
-    high: {
-      bg: 'bg-red-50 dark:bg-red-950/20',
-      border: 'border-red-100 dark:border-red-900/30',
-      icon: 'text-red-600 dark:text-red-400',
-      badge: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300'
-    },
-    medium: {
-      bg: 'bg-orange-50 dark:bg-orange-950/20',
-      border: 'border-orange-100 dark:border-orange-900/30',
-      icon: 'text-orange-600 dark:text-orange-400',
-      badge: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300'
-    },
-    low: {
-      bg: 'bg-yellow-50 dark:bg-yellow-950/20',
-      border: 'border-yellow-100 dark:border-yellow-900/30',
-      icon: 'text-yellow-600 dark:text-yellow-400',
-      badge: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-300'
-    },
-    info: {
-      bg: 'bg-blue-50 dark:bg-blue-950/20',
-      border: 'border-blue-100 dark:border-blue-900/30',
-      icon: 'text-blue-600 dark:text-blue-400',
-      badge: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300'
-    }
-  };
-
-  const severityLabels: Record<string, string> = {
-    critical: t('gcodeAnalytics.severityCritical'),
-    high: t('gcodeAnalytics.severityHigh'),
-    medium: t('gcodeAnalytics.severityMedium'),
-    low: t('gcodeAnalytics.severityLow'),
-    info: t('gcodeAnalytics.severityInfo'),
-  };
-
-  const style = severityStyles[summary.severity] || severityStyles.info;
+  // 공통 유틸리티 사용
+  const severityLabels = useSeverityLabels();
+  const cardStyle = severityCardStyles[summary.severity] || severityCardStyles.info;
+  const badgeStyle = severityBadgeStyles[summary.severity] || severityBadgeStyles.info;
 
   // 출력 판단 문구 생성 (severity 기반)
   const getPrintabilityVerdict = () => {
@@ -3718,14 +2965,14 @@ function DiagnosisSummaryCard({ summary, detailedIssues }: { summary: DiagnosisS
   };
 
   return (
-    <div className={cn("rounded-xl p-5 border shadow-sm", style.bg, style.border)}>
+    <div className={cn("rounded-xl p-5 border shadow-sm", cardStyle.bg, cardStyle.border)}>
       <div className="flex flex-col md:flex-row gap-4 md:items-start">
-        <div className={cn("p-3 rounded-xl bg-white shadow-sm shrink-0", style.icon)}>
+        <div className={cn("p-3 rounded-xl bg-white shadow-sm shrink-0", cardStyle.icon)}>
           <Thermometer className="h-7 w-7" strokeWidth={1.5} />
         </div>
         <div className="flex-1 space-y-1.5">
           <div className="flex items-center gap-2">
-            <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider", style.badge)}>
+            <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider", badgeStyle)}>
               {severityLabels[summary.severity] || summary.severity}
             </span>
             <span className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-wider">{t('gcodeAnalytics.diagnosisSummary')}</span>
@@ -3858,15 +3105,9 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [showResolution, setShowResolution] = useState(false);
 
-  const severityStyles = {
-    critical: { strip: 'bg-rose-600', badge: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300', icon: 'text-rose-600' },
-    high: { strip: 'bg-red-500', badge: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300', icon: 'text-red-500' },
-    medium: { strip: 'bg-orange-500', badge: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300', icon: 'text-orange-500' },
-    low: { strip: 'bg-amber-400', badge: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300', icon: 'text-amber-500' },
-    info: { strip: 'bg-blue-400', badge: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300', icon: 'text-blue-500' },
-  };
-
-  const style = severityStyles[issue.severity] || severityStyles.info;
+  // 공통 유틸리티 사용
+  const stripStyle = severityStripStyles[issue.severity] || severityStripStyles.info;
+  const badgeStyle = severityBadgeStyles[issue.severity] || severityBadgeStyles.info;
 
   // 이슈가 해결되었는지 확인 (이슈의 라인 번호 중 하나라도 resolvedLines에 있으면 해결됨)
   const isResolved = useMemo(() => {
@@ -3919,8 +3160,8 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
     const effectiveGroupCount = groupCount || issue.count || 1;
     const isGrouped = issue.is_grouped || effectiveGroupCount > 1 || effectiveGroupLines.length > 1;
 
-    // 대표 라인 번호 (새 구조: lines[0] 사용)
-    const lineNumber = effectiveGroupLines[0] || (typeof issue.line === 'string' ? parseInt(issue.line, 10) : (issue.line || issue.line_index as number || 0));
+    // 대표 라인 번호 (새 구조: lines[0] 사용) - 공유 유틸리티 사용
+    const lineNumber = effectiveGroupLines[0] || toLineNumber(issue.line) || (issue.line_index as number || 0);
     const issueTitle = issue.title || getIssueTypeLabel(issue.type || issue.issueType || '');
 
     // 시작 콜백 호출 (사용자 질문 메시지 + 로딩 시작)
@@ -3999,7 +3240,7 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
         {/* Left Status Strip */}
         <div className={cn(
           "absolute left-0 top-0 bottom-0 w-1 transition-all duration-300",
-          isResolved ? "bg-emerald-500" : style.strip,
+          isResolved ? "bg-emerald-500" : stripStyle.strip,
           isExpanded || isResolved ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         )} />
 
@@ -4010,7 +3251,7 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
         >
           <div className="flex items-center gap-4 overflow-hidden">
             {/* Icon Box */}
-            <div className={cn("p-2 rounded-lg bg-slate-100 dark:bg-slate-800 shrink-0", style.icon)}>
+            <div className={cn("p-2 rounded-lg bg-slate-100 dark:bg-slate-800 shrink-0", stripStyle.icon)}>
               {getIssueIcon(issue.issueType)}
             </div>
 
@@ -4019,7 +3260,7 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
                 <h4 className="font-heading font-bold text-slate-900 dark:text-white truncate">
                   {issue.title || getIssueTypeLabel(issue.type || issue.issueType || '')}
                 </h4>
-                <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider", style.badge)}>
+                <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider", badgeStyle)}>
                   {getSeverityLabel(issue.severity)}
                 </span>
                 {/* 해결됨 뱃지 */}
@@ -4216,470 +3457,39 @@ function DetailedIssueCard({ issue, index, isExpanded, onToggle, gcodeContent, o
   );
 }
 
-// AI 해결 결과 패널
-function AIResolutionPanel({
-  resolution,
-  onClose,
-  onViewCode,
-  onViewCodeFix
-}: {
-  resolution: IssueResolveResponse;
-  onClose: () => void;
-  onViewCode?: () => void;
-  onViewCodeFix?: (fix: { line_number: number | null; original: string | null; fixed: string | null }) => void;
-}) {
+// 예상 개선 효과 섹션 (중복 제거용 컴포넌트)
+function ExpectedImprovementsSection({ improvements }: { improvements: ExpectedImprovement[] }) {
   const { t } = useTranslation();
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['explanation']));
 
-  const toggleSection = (section: string) => {
-    setExpandedSections(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(section)) {
-        newSet.delete(section);
-      } else {
-        newSet.add(section);
-      }
-      return newSet;
-    });
-  };
-
-  const { explanation, solution, tips } = resolution.resolution;
-
-  // 디버그: solution 구조 확인
-  console.log('[AIResolutionPanel] solution:', solution);
-  console.log('[AIResolutionPanel] solution.code_fix:', solution?.code_fix);
-  console.log('[AIResolutionPanel] solution.code_fixes:', solution?.code_fixes);
-
-  // 디버그: code_fixes 배열 각 항목 상세 출력
-  if (solution?.code_fixes) {
-    console.log('[AIResolutionPanel] code_fixes length:', solution.code_fixes.length);
-    solution.code_fixes.forEach((fix, idx) => {
-      console.log(`[AIResolutionPanel] code_fixes[${idx}]:`, {
-        line_number: fix.line_number,
-        has_fix: fix.has_fix,
-        original: fix.original ? `"${fix.original.substring(0, 50)}..."` : null,
-        fixed: fix.fixed ? `"${fix.fixed.substring(0, 50)}..."` : null,
-        original_type: typeof fix.original,
-        fixed_type: typeof fix.fixed,
-        passesFilter: !!(fix.original && fix.fixed)
-      });
-    });
-    const filtered = solution.code_fixes.filter(fix => fix.original && fix.fixed);
-    console.log('[AIResolutionPanel] filtered code_fixes count:', filtered.length);
-  }
-
-  // 심각도 라벨
-  const severityLabels: Record<string, string> = {
-    none: t('gcodeAnalytics.severityNone', '없음'),
-    low: t('gcodeAnalytics.severityLow', '낮음'),
-    medium: t('gcodeAnalytics.severityMedium', '중간'),
-    high: t('gcodeAnalytics.severityHigh', '높음'),
-    critical: t('gcodeAnalytics.severityCritical', '치명적'),
-  };
-
-  // 오탐 여부에 따라 헤더 색상/텍스트 변경
-  const isNormal = explanation.is_false_positive;
+  if (!improvements || improvements.length === 0) return null;
 
   return (
-    <div className={cn(
-      "mt-4 border rounded-xl overflow-hidden",
-      isNormal
-        ? "bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 border-emerald-200 dark:border-emerald-800/50"
-        : "bg-gradient-to-br from-violet-50 to-indigo-50 dark:from-violet-900/20 dark:to-indigo-900/20 border-violet-200 dark:border-violet-800/50"
-    )}>
-      {/* 헤더 */}
-      <div className={cn(
-        "flex items-center justify-between px-4 py-3 text-white",
-        isNormal
-          ? "bg-gradient-to-r from-emerald-600 to-green-600"
-          : "bg-gradient-to-r from-violet-600 to-indigo-600"
-      )}>
-        <div className="flex items-center gap-2">
-          {isNormal ? <CheckCircle2 className="h-4 w-4" /> : <Zap className="h-4 w-4" />}
-          <span className="font-heading font-bold text-sm">
-            {isNormal
-              ? t('gcodeAnalytics.analysisResultNormal', '분석 결과: 정상')
-              : t('gcodeAnalytics.aiResolution', 'AI 해결 방안')
-            }
-          </span>
-        </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-6 w-6 p-0 text-white hover:bg-white/20"
-          onClick={onClose}
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-
-      <div className="p-4 space-y-3">
-        {/* 분석 요약 */}
-        <CollapsibleSection
-          title={t('gcodeAnalytics.analysisSummary', '분석 요약')}
-          icon={<Target className="h-4 w-4" />}
-          isExpanded={expandedSections.has('explanation')}
-          onToggle={() => toggleSection('explanation')}
-        >
-          <div className="space-y-2 text-sm">
-            <p className="text-slate-600 dark:text-slate-400">{explanation.summary}</p>
-            <p>
-              <strong className="text-slate-700 dark:text-slate-300">{t('gcodeAnalytics.cause', '원인')}:</strong>{' '}
-              <span className="text-slate-600 dark:text-slate-400">{explanation.cause}</span>
-            </p>
-            {!isNormal && explanation.severity !== 'none' && (
-              <p>
-                <strong className="text-slate-700 dark:text-slate-300">{t('gcodeAnalytics.severity', '심각도')}:</strong>{' '}
-                <span className={cn(
-                  "font-medium",
-                  explanation.severity === 'critical' && "text-rose-600 dark:text-rose-400",
-                  explanation.severity === 'high' && "text-red-600 dark:text-red-400",
-                  explanation.severity === 'medium' && "text-orange-600 dark:text-orange-400",
-                  explanation.severity === 'low' && "text-amber-600 dark:text-amber-400",
-                )}>
-                  {severityLabels[explanation.severity] || explanation.severity}
-                </span>
-              </p>
-            )}
+    <div className="bg-green-50 dark:bg-green-500/5 border border-green-200 dark:border-green-500/20 rounded-xl p-6">
+      <h3 className="text-xl font-title font-bold text-green-600 dark:text-green-300 mb-5 flex items-center gap-2">
+        <TrendingUp className="h-6 w-6" />
+        {t('gcodeAnalytics.expectedImprovements', '예상 개선 효과')}
+      </h3>
+      <div className="space-y-4">
+        {improvements.map((imp, index) => (
+          <div key={index}>
+            <div className="flex items-center justify-between text-base mb-1">
+              <span className="font-body text-slate-600 dark:text-slate-400">{imp.label}</span>
+              <span className="font-score font-black text-green-600 dark:text-green-400">{imp.value}</span>
+            </div>
+            <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+              <div
+                className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                style={{ width: `${imp.progress}%` }}
+              />
+            </div>
           </div>
-        </CollapsibleSection>
-
-        {/* 해결 방안 (조치가 필요한 경우에만) */}
-        {solution.action_needed && (
-          <CollapsibleSection
-            title={t('gcodeAnalytics.solutionTitle', '해결 방안')}
-            icon={<CheckCircle2 className="h-4 w-4" />}
-            isExpanded={expandedSections.has('solution')}
-            onToggle={() => toggleSection('solution')}
-            highlight
-          >
-            <div className="space-y-2 text-sm">
-              {solution.steps?.length > 0 && (
-                <ol className="list-decimal list-inside space-y-1 text-slate-600 dark:text-slate-400">
-                  {solution.steps.map((step, i) => <li key={`solution-step-${i}-${step.slice(0, 20)}`}>{step}</li>)}
-                </ol>
-              )}
-            </div>
-          </CollapsibleSection>
-        )}
-
-        {/* 코드 수정 (있는 경우) */}
-        {(solution.code_fix?.has_fix || (solution.code_fixes && solution.code_fixes.length > 0)) && (
-          <CollapsibleSection
-            title={t('gcodeAnalytics.codeFix', '코드 수정')}
-            icon={<FileCode className="h-4 w-4" />}
-            isExpanded={expandedSections.has('code_fix')}
-            onToggle={() => toggleSection('code_fix')}
-            badge={solution.code_fixes && solution.code_fixes.length > 1 ? `${solution.code_fixes.length}건` : undefined}
-          >
-            <div className="space-y-4 text-sm">
-              {/* 그룹화된 코드 수정 (code_fixes 배열) */}
-              {solution.code_fixes && solution.code_fixes.length > 0 ? (
-                solution.code_fixes.filter(fix => fix.original && fix.fixed).map((fix, fixIdx, filteredArr) => (
-                  <div key={fixIdx} className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
-                    {/* 라인 번호 헤더 - 클릭하여 에디터로 이동 */}
-                    {fix.line_number && (
-                      <div
-                        className={cn(
-                          "px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2",
-                          onViewCodeFix && "cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors group"
-                        )}
-                        onClick={() => onViewCodeFix?.(fix)}
-                        role={onViewCodeFix ? "button" : undefined}
-                        tabIndex={onViewCodeFix ? 0 : undefined}
-                        onKeyDown={(e) => {
-                          if (onViewCodeFix && (e.key === 'Enter' || e.key === ' ')) {
-                            e.preventDefault();
-                            onViewCodeFix(fix);
-                          }
-                        }}
-                      >
-                        <span className={cn(
-                          "text-xs font-mono bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-700 dark:text-slate-300",
-                          onViewCodeFix && "group-hover:bg-blue-100 dark:group-hover:bg-blue-800 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors"
-                        )}>
-                          LN {fix.line_number.toLocaleString()}
-                        </span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">
-                          {t('gcodeAnalytics.fixNumber', '수정 {{n}}', { n: fixIdx + 1 })} / {filteredArr.length}
-                        </span>
-                        {onViewCodeFix && (
-                          <span className="ml-auto text-xs text-blue-500 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                            <Edit3 className="h-3 w-3" />
-                            {t('gcodeAnalytics.editInViewer', '에디터에서 수정')}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {/* 원본 코드 */}
-                    <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
-                      <div className="px-3 py-1.5 bg-red-100 dark:bg-red-900/40 border-b border-red-200 dark:border-red-800">
-                        <span className="text-xs text-red-600 dark:text-red-400 font-semibold">{t('gcodeAnalytics.original', '원본')}</span>
-                      </div>
-                      <div className="p-3 overflow-x-auto">
-                        {fix.original!.split('\n').map((line, idx) => (
-                          <div key={idx} className="flex font-mono text-xs leading-relaxed">
-                            <span className="w-16 flex-shrink-0 text-red-400 dark:text-red-500 select-none pr-2 text-right border-r border-red-200 dark:border-red-700 mr-3">
-                              {line.match(/^(\d+):/)?.[1] || ''}
-                            </span>
-                            <span className="text-red-700 dark:text-red-300 whitespace-pre">
-                              {line.replace(/^\d+:\s*/, '')}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    {/* 수정 코드 */}
-                    <div className="bg-emerald-50 dark:bg-emerald-900/20">
-                      <div className="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/40 border-b border-emerald-200 dark:border-emerald-800">
-                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">{t('gcodeAnalytics.fixed', '수정')}</span>
-                      </div>
-                      <div className="p-3 overflow-x-auto">
-                        {fix.fixed!.split('\n').map((line, idx) => (
-                          <div key={idx} className="flex font-mono text-xs leading-relaxed">
-                            <span className="w-16 flex-shrink-0 text-emerald-400 dark:text-emerald-500 select-none pr-2 text-right border-r border-emerald-200 dark:border-emerald-700 mr-3">
-                              {line.match(/^(\d+):/)?.[1] || ''}
-                            </span>
-                            <span className="text-emerald-700 dark:text-emerald-300 whitespace-pre">
-                              {line.replace(/^\d+:\s*/, '')}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                /* 단일 코드 수정 (code_fix) - 하위 호환성 */
-                solution.code_fix?.original && solution.code_fix?.fixed && (
-                  <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
-                    {/* 원본 코드 */}
-                    <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
-                      <div className="px-3 py-1.5 bg-red-100 dark:bg-red-900/40 border-b border-red-200 dark:border-red-800">
-                        <span className="text-xs text-red-600 dark:text-red-400 font-semibold">{t('gcodeAnalytics.original', '원본')}</span>
-                      </div>
-                      <div className="p-3 overflow-x-auto">
-                        {solution.code_fix.original.split('\n').map((line, idx) => (
-                          <div key={idx} className="flex font-mono text-xs leading-relaxed">
-                            <span className="w-16 flex-shrink-0 text-red-400 dark:text-red-500 select-none pr-2 text-right border-r border-red-200 dark:border-red-700 mr-3">
-                              {line.match(/^(\d+):/)?.[1] || ''}
-                            </span>
-                            <span className="text-red-700 dark:text-red-300 whitespace-pre">
-                              {line.replace(/^\d+:\s*/, '')}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    {/* 수정 코드 */}
-                    <div className="bg-emerald-50 dark:bg-emerald-900/20">
-                      <div className="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/40 border-b border-emerald-200 dark:border-emerald-800">
-                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">{t('gcodeAnalytics.fixed', '수정')}</span>
-                      </div>
-                      <div className="p-3 overflow-x-auto">
-                        {solution.code_fix.fixed.split('\n').map((line, idx) => (
-                          <div key={idx} className="flex font-mono text-xs leading-relaxed">
-                            <span className="w-16 flex-shrink-0 text-emerald-400 dark:text-emerald-500 select-none pr-2 text-right border-r border-emerald-200 dark:border-emerald-700 mr-3">
-                              {line.match(/^(\d+):/)?.[1] || ''}
-                            </span>
-                            <span className="text-emerald-700 dark:text-emerald-300 whitespace-pre">
-                              {line.replace(/^\d+:\s*/, '')}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )
-              )}
-              {onViewCode && (
-                <Button size="sm" variant="outline" className="mt-2 gap-2" onClick={onViewCode}>
-                  <Edit3 className="h-3 w-3" />
-                  {t('gcodeAnalytics.editInViewer', '에디터에서 수정')}
-                </Button>
-              )}
-            </div>
-          </CollapsibleSection>
-        )}
-
-        {/* 팁 */}
-        {tips?.length > 0 && (
-          <CollapsibleSection
-            title={t('gcodeAnalytics.tips', '팁')}
-            icon={<Info className="h-4 w-4" />}
-            isExpanded={expandedSections.has('tips')}
-            onToggle={() => toggleSection('tips')}
-          >
-            <ul className="list-disc list-inside space-y-2 text-sm text-slate-600 dark:text-slate-400">
-              {tips.map((tip, i) => (
-                <li key={i} className="[&>p]:inline [&>p]:m-0 [&_strong]:font-semibold [&_strong]:text-slate-700 [&_strong]:dark:text-slate-300 [&_code]:bg-slate-100 [&_code]:dark:bg-slate-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ p: ({ children }) => <>{children}</> }}>
-                    {tip}
-                  </ReactMarkdown>
-                </li>
-              ))}
-            </ul>
-          </CollapsibleSection>
-        )}
+        ))}
       </div>
     </div>
   );
 }
 
-// 접을 수 있는 섹션 컴포넌트
-function CollapsibleSection({
-  title,
-  icon,
-  isExpanded,
-  onToggle,
-  highlight,
-  badge,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  isExpanded: boolean;
-  onToggle: () => void;
-  highlight?: boolean;
-  badge?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={cn(
-      "rounded-lg border overflow-hidden",
-      highlight
-        ? "border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-900"
-        : "border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50"
-    )}>
-      <button
-        className={cn(
-          "w-full flex items-center justify-between px-3 py-2 text-left transition-colors",
-          highlight
-            ? "bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
-            : "hover:bg-slate-50 dark:hover:bg-slate-800"
-        )}
-        onClick={onToggle}
-      >
-        <div className="flex items-center gap-2">
-          <span className={highlight ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500"}>{icon}</span>
-          <span className={cn(
-            "font-heading font-semibold text-sm",
-            highlight ? "text-emerald-700 dark:text-emerald-300" : "text-slate-700 dark:text-slate-300"
-          )}>{title}</span>
-          {badge && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-violet-100 dark:bg-violet-500/20 text-violet-600 dark:text-violet-300">
-              {badge}
-            </span>
-          )}
-        </div>
-        <ChevronDown className={cn(
-          "h-4 w-4 transition-transform text-slate-400",
-          isExpanded && "rotate-180"
-        )} />
-      </button>
-      {isExpanded && (
-        <div className="px-3 py-3 border-t border-slate-100 dark:border-slate-700">
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// 패치 제안 섹션
-function PatchSuggestionsSection({ patches }: { patches: PatchSuggestion[] }) {
-  const { t } = useTranslation();
-  const [showAll, setShowAll] = useState(false);
-  const displayedPatches = showAll ? patches : patches.slice(0, 3);
-
-  const getActionLabel = (action: string) => {
-    return t(`gcodeAnalytics.patchAction.${action}`);
-  };
-
-  const actionColors: Record<string, string> = {
-    remove: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20',
-    modify: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20',
-    insert: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20',
-    insert_after: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20',
-  };
-
-  return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
-      <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-50 dark:bg-indigo-500/20 rounded-lg text-indigo-600 dark:text-indigo-400">
-            <FileCode className="h-5 w-5" />
-          </div>
-          <h3 className="text-lg font-heading font-bold text-slate-900 dark:text-white">{t('gcodeAnalytics.patchSuggestions')}</h3>
-          <span className="text-sm font-score font-black bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 px-3 py-1 rounded-full">
-            {t('gcodeAnalytics.patchCount', { count: patches.length })}
-          </span>
-        </div>
-        {patches.length > 3 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowAll(!showAll)}
-            className="text-sm font-medium text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400"
-          >
-            {showAll ? t('gcodeAnalytics.collapse') : t('gcodeAnalytics.showAll', { count: patches.length })}
-          </Button>
-        )}
-      </div>
-      <div className="divide-y divide-slate-100 dark:divide-slate-800">
-        {displayedPatches.map((patch, index) => {
-          const actionColor = actionColors[patch.action] || actionColors.modify;
-          return (
-            <div key={index} className="p-6 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/30">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Line</span>
-                  <span className="font-mono text-sm font-bold text-slate-700 dark:text-slate-200">{patch.line || patch.line_index || 'N/A'}</span>
-                </span>
-                <span className={cn("text-xs px-2.5 py-1 rounded border font-bold uppercase tracking-wider", actionColor)}>
-                  {getActionLabel(patch.action)}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Original Code */}
-                {(patch.action === 'remove' || patch.action === 'modify') && patch.original && (
-                  <div className="group/code">
-                    <span className="text-xs font-heading font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 block">{t('gcodeAnalytics.original')}</span>
-                    <div className="relative bg-slate-950 rounded-lg overflow-hidden border border-slate-800">
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500"></div>
-                      <code className="block p-3 pl-4 font-mono text-xs md:text-sm text-red-300 overflow-x-auto">
-                        - {patch.original}
-                      </code>
-                    </div>
-                  </div>
-                )}
-
-                {/* Modified Code */}
-                {(patch.action === 'insert' || patch.action === 'insert_after' || patch.action === 'modify') && patch.modified && (
-                  <div className="group/code">
-                    <span className="text-xs font-heading font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 block">{t('gcodeAnalytics.modified')}</span>
-                    <div className="relative bg-slate-950 rounded-lg overflow-hidden border border-slate-800">
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500"></div>
-                      <code className="block p-3 pl-4 font-mono text-xs md:text-sm text-emerald-300 overflow-x-auto">
-                        + {patch.modified}
-                      </code>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-4 flex items-start gap-2 bg-blue-50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-900/20">
-                <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
-                <p className="text-sm font-body text-slate-600 dark:text-slate-400 leading-relaxed">{patch.reason}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+// PatchSuggestionsSection은 ./GCodeAnalysisReport/PatchSuggestionsSection.tsx로 분리됨
 
 // ============================================================================
 // 유틸리티: LLM 응답을 GCodeAnalysisData로 변환

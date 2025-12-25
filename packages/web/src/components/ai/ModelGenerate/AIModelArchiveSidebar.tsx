@@ -1,9 +1,13 @@
+/**
+ * AI 모델 아카이브 사이드바
+ * 생성된 3D 모델 및 업로드된 파일 아카이브 관리
+ */
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import ModelArchive from "@/components/ai/ModelArchive";
-import UploadArchive from "@/components/ai/UploadArchive";
+import ModelArchive from "./ModelArchive";
+import UploadArchive from "./UploadArchive";
 import { PrinterCard } from "@/components/PrinterCard";
 import { FolderOpen, Type, Image as ImageFile, Menu } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -14,7 +18,7 @@ import { toast } from "@/components/ui/use-toast";
 import { deleteAIModel } from "@shared/services/supabaseService/aiModel";
 import { supabase } from "@shared/integrations/supabase/client";
 
-interface AIArchiveSidebarProps {
+export interface AIModelArchiveSidebarProps {
     activeTab: string;
     setActiveTab: (tab: string) => void;
     archiveViewMode: 'raw' | '3d';
@@ -53,7 +57,7 @@ interface AIArchiveSidebarProps {
     onToggle?: () => void;
 }
 
-export function AIArchiveSidebar({
+export function AIModelArchiveSidebar({
     activeTab,
     setActiveTab,
     archiveViewMode,
@@ -85,7 +89,7 @@ export function AIArchiveSidebar({
     modelViewerUrl,
     isLeftSidebar = false,
     onToggle
-}: AIArchiveSidebarProps) {
+}: AIModelArchiveSidebarProps) {
     const { t } = useTranslation();
 
     return (
@@ -387,3 +391,5 @@ export function AIArchiveSidebar({
         </div>
     );
 }
+
+export default AIModelArchiveSidebar;

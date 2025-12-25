@@ -8,9 +8,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Cpu, File, ExternalLink, ArrowRight, ImageIcon, X, ZoomIn, Link2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CodeFixDiffCard } from "@/components/gcodeAnalysis/CodeFixDiffCard";
-import type { CodeFixInfo } from "@/components/gcodeAnalysis/CodeFixDiffCard";
-import { ReportCompletionCard } from "./ReportCompletionCard";
+import { CodeFixDiffCard } from "./GCodeAnalytics/CodeFixDiffCard";
+import type { CodeFixInfo } from "./GCodeAnalytics/CodeFixDiffCard";
+import { ReportCompletionCard } from "./GCodeAnalytics/ReportCompletionCard";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

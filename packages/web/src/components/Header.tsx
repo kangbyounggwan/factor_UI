@@ -105,7 +105,6 @@ export const Header = () => {
   const navigation: NavigationItem[] = [
     { name: t('nav.printers'), href: "/dashboard", icon: PrinterIcon },
     { name: t('nav.aiTools'), href: "/ai-chat", icon: Sparkles },
-    { name: t('nav.settings'), href: "/settings", icon: Settings },
   ];
 
   const homeNavigation = [
