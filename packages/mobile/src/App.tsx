@@ -37,9 +37,6 @@ const SocialAccountLinking = lazy(() => import("./pages/SocialAccountLinking"));
 const ThemeSettings = lazy(() => import("./pages/ThemeSettings"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword"));
 const Subscription = lazy(() => import("./pages/Subscription"));
-const PaymentCheckout = lazy(() => import("./pages/PaymentCheckout"));
-const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
-const PaymentFail = lazy(() => import("./pages/PaymentFail"));
 const SupportedPrinters = lazy(() => import("./pages/SupportedPrinters"));
 const AI = lazy(() => import("./pages/AI"));
 const AIChat = lazy(() => import("./pages/AIChat"));
@@ -370,16 +367,7 @@ const AppContent = () => {
             } />
             {/* iOS에서는 구독/결제 라우트 완전 차단 (Apple IAP 정책 준수) */}
             {!isIOS && (
-              <>
-                <Route path="/subscription" element={<Subscription />} />
-                <Route path="/payment/checkout" element={
-                  <ProtectedRoute>
-                    <PaymentCheckout />
-                  </ProtectedRoute>
-                } />
-                <Route path="/payment/success" element={<PaymentSuccess />} />
-                <Route path="/payment/fail" element={<PaymentFail />} />
-              </>
+              <Route path="/subscription" element={<Subscription />} />
             )}
             <Route path="/supported-printers" element={<SupportedPrinters />} />
             <Route path="/create" element={

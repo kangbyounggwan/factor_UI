@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@shared/contexts/AuthContext";
@@ -21,39 +20,29 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@shared/integrations/supabase/client";
 import { type SubscriptionPlan } from "@shared/types/subscription";
 import { getUserPaymentHistory, upsertUserSubscription, type PaymentHistory } from "@shared/services/supabaseService/subscription";
-import { getUserPaymentMethods, type PaymentMethod } from "@shared/services/supabaseService/paymentMethod";
+import { getUserPaymentMethods, formatCardDisplay, formatCardExpiry, type PaymentMethod } from "@shared/services/supabaseService/paymentMethod";
 import {
   initializePaddleService,
   openPaddleCheckout,
   getPaddlePriceId,
 } from "@/lib/paddleService";
 import {
-  User,
-  Mail,
-  Bell,
-  CreditCard,
-  Trash2,
+  Check,
   Crown,
   AlertTriangle,
-  Camera,
-  Check,
-  Link as LinkIcon,
-  Unlink,
-  Shield,
-  LogOut,
-  RefreshCw,
+  Loader2,
   ChevronLeft,
   ChevronRight,
-  Key,
-  Copy,
-  Plus,
-  Eye,
-  EyeOff,
-  MoreVertical,
-  Power,
-  Pencil,
-  Loader2,
+  CreditCard,
+  Mail,
+  RefreshCw,
 } from "lucide-react";
+// Tab Components
+import { ProfileTab } from "@/components/UserSettings/ProfileTab";
+import { AccountTab } from "@/components/UserSettings/AccountTab";
+import { SubscriptionTab } from "@/components/UserSettings/SubscriptionTab";
+import { NotificationsTab } from "@/components/UserSettings/NotificationsTab";
+import { ApiKeysTab } from "@/components/UserSettings/ApiKeysTab";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -95,34 +84,6 @@ import {
   type ApiKey,
 } from "@shared/services/supabaseService/apiKeys";
 import { useSidebarState } from "@/hooks/useSidebarState";
-
-// Google Logo SVG Component
-const GoogleLogo = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 18 18"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path
-      d="M17.64 9.20443C17.64 8.56625 17.5827 7.95262 17.4764 7.36353H9V10.8449H13.8436C13.635 11.9699 13.0009 12.9231 12.0477 13.5613V15.8194H14.9564C16.6582 14.2526 17.64 11.9453 17.64 9.20443Z"
-      fill="#4285F4"
-    />
-    <path
-      d="M8.99976 18C11.4298 18 13.467 17.1941 14.9561 15.8195L12.0475 13.5613C11.2416 14.1013 10.2107 14.4204 8.99976 14.4204C6.65567 14.4204 4.67158 12.8372 3.96385 10.71H0.957031V13.0418C2.43794 15.9831 5.48158 18 8.99976 18Z"
-      fill="#34A853"
-    />
-    <path
-      d="M3.96409 10.7098C3.78409 10.1698 3.68182 9.59301 3.68182 8.99983C3.68182 8.40665 3.78409 7.82983 3.96409 7.28983V4.95801H0.957273C0.347727 6.17301 0 7.54755 0 8.99983C0 10.4521 0.347727 11.8266 0.957273 13.0416L3.96409 10.7098Z"
-      fill="#FBBC05"
-    />
-    <path
-      d="M8.99976 3.57955C10.3211 3.57955 11.5075 4.03364 12.4402 4.92545L15.0216 2.34409C13.4629 0.891818 11.4257 0 8.99976 0C5.48158 0 2.43794 2.01682 0.957031 4.95818L3.96385 7.29C4.67158 5.16273 6.65567 3.57955 8.99976 3.57955Z"
-      fill="#EA4335"
-    />
-  </svg>
-);
 
 // 한국 사용자 감지 (언어 또는 타임존 기반)
 const isKoreanUser = () => {
@@ -217,7 +178,6 @@ const UserSettings = () => {
   const [showChangePlanModal, setShowChangePlanModal] = useState(false);
   const [showBillingHistoryModal, setShowBillingHistoryModal] = useState(false);
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
-  const [showRefundPolicyModal, setShowRefundPolicyModal] = useState(false);
   const [showDowngradeWarningModal, setShowDowngradeWarningModal] = useState(false);
 
   // Payment data states
@@ -385,7 +345,7 @@ const UserSettings = () => {
         // Load ALL payment history (최대 100개) and methods in parallel
         const [historyResult, methodsResult] = await Promise.all([
           getUserPaymentHistory(user.id, 100, 0),
-          getUserPaymentMethods(user.id),
+          getUserPaymentMethods(),
         ]);
 
         setAllPaymentHistory(historyResult.data);
@@ -949,288 +909,36 @@ const UserSettings = () => {
 
         {/* Profile Tab */}
         {activeTab === 'profile' && (
-          <div className="space-y-6">
-            {/* Header Section */}
-            <div className="space-y-1">
-              <h2 className="text-2xl font-bold tracking-tight">{t("userSettings.profileInfo")}</h2>
-              <p className="text-muted-foreground">
-                {t("userSettings.profileDescription")}
-              </p>
-            </div>
-
-          <Card className="overflow-hidden border-2">
-            <CardContent className="p-8 space-y-6">
-              {/* Avatar */}
-              <div className="flex items-center gap-6">
-                <input
-                  type="file"
-                  id="avatar-upload"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleAvatarUpload}
-                  disabled={uploadingAvatar}
-                />
-                <label htmlFor="avatar-upload" className="cursor-pointer">
-                  <div className="relative group">
-                    {avatarUrl ? (
-                      <img
-                        src={avatarUrl}
-                        alt="Profile"
-                        className="w-24 h-24 rounded-full object-cover border-2 border-primary"
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center w-24 h-24 bg-primary rounded-full border-2 border-primary">
-                        <User className="w-12 h-12 text-primary-foreground" />
-                      </div>
-                    )}
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Camera className="h-6 w-6 text-white" />
-                    </div>
-                    {uploadingAvatar && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/70 rounded-full">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-                      </div>
-                    )}
-                  </div>
-                </label>
-                <div className="space-y-2">
-                  <h3 className="font-medium">
-                    {t("userSettings.profilePicture")}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    JPG, PNG or GIF format (max 2MB)
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    프로필 사진을 클릭하여 변경하세요
-                  </p>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Form */}
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="displayName">{t("userSettings.name")}</Label>
-                  <Input
-                    id="displayName"
-                    value={displayName}
-                    onChange={(e) => {
-                      setDisplayName(e.target.value);
-                      setIsEditingProfile(true);
-                    }}
-                    placeholder={t("userSettings.namePlaceholder")}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">{t("userSettings.email")}</Label>
-                  <div className="relative">
-                    <Input
-                      id="email"
-                      value={email}
-                      disabled
-                      className="pr-24"
-                    />
-                    <Badge
-                      variant="secondary"
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs"
-                    >
-                      <Check className="h-3 w-3 mr-1" />
-                      {t("userSettings.verified")}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone">{t("userSettings.phone", "휴대폰 번호")}</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => {
-                      setPhone(e.target.value);
-                      setIsEditingProfile(true);
-                    }}
-                    placeholder="010-0000-0000"
-                  />
-                </div>
-              </div>
-
-              {isEditingProfile && (
-                <div className="flex justify-between items-center pt-6 border-t">
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        초기화
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>프로필 정보 초기화</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          정말로 프로필 정보를 초기화하시겠습니까? 변경된 내용이 모두 삭제됩니다.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>취소</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => {
-                            setDisplayName(originalProfile.displayName);
-                            setPhone(originalProfile.phone);
-                            setIsEditingProfile(false);
-                          }}
-                        >
-                          초기화
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                  <Button onClick={handleSaveProfile}>
-                    {t("userSettings.saveChanges")}
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+          <ProfileTab
+            user={user}
+            displayName={displayName}
+            setDisplayName={setDisplayName}
+            email={email}
+            phone={phone}
+            setPhone={setPhone}
+            avatarUrl={avatarUrl}
+            setAvatarUrl={setAvatarUrl}
+            isEditingProfile={isEditingProfile}
+            setIsEditingProfile={setIsEditingProfile}
+            uploadingAvatar={uploadingAvatar}
+            setUploadingAvatar={setUploadingAvatar}
+            originalProfile={originalProfile}
+            onSaveProfile={handleSaveProfile}
+            onAvatarUpload={handleAvatarUpload}
+          />
         )}
 
         {/* Account Tab */}
         {activeTab === 'account' && (
-          <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="space-y-3">
-                <CardTitle>{t("userSettings.socialAccounts")}</CardTitle>
-                <CardDescription>
-                  {t("userSettings.socialAccountsDescription")}
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Google Account Linking */}
-              {isGoogleLinked ? (
-                <div className="flex items-center justify-between p-4 rounded-lg border bg-card">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-muted">
-                      <GoogleLogo />
-                    </div>
-                    <div>
-                      <p className="font-medium">Google</p>
-                      <p className="text-sm text-muted-foreground">
-                        {googleIdentity?.identity_data?.email ||
-                          t("userSettings.linkedAccount")}
-                      </p>
-                    </div>
-                  </div>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Unlink className="h-4 w-4 mr-2" />
-                        {t("userSettings.unlinkAccount")}
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>
-                          {t("userSettings.unlinkConfirmTitle")}
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                          {t("userSettings.unlinkConfirmDescription")}
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={handleUnlinkGoogle}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          {t("userSettings.unlinkAccount")}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              ) : (
-                <Button
-                  variant="outline"
-                  className="w-full justify-start h-auto p-4"
-                  onClick={handleLinkGoogle}
-                >
-                  <div className="flex items-center gap-4 w-full">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-muted">
-                      <GoogleLogo />
-                    </div>
-                    <div className="flex-1 text-left">
-                      <p className="font-medium">
-                        {t("userSettings.linkGoogleAccount")}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {t("userSettings.linkGoogleDescription")}
-                      </p>
-                    </div>
-                  </div>
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Danger Zone */}
-          <Card className="border-destructive">
-            <CardHeader>
-              <div className="space-y-3">
-                <CardTitle className="flex items-center gap-2 text-destructive">
-                  <AlertTriangle className="h-5 w-5" />
-                  {t("userSettings.dangerZone")}
-                </CardTitle>
-                <CardDescription>
-                  {t("userSettings.dangerZoneDescription")}
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" className="w-full">
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    {t("userSettings.deleteAccount")}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t("userSettings.deleteAccountConfirmTitle")}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription className="space-y-2">
-                      <p>{t("userSettings.deleteAccountWarning")}</p>
-                      <ul className="list-disc list-inside space-y-1 text-sm">
-                        <li>{t("userSettings.deleteWarning1")}</li>
-                        <li>{t("userSettings.deleteWarning2")}</li>
-                        <li>{t("userSettings.deleteWarning3")}</li>
-                        <li>{t("userSettings.deleteWarning4")}</li>
-                      </ul>
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleDeleteAccount}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      {t("userSettings.deleteAccount")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </CardContent>
-          </Card>
-        </div>
+          <AccountTab
+            user={user}
+            isGoogleLinked={isGoogleLinked}
+            googleIdentity={googleIdentity}
+            onLinkGoogle={handleLinkGoogle}
+            onUnlinkGoogle={handleUnlinkGoogle}
+            onDeleteAccount={handleDeleteAccount}
+            onSignOut={signOut}
+          />
         )}
 
         {/* Subscription Tab */}
@@ -1411,7 +1119,7 @@ const UserSettings = () => {
                     <Button
                       variant="link"
                       className="text-sm text-muted-foreground"
-                      onClick={() => setShowRefundPolicyModal(true)}
+                      onClick={() => navigate('/refund-policy')}
                     >
                       {t('userSettings.refundPolicyButton')}
                     </Button>
@@ -1575,16 +1283,13 @@ const UserSettings = () => {
                                         <CreditCard className="h-5 w-5 text-white" />
                                       </div>
                                       <div>
-                                        <p className="font-medium">{method.card_number}</p>
+                                        <p className="font-medium">{formatCardDisplay(method)}</p>
                                         <p className="text-sm text-muted-foreground">
-                                          {method.card_company && `${method.card_company} · `}만료: {method.card_expiry}
+                                          {method.card_type && `${method.card_type} · `}{formatCardExpiry(method) && `만료: ${formatCardExpiry(method)}`}
                                         </p>
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      {method.is_default && (
-                                        <Badge className="bg-green-500 hover:bg-green-500">기본</Badge>
-                                      )}
                                       <Button variant="ghost" size="icon">
                                         <span className="text-xl">⋯</span>
                                       </Button>
@@ -1676,527 +1381,53 @@ const UserSettings = () => {
 
         {/* Notifications Tab */}
         {activeTab === 'notifications' && (
-          <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-3">
-                  <CardTitle>{t("userSettings.notificationSettings")}</CardTitle>
-                  <CardDescription>
-                    {t("userSettings.notificationDescription")}
-                  </CardDescription>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    setPushNotifications(originalNotifications.push);
-                    setPrintCompleteNotif(originalNotifications.printComplete);
-                    setErrorNotif(originalNotifications.error);
-                    setEmailNotifications(originalNotifications.email);
-                    setWeeklyReport(originalNotifications.weekly);
-                    setIsEditingNotifications(false);
-                  }}
-                  className="h-9 w-9 shrink-0"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                {/* Push Notifications */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="space-y-0.5 flex-1">
-                    <Label
-                      htmlFor="push-notif"
-                      className="text-base font-medium cursor-pointer"
-                    >
-                      {t("userSettings.pushNotifications")}
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      {t("userSettings.pushNotificationsDesc")}
-                    </p>
-                  </div>
-                  <Switch
-                    id="push-notif"
-                    checked={pushNotifications}
-                    onCheckedChange={(value) => {
-                      setPushNotifications(value);
-                      setIsEditingNotifications(true);
-                    }}
-                    disabled={loadingNotifications}
-                  />
-                </div>
-
-                <Separator />
-
-                {/* Print Complete */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="space-y-0.5 flex-1">
-                    <Label
-                      htmlFor="print-complete"
-                      className="text-base font-medium cursor-pointer"
-                    >
-                      {t("userSettings.printComplete")}
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      {t("userSettings.printCompleteDesc")}
-                    </p>
-                  </div>
-                  <Switch
-                    id="print-complete"
-                    checked={printCompleteNotif}
-                    onCheckedChange={(value) => {
-                      setPrintCompleteNotif(value);
-                      setIsEditingNotifications(true);
-                    }}
-                    disabled={loadingNotifications}
-                  />
-                </div>
-
-                <Separator />
-
-                {/* Error Notifications */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="space-y-0.5 flex-1">
-                    <Label
-                      htmlFor="error-notif"
-                      className="text-base font-medium cursor-pointer"
-                    >
-                      {t("userSettings.errorNotifications")}
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      {t("userSettings.errorNotificationsDesc")}
-                    </p>
-                  </div>
-                  <Switch
-                    id="error-notif"
-                    checked={errorNotif}
-                    onCheckedChange={(value) => {
-                      setErrorNotif(value);
-                      setIsEditingNotifications(true);
-                    }}
-                    disabled={loadingNotifications}
-                  />
-                </div>
-
-                <Separator />
-
-                {/* Email Notifications */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="space-y-0.5 flex-1">
-                    <div className="flex items-center gap-2">
-                      <Label
-                        htmlFor="email-notif"
-                        className={`text-base font-medium ${
-                          currentPlan === "free"
-                            ? "cursor-not-allowed opacity-50"
-                            : "cursor-pointer"
-                        }`}
-                      >
-                        {t("userSettings.emailNotifications")}
-                      </Label>
-                      <Badge
-                        className="text-xs bg-gradient-to-r from-blue-600 to-blue-500 text-white border-0"
-                        style={{
-                          boxShadow:
-                            "0 2px 8px rgba(37, 99, 235, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)",
-                        }}
-                      >
-                        <Crown className="h-3 w-3 mr-1" />
-                        Pro
-                      </Badge>
-                    </div>
-                    <p
-                      className={`text-sm text-muted-foreground ${
-                        currentPlan === "free" ? "opacity-50" : ""
-                      }`}
-                    >
-                      {t("userSettings.emailNotificationsDesc")}
-                    </p>
-                  </div>
-                  <Switch
-                    id="email-notif"
-                    checked={emailNotifications}
-                    onCheckedChange={(value) => {
-                      setEmailNotifications(value);
-                      setIsEditingNotifications(true);
-                    }}
-                    disabled={currentPlan === "free" || loadingNotifications}
-                  />
-                </div>
-
-                <Separator />
-
-                {/* Weekly Report */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="space-y-0.5 flex-1">
-                    <div className="flex items-center gap-2">
-                      <Label
-                        htmlFor="weekly-report"
-                        className={`text-base font-medium ${
-                          currentPlan === "free"
-                            ? "cursor-not-allowed opacity-50"
-                            : "cursor-pointer"
-                        }`}
-                      >
-                        {t("userSettings.weeklyReport")}
-                      </Label>
-                      <Badge
-                        className="text-xs bg-gradient-to-r from-blue-600 to-blue-500 text-white border-0"
-                        style={{
-                          boxShadow:
-                            "0 2px 8px rgba(37, 99, 235, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)",
-                        }}
-                      >
-                        <Crown className="h-3 w-3 mr-1" />
-                        Pro
-                      </Badge>
-                    </div>
-                    <p
-                      className={`text-sm text-muted-foreground ${
-                        currentPlan === "free" ? "opacity-50" : ""
-                      }`}
-                    >
-                      {t("userSettings.weeklyReportDesc")}
-                    </p>
-                  </div>
-                  <Switch
-                    id="weekly-report"
-                    checked={weeklyReport}
-                    onCheckedChange={(value) => {
-                      setWeeklyReport(value);
-                      setIsEditingNotifications(true);
-                    }}
-                    disabled={currentPlan === "free" || loadingNotifications}
-                  />
-                </div>
-              </div>
-
-              {isEditingNotifications && (
-                <div className="flex justify-end pt-4 border-t">
-                  <Button onClick={handleSaveNotifications}>
-                    {t("userSettings.saveChanges")}
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+          <NotificationsTab
+            currentPlan={currentPlan}
+            emailNotifications={emailNotifications}
+            setEmailNotifications={setEmailNotifications}
+            pushNotifications={pushNotifications}
+            setPushNotifications={setPushNotifications}
+            printCompleteNotif={printCompleteNotif}
+            setPrintCompleteNotif={setPrintCompleteNotif}
+            errorNotif={errorNotif}
+            setErrorNotif={setErrorNotif}
+            weeklyReport={weeklyReport}
+            setWeeklyReport={setWeeklyReport}
+            loadingNotifications={loadingNotifications}
+            isEditingNotifications={isEditingNotifications}
+            setIsEditingNotifications={setIsEditingNotifications}
+            originalNotifications={originalNotifications}
+            onSaveNotifications={handleSaveNotifications}
+          />
         )}
 
         {/* API Keys Tab */}
         {activeTab === 'api-keys' && (
-          <div className="space-y-6">
-            {/* Header Section */}
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <h2 className="text-2xl font-bold tracking-tight">{t("apiKeys.title", "API Keys")}</h2>
-                <p className="text-muted-foreground">
-                  {t("apiKeys.description", "Manage API keys for external access to your FACTOR data.")}
-                </p>
-              </div>
-              <Button onClick={() => setShowCreateApiKeyModal(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                {t("apiKeys.createNew", "Create API Key")}
-              </Button>
-            </div>
-
-            {/* API Key Info Card */}
-            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
-                  <div className="space-y-1">
-                    <p className="font-medium text-blue-900 dark:text-blue-100">
-                      {t("apiKeys.securityInfo", "Security Information")}
-                    </p>
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      {t("apiKeys.securityDesc", "API keys provide access to your data. Keep them secure and never share them publicly. You can deactivate or delete keys at any time.")}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* API Keys List */}
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("apiKeys.yourKeys", "Your API Keys")}</CardTitle>
-                <CardDescription>
-                  {t("apiKeys.keysDescription", "Use these keys to authenticate API requests from external applications.")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loadingApiKeys ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : apiKeys.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Key className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
-                    <p className="text-muted-foreground mb-4">
-                      {t("apiKeys.noKeys", "No API keys yet. Create one to get started.")}
-                    </p>
-                    <Button variant="outline" onClick={() => setShowCreateApiKeyModal(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      {t("apiKeys.createFirst", "Create your first API key")}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {apiKeys.map((key) => (
-                      <div
-                        key={key.id}
-                        className={`flex items-center justify-between p-4 rounded-lg border ${
-                          key.is_active
-                            ? 'bg-background'
-                            : 'bg-muted/50 opacity-60'
-                        }`}
-                      >
-                        <div className="flex items-center gap-4 flex-1 min-w-0">
-                          <div className={`p-2 rounded-md ${key.is_active ? 'bg-primary/10' : 'bg-muted'}`}>
-                            <Key className={`h-4 w-4 ${key.is_active ? 'text-primary' : 'text-muted-foreground'}`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            {editingKeyId === key.id ? (
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  value={editingKeyName}
-                                  onChange={(e) => setEditingKeyName(e.target.value)}
-                                  className="h-8 w-48"
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleRenameApiKey(key.id);
-                                    if (e.key === 'Escape') {
-                                      setEditingKeyId(null);
-                                      setEditingKeyName("");
-                                    }
-                                  }}
-                                />
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleRenameApiKey(key.id)}
-                                >
-                                  <Check className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium truncate">{key.name}</span>
-                                  {!key.is_active && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      {t("apiKeys.inactive", "Inactive")}
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-3 text-sm text-muted-foreground mt-0.5">
-                                  <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">
-                                    {key.key_prefix}...
-                                  </code>
-                                  <span>•</span>
-                                  <span>{t("apiKeys.created", "Created")}: {formatDate(key.created_at)}</span>
-                                  {key.last_used_at && (
-                                    <>
-                                      <span>•</span>
-                                      <span>{t("apiKeys.lastUsed", "Last used")}: {formatDate(key.last_used_at)}</span>
-                                    </>
-                                  )}
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setEditingKeyId(key.id);
-                                setEditingKeyName(key.name);
-                              }}
-                            >
-                              <Pencil className="h-4 w-4 mr-2" />
-                              {t("common.rename", "Rename")}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleToggleApiKey(key.id, !key.is_active)}
-                            >
-                              <Power className="h-4 w-4 mr-2" />
-                              {key.is_active
-                                ? t("apiKeys.deactivate", "Deactivate")
-                                : t("apiKeys.activate", "Activate")}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => setDeletingKeyId(key.id)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              {t("common.delete", "Delete")}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* API Documentation Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("apiKeys.howToUse", "How to use API Keys")}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    {t("apiKeys.authHeader", "Include your API key in the request header:")}
-                  </p>
-                  <div className="bg-muted rounded-lg p-4 font-mono text-sm overflow-x-auto">
-                    <code className="text-foreground">
-                      X-API-Key: fk_live_xxxxxxxx...
-                    </code>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    {t("apiKeys.exampleRequest", "Example API request:")}
-                  </p>
-                  <div className="bg-muted rounded-lg p-4 font-mono text-sm overflow-x-auto">
-                    <pre className="text-foreground whitespace-pre-wrap">{`curl -X GET "https://factor.io.kr/api/v1/printers" \\
-  -H "X-API-Key: YOUR_API_KEY"`}</pre>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium mb-2">{t("apiKeys.availableEndpoints", "Available Endpoints:")}</p>
-                  <ul className="text-sm text-muted-foreground space-y-1 ml-4 list-disc">
-                    <li><code className="text-xs bg-muted px-1 rounded">GET /api/v1/me</code> - {t("apiKeys.endpoint.me", "Get user profile")}</li>
-                    <li><code className="text-xs bg-muted px-1 rounded">GET /api/v1/printers</code> - {t("apiKeys.endpoint.printers", "List your printers")}</li>
-                    <li><code className="text-xs bg-muted px-1 rounded">GET /api/v1/printers/:uuid</code> - {t("apiKeys.endpoint.printer", "Get printer details")}</li>
-                    <li><code className="text-xs bg-muted px-1 rounded">GET /api/v1/cameras</code> - {t("apiKeys.endpoint.cameras", "List your cameras")}</li>
-                    <li><code className="text-xs bg-muted px-1 rounded">GET /api/v1/subscription</code> - {t("apiKeys.endpoint.subscription", "Get subscription info")}</li>
-                    <li><code className="text-xs bg-muted px-1 rounded">GET /api/v1/overview</code> - {t("apiKeys.endpoint.overview", "Get dashboard overview")}</li>
-                  </ul>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <ApiKeysTab
+            apiKeys={apiKeys}
+            loadingApiKeys={loadingApiKeys}
+            showCreateApiKeyModal={showCreateApiKeyModal}
+            setShowCreateApiKeyModal={setShowCreateApiKeyModal}
+            newApiKeyName={newApiKeyName}
+            setNewApiKeyName={setNewApiKeyName}
+            creatingApiKey={creatingApiKey}
+            newlyCreatedKey={newlyCreatedKey}
+            showNewKeyModal={showNewKeyModal}
+            setShowNewKeyModal={setShowNewKeyModal}
+            setNewlyCreatedKey={setNewlyCreatedKey}
+            editingKeyId={editingKeyId}
+            setEditingKeyId={setEditingKeyId}
+            editingKeyName={editingKeyName}
+            setEditingKeyName={setEditingKeyName}
+            deletingKeyId={deletingKeyId}
+            setDeletingKeyId={setDeletingKeyId}
+            onCreateApiKey={handleCreateApiKey}
+            onDeleteApiKey={handleDeleteApiKey}
+            onToggleApiKey={handleToggleApiKey}
+            onRenameApiKey={handleRenameApiKey}
+            onCopyToClipboard={copyToClipboard}
+          />
         )}
-
-      {/* Create API Key Dialog */}
-      <Dialog open={showCreateApiKeyModal} onOpenChange={setShowCreateApiKeyModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("apiKeys.createTitle", "Create API Key")}</DialogTitle>
-            <DialogDescription>
-              {t("apiKeys.createDescription", "Give your API key a memorable name to help you identify it later.")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="api-key-name">{t("apiKeys.keyName", "Key Name")}</Label>
-              <Input
-                id="api-key-name"
-                placeholder={t("apiKeys.keyNamePlaceholder", "e.g., Home Server, Production App")}
-                value={newApiKeyName}
-                onChange={(e) => setNewApiKeyName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleCreateApiKey();
-                }}
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setShowCreateApiKeyModal(false)}>
-              {t("common.cancel", "Cancel")}
-            </Button>
-            <Button onClick={handleCreateApiKey} disabled={creatingApiKey}>
-              {creatingApiKey && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {t("apiKeys.create", "Create")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* New API Key Display Dialog */}
-      <Dialog open={showNewKeyModal} onOpenChange={(open) => {
-        if (!open) setNewlyCreatedKey(null);
-        setShowNewKeyModal(open);
-      }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Check className="h-5 w-5 text-green-500" />
-              {t("apiKeys.keyCreated", "API Key Created")}
-            </DialogTitle>
-            <DialogDescription>
-              {t("apiKeys.copyWarning", "Copy your API key now. You won't be able to see it again!")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <div className="bg-muted rounded-lg p-4 flex items-center gap-2">
-              <code className="flex-1 font-mono text-sm break-all">
-                {newlyCreatedKey}
-              </code>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => newlyCreatedKey && copyToClipboard(newlyCreatedKey)}
-                className="shrink-0"
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-              <div className="flex gap-2">
-                <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0 mt-0.5" />
-                <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  {t("apiKeys.saveKeyWarning", "Make sure to copy and save this key securely. For security reasons, we cannot show it again.")}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <Button onClick={() => {
-              setShowNewKeyModal(false);
-              setNewlyCreatedKey(null);
-            }}>
-              {t("common.done", "Done")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete API Key Confirmation */}
-      <AlertDialog open={!!deletingKeyId} onOpenChange={(open) => !open && setDeletingKeyId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("apiKeys.deleteConfirm", "Delete API Key?")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("apiKeys.deleteWarning", "This action cannot be undone. Any applications using this API key will no longer be able to access your data.")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("common.cancel", "Cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deletingKeyId && handleDeleteApiKey(deletingKeyId)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {t("common.delete", "Delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Downgrade Warning Dialog */}
       <Dialog open={showDowngradeWarningModal} onOpenChange={setShowDowngradeWarningModal}>
@@ -2279,20 +1510,20 @@ const UserSettings = () => {
                   if (!user) return;
 
                   try {
-                    // Basic(Free) 플랜으로 다운그레이드
+                    // Free 플랜으로 다운그레이드
                     const now = new Date();
                     const periodEnd = new Date(now);
                     periodEnd.setFullYear(periodEnd.getFullYear() + 100); // 무료 플랜은 무기한
 
                     const result = await upsertUserSubscription(
                       user.id,
-                      'basic',
+                      'free',
                       now,
                       periodEnd
                     );
 
                     if (result) {
-                      setCurrentPlan('basic');
+                      setCurrentPlan('free');
                       toast({
                         title: "플랜 변경 완료",
                         description: "Free 플랜으로 변경되었습니다.",
@@ -2313,179 +1544,6 @@ const UserSettings = () => {
                 }}
               >
                 확인 및 다운그레이드
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Refund Policy Dialog */}
-      <Dialog open={showRefundPolicyModal} onOpenChange={setShowRefundPolicyModal}>
-        <DialogContent className="max-w-3xl h-[85vh] p-0 gap-0 flex flex-col">
-          {/* Fixed Header */}
-          <div className="px-6 pt-6 pb-4 border-b bg-background shrink-0">
-            <DialogHeader className="mb-3">
-              <DialogTitle className="text-2xl font-bold">월 구독 플랜 환불 정책</DialogTitle>
-              <DialogDescription>
-                시행일: 2025년 11월 10일 | 적용 대상: FACTOR 3D의 월 구독 플랜
-              </DialogDescription>
-            </DialogHeader>
-          </div>
-
-          {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto px-6 py-4">
-
-            <div className="space-y-5">
-              {/* 1. 기본 원칙 */}
-              <section className="space-y-2">
-                <h3 className="text-lg font-semibold">1. 기본 원칙</h3>
-                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground leading-relaxed ml-2">
-                  <li>구독은 월 단위 선결제이며, 결제 즉시 프리미엄 기능이 활성화됩니다.</li>
-                  <li>환불은 아래 기준에 따라 처리되며, 부분 사용분 공제 또는 일할 계산이 적용될 수 있습니다.</li>
-                  <li>자동 갱신 전 언제든 해지 가능하며, 해지 시 다음 결제부터 청구되지 않습니다.</li>
-                </ul>
-              </section>
-
-              {/* 2. 결제 직후 철회 */}
-              <section className="space-y-2">
-                <h3 className="text-lg font-semibold">2. 결제 직후 철회(변심) - 쿨링오프</h3>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    결제 후 <strong className="text-foreground">7일 이내</strong>이고, 실질적 사용(대량 사용·다운로드·크레딧 소진 등)이 없을 경우 <strong className="text-foreground">전액 환불</strong>합니다.
-                  </p>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    사용 이력이 일부라도 있는 경우, 일할 차감 또는 사용량 차감 후 환불합니다.
-                  </p>
-                  <div className="bg-muted p-3 rounded text-sm">
-                    <strong>예시:</strong> 월 30일 기준 3일 사용 시 → 결제금액 × (30-3)/30 환불
-                  </div>
-                </div>
-              </section>
-
-              {/* 3. 무료 체험 */}
-              <section className="space-y-2">
-                <h3 className="text-lg font-semibold">3. 무료 체험(Trial)·프로모션</h3>
-                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground leading-relaxed ml-2">
-                  <li>무료 체험 기간 중에는 언제든 해지 가능하며 청구·환불 없음</li>
-                  <li>체험 종료 후 유료 전환·청구가 발생한 뒤에는 본 정책 2)~10) 조항 적용</li>
-                </ul>
-              </section>
-
-              {/* 4. 중도 해지 */}
-              <section className="space-y-2">
-                <h3 className="text-lg font-semibold">4. 중도 해지(월 구독 기간 내)</h3>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    해지 즉시 미사용 기간에 대해 일할 계산하여 <strong className="text-foreground">영업일 5~10일</strong> 내 결제 수단으로 환불합니다.
-                  </p>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    해지 후에도 현재 결제 주기 종료일까지 서비스 이용 가능합니다.
-                  </p>
-                </div>
-              </section>
-
-              {/* 5. 장애·품질 문제 */}
-              <section className="space-y-2">
-                <h3 className="text-lg font-semibold">5. 장애·품질 문제로 인한 환불</h3>
-                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground leading-relaxed ml-2">
-                  <li>연속 12시간 이상 중대한 서비스 장애 발생 시, 고객 요청에 따라 장애시간 비례 금액을 크레딧/연장 또는 환불 중 선택 제공</li>
-                  <li>장애 통지 및 보상 요청은 발생일로부터 14일 이내 고객센터로 접수</li>
-                </ul>
-              </section>
-
-              {/* 6. 과금 오류 */}
-              <section className="space-y-2">
-                <h3 className="text-lg font-semibold">6. 과금 오류·중복 결제</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  중복 결제 또는 명백한 과금 오류 확인 시 전액 환불. 영수증/거래 내역 확인 후 영업일 5~10일 내 결제 수단으로 환불 처리.
-                </p>
-              </section>
-
-              {/* 7. 결제 실패 */}
-              <section className="space-y-2">
-                <h3 className="text-lg font-semibold">7. 결제 실패·미수금</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  결제 실패 시 3~7일 간 재시도하며, 실패 지속 시 자동 해지 또는 기능 제한이 적용됩니다.
-                  미수금 해소 시 서비스가 재개되며, 사용하지 못한 기간에 대한 자동 환불은 없습니다.
-                </p>
-              </section>
-
-              {/* 8. 남용·사기 방지 */}
-              <section className="space-y-2">
-                <h3 className="text-lg font-semibold">8. 남용·사기 방지</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  불법 사용, 환불 남용이 확인될 경우 환불 제한·계정 제한이 적용될 수 있습니다.
-                </p>
-              </section>
-
-              {/* 9. 환불 절차 */}
-              <section className="space-y-2">
-                <h3 className="text-lg font-semibold">9. 환불 절차</h3>
-                <div className="bg-muted p-4 rounded-lg space-y-2">
-                  <div className="grid grid-cols-1 gap-2 text-sm">
-                    <p><strong className="text-foreground">요청 경로:</strong> tlvh109@gmail.com</p>
-                    <p><strong className="text-foreground">필수 정보:</strong> 결제 이메일/아이디, 결제일, 금액, 사유, 영수증</p>
-                    <p><strong className="text-foreground">처리 기한:</strong> 요청 수신 후 영업일 5~10일 내 승인/반려 안내</p>
-                    <p><strong className="text-foreground">표시 반영:</strong> 카드사 정책에 따라 실 반영까지 최대 14일 소요</p>
-                  </div>
-                </div>
-              </section>
-
-              {/* 10. 세금·수수료 */}
-              <section className="space-y-2">
-                <h3 className="text-lg font-semibold">10. 세금·수수료</h3>
-                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground leading-relaxed ml-2">
-                  <li>환불 시 결제 대행 수수료·환전 수수료 등이 발생하면, 법령 허용 범위 내에서 실비 공제가 적용될 수 있습니다</li>
-                  <li>국외 결제의 경우 환율 변동으로 환불 금액이 결제 금액과 다를 수 있습니다</li>
-                </ul>
-              </section>
-
-              {/* 11. 정책 변경 */}
-              <section className="space-y-2">
-                <h3 className="text-lg font-semibold">11. 정책 변경</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  본 정책은 사전 고지 후 변경될 수 있습니다. 중대한 변경 시 시행 7일 전 이메일/공지로 안내합니다.
-                </p>
-              </section>
-
-              {/* 문의처 */}
-              <section className="space-y-2">
-                <h3 className="text-lg font-semibold">12. 문의처</h3>
-                <div className="bg-primary/5 border border-primary/20 p-4 rounded-lg space-y-2">
-                  <p className="text-sm">
-                    <strong>이메일:</strong> tlvh109@gmail.com
-                  </p>
-                  <p className="text-sm">
-                    <strong>운영 시간:</strong> 평일 10:00 - 18:00 KST
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    상세한 환불 정책 및 문의사항은 위 이메일로 연락 주시기 바랍니다.
-                  </p>
-                </div>
-              </section>
-
-              {/* 요약 박스 */}
-              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-4 rounded-lg">
-                <h4 className="font-semibold mb-2 text-sm">빠른 요약</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  월 구독은 선결제이며, <strong>7일 이내 미사용 시 전액 환불</strong> / <strong>중도 해지 시 미사용분 일할 환불</strong>을 제공합니다.
-                  환불 문의: tlvh109@gmail.com
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Fixed Footer */}
-          <div className="px-6 py-4 border-t bg-background shrink-0">
-            <div className="flex justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setShowRefundPolicyModal(false)}
-              >
-                취소
-              </Button>
-              <Button onClick={() => setShowRefundPolicyModal(false)}>
-                확인
               </Button>
             </div>
           </div>

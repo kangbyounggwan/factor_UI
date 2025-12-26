@@ -10,12 +10,12 @@ import {
   Crown,
   X,
   ExternalLink,
-  Monitor,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
 import useEmblaCarousel from "embla-carousel-react";
 import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 
 interface SubscriptionPlan {
   id: string;
@@ -124,7 +124,7 @@ const Subscription = () => {
     },
   ];
 
-  const handleSelectPlan = (planId: string) => {
+  const handleSelectPlan = async (planId: string) => {
     if (planId === currentPlan) {
       toast({
         title: t("subscription.currentPlan"),
@@ -149,13 +149,22 @@ const Subscription = () => {
       return;
     }
 
-    // 모바일에서는 PC 웹 안내, PC에서는 결제 페이지 이동
+    // 웹 결제 페이지 URL 생성
+    const webBaseUrl = import.meta.env.VITE_WEB_URL || "https://factor3d.io";
+    const checkoutUrl = `${webBaseUrl}/payment/checkout?plan=${planId}&cycle=${isYearly ? "yearly" : "monthly"}`;
+
+    // 모바일에서는 외부 브라우저로 결제 페이지 열기
     if (isMobile) {
-      toast({
-        title: t("subscription.webOnly"),
-        description: t("subscription.webOnlyDesc"),
-        duration: 5000,
-      });
+      try {
+        await Browser.open({ url: checkoutUrl });
+      } catch (error) {
+        console.error("Failed to open browser:", error);
+        toast({
+          title: t("common.error"),
+          description: t("subscription.browserOpenFailed"),
+          variant: "destructive",
+        });
+      }
     } else {
       navigate("/payment/checkout", { state: { planId, isYearly } });
     }
@@ -186,11 +195,11 @@ const Subscription = () => {
       {isMobile && (
         <div className="mx-4 mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
           <div className="flex items-start gap-3">
-            <Monitor className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+            <ExternalLink className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="font-semibold text-blue-500">{t("subscription.webOnly")}</h3>
+              <h3 className="font-semibold text-blue-500">{t("subscription.externalPayment", "External Payment")}</h3>
               <p className="text-sm text-blue-500/80 mt-1">
-                {t("subscription.webOnlyDesc")}
+                {t("subscription.externalPaymentDesc", "Payment will open in your browser for secure checkout.")}
               </p>
             </div>
           </div>
@@ -332,8 +341,8 @@ const Subscription = () => {
                       t("subscription.downgrade")
                     ) : isMobile ? (
                       <>
-                        <Monitor className="h-4 w-4 mr-2" />
-                        {t("subscription.subscribeOnWeb")}
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        {t("subscription.subscribe")}
                       </>
                     ) : (
                       <>

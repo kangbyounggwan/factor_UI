@@ -6,12 +6,11 @@
 import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Cpu, File, ExternalLink, ArrowRight, ImageIcon, X, ZoomIn, Link2, AlertCircle } from "lucide-react";
+import { Cpu, File, ExternalLink, ImageIcon, X, ZoomIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CodeFixDiffCard } from "./GCodeAnalytics/CodeFixDiffCard";
 import type { CodeFixInfo } from "./GCodeAnalytics/CodeFixDiffCard";
 import { ReportCompletionCard } from "./GCodeAnalytics/ReportCompletionCard";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -75,8 +74,6 @@ interface ChatMessageProps {
   resolvedLines?: Set<number>;
   // 되돌리기 콜백 (수정코드 -> 원본코드로)
   onRevert?: (lineNumber: number, fixedCode: string, originalCode: string) => void;
-  // 제안 액션 클릭 콜백
-  onSuggestedAction?: (action: SuggestedAction) => void;
 }
 
 /**
@@ -343,7 +340,6 @@ const AssistantMessage: React.FC<{
   onReportCardClick?: (reportId: string) => void;
   resolvedLines?: Set<number>;
   onRevert?: (lineNumber: number, fixedCode: string, originalCode: string) => void;
-  onSuggestedAction?: (action: SuggestedAction) => void;
 }> = ({
   message,
   gcodeContent,
@@ -354,7 +350,6 @@ const AssistantMessage: React.FC<{
   onReportCardClick,
   resolvedLines,
   onRevert,
-  onSuggestedAction,
 }) => {
   // 출처 추출 및 본문 분리
   const { cleanContent, sources } = extractSources(message.content);
@@ -404,7 +399,7 @@ const AssistantMessage: React.FC<{
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-full transition-colors group"
-              title={'snippet' in ref && ref.snippet ? ref.snippet : undefined}
+              title={'snippet' in ref && ref.snippet ? String(ref.snippet) : undefined}
             >
               <span className="max-w-[200px] truncate">{ref.title}</span>
               <ExternalLink className="w-3 h-3 flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
@@ -450,49 +445,6 @@ const AssistantMessage: React.FC<{
       </div>
     )}
 
-    {/* 참조 링크 섹션 - 참조 이미지가 있을 때만 표시 (트러블슈팅 응답) */}
-    {message.referenceImages && message.referenceImages.images && message.referenceImages.images.length > 0 && (
-      <div className="pl-8 mt-4 pt-4 border-t border-border/50">
-        <div className="flex items-center gap-2 mb-3 text-sm font-medium text-muted-foreground">
-          <Link2 className="w-4 h-4" />
-          <span>참조 링크</span>
-        </div>
-        {message.references && message.references.length > 0 ? (
-          <div className="space-y-2">
-            {message.references.map((ref, idx) => (
-              <a
-                key={`ref-link-${idx}-${ref.url}`}
-                href={ref.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-start gap-3 p-3 rounded-lg border border-border/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
-              >
-                <ExternalLink className="w-4 h-4 mt-0.5 text-muted-foreground group-hover:text-primary shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-foreground group-hover:text-primary line-clamp-1">
-                    {ref.title}
-                  </div>
-                  {ref.snippet && (
-                    <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
-                      {ref.snippet}
-                    </div>
-                  )}
-                  <div className="text-xs text-muted-foreground/70 mt-1 truncate">
-                    {ref.source || new URL(ref.url).hostname}
-                  </div>
-                </div>
-              </a>
-            ))}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-muted-foreground text-sm">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>참조 링크가 없습니다</span>
-          </div>
-        )}
-      </div>
-    )}
-
     {/* 이미지 확대 보기 모달 */}
     <Dialog open={!!selectedImage} onOpenChange={(open) => !open && setSelectedImage(null)}>
       <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] p-0 overflow-hidden bg-black/95 border-none">
@@ -532,26 +484,6 @@ const AssistantMessage: React.FC<{
         )}
       </DialogContent>
     </Dialog>
-
-    {/* 제안 액션 버튼 */}
-    {message.suggestedActions && message.suggestedActions.length > 0 && onSuggestedAction && (
-      <div className="pl-8 mt-4">
-        <div className="flex flex-wrap gap-2">
-          {message.suggestedActions.map((action, idx) => (
-            <Button
-              key={`action-${idx}-${action.label}`}
-              variant="outline"
-              size="sm"
-              onClick={() => onSuggestedAction(action)}
-              className="rounded-full text-xs gap-1.5 hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors"
-            >
-              {action.label}
-              <ArrowRight className="w-3 h-3" />
-            </Button>
-          ))}
-        </div>
-      </div>
-    )}
 
     {/* 코드 수정 카드 (GitHub Diff 스타일) */}
     {message.codeFixes && message.codeFixes.length > 0 && onCodeFixClick && (
@@ -602,7 +534,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onReportCardClick,
   resolvedLines,
   onRevert,
-  onSuggestedAction,
 }) => {
   return (
     <div
@@ -628,7 +559,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             onReportCardClick={onReportCardClick}
             resolvedLines={resolvedLines}
             onRevert={onRevert}
-            onSuggestedAction={onSuggestedAction}
           />
         )}
       </div>
