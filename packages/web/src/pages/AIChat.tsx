@@ -27,6 +27,9 @@ import {
   ChevronRight,
   Check,
   Box,
+  Share2,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -83,6 +86,7 @@ import {
   updateChatSessionTitle,
   updateChatSessionToolType,
 } from "@shared/services/supabaseService/chat";
+import { createSharedChat, type SharedMessage } from "@shared/services/supabaseService/sharedChat";
 import { generateChatTitle } from "@shared/services/geminiService";
 import {
   getAnonymousId,
@@ -284,6 +288,11 @@ const AIChat = () => {
 
   // 되돌리기 상태 (라인 번호 설정 시 해당 라인 되돌리기)
   const [revertLineNumber, setRevertLineNumber] = useState<number | undefined>(undefined);
+
+  // 공유 관련 상태
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   // 사용자 플랜 정보 가져오기 (shared 훅 사용)
   const { plan: userPlan } = useUserPlan(user?.id);
@@ -631,6 +640,74 @@ const AIChat = () => {
     // 아카이브 뷰를 열고 해당 보고서 상세 보기로 이동
     setArchiveViewActive(true);
     await handleArchiveViewReport(report.id, report.fileName);
+  };
+
+  // 대화 공유 핸들러
+  const handleShareChat = async () => {
+    if (messages.length === 0) {
+      toast({
+        title: t('aiChat.shareNoMessages', '공유할 대화가 없습니다'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSharing(true);
+    try {
+      // Message를 SharedMessage 형식으로 변환
+      const sharedMessages: SharedMessage[] = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.timestamp.toISOString(),
+        images: msg.images,
+        files: msg.files,
+      }));
+
+      // 세션 제목 또는 첫 메시지에서 제목 추출
+      const currentSession = chatSessions.find(s => s.id === currentSessionId);
+      const title = currentSession?.title ||
+        (messages[0]?.content.slice(0, 50) + (messages[0]?.content.length > 50 ? '...' : '')) ||
+        t('aiChat.sharedConversation', '공유된 대화');
+
+      const result = await createSharedChat(sharedMessages, {
+        userId: user?.id,
+        title,
+        expiresInDays: 30, // 30일 후 만료
+      });
+
+      if (result) {
+        setShareUrl(result.shareUrl);
+        setShowShareModal(true);
+      } else {
+        throw new Error('Failed to create share link');
+      }
+    } catch (error) {
+      console.error('[AIChat] Share error:', error);
+      toast({
+        title: t('aiChat.shareError', '공유 링크 생성 실패'),
+        description: t('aiChat.shareErrorDesc', '잠시 후 다시 시도해주세요'),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  // 클립보드 복사 핸들러
+  const handleCopyShareUrl = async () => {
+    if (!shareUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast({
+        title: t('aiChat.shareCopied', '링크가 복사되었습니다'),
+      });
+    } catch {
+      toast({
+        title: t('aiChat.shareCopyError', '복사 실패'),
+        variant: 'destructive',
+      });
+    }
   };
 
   // 보고서 아카이브 삭제 핸들러
@@ -2045,7 +2122,28 @@ const AIChat = () => {
       {/* 메인 컨텐츠 */}
       <div className="flex-1 flex flex-col min-w-0 relative transition-all duration-300">
         {/* 상단 헤더 - AppHeader 재사용 */}
-        <AppHeader sidebarOpen={sidebarOpen} onLoginRequired={() => setShowLoginModal(true)} />
+        <AppHeader
+          sidebarOpen={sidebarOpen}
+          onLoginRequired={() => setShowLoginModal(true)}
+          rightContent={
+            messages.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleShareChat}
+                disabled={isSharing}
+                className="gap-2 text-muted-foreground hover:text-foreground"
+              >
+                {isSharing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Share2 className="w-4 h-4" />
+                )}
+                <span className="hidden sm:inline">{t('aiChat.share', '공유')}</span>
+              </Button>
+            )
+          }
+        />
 
         {archiveViewActive && user?.id ? (
           // 아카이브 뷰 모드 - GCodeAnalyticsArchive 컴포넌트 사용
@@ -2704,6 +2802,59 @@ const AIChat = () => {
               {t('aiChat.startNewChat', '새 채팅 시작')}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 대화 공유 모달 */}
+      <Dialog open={showShareModal} onOpenChange={setShowShareModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="w-5 h-5" />
+              {t('aiChat.shareTitle', '대화 공유')}
+            </DialogTitle>
+            <DialogDescription>
+              {t('aiChat.shareDescription', '이 링크를 통해 다른 사람과 대화 내용을 공유할 수 있습니다. 링크는 30일간 유효합니다.')}
+            </DialogDescription>
+          </DialogHeader>
+
+          {shareUrl && (
+            <div className="space-y-4">
+              {/* 공유 URL */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 p-3 bg-muted rounded-lg border text-sm truncate font-mono">
+                  {shareUrl}
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleCopyShareUrl}
+                  className="shrink-0"
+                >
+                  <Copy className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {/* 버튼 */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 gap-2"
+                  onClick={handleCopyShareUrl}
+                >
+                  <Copy className="w-4 h-4" />
+                  {t('aiChat.copyLink', '링크 복사')}
+                </Button>
+                <Button
+                  className="flex-1 gap-2"
+                  onClick={() => window.open(shareUrl, '_blank')}
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  {t('aiChat.openLink', '열기')}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

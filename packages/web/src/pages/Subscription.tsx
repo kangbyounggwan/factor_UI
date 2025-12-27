@@ -345,10 +345,15 @@ const Subscription = () => {
     if (!user) return;
 
     try {
-      // 구독 취소 - user_subscriptions 테이블에서 삭제
+      // 구독 취소 - 즉시 삭제하지 않고 cancel_at_period_end 설정
+      // 현재 결제 기간이 끝날 때까지 플랜 유지
       const { error } = await supabase
         .from('user_subscriptions')
-        .delete()
+        .update({
+          cancel_at_period_end: true,
+          cancelled_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
         .eq('user_id', user.id);
 
       if (error) throw error;
@@ -356,12 +361,22 @@ const Subscription = () => {
       // 성공 토스트
       toast({
         title: t('subscription.cancelSuccessTitle'),
-        description: t('subscription.cancelSuccessMessage'),
+        description: t('subscription.cancelScheduledMessage', '구독이 현재 결제 기간 종료 후 취소됩니다.'),
       });
 
-      // 현재 플랜을 free로 업데이트
-      setCurrentPlanId('free');
       setShowCancelDialog(false);
+
+      // 구독 데이터 새로고침
+      const { data: updatedSubscription } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (updatedSubscription) {
+        // 상태 업데이트 (플랜은 유지, 취소 예정 표시)
+        console.log('[Subscription] Cancel scheduled, period ends:', updatedSubscription.current_period_end);
+      }
     } catch (error) {
       console.error('Error canceling subscription:', error);
       toast({

@@ -47,6 +47,7 @@ const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const GCodeAPITest = lazy(() => import("./pages/GCodeAPITest"));
 const GCodeAnalytics = lazy(() => import("./pages/GCodeAnalytics"));
 const SharedReport = lazy(() => import("@/components/ai/GCodeAnalytics/SharedReportPage"));
+const SharedChat = lazy(() => import("./pages/SharedChat"));
 
 const queryClient = new QueryClient();
 
@@ -73,7 +74,8 @@ const AppContent = () => {
     '/printer',
     '/admin',
     '/gcode-analytics',
-    '/shared'
+    '/shared',
+    '/share'
   ];
 
   // 현재 경로가 Header를 숨겨야 하는 경로인지 확인
@@ -90,7 +92,8 @@ const AppContent = () => {
     '/admin',
     '/auth',
     '/gcode-analytics',
-    '/shared'
+    '/shared',
+    '/share'
   ];
 
   // 현재 경로가 Footer를 숨겨야 하는 경로인지 확인
@@ -171,6 +174,7 @@ const AppContent = () => {
               </ProtectedRoute>
             } />
             <Route path="/shared/report/:shareId" element={<SharedReport />} />
+            <Route path="/share/:shareId" element={<SharedChat />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

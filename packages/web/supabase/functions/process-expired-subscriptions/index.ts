@@ -35,14 +35,16 @@ serve(async (req) => {
 
     const now = new Date().toISOString();
 
-    // 1. 만료된 유료 구독 찾기 (trial/trialing 제외, active 상태만)
+    // 1. 만료된 유료 구독 찾기
+    // - current_period_end가 지났고 cancel_at_period_end가 true인 구독
+    // - 또는 status가 cancelled이고 current_period_end가 지난 구독
     // Free 플랜은 current_period_end가 100년 후로 설정되어 있어서 만료되지 않음
     const { data: expiredSubscriptions, error: fetchError } = await supabase
       .from("user_subscriptions")
-      .select("id, user_id, plan_name, status, current_period_end")
-      .eq("status", "active")
+      .select("id, user_id, plan_name, status, current_period_end, cancel_at_period_end")
       .neq("plan_name", "free")
-      .lt("current_period_end", now);
+      .lt("current_period_end", now)
+      .or("cancel_at_period_end.eq.true,status.eq.cancelled");
 
     if (fetchError) {
       console.error("[ExpiredSubscriptions] Error fetching expired subscriptions:", fetchError);

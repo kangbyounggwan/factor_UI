@@ -116,26 +116,57 @@ async function getPlanId(supabase: any, planCode: string): Promise<string | null
   return data.id;
 }
 
+// Paddle Price ID to Plan Name 매핑 (가장 정확한 방법)
+const PADDLE_PRICE_TO_PLAN: Record<string, string> = {
+  // Starter Plans
+  "pri_01kcyrxke87z2a51hrfd0vhe4f": "starter",  // Starter Monthly
+  "pri_01kcys0seakfd2e6y7c3mvtm7z": "starter",  // Starter Yearly
+  // Pro Plans
+  "pri_01kbhasnwsznd6cp0xsffyvqbc": "pro",      // Pro Monthly
+  "pri_01kbhay65qjtkh4tbmep4egdmf": "pro",      // Pro Yearly
+};
+
 /**
  * Determine plan name from Paddle price/product info
+ * 순서 중요: Price ID > Name 매칭 > fallback
  */
 function determinePlanName(data: any): string {
   const items = data.items || [];
   const priceName = items[0]?.price?.name?.toLowerCase() || "";
   const productName = items[0]?.price?.product?.name?.toLowerCase() || "";
+  const priceId = items[0]?.price?.id || "";
 
-  // Check for enterprise
+  console.log("[determinePlanName] priceName:", priceName, "productName:", productName, "priceId:", priceId);
+
+  // 1. Price ID로 정확히 매핑 (가장 신뢰할 수 있는 방법)
+  if (priceId && PADDLE_PRICE_TO_PLAN[priceId]) {
+    const plan = PADDLE_PRICE_TO_PLAN[priceId];
+    console.log("[determinePlanName] Matched by priceId:", priceId, "->", plan);
+    return plan;
+  }
+
+  // 2. Check for enterprise (가장 높은 플랜)
   if (priceName.includes("enterprise") || productName.includes("enterprise")) {
+    console.log("[determinePlanName] Matched by name: enterprise");
     return "enterprise";
   }
 
-  // Check for pro (default paid plan)
+  // 3. Check for pro
   if (priceName.includes("pro") || productName.includes("pro")) {
+    console.log("[determinePlanName] Matched by name: pro");
     return "pro";
   }
 
-  // Default to pro for any paid subscription
-  return "pro";
+  // 4. Check for starter
+  if (priceName.includes("starter") || productName.includes("starter")) {
+    console.log("[determinePlanName] Matched by name: starter");
+    return "starter";
+  }
+
+  // 5. 매칭 실패 시 - 에러 로그 남기고 starter 반환 (안전한 기본값)
+  console.error("[determinePlanName] WARNING: No plan matched! priceId:", priceId, "priceName:", priceName, "productName:", productName);
+  console.error("[determinePlanName] Defaulting to 'starter' - please add this priceId to PADDLE_PRICE_TO_PLAN mapping");
+  return "starter";
 }
 
 /**
@@ -394,9 +425,8 @@ async function handleTransactionCompleted(supabase: any, data: any) {
   const amount = parseFloat(totals.total || "0") / 100; // Paddle uses cents
   const currency = data.currency_code || "USD";
 
-  // Get plan name from items
-  const items = data.items || [];
-  const planName = items[0]?.price?.product?.name?.toLowerCase().includes("pro") ? "pro" : "pro";
+  // Get plan name from items using determinePlanName function
+  const planName = determinePlanName(data);
 
   // Check if transaction already exists (prevent duplicates)
   const { data: existingPayment } = await supabase
@@ -457,10 +487,11 @@ async function handlePaymentFailed(supabase: any, data: any) {
   const totals = data.details?.totals || {};
   const amount = parseFloat(totals.total || "0") / 100;
   const currency = data.currency_code || "USD";
+  const planName = determinePlanName(data);
 
   const { error } = await supabase.from("payment_history").insert({
     user_id: userId,
-    plan_name: "pro",
+    plan_name: planName,
     amount: amount,
     currency: currency,
     status: "failed",

@@ -332,8 +332,7 @@ const UserSettings = () => {
   // Load payment data (history and methods) - 한 번만 로드
   useEffect(() => {
     const loadPaymentData = async () => {
-      if (!user || !subscriptionData || subscriptionData.price === 0) {
-        // No paid subscription, no need to load payment data
+      if (!user) {
         setAllPaymentHistory([]);
         setPaymentMethods([]);
         return;
@@ -342,14 +341,17 @@ const UserSettings = () => {
       try {
         setLoadingPaymentData(true);
 
-        // Load ALL payment history (최대 100개) and methods in parallel
-        const [historyResult, methodsResult] = await Promise.all([
-          getUserPaymentHistory(user.id, 100, 0),
-          getUserPaymentMethods(),
-        ]);
-
+        // 결제 내역은 항상 로드 (과거 결제 기록 표시를 위해)
+        const historyResult = await getUserPaymentHistory(user.id, 100, 0);
         setAllPaymentHistory(historyResult.data);
-        setPaymentMethods(methodsResult);
+
+        // 결제 수단은 유료 구독이 있을 때만 로드
+        if (subscriptionData && subscriptionData.price > 0) {
+          const methodsResult = await getUserPaymentMethods();
+          setPaymentMethods(methodsResult);
+        } else {
+          setPaymentMethods([]);
+        }
       } catch (error) {
         console.error("Error loading payment data:", error);
       } finally {

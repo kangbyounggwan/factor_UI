@@ -415,15 +415,6 @@ POST /api/v1/printers/{id}/print
         </div>
       </section>
 
-      {/* Footer - 무료 AI 모델 안내 */}
-      <footer className="py-8 px-6 bg-muted/30 border-t">
-        <div className="max-w-7xl mx-auto text-center">
-          <p className="text-sm text-muted-foreground">
-            {t('landing.freeAiModelInfo', '🎁 로그인 없이 AI 채팅 10회 무료 체험 · Gemini 2.5 Flash Lite')}
-          </p>
-        </div>
-      </footer>
-
       {/* Installation Video Modal */}
       <Dialog open={showVideoModal} onOpenChange={setShowVideoModal}>
         <DialogContent className="max-w-5xl" aria-describedby={undefined}>
