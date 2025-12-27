@@ -7,6 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ScrollToTop } from "@/components/ScrollToTop";
+import { EventBanner } from "@/components/EventBanner";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 import { lazy, Suspense, useEffect } from "react";
@@ -103,6 +104,9 @@ const AppContent = () => {
     <div className="flex flex-col min-h-screen bg-background transition-colors">
       {/* 페이지 이동 시 스크롤 최상단으로 */}
       <ScrollToTop />
+
+      {/* 이벤트 배너 (홈페이지에서만 표시) */}
+      {location.pathname === '/' && <EventBanner />}
 
       {/* 헤더를 모든 페이지에 통합 (ai-chat 제외) */}
       {!shouldHideHeader && <Header />}
