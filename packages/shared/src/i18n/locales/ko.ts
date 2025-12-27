@@ -664,6 +664,16 @@ export default {
       modeling: "스마트폰 거치대 만들어줘",
       modelingHook: "벽걸이 후크 만들어줘",
     },
+    // 채팅 공유 관련
+    share: "공유",
+    shareTitle: "대화 공유",
+    shareDescription: "이 링크를 통해 다른 사람과 대화 내용을 공유할 수 있습니다. 링크는 30일간 유효합니다.",
+    copyLink: "링크 복사",
+    openLink: "열기",
+    linkCopied: "링크가 복사되었습니다",
+    shareSuccess: "공유 링크가 생성되었습니다",
+    shareFailed: "공유 링크 생성에 실패했습니다",
+    starterAndAbove: "Starter 이상",
   },
   profile: {
     // UserSettings 페이지
@@ -2580,5 +2590,28 @@ export default {
     light: "라이트",
     dark: "다크",
     system: "시스템"
+  },
+  // 공유된 대화 페이지
+  shared: {
+    loadingChat: "대화를 불러오는 중...",
+    chatExpired: "대화를 찾을 수 없음",
+    chatNotFound: "대화를 찾을 수 없음",
+    chatExpiredDesc: "이 공유 링크가 만료되었거나 삭제되었습니다.",
+    chatNotFoundDesc: "공유된 대화를 찾을 수 없습니다.",
+    goHome: "홈으로",
+    sharedChat: "공유된 대화",
+    tryFactor: "FACTOR 사용하기",
+    chatConversation: "프린터 문제 진단 대화",
+    generatedByFactor: "FACTOR AI 어시스턴트와의 대화",
+    user: "사용자",
+    factorAI: "FACTOR AI",
+    references: "참고 자료",
+    referenceImages: "참조 이미지",
+    viewOriginal: "원본 사이트에서 보기",
+    tryFactorCTA: "나도 FACTOR로 프린터 문제 해결하기",
+    tryFactorDesc: "AI가 3D 프린터 문제를 진단하고 해결 방법을 알려드립니다.",
+    startChat: "무료로 시작하기",
+    poweredBy: "Powered by FACTOR - AI-Powered 3D Printing Assistant",
+    learnMore: "FACTOR에 대해 더 알아보기"
   }
 };

@@ -3,10 +3,21 @@
  * - 사용자 메시지와 AI 메시지를 렌더링
  * - 마크다운 렌더링, 코드 수정 카드, 보고서 카드 포함
  */
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Cpu, File, ExternalLink, ImageIcon, X, ZoomIn } from "lucide-react";
+
+/**
+ * 마크다운 렌더링 전 ~ 문자를 이스케이프
+ * remarkGfm의 strikethrough(~~text~~) 문법과 충돌 방지
+ * 예: "190~220°C" → "190\~220°C"
+ */
+function escapeMarkdownTildes(content: string): string {
+  // ~~ (연속 두 개)가 아닌 단일 ~만 이스케이프
+  // 이미 이스케이프된 \~는 건드리지 않음
+  return content.replace(/(?<!\\)~(?!~)/g, '\\~');
+}
 import { cn } from "@/lib/utils";
 import { CodeFixDiffCard } from "./GCodeAnalytics/CodeFixDiffCard";
 import type { CodeFixInfo } from "./GCodeAnalytics/CodeFixDiffCard";
@@ -354,6 +365,9 @@ const AssistantMessage: React.FC<{
   // 출처 추출 및 본문 분리
   const { cleanContent, sources } = extractSources(message.content);
 
+  // ~ 문자 이스케이프 (strikethrough 방지) - useMemo로 최적화
+  const escapedContent = useMemo(() => escapeMarkdownTildes(cleanContent), [cleanContent]);
+
   // API에서 받은 참고 자료가 있으면 그것을 사용, 없으면 본문에서 추출한 sources 사용
   const displayReferences = message.references && message.references.length > 0
     ? message.references
@@ -380,7 +394,7 @@ const AssistantMessage: React.FC<{
         remarkPlugins={[remarkGfm]}
         components={markdownComponents}
       >
-        {cleanContent}
+        {escapedContent}
       </ReactMarkdown>
     </div>
 

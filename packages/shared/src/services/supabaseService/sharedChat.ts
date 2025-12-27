@@ -3,6 +3,21 @@
  */
 import { supabase } from '../../integrations/supabase/client';
 
+// 참고 자료 타입
+export interface SharedReference {
+  title: string;
+  url: string;
+  source?: string;
+  snippet?: string;
+}
+
+// 참조 이미지 타입
+export interface SharedReferenceImage {
+  title: string;
+  thumbnail_url: string;
+  source_url: string;
+}
+
 // 공유 메시지 타입
 export interface SharedMessage {
   role: 'user' | 'assistant';
@@ -10,6 +25,10 @@ export interface SharedMessage {
   timestamp: string;
   images?: string[];
   files?: { name: string; type: string }[];
+  // AI 응답에 포함된 참고 자료
+  references?: SharedReference[];
+  // AI 응답에 포함된 참조 이미지
+  referenceImages?: SharedReferenceImage[];
 }
 
 // 공유 채팅 타입
@@ -66,7 +85,7 @@ export async function createSharedChat(
       .single();
 
     if (error) {
-      console.error('[sharedChat] Error creating shared chat:', error);
+      console.error('[sharedChat] Error creating shared chat:', error.message, error.code, error.details, error.hint);
       return null;
     }
 

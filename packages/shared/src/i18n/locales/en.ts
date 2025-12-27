@@ -2624,10 +2624,43 @@ export default {
       modeling: "Make a phone stand",
       modelingHook: "Make a wall hook",
     },
+    // Chat sharing related
+    share: "Share",
+    shareTitle: "Share Conversation",
+    shareDescription: "Share this conversation with others via link. The link is valid for 30 days.",
+    copyLink: "Copy Link",
+    openLink: "Open",
+    linkCopied: "Link copied to clipboard",
+    shareSuccess: "Share link created successfully",
+    shareFailed: "Failed to create share link",
+    starterAndAbove: "Starter and above",
   },
   theme: {
     light: "Light",
     dark: "Dark",
     system: "System"
+  },
+  // Shared chat page
+  shared: {
+    loadingChat: "Loading conversation...",
+    chatExpired: "Chat Not Found",
+    chatNotFound: "Chat Not Found",
+    chatExpiredDesc: "This share link has expired or been deleted.",
+    chatNotFoundDesc: "The shared conversation could not be found.",
+    goHome: "Go Home",
+    sharedChat: "Shared Chat",
+    tryFactor: "Try FACTOR",
+    chatConversation: "Printer Troubleshooting Conversation",
+    generatedByFactor: "Conversation with FACTOR AI Assistant",
+    user: "User",
+    factorAI: "FACTOR AI",
+    references: "References",
+    referenceImages: "Reference Images",
+    viewOriginal: "View on original site",
+    tryFactorCTA: "Solve Your 3D Printing Problems with FACTOR",
+    tryFactorDesc: "AI diagnoses your 3D printer issues and provides solutions.",
+    startChat: "Get Started Free",
+    poweredBy: "Powered by FACTOR - AI-Powered 3D Printing Assistant",
+    learnMore: "Learn More About FACTOR"
   }
 };
