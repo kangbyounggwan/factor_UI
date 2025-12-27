@@ -654,13 +654,20 @@ const AIChat = () => {
 
     setIsSharing(true);
     try {
-      // Message를 SharedMessage 형식으로 변환
+      // Message를 SharedMessage 형식으로 변환 (references, referenceImages 포함)
       const sharedMessages: SharedMessage[] = messages.map(msg => ({
         role: msg.role,
         content: msg.content,
         timestamp: msg.timestamp.toISOString(),
         images: msg.images,
         files: msg.files,
+        // AI 응답에 포함된 참고자료와 참조이미지도 저장
+        references: msg.references,
+        referenceImages: msg.referenceImages?.images?.map(img => ({
+          title: img.title,
+          thumbnail_url: img.thumbnail_url,
+          source_url: img.source_url,
+        })),
       }));
 
       // 세션 제목 또는 첫 메시지에서 제목 추출

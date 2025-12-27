@@ -18,6 +18,35 @@ function escapeMarkdownTildes(content: string): string {
   // 이미 이스케이프된 \~는 건드리지 않음
   return content.replace(/(?<!\\)~(?!~)/g, '\\~');
 }
+
+/**
+ * 마크다운 포맷팅 수정
+ * AI 응답에서 제목과 내용이 붙어있는 경우 줄바꿈 추가
+ */
+function fixMarkdownLineBreaks(content: string): string {
+  let result = content;
+
+  // 패턴 1: "추천 해결 방법:**1." → "추천 해결 방법:**\n\n**1."
+  // 이모지 포함 가능: "🔧 추천 해결 방법:**1."
+  result = result.replace(/(추천\s*해결\s*방법:?)(\*\*\d+\.)/g, '$1\n\n$2');
+  result = result.replace(/(Recommended\s*Solutions?:?)(\*\*\d+\.)/gi, '$1\n\n$2');
+
+  // 패턴 2: "**제목:**숫자." → "**제목:**\n\n숫자."
+  result = result.replace(/(\*\*[^*]+:\*\*)(\d+\.)/g, '$1\n\n$2');
+
+  // 패턴 3: "**제목:**\n숫자." → "**제목:**\n\n숫자." (줄바꿈 1개 → 2개)
+  result = result.replace(/(\*\*[^*]+:\*\*)\n(\d+\.)/g, '$1\n\n$2');
+
+  // 패턴 4: "제목:\n**1." → "제목:\n\n**1." (볼드 없는 제목 + 볼드 번호)
+  result = result.replace(/(방법:)\n(\*\*\d+\.)/g, '$1\n\n$2');
+  result = result.replace(/(Solutions?:)\n(\*\*\d+\.)/gi, '$1\n\n$2');
+
+  // 난이도/예상 시간 줄과 단계 목록 사이 줄바꿈 확보
+  result = result.replace(/(예상 시간:[^\n]+)\n(\s*\d+\.)/g, '$1\n\n$2');
+  result = result.replace(/(estimated time:[^\n]+)\n(\s*\d+\.)/gi, '$1\n\n$2');
+
+  return result;
+}
 import { cn } from "@/lib/utils";
 import { CodeFixDiffCard } from "./GCodeAnalytics/CodeFixDiffCard";
 import type { CodeFixInfo } from "./GCodeAnalytics/CodeFixDiffCard";
@@ -264,26 +293,24 @@ interface SourceInfo {
 /**
  * 마크다운에서 출처/참고 자료 링크를 추출하고 본문과 분리
  * GPT 스타일: 본문에서 출처를 제거하고 하단에 별도 섹션으로 표시
+ *
+ * 주의: 인라인 출처 텍스트 (예: "출처: [official] 텍스트...")는 제거하지 않음
+ * 마크다운 링크 형식 [title](url)이 포함된 경우만 추출 및 하단 이동
  */
 function extractSources(content: string): { cleanContent: string; sources: SourceInfo[] } {
   const sources: SourceInfo[] = [];
 
-  // 다양한 출처/참고자료 패턴 매칭
-  // 이모지, 볼드, 여러 언어 지원
+  // 마크다운 링크가 포함된 출처 섹션만 추출
+  // 인라인 텍스트 출처는 건드리지 않음
   const sourcePatterns = [
-    // === 한국어 패턴 ===
+    // === 한국어 패턴 (마크다운 링크 필수) ===
     // "📚 참고 자료:" 뒤에 리스트 형식으로 나오는 경우 (여러 줄)
     /📚\s*참고\s*자료:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
     // "📚 출처:" 뒤에 리스트 형식으로 나오는 경우 (여러 줄)
     /📚\s*출처:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    // "📎 출처:" 패턴
+    // "📎 출처:" 패턴 - 볼드 포함
+    /📎\s*\*\*출처:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
     /📎\s*출처:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    // 단일 줄 패턴들
-    /📚\s*출처:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
-    /📚\s*참고\s*자료:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
-    /📎\s*출처:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
-    /🔗\s*출처:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
-    /🔗\s*참고\s*자료:\s*(.+?)(?=\n\n|\n(?=[#\d])|$)/gs,
     // 볼드 패턴 (** **) - 한국어
     /\*\*참고\s*자료:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
     /\*\*출처:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
@@ -293,10 +320,11 @@ function extractSources(content: string): { cleanContent: string; sources: Sourc
     /\*\*더\s*알아보기:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
     /\*\*관련\s*링크:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
 
-    // === 영어 패턴 ===
+    // === 영어 패턴 (마크다운 링크 필수) ===
     // "📚 Sources:" or "📚 References:"
     /📚\s*Sources?:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
     /📚\s*References?:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    /📎\s*\*\*Sources?:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
     /📎\s*Sources?:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
     /🔗\s*Sources?:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
     // 볼드 패턴 - 영어
@@ -310,18 +338,21 @@ function extractSources(content: string): { cleanContent: string; sources: Sourc
 
   for (const pattern of sourcePatterns) {
     cleanContent = cleanContent.replace(pattern, (match, sourceText) => {
-      // [Title](URL) 패턴 추출
+      // [Title](URL) 패턴 추출 - 반드시 마크다운 링크가 있어야 함
       const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
       let linkMatch;
+      let hasValidLinks = false;
       while ((linkMatch = linkPattern.exec(sourceText)) !== null) {
         const title = linkMatch[1].trim();
         const url = linkMatch[2].trim();
         // 중복 체크 및 유효한 URL만 추가
         if (url.startsWith('http') && !sources.some(s => s.url === url)) {
           sources.push({ title, url });
+          hasValidLinks = true;
         }
       }
-      return ''; // 본문에서 출처 제거
+      // 마크다운 링크가 있는 경우에만 본문에서 제거
+      return hasValidLinks ? '' : match;
     });
   }
 
@@ -365,8 +396,11 @@ const AssistantMessage: React.FC<{
   // 출처 추출 및 본문 분리
   const { cleanContent, sources } = extractSources(message.content);
 
-  // ~ 문자 이스케이프 (strikethrough 방지) - useMemo로 최적화
-  const escapedContent = useMemo(() => escapeMarkdownTildes(cleanContent), [cleanContent]);
+  // 줄바꿈 수정 및 ~ 문자 이스케이프 - useMemo로 최적화
+  const escapedContent = useMemo(() => {
+    const fixedContent = fixMarkdownLineBreaks(cleanContent);
+    return escapeMarkdownTildes(fixedContent);
+  }, [cleanContent]);
 
   // API에서 받은 참고 자료가 있으면 그것을 사용, 없으면 본문에서 추출한 sources 사용
   const displayReferences = message.references && message.references.length > 0
