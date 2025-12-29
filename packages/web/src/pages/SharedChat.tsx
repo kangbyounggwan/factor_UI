@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { useIsMobile } from '@/hooks/use-mobile';
 import { SharedBottomNavigation } from '@/components/shared/SharedBottomNavigation';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 /**
  * 마크다운 렌더링 전 ~ 문자를 이스케이프
@@ -406,6 +407,8 @@ export default function SharedChatPage() {
                   </div>
                 </>
               )}
+              {/* 언어 변경 버튼 */}
+              <LanguageSwitcher />
               {/* 모바일에서는 아이콘만, 데스크탑에서는 전체 버튼 */}
               <Link to="/ai-chat">
                 <Button size="sm" className={cn("gap-2", isMobile && "px-3")}>

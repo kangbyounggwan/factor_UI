@@ -36,7 +36,6 @@ import { cn } from "@/lib/utils";
 import { ChatMessage, LoadingMessage, type ChatMessageData, type ReferenceInfo, type SuggestedAction } from "@/components/ai/ChatMessage";
 import {
   sendChatMessage,
-  imagesToAttachments,
   formatChatResponse,
   type ChatApiRequest,
   type ChatApiResponse,
@@ -318,9 +317,14 @@ const AIChat = () => {
         });
       }
 
-      // API 요청 구성
+      // API 요청 구성 - 모바일에서는 이미지가 dataURL 형태로 저장되므로 직접 변환
       const attachments = uploadedImages.length > 0
-        ? imagesToAttachments(uploadedImages)
+        ? uploadedImages.map((dataUrl, index) => ({
+            type: 'image' as const,
+            content: dataUrl.split(',')[1] || dataUrl,  // base64 부분만 추출
+            filename: `image_${index}.jpg`,
+            mime_type: dataUrl.match(/data:(.*?);/)?.[1] || 'image/jpeg',
+          }))
         : undefined;
 
       const request: ChatApiRequest = {
