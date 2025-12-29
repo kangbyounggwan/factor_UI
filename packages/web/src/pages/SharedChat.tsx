@@ -19,6 +19,8 @@ import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
+import { useIsMobile } from '@/hooks/use-mobile';
+import { SharedBottomNavigation } from '@/components/shared/SharedBottomNavigation';
 
 /**
  * 마크다운 렌더링 전 ~ 문자를 이스케이프
@@ -260,6 +262,7 @@ export default function SharedChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [chatData, setChatData] = useState<SharedChat | null>(null);
   const [selectedImage, setSelectedImage] = useState<SharedReferenceImage | null>(null);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     async function loadSharedChat() {
@@ -336,40 +339,52 @@ export default function SharedChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* 공유 헤더 */}
+    <div className={cn("min-h-screen bg-background", isMobile && "pb-20")}>
+      {/* 공유 헤더 - 모바일/데스크탑 반응형 */}
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/" className="flex items-center gap-2">
+            <div className="flex items-center gap-2 md:gap-4">
+              <Link to="/ai-chat" className="flex items-center gap-2">
                 <div className="flex items-center justify-center w-8 h-8 bg-primary rounded-lg">
                   <Activity className="w-5 h-5 text-primary-foreground" />
                 </div>
-                <span className="text-xl font-bold font-orbitron text-primary tracking-wide">
+                <span className="text-lg md:text-xl font-bold font-orbitron text-primary tracking-wide">
                   FACTOR
                 </span>
               </Link>
-              <div className="h-6 w-px bg-border" />
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <MessageCircle className="w-4 h-4" />
-                {t('shared.sharedChat', '공유된 대화')}
-              </div>
+              {/* 데스크탑에서만 구분선과 레이블 표시 */}
+              {!isMobile && (
+                <>
+                  <div className="h-6 w-px bg-border" />
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <MessageCircle className="w-4 h-4" />
+                    {t('shared.sharedChat', '공유된 대화')}
+                  </div>
+                </>
+              )}
             </div>
 
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <div className="flex items-center gap-1.5">
-                <Eye className="w-4 h-4" />
-                <span>{chatData.view_count}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4" />
-                <span>{new Date(chatData.created_at).toLocaleDateString()}</span>
-              </div>
+            {/* 모바일: 간소화된 헤더, 데스크탑: 풀 헤더 */}
+            <div className="flex items-center gap-2 md:gap-4 text-sm text-muted-foreground">
+              {/* 조회수/날짜는 데스크탑에서만 */}
+              {!isMobile && (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <Eye className="w-4 h-4" />
+                    <span>{chatData.view_count}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4" />
+                    <span>{new Date(chatData.created_at).toLocaleDateString()}</span>
+                  </div>
+                </>
+              )}
+              {/* 모바일에서는 아이콘만, 데스크탑에서는 전체 버튼 */}
               <Link to="/ai-chat">
-                <Button size="sm" className="gap-2">
-                  <ExternalLink className="w-4 h-4" />
-                  {t('shared.tryFactor', 'FACTOR 사용하기')}
+                <Button size="sm" className={cn("gap-2", isMobile && "px-3")}>
+                  <MessageCircle className="w-4 h-4" />
+                  {!isMobile && t('shared.tryFactor', 'FACTOR 사용하기')}
                 </Button>
               </Link>
             </div>
@@ -378,15 +393,34 @@ export default function SharedChatPage() {
       </header>
 
       {/* 대화 콘텐츠 */}
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
+      <main className={cn(
+        "container mx-auto px-4 max-w-4xl",
+        isMobile ? "py-4" : "py-8"
+      )}>
         {/* 제목 */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold mb-2">
+        <div className={cn("mb-4", !isMobile && "mb-8")}>
+          <h1 className={cn(
+            "font-bold mb-2",
+            isMobile ? "text-xl" : "text-2xl"
+          )}>
             {chatData.title || t('shared.chatConversation', '프린터 문제 진단 대화')}
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm md:text-base text-muted-foreground">
             {t('shared.generatedByFactor', 'FACTOR AI 어시스턴트와의 대화')}
           </p>
+          {/* 모바일에서 조회수/날짜 표시 */}
+          {isMobile && (
+            <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <Eye className="w-3.5 h-3.5" />
+                <span>{chatData.view_count}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>{new Date(chatData.created_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 메시지 목록 */}
@@ -567,19 +601,19 @@ export default function SharedChatPage() {
           </DialogContent>
         </Dialog>
 
-        {/* CTA */}
-        <div className="mt-12 text-center">
+        {/* CTA - 모바일에서는 작게, 데스크탑에서는 크게 */}
+        <div className={cn("text-center", isMobile ? "mt-6" : "mt-12")}>
           <Card className="bg-gradient-to-r from-primary/10 to-blue-500/10 border-primary/20">
-            <CardContent className="py-8">
-              <h2 className="text-xl font-bold mb-2">
+            <CardContent className={cn(isMobile ? "py-5 px-4" : "py-8")}>
+              <h2 className={cn("font-bold mb-2", isMobile ? "text-lg" : "text-xl")}>
                 {t('shared.tryFactorCTA', '나도 FACTOR로 프린터 문제 해결하기')}
               </h2>
-              <p className="text-muted-foreground mb-4">
+              <p className={cn("text-muted-foreground mb-4", isMobile && "text-sm")}>
                 {t('shared.tryFactorDesc', 'AI가 3D 프린터 문제를 진단하고 해결 방법을 알려드립니다.')}
               </p>
               <Link to="/ai-chat">
-                <Button size="lg" className="gap-2">
-                  <MessageCircle className="w-5 h-5" />
+                <Button size={isMobile ? "default" : "lg"} className="gap-2">
+                  <MessageCircle className={cn(isMobile ? "w-4 h-4" : "w-5 h-5")} />
                   {t('shared.startChat', '무료로 시작하기')}
                 </Button>
               </Link>
@@ -588,17 +622,22 @@ export default function SharedChatPage() {
         </div>
       </main>
 
-      {/* 푸터 */}
-      <footer className="border-t mt-12 py-8">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p className="mb-2">
-            {t('shared.poweredBy', 'Powered by FACTOR - AI-Powered 3D Printing Assistant')}
-          </p>
-          <Link to="/" className="text-primary hover:underline">
-            {t('shared.learnMore', 'FACTOR에 대해 더 알아보기')}
-          </Link>
-        </div>
-      </footer>
+      {/* 푸터 - 모바일에서는 숨기고 하단 네비게이션 표시 */}
+      {!isMobile && (
+        <footer className="border-t mt-12 py-8">
+          <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
+            <p className="mb-2">
+              {t('shared.poweredBy', 'Powered by FACTOR - AI-Powered 3D Printing Assistant')}
+            </p>
+            <Link to="/" className="text-primary hover:underline">
+              {t('shared.learnMore', 'FACTOR에 대해 더 알아보기')}
+            </Link>
+          </div>
+        </footer>
+      )}
+
+      {/* 모바일 하단 네비게이션 */}
+      {isMobile && <SharedBottomNavigation />}
     </div>
   );
 }

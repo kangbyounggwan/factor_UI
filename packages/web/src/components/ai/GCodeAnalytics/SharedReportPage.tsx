@@ -133,7 +133,7 @@ export default function SharedReportPage() {
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link to="/" className="flex items-center gap-2">
+              <Link to="/ai-chat" className="flex items-center gap-2">
                 <div className="flex items-center justify-center w-8 h-8 bg-primary rounded-lg">
                   <Activity className="w-5 h-5 text-primary-foreground" />
                 </div>

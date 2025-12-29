@@ -48,6 +48,7 @@ const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const SharedChat = lazy(() => import("./pages/SharedChat"));
 
 const queryClient = new QueryClient();
 
@@ -262,9 +263,9 @@ const AppContent = () => {
     }
   };
   
-  // 하단 네비게이션을 숨길 경로들 (Auth, Admin, 상세 페이지)
+  // 하단 네비게이션을 숨길 경로들 (Auth, Admin, 상세 페이지, 공유 페이지)
   const hideBottomNavPaths = ["/", "/subscription", "/payment/checkout", "/payment/success", "/payment/fail", "/language-settings", "/notification-settings", "/social-account-linking", "/theme-settings", "/change-password", "/privacy", "/terms"];
-  const hideBottomNavStartsWith = ["/admin", "/user-profile"];
+  const hideBottomNavStartsWith = ["/admin", "/user-profile", "/share"];
 
   // Settings 페이지에서 그룹/프린터 추가/수정 중인지 확인
   const searchParams = new URLSearchParams(location.search);
@@ -390,6 +391,8 @@ const AppContent = () => {
             } />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsOfService />} />
+            {/* 공유 페이지 - 로그인 불필요 */}
+            <Route path="/share/:shareId" element={<SharedChat />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
