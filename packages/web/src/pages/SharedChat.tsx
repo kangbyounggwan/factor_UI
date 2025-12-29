@@ -267,7 +267,7 @@ export default function SharedChatPage() {
   useEffect(() => {
     async function loadSharedChat() {
       if (!shareId) {
-        setError('Invalid share link');
+        setError('invalidLink');
         setLoading(false);
         return;
       }
@@ -276,7 +276,7 @@ export default function SharedChatPage() {
         const data = await getSharedChat(shareId);
 
         if (!data) {
-          setError('Chat not found or expired');
+          setError('expired');
           setLoading(false);
           return;
         }
@@ -284,7 +284,7 @@ export default function SharedChatPage() {
         setChatData(data);
       } catch (err) {
         console.error('[SharedChatPage] Error:', err);
-        setError('Failed to load chat');
+        setError('loadFailed');
       } finally {
         setLoading(false);
       }
@@ -299,7 +299,7 @@ export default function SharedChatPage() {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-12 h-12 animate-spin text-primary" />
-          <p className="text-muted-foreground">{t('shared.loadingChat', '대화를 불러오는 중...')}</p>
+          <p className="text-muted-foreground">{t('shared.loadingChat', 'Loading conversation...')}</p>
         </div>
       </div>
     );
@@ -307,6 +307,21 @@ export default function SharedChatPage() {
 
   // 에러 상태
   if (error || !chatData) {
+    // 에러 타입에 따른 메시지 결정
+    const getErrorTitle = () => {
+      if (error === 'expired') return t('shared.chatExpired', 'Chat Not Found');
+      if (error === 'invalidLink') return t('shared.invalidLink', 'Invalid Link');
+      if (error === 'loadFailed') return t('shared.loadFailed', 'Failed to Load');
+      return t('shared.chatNotFound', 'Chat Not Found');
+    };
+
+    const getErrorDesc = () => {
+      if (error === 'expired') return t('shared.chatExpiredDesc', 'This share link has expired or been deleted.');
+      if (error === 'invalidLink') return t('shared.invalidLinkDesc', 'The share link is invalid.');
+      if (error === 'loadFailed') return t('shared.loadFailedDesc', 'Failed to load the conversation. Please try again.');
+      return t('shared.chatNotFoundDesc', 'The shared conversation could not be found.');
+    };
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="max-w-md w-full">
@@ -316,20 +331,16 @@ export default function SharedChatPage() {
             </div>
             <div className="text-center">
               <h1 className="text-xl font-semibold mb-2">
-                {error === 'Chat not found or expired'
-                  ? t('shared.chatExpired', '대화를 찾을 수 없음')
-                  : t('shared.chatNotFound', '대화를 찾을 수 없음')}
+                {getErrorTitle()}
               </h1>
               <p className="text-muted-foreground">
-                {error === 'Chat not found or expired'
-                  ? t('shared.chatExpiredDesc', '이 공유 링크가 만료되었거나 삭제되었습니다.')
-                  : t('shared.chatNotFoundDesc', '공유된 대화를 찾을 수 없습니다.')}
+                {getErrorDesc()}
               </p>
             </div>
             <Link to="/">
               <Button variant="outline" className="gap-2">
                 <ArrowLeft className="w-4 h-4" />
-                {t('shared.goHome', '홈으로')}
+                {t('shared.goHome', 'Go Home')}
               </Button>
             </Link>
           </CardContent>
@@ -359,7 +370,7 @@ export default function SharedChatPage() {
                   <div className="h-6 w-px bg-border" />
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <MessageCircle className="w-4 h-4" />
-                    {t('shared.sharedChat', '공유된 대화')}
+                    {t('shared.sharedChat', 'Shared Chat')}
                   </div>
                 </>
               )}
@@ -384,7 +395,7 @@ export default function SharedChatPage() {
               <Link to="/ai-chat">
                 <Button size="sm" className={cn("gap-2", isMobile && "px-3")}>
                   <MessageCircle className="w-4 h-4" />
-                  {!isMobile && t('shared.tryFactor', 'FACTOR 사용하기')}
+                  {!isMobile && t('shared.tryFactor', 'Try FACTOR')}
                 </Button>
               </Link>
             </div>
@@ -403,10 +414,10 @@ export default function SharedChatPage() {
             "font-bold mb-2",
             isMobile ? "text-xl" : "text-2xl"
           )}>
-            {chatData.title || t('shared.chatConversation', '프린터 문제 진단 대화')}
+            {chatData.title || t('shared.chatConversation', 'Printer Troubleshooting Conversation')}
           </h1>
           <p className="text-sm md:text-base text-muted-foreground">
-            {t('shared.generatedByFactor', 'FACTOR AI 어시스턴트와의 대화')}
+            {t('shared.generatedByFactor', 'Conversation with FACTOR AI Assistant')}
           </p>
           {/* 모바일에서 조회수/날짜 표시 */}
           {isMobile && (
@@ -499,7 +510,7 @@ export default function SharedChatPage() {
                         <div className="pl-8 mt-6 pt-4 border-t border-border/50">
                           <div className="flex items-center gap-2 mb-3 text-sm font-medium text-muted-foreground">
                             <ExternalLink className="w-4 h-4" />
-                            <span>{t('shared.references', '참고 자료')}</span>
+                            <span>{t('shared.references', 'References')}</span>
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {displayReferences.map((ref, idx) => (
@@ -524,7 +535,7 @@ export default function SharedChatPage() {
                         <div className="pl-8 mt-4 pt-4 border-t border-border/50">
                           <div className="flex items-center gap-2 mb-3 text-sm font-medium text-muted-foreground">
                             <ImageIcon className="w-4 h-4" />
-                            <span>{t('shared.referenceImages', '참조 이미지')}</span>
+                            <span>{t('shared.referenceImages', 'Reference Images')}</span>
                           </div>
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                             {message.referenceImages.slice(0, 8).map((img, idx) => (
@@ -593,7 +604,7 @@ export default function SharedChatPage() {
                     className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
-                    {t('shared.viewOriginal', '원본 사이트에서 보기')}
+                    {t('shared.viewOriginal', 'View on original site')}
                   </a>
                 </div>
               </div>
@@ -606,15 +617,15 @@ export default function SharedChatPage() {
           <Card className="bg-gradient-to-r from-primary/10 to-blue-500/10 border-primary/20">
             <CardContent className={cn(isMobile ? "py-5 px-4" : "py-8")}>
               <h2 className={cn("font-bold mb-2", isMobile ? "text-lg" : "text-xl")}>
-                {t('shared.tryFactorCTA', '나도 FACTOR로 프린터 문제 해결하기')}
+                {t('shared.tryFactorCTA', 'Solve Your 3D Printing Problems with FACTOR')}
               </h2>
               <p className={cn("text-muted-foreground mb-4", isMobile && "text-sm")}>
-                {t('shared.tryFactorDesc', 'AI가 3D 프린터 문제를 진단하고 해결 방법을 알려드립니다.')}
+                {t('shared.tryFactorDesc', 'AI diagnoses your 3D printer issues and provides solutions.')}
               </p>
               <Link to="/ai-chat">
                 <Button size={isMobile ? "default" : "lg"} className="gap-2">
                   <MessageCircle className={cn(isMobile ? "w-4 h-4" : "w-5 h-5")} />
-                  {t('shared.startChat', '무료로 시작하기')}
+                  {t('shared.startChat', 'Get Started Free')}
                 </Button>
               </Link>
             </CardContent>
@@ -630,7 +641,7 @@ export default function SharedChatPage() {
               {t('shared.poweredBy', 'Powered by FACTOR - AI-Powered 3D Printing Assistant')}
             </p>
             <Link to="/" className="text-primary hover:underline">
-              {t('shared.learnMore', 'FACTOR에 대해 더 알아보기')}
+              {t('shared.learnMore', 'Learn More About FACTOR')}
             </Link>
           </div>
         </footer>
