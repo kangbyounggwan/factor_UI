@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useTranslation } from "react-i18next";
 import { Cpu, File, ExternalLink, ImageIcon, X, ZoomIn } from "lucide-react";
 
 /**
@@ -19,34 +20,84 @@ function escapeMarkdownTildes(content: string): string {
   return content.replace(/(?<!\\)~(?!~)/g, '\\~');
 }
 
-/**
- * 마크다운 포맷팅 수정
- * AI 응답에서 제목과 내용이 붙어있는 경우 줄바꿈 추가
- */
-function fixMarkdownLineBreaks(content: string): string {
-  let result = content;
-
-  // 패턴 1: "추천 해결 방법:**1." → "추천 해결 방법:**\n\n**1."
-  // 이모지 포함 가능: "🔧 추천 해결 방법:**1."
-  result = result.replace(/(추천\s*해결\s*방법:?)(\*\*\d+\.)/g, '$1\n\n$2');
-  result = result.replace(/(Recommended\s*Solutions?:?)(\*\*\d+\.)/gi, '$1\n\n$2');
-
-  // 패턴 2: "**제목:**숫자." → "**제목:**\n\n숫자."
-  result = result.replace(/(\*\*[^*]+:\*\*)(\d+\.)/g, '$1\n\n$2');
-
-  // 패턴 3: "**제목:**\n숫자." → "**제목:**\n\n숫자." (줄바꿈 1개 → 2개)
-  result = result.replace(/(\*\*[^*]+:\*\*)\n(\d+\.)/g, '$1\n\n$2');
-
-  // 패턴 4: "제목:\n**1." → "제목:\n\n**1." (볼드 없는 제목 + 볼드 번호)
-  result = result.replace(/(방법:)\n(\*\*\d+\.)/g, '$1\n\n$2');
-  result = result.replace(/(Solutions?:)\n(\*\*\d+\.)/gi, '$1\n\n$2');
-
-  // 난이도/예상 시간 줄과 단계 목록 사이 줄바꿈 확보
-  result = result.replace(/(예상 시간:[^\n]+)\n(\s*\d+\.)/g, '$1\n\n$2');
-  result = result.replace(/(estimated time:[^\n]+)\n(\s*\d+\.)/gi, '$1\n\n$2');
-
-  return result;
+// 출처 정보 타입 (본문에서 추출용)
+interface SourceInfo {
+  title: string;
+  url: string;
 }
+
+/**
+ * 마크다운에서 출처/참고 자료 링크를 추출하고 본문과 분리
+ * GPT 스타일: 본문에서 출처를 제거하고 하단에 별도 섹션으로 표시
+ *
+ * 주의: 인라인 출처 텍스트 (예: "출처: [official] 텍스트...")는 제거하지 않음
+ * 마크다운 링크 형식 [title](url)이 포함된 경우만 추출 및 하단 이동
+ */
+function extractSources(content: string): { cleanContent: string; sources: SourceInfo[] } {
+  const sources: SourceInfo[] = [];
+
+  // 마크다운 링크가 포함된 출처 섹션만 추출
+  // 인라인 텍스트 출처는 건드리지 않음
+  const sourcePatterns = [
+    // === 한국어 패턴 (마크다운 링크 필수) ===
+    // "📚 참고 자료:" 뒤에 리스트 형식으로 나오는 경우 (여러 줄)
+    /📚\s*참고\s*자료:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    // "📚 출처:" 뒤에 리스트 형식으로 나오는 경우 (여러 줄)
+    /📚\s*출처:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    // "📎 출처:" 패턴 - 볼드 포함
+    /📎\s*\*\*출처:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    /📎\s*출처:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    // 볼드 패턴 (** **) - 한국어
+    /\*\*참고\s*자료:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    /\*\*출처:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    /\*\*📚\s*참고\s*자료:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    /\*\*📎\s*출처:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    // "참고자료:" 또는 "더 알아보기:" 볼드 패턴
+    /\*\*더\s*알아보기:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    /\*\*관련\s*링크:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+
+    // === 영어 패턴 (마크다운 링크 필수) ===
+    // "📚 Sources:" or "📚 References:"
+    /📚\s*Sources?:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    /📚\s*References?:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    /📎\s*\*\*Sources?:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    /📎\s*Sources?:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    /🔗\s*Sources?:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    // 볼드 패턴 - 영어
+    /\*\*Sources?:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    /\*\*References?:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    /\*\*Learn More:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+    /\*\*Related Links?:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
+  ];
+
+  let cleanContent = content;
+
+  for (const pattern of sourcePatterns) {
+    cleanContent = cleanContent.replace(pattern, (match, sourceText) => {
+      // [Title](URL) 패턴 추출 - 반드시 마크다운 링크가 있어야 함
+      const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
+      let linkMatch: RegExpExecArray | null;
+      let hasValidLinks = false;
+      while ((linkMatch = linkPattern.exec(sourceText)) !== null) {
+        const title = linkMatch[1].trim();
+        const url = linkMatch[2].trim();
+        // 중복 체크 및 유효한 URL만 추가
+        if (url.startsWith('http') && !sources.some(s => s.url === url)) {
+          sources.push({ title, url });
+          hasValidLinks = true;
+        }
+      }
+      // 마크다운 링크가 있는 경우에만 본문에서 제거
+      return hasValidLinks ? '' : match;
+    });
+  }
+
+  // 불필요한 빈 줄 정리 (3개 이상 연속 → 2개로)
+  cleanContent = cleanContent.replace(/\n{3,}/g, '\n\n').trim();
+
+  return { cleanContent, sources };
+}
+
 import { cn } from "@/lib/utils";
 import { CodeFixDiffCard } from "./GCodeAnalytics/CodeFixDiffCard";
 import type { CodeFixInfo } from "./GCodeAnalytics/CodeFixDiffCard";
@@ -285,93 +336,6 @@ const markdownComponents = {
 };
 
 /**
- * 출처 정보 타입
- */
-interface SourceInfo {
-  title: string;
-  url: string;
-}
-
-/**
- * 마크다운에서 출처/참고 자료 링크를 추출하고 본문과 분리
- * GPT 스타일: 본문에서 출처를 제거하고 하단에 별도 섹션으로 표시
- *
- * 주의: 인라인 출처 텍스트 (예: "출처: [official] 텍스트...")는 제거하지 않음
- * 마크다운 링크 형식 [title](url)이 포함된 경우만 추출 및 하단 이동
- */
-function extractSources(content: string): { cleanContent: string; sources: SourceInfo[] } {
-  const sources: SourceInfo[] = [];
-
-  // 마크다운 링크가 포함된 출처 섹션만 추출
-  // 인라인 텍스트 출처는 건드리지 않음
-  const sourcePatterns = [
-    // === 한국어 패턴 (마크다운 링크 필수) ===
-    // "📚 참고 자료:" 뒤에 리스트 형식으로 나오는 경우 (여러 줄)
-    /📚\s*참고\s*자료:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    // "📚 출처:" 뒤에 리스트 형식으로 나오는 경우 (여러 줄)
-    /📚\s*출처:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    // "📎 출처:" 패턴 - 볼드 포함
-    /📎\s*\*\*출처:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    /📎\s*출처:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    // 볼드 패턴 (** **) - 한국어
-    /\*\*참고\s*자료:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    /\*\*출처:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    /\*\*📚\s*참고\s*자료:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    /\*\*📎\s*출처:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    // "참고자료:" 또는 "더 알아보기:" 볼드 패턴
-    /\*\*더\s*알아보기:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    /\*\*관련\s*링크:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-
-    // === 영어 패턴 (마크다운 링크 필수) ===
-    // "📚 Sources:" or "📚 References:"
-    /📚\s*Sources?:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    /📚\s*References?:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    /📎\s*\*\*Sources?:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    /📎\s*Sources?:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    /🔗\s*Sources?:?\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    // 볼드 패턴 - 영어
-    /\*\*Sources?:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    /\*\*References?:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    /\*\*Learn More:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-    /\*\*Related Links?:?\*\*\s*\n((?:\s*[-*]\s*\[.+?\]\(.+?\).*?\n?)+)/gi,
-  ];
-
-  let cleanContent = content;
-
-  for (const pattern of sourcePatterns) {
-    cleanContent = cleanContent.replace(pattern, (match, sourceText) => {
-      // [Title](URL) 패턴 추출 - 반드시 마크다운 링크가 있어야 함
-      const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
-      let linkMatch;
-      let hasValidLinks = false;
-      while ((linkMatch = linkPattern.exec(sourceText)) !== null) {
-        const title = linkMatch[1].trim();
-        const url = linkMatch[2].trim();
-        // 중복 체크 및 유효한 URL만 추가
-        if (url.startsWith('http') && !sources.some(s => s.url === url)) {
-          sources.push({ title, url });
-          hasValidLinks = true;
-        }
-      }
-      // 마크다운 링크가 있는 경우에만 본문에서 제거
-      return hasValidLinks ? '' : match;
-    });
-  }
-
-  // 정리: 잔여물 제거
-  // 빈 볼드 (**) 제거
-  cleanContent = cleanContent.replace(/\*\*\s*\*\*/g, '');
-  // 빈 줄만 있는 볼드 제거 (예: **\n**)
-  cleanContent = cleanContent.replace(/\*\*\s*\n\s*\*\*/g, '');
-  // 단독 ** 제거
-  cleanContent = cleanContent.replace(/^\s*\*\*\s*$/gm, '');
-  // 연속된 빈 줄 제거
-  cleanContent = cleanContent.replace(/\n{3,}/g, '\n\n').trim();
-
-  return { cleanContent, sources };
-}
-
-/**
  * AI 메시지 컴포넌트
  */
 const AssistantMessage: React.FC<{
@@ -395,17 +359,20 @@ const AssistantMessage: React.FC<{
   resolvedLines,
   onRevert,
 }) => {
-  // 출처 추출 및 본문 분리
-  const { cleanContent, sources } = extractSources(message.content);
+  const { t } = useTranslation();
 
-  // 줄바꿈 수정 및 ~ 문자 이스케이프 - useMemo로 최적화
+  // 본문에서 출처 섹션 추출 및 분리
+  const { cleanContent, sources } = useMemo(() => {
+    return extractSources(message.content);
+  }, [message.content]);
+
+  // ~ 문자 이스케이프 - useMemo로 최적화
   const escapedContent = useMemo(() => {
-    const fixedContent = fixMarkdownLineBreaks(cleanContent);
-    return escapeMarkdownTildes(fixedContent);
+    return escapeMarkdownTildes(cleanContent);
   }, [cleanContent]);
 
-  // API에서 받은 참고 자료가 있으면 그것을 사용, 없으면 본문에서 추출한 sources 사용
-  const displayReferences = message.references && message.references.length > 0
+  // API 참고 자료 우선, 없으면 본문에서 추출한 sources 사용 (하단 칩 UI용)
+  const displayReferences: SourceInfo[] = message.references && message.references.length > 0
     ? message.references
     : sources;
 
@@ -439,7 +406,7 @@ const AssistantMessage: React.FC<{
       <div className="pl-8 mt-6 pt-4 border-t border-border/50">
         <div className="flex items-center gap-2 mb-3 text-sm font-medium text-muted-foreground">
           <ExternalLink className="w-4 h-4" />
-          <span>참고 자료</span>
+          <span>{t('chat.references', '참고 자료')}</span>
         </div>
         <div className="flex flex-wrap gap-2">
           {displayReferences.map((ref, idx) => (
@@ -464,7 +431,7 @@ const AssistantMessage: React.FC<{
       <div className="pl-8 mt-4 pt-4 border-t border-border/50">
         <div className="flex items-center gap-2 mb-3 text-sm font-medium text-muted-foreground">
           <ImageIcon className="w-4 h-4" />
-          <span>참조 이미지</span>
+          <span>{t('chat.referenceImages', '참조 이미지')}</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {message.referenceImages.images.slice(0, 8).map((img, idx) => (
@@ -527,7 +494,7 @@ const AssistantMessage: React.FC<{
                 className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                원본 사이트에서 보기
+                {t('chat.viewOriginal', '원본 사이트에서 보기')}
               </a>
             </div>
           </div>

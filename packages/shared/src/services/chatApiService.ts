@@ -3,8 +3,15 @@
  * Python 백엔드 POST /api/v1/chat 엔드포인트와 통신
  */
 
+import i18n from '../i18n';
+
 // API 기본 URL - .env의 VITE_AI_PYTHON_URL 사용
 const API_BASE_URL = import.meta.env.VITE_AI_PYTHON_URL || 'http://127.0.0.1:7000';
+
+// 현재 언어 가져오기 헬퍼
+const getCurrentLanguage = (): 'ko' | 'en' => {
+  return (i18n.language === 'en' ? 'en' : 'ko') as 'ko' | 'en';
+};
 
 // ============================================
 // 타입 정의
@@ -398,7 +405,8 @@ export function formatChatResponse(response: ChatApiResponse): string {
     }
   }
 
-  return '응답을 처리할 수 없습니다.';
+  const lang = getCurrentLanguage();
+  return lang === 'en' ? 'Unable to process the response.' : '응답을 처리할 수 없습니다.';
 }
 
 /**
@@ -418,21 +426,21 @@ function injectSolutionSources(markdown: string, data: TroubleshootData): string
       const solutionNumber = index + 1;
       const nextSolutionNumber = index + 2;
 
-      // 솔루션 제목 패턴 찾기 (예: "**1. 리트랙션 설정 조정**" 또는 "1. 리트랙션 설정 조정")
-      // 다음 솔루션 시작 또는 다음 섹션 시작 전까지의 영역을 찾음
+      // 솔루션 제목 패턴 찾기 (예: "**1. 리트랙션 설정 조정**" 또는 "1. Adjust Retraction")
+      // 다음 솔루션 시작 또는 다음 섹션 시작 전까지의 영역을 찾음 (한/영 모두 지원)
       const solutionPatterns = [
         // 볼드 숫자 패턴: **1. Title**
-        new RegExp(`(\\*\\*${solutionNumber}\\.\\s*[^*]+\\*\\*[\\s\\S]*?)(?=\\*\\*${nextSolutionNumber}\\.\\s|\\*\\*💡|\\*\\*전문가|\\*\\*예방|\\*\\*📚|$)`, 'i'),
+        new RegExp(`(\\*\\*${solutionNumber}\\.\\s*[^*]+\\*\\*[\\s\\S]*?)(?=\\*\\*${nextSolutionNumber}\\.\\s|\\*\\*💡|\\*\\*전문가|\\*\\*Expert|\\*\\*예방|\\*\\*Prevention|\\*\\*📚|$)`, 'i'),
         // 일반 숫자 패턴: 1. Title
-        new RegExp(`(${solutionNumber}\\.\\s*[^\\n]+[\\s\\S]*?)(?=${nextSolutionNumber}\\.\\s|💡|전문가|예방|📚|$)`, 'i'),
+        new RegExp(`(${solutionNumber}\\.\\s*[^\\n]+[\\s\\S]*?)(?=${nextSolutionNumber}\\.\\s|💡|전문가|Expert|예방|Prevention|📚|$)`, 'i'),
       ];
 
       for (const pattern of solutionPatterns) {
         const match = result.match(pattern);
         if (match && match[1]) {
           const solutionSection = match[1];
-          // 이미 출처가 포함되어 있는지 확인
-          if (!solutionSection.includes('📎') && !solutionSection.includes('출처:')) {
+          // 이미 출처가 포함되어 있는지 확인 (한/영 모두 체크)
+          if (!solutionSection.includes('📎') && !solutionSection.includes('출처:') && !solutionSection.includes('Sources:')) {
             const sourceLinks = formatSourceRefs(sol.source_refs, '   ');
             // 솔루션 섹션 끝에 출처 추가
             const updatedSection = solutionSection.trimEnd() + '\n' + sourceLinks;
@@ -446,8 +454,8 @@ function injectSolutionSources(markdown: string, data: TroubleshootData): string
 
   // 전문가 의견 출처 추가
   if (data.expert_opinion?.source_refs && data.expert_opinion.source_refs.length > 0) {
-    // 전문가 의견 섹션 찾기
-    const expertPattern = /(💡\s*전문가\s*의견[:\s]*[^\n]*[\s\S]*?)(?=📚|$)/i;
+    // 전문가 의견 섹션 찾기 (한/영 모두 지원)
+    const expertPattern = /(💡\s*(전문가\s*의견|Expert\s*Opinion)[:\s]*[^\n]*[\s\S]*?)(?=📚|$)/i;
     const expertMatch = result.match(expertPattern);
     if (expertMatch && expertMatch[1] && !expertMatch[1].includes('📎')) {
       const expertSection = expertMatch[1];
@@ -477,7 +485,9 @@ function isModellingData(data: unknown): data is ModellingData {
 function formatSourceRefs(refs: SourceReference[], indent = ''): string {
   if (!refs || refs.length === 0) return '';
 
-  let result = `${indent}📎 **출처:**\n`;
+  const lang = getCurrentLanguage();
+  const sourceLabel = lang === 'en' ? 'Sources' : '출처';
+  let result = `${indent}📎 **${sourceLabel}:**\n`;
   refs.forEach(ref => {
     result += `${indent}- [${ref.title}](${ref.url})`;
     if (ref.source) result += ` *(${ref.source})*`;
@@ -488,17 +498,33 @@ function formatSourceRefs(refs: SourceReference[], indent = ''): string {
 
 // 포맷 함수들
 function formatTroubleshootResponse(data: TroubleshootData): string {
-  let response = '**문제 분석 결과** 🔍\n\n';
+  const lang = getCurrentLanguage();
+  const isEn = lang === 'en';
+
+  // 다국어 레이블
+  const labels = {
+    analysisResult: isEn ? 'Problem Analysis Result' : '문제 분석 결과',
+    detectedProblem: isEn ? 'Detected Problem' : '감지된 문제',
+    confidence: isEn ? 'Confidence' : '확신도',
+    recommendedSolutions: isEn ? 'Recommended Solutions' : '추천 해결 방법',
+    difficulty: isEn ? 'Difficulty' : '난이도',
+    estimatedTime: isEn ? 'Est. Time' : '예상 시간',
+    expertOpinion: isEn ? 'Expert Opinion' : '전문가 의견',
+    preventionTips: isEn ? 'Prevention Tips' : '예방 팁',
+    references: isEn ? 'References' : '참고자료',
+  };
+
+  let response = `**${labels.analysisResult}** 🔍\n\n`;
 
   if (data.problem) {
-    response += `**감지된 문제:** ${data.problem.description} (확신도: ${Math.round(data.problem.confidence * 100)}%)\n\n`;
+    response += `**${labels.detectedProblem}:** ${data.problem.description} (${labels.confidence}: ${Math.round(data.problem.confidence * 100)}%)\n\n`;
   }
 
   if (data.solutions && data.solutions.length > 0) {
-    response += '**🔧 추천 해결 방법:**\n\n';
+    response += `**🔧 ${labels.recommendedSolutions}:**\n\n`;
     data.solutions.forEach((sol, i) => {
       response += `**${i + 1}. ${sol.title}**\n`;
-      response += `   난이도: ${sol.difficulty} | 예상 시간: ${sol.estimated_time}\n`;
+      response += `   ${labels.difficulty}: ${sol.difficulty} | ${labels.estimatedTime}: ${sol.estimated_time}\n`;
       sol.steps.forEach((step, j) => {
         response += `   ${j + 1}. ${step}\n`;
       });
@@ -511,9 +537,9 @@ function formatTroubleshootResponse(data: TroubleshootData): string {
   }
 
   if (data.expert_opinion) {
-    response += `**💡 전문가 의견:** ${data.expert_opinion.summary}\n`;
+    response += `**💡 ${labels.expertOpinion}:** ${data.expert_opinion.summary}\n`;
     if (data.expert_opinion.prevention_tips && data.expert_opinion.prevention_tips.length > 0) {
-      response += '\n**예방 팁:**\n';
+      response += `\n**${labels.preventionTips}:**\n`;
       data.expert_opinion.prevention_tips.forEach(tip => {
         response += `- ${tip}\n`;
       });
@@ -527,7 +553,7 @@ function formatTroubleshootResponse(data: TroubleshootData): string {
 
   // 전체 참고자료 섹션
   if (data.references && data.references.length > 0) {
-    response += '\n**📚 참고자료:**\n';
+    response += `\n**📚 ${labels.references}:**\n`;
     data.references.forEach(ref => {
       response += `- [${ref.title}](${ref.url})`;
       if (ref.source) response += ` *(${ref.source})*`;
@@ -539,23 +565,41 @@ function formatTroubleshootResponse(data: TroubleshootData): string {
 }
 
 function formatGcodeResponse(data: GcodeAnalysisData): string {
-  let response = `**G-code 분석 완료!** 📊\n\n`;
-  response += `**파일:** ${data.filename}\n`;
-  response += `**품질 점수:** ${data.quality_score}/100\n\n`;
+  const lang = getCurrentLanguage();
+  const isEn = lang === 'en';
+
+  const labels = {
+    analysisComplete: isEn ? 'G-code Analysis Complete!' : 'G-code 분석 완료!',
+    file: isEn ? 'File' : '파일',
+    qualityScore: isEn ? 'Quality Score' : '품질 점수',
+    basicInfo: isEn ? 'Basic Info' : '기본 정보',
+    printTime: isEn ? 'Est. Print Time' : '예상 출력 시간',
+    filamentUsage: isEn ? 'Filament Usage' : '필라멘트 사용량',
+    totalLayers: isEn ? 'Total Layers' : '총 레이어',
+    layerHeight: isEn ? 'Layer Height' : '레이어 높이',
+    tempSettings: isEn ? 'Temperature Settings' : '온도 설정',
+    nozzle: isEn ? 'Nozzle' : '노즐',
+    bed: isEn ? 'Bed' : '베드',
+    issuesFound: isEn ? 'Issues Found' : '발견된 이슈',
+  };
+
+  let response = `**${labels.analysisComplete}** 📊\n\n`;
+  response += `**${labels.file}:** ${data.filename}\n`;
+  response += `**${labels.qualityScore}:** ${data.quality_score}/100\n\n`;
 
   const { summary } = data;
-  response += `**📋 기본 정보:**\n`;
-  response += `- 예상 출력 시간: ${summary.print_time.formatted}\n`;
-  response += `- 필라멘트 사용량: ${(summary.filament.total_extrusion_mm / 1000).toFixed(1)}m\n`;
-  response += `- 총 레이어: ${summary.layers.total_layers}개\n`;
-  response += `- 레이어 높이: ${summary.layers.layer_height_mm}mm\n\n`;
+  response += `**📋 ${labels.basicInfo}:**\n`;
+  response += `- ${labels.printTime}: ${summary.print_time.formatted}\n`;
+  response += `- ${labels.filamentUsage}: ${(summary.filament.total_extrusion_mm / 1000).toFixed(1)}m\n`;
+  response += `- ${labels.totalLayers}: ${summary.layers.total_layers}${isEn ? '' : '개'}\n`;
+  response += `- ${labels.layerHeight}: ${summary.layers.layer_height_mm}mm\n\n`;
 
-  response += `**🌡️ 온도 설정:**\n`;
-  response += `- 노즐: ${summary.temperature.nozzle.avg}°C\n`;
-  response += `- 베드: ${summary.temperature.bed.avg}°C\n\n`;
+  response += `**🌡️ ${labels.tempSettings}:**\n`;
+  response += `- ${labels.nozzle}: ${summary.temperature.nozzle.avg}°C\n`;
+  response += `- ${labels.bed}: ${summary.temperature.bed.avg}°C\n\n`;
 
   if (data.issues && data.issues.length > 0) {
-    response += `**⚠️ 발견된 이슈 (${data.issues.length}개):**\n`;
+    response += `**⚠️ ${labels.issuesFound} (${data.issues.length}${isEn ? '' : '개'}):**\n`;
     data.issues.forEach((issue, i) => {
       response += `${i + 1}. ${issue.message}\n`;
     });
@@ -565,17 +609,31 @@ function formatGcodeResponse(data: GcodeAnalysisData): string {
 }
 
 function formatModellingResponse(data: ModellingData): string {
-  let response = `**3D 모델 생성 ${data.status === 'completed' ? '완료!' : '시작!'}** 🎨\n\n`;
-  response += `**프롬프트:** ${data.prompt}\n\n`;
+  const lang = getCurrentLanguage();
+  const isEn = lang === 'en';
+
+  const labels = {
+    started: isEn ? '3D Model Generation Started!' : '3D 모델 생성 시작!',
+    completed: isEn ? '3D Model Generation Complete!' : '3D 모델 생성 완료!',
+    prompt: isEn ? 'Prompt' : '프롬프트',
+    generating: isEn ? 'Generating model... (approx. 2-3 min)\n\nWe\'ll notify you when it\'s done!' : '모델을 생성 중입니다... (약 2-3분 소요)\n\n완료되면 알려드릴게요!',
+    modelComplete: isEn ? 'Model is ready!' : '모델이 완료되었습니다!',
+    downloadGLB: isEn ? 'Download GLB' : 'GLB 다운로드',
+    downloadSTL: isEn ? 'Download STL' : 'STL 다운로드',
+    failed: isEn ? 'Model generation failed. Please try again.' : '모델 생성에 실패했습니다. 다시 시도해주세요.',
+  };
+
+  let response = `**${data.status === 'completed' ? labels.completed : labels.started}** 🎨\n\n`;
+  response += `**${labels.prompt}:** ${data.prompt}\n\n`;
 
   if (data.status === 'processing') {
-    response += '모델을 생성 중입니다... (약 2-3분 소요)\n\n완료되면 알려드릴게요!';
+    response += labels.generating;
   } else if (data.status === 'completed') {
-    response += '모델이 완료되었습니다!\n';
-    if (data.glb_url) response += `- [GLB 다운로드](${data.glb_url})\n`;
-    if (data.stl_url) response += `- [STL 다운로드](${data.stl_url})\n`;
+    response += `${labels.modelComplete}\n`;
+    if (data.glb_url) response += `- [${labels.downloadGLB}](${data.glb_url})\n`;
+    if (data.stl_url) response += `- [${labels.downloadSTL}](${data.stl_url})\n`;
   } else {
-    response += '모델 생성에 실패했습니다. 다시 시도해주세요.';
+    response += labels.failed;
   }
 
   return response;

@@ -674,6 +674,15 @@ export default {
     shareSuccess: "공유 링크가 생성되었습니다",
     shareFailed: "공유 링크 생성에 실패했습니다",
     starterAndAbove: "Starter 이상",
+    // ChatMessage 컴포넌트 다국어
+    references: "참고 자료",
+    referenceImages: "참조 이미지",
+    viewOriginal: "원본 사이트에서 보기",
+  },
+  chat: {
+    references: "참고 자료",
+    referenceImages: "참조 이미지",
+    viewOriginal: "원본 사이트에서 보기",
   },
   profile: {
     // UserSettings 페이지

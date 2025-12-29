@@ -2634,6 +2634,15 @@ export default {
     shareSuccess: "Share link created successfully",
     shareFailed: "Failed to create share link",
     starterAndAbove: "Starter and above",
+    // ChatMessage component i18n
+    references: "References",
+    referenceImages: "Reference Images",
+    viewOriginal: "View on original site",
+  },
+  chat: {
+    references: "References",
+    referenceImages: "Reference Images",
+    viewOriginal: "View on original site",
   },
   theme: {
     light: "Light",
