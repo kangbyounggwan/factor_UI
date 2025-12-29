@@ -38,9 +38,13 @@ function escapeMarkdownTildes(content: string): string {
 function fixMarkdownLineBreaks(content: string): string {
   let result = content;
 
-  // 패턴 1: "추천 해결 방법:**1." → "추천 해결 방법:**\n\n**1."
+  // 패턴 1: "추천 해결 방법:**1." → "추천 해결 방법:\n\n**1."
   result = result.replace(/(추천\s*해결\s*방법:?)(\*\*\d+\.)/g, '$1\n\n$2');
   result = result.replace(/(Recommended\s*Solutions?:?)(\*\*\d+\.)/gi, '$1\n\n$2');
+
+  // 패턴 1-1: "Recommended Solutions:1." → "Recommended Solutions:\n\n1." (볼드 없는 숫자)
+  result = result.replace(/(추천\s*해결\s*방법:?)(\d+\.)/g, '$1\n\n$2');
+  result = result.replace(/(Recommended\s*Solutions?:?)(\d+\.)/gi, '$1\n\n$2');
 
   // 패턴 2: "**제목:**숫자." → "**제목:**\n\n숫자."
   result = result.replace(/(\*\*[^*]+:\*\*)(\d+\.)/g, '$1\n\n$2');
@@ -51,6 +55,17 @@ function fixMarkdownLineBreaks(content: string): string {
   // 패턴 4: "제목:\n**1." → "제목:\n\n**1."
   result = result.replace(/(방법:)\n(\*\*\d+\.)/g, '$1\n\n$2');
   result = result.replace(/(Solutions?:)\n(\*\*\d+\.)/gi, '$1\n\n$2');
+
+  // 패턴 5: "🔧 Recommended Solutions:1." → 줄바꿈 추가 (이모지 뒤 패턴)
+  result = result.replace(/(🔧[^:]*:)(\*?\*?\d+\.)/g, '$1\n\n$2');
+
+  // 패턴 6: "Difficulty: xxx | Est. time: xxx" 뒤에 줄바꿈 (단계 목록 전)
+  // "Est. time: 20-30 minutes1." 또는 "Est. time: 20-30 minutes Step 1:" 패턴
+  result = result.replace(/(Est\.?\s*time:[^)]+(?:minutes?|hours?|시간|분))(\s*)(\d+\.|Step\s*\d+)/gi, '$1\n\n$3');
+
+  // 패턴 7: ") Difficulty:" 앞에 줄바꿈 추가 (솔루션 제목과 난이도 분리)
+  result = result.replace(/(\))\s*(Difficulty:)/gi, '$1\n\n$2');
+  result = result.replace(/(\))\s*(난이도:)/g, '$1\n\n$2');
 
   // 난이도/예상 시간 줄과 단계 목록 사이 줄바꿈 확보
   result = result.replace(/(예상 시간:[^\n]+)\n(\s*\d+\.)/g, '$1\n\n$2');
