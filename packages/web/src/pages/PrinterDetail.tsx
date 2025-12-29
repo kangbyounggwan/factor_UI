@@ -37,6 +37,8 @@ import { supabase } from "@shared/integrations/supabase/client"
 import { onDashStatusMessage, mqttConnect, publishSdUploadChunkFirst, publishSdUploadChunk, publishSdUploadCommit, waitForGCodeUploadResult } from "@shared/services/mqttService";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 
 
 // 로컬 스냅샷 퍼시스턴스 훅(한 파일 내 사용)
@@ -158,6 +160,7 @@ const PrinterDetail = () => {
 
   // 사이드바 상태 (페이지 간 공유)
   const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
+  const isMobile = useIsMobile();
 
   // MQTT WebSocket 연결 상태는 사용하지 않음 - 프린터의 connected 상태만 사용
   const [deviceUuid, setDeviceUuid] = useState<string | null>(null);
@@ -1236,7 +1239,7 @@ const PrinterDetail = () => {
   );
 
   return (
-    <div className="h-screen flex overflow-hidden">
+    <div className={cn("h-screen flex overflow-hidden", isMobile && "pb-16")}>
       {/* App Sidebar - printer-detail 모드 */}
       <AppSidebar
         isOpen={sidebarOpen}

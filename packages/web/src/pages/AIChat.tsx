@@ -12,36 +12,17 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Send,
-  Cpu,
-  FileCode2,
-  Stethoscope,
   Loader2,
-  X,
-  Plus,
-  Settings2,
-  ChevronDown,
   ChevronRight,
-  Check,
-  Box,
   Share2,
   Copy,
   ExternalLink,
+  Cpu,
+  FileCode2,
+  Check,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
   sendChatMessage,
@@ -75,7 +56,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import {
   getChatSessions,
   getChatSession,
@@ -86,7 +67,6 @@ import {
   updateChatSessionTitle,
   updateChatSessionToolType,
 } from "@shared/services/supabaseService/chat";
-import { createSharedChat, type SharedMessage } from "@shared/services/supabaseService/sharedChat";
 import { generateChatTitle } from "@shared/services/geminiService";
 import {
   getAnonymousId,
@@ -96,7 +76,7 @@ import {
   type AnonChatMessage,
 } from "@shared/utils/anonymousId";
 
-// 리팩토링된 채팅 유틸리티 함수
+// 리팩토링된 채팅 훅 및 유틸리티 함수
 import {
   detectToolType,
   determineChatMode,
@@ -105,9 +85,13 @@ import {
   createErrorMessage,
   prepareFileInfos,
   canSendMessage,
+  useFileUpload,
+  useChatSharing,
 } from "@/hooks/chat";
 import { GCodeAnalysisReport, type AIResolveStartInfo, type AIResolveCompleteInfo, type GCodeAnalysisData } from "@/components/ai/GCodeAnalytics";
 import { useSidebarState } from "@/hooks/useSidebarState";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { SharedBottomNavigation } from "@/components/shared/SharedBottomNavigation";
 import {
   useGcodeAnalysisPolling,
   type ReportCardData,
@@ -126,28 +110,9 @@ import { supabase } from "@shared/integrations/supabase/client";
 import { downloadAndUploadReferenceImages } from "@shared/services/supabaseService/aiStorage";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { GCodeAnalyticsArchive } from "@/components/ai/GCodeAnalytics";
+import { WelcomeScreen } from "@/components/ai/Chat/WelcomeScreen";
+import { ChatInput, type SelectedModel } from "@/components/ai/Chat/ChatInput";
 
 // 코드 수정 정보 타입
 interface CodeFixInfo {
@@ -205,18 +170,39 @@ const AIChat = () => {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const location = useLocation();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const locationState = location.state as { openSidebar?: boolean } | null;
+  const isMobile = useIsMobile();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>("general");
-  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [gcodeFile, setGcodeFile] = useState<File | null>(null);
-  const [gcodeFileContent, setGcodeFileContent] = useState<string | null>(null); // G-code 파일 내용 (코드 수정 컨텍스트용)
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
+
+  // 파일 업로드 훅 사용
+  const {
+    uploadedImages,
+    imageFiles,
+    gcodeFile,
+    gcodeFileContent,
+    isDragging,
+    fileInputRef,
+    gcodeInputRef,
+    handleImageUpload,
+    handleGcodeUpload,
+    removeImage: fileUploadRemoveImage,
+    removeGcodeFile: fileUploadRemoveGcodeFile,
+    clearAllFiles,
+    handleDragOver,
+    handleDragEnter,
+    handleDragLeave,
+    handleDrop,
+    handlePaste,
+    setUploadedImages,
+    setImageFiles,
+    setGcodeFile,
+    setGcodeFileContent,
+  } = useFileUpload();
   // 사이드바 상태 (페이지 간 공유)
   const { isOpen: sidebarOpen, toggle: toggleSidebar, setIsOpen: setSidebarOpen } = useSidebarState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -229,7 +215,7 @@ const AIChat = () => {
   const [reportArchive, setReportArchive] = useState<ReportArchiveItem[]>([]);
 
   // 현재 세션의 도구 타입 추적 (한 세션에서 하나의 도구만 사용 가능)
-  const [currentSessionToolType, setCurrentSessionToolType] = useState<string | null>(null);
+  const [_currentSessionToolType, setCurrentSessionToolType] = useState<string | null>(null);
   // 새 채팅 유도 모달 상태
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [pendingToolId, setPendingToolId] = useState<string | null>(null);
@@ -289,10 +275,16 @@ const AIChat = () => {
   // 되돌리기 상태 (라인 번호 설정 시 해당 라인 되돌리기)
   const [revertLineNumber, setRevertLineNumber] = useState<number | undefined>(undefined);
 
-  // 공유 관련 상태
-  const [isSharing, setIsSharing] = useState(false);
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [showShareModal, setShowShareModal] = useState(false);
+  // 공유 훅 사용
+  const {
+    isSharing,
+    shareUrl,
+    showShareModal,
+    shareChat,
+    copyShareUrl,
+    closeShareModal,
+    setShowShareModal,
+  } = useChatSharing({ userId: user?.id });
 
   // 사용자 플랜 정보 가져오기 (shared 훅 사용)
   const { plan: userPlan } = useUserPlan(user?.id);
@@ -424,8 +416,6 @@ const AIChat = () => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const gcodeInputRef = useRef<HTMLInputElement>(null);
 
   // 새 채팅 시작
   const handleNewChat = async () => {
@@ -642,79 +632,17 @@ const AIChat = () => {
     await handleArchiveViewReport(report.id, report.fileName);
   };
 
-  // 대화 공유 핸들러
+  // 대화 공유 핸들러 (useChatSharing 훅 사용)
   const handleShareChat = async () => {
-    if (messages.length === 0) {
-      toast({
-        title: t('aiChat.shareNoMessages', '공유할 대화가 없습니다'),
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsSharing(true);
-    try {
-      // Message를 SharedMessage 형식으로 변환 (references, referenceImages 포함)
-      const sharedMessages: SharedMessage[] = messages.map(msg => ({
-        role: msg.role,
-        content: msg.content,
-        timestamp: msg.timestamp.toISOString(),
-        images: msg.images,
-        files: msg.files,
-        // AI 응답에 포함된 참고자료와 참조이미지도 저장
-        references: msg.references,
-        referenceImages: msg.referenceImages?.images?.map(img => ({
-          title: img.title,
-          thumbnail_url: img.thumbnail_url,
-          source_url: img.source_url,
-        })),
-      }));
-
-      // 세션 제목 또는 첫 메시지에서 제목 추출
-      const currentSession = chatSessions.find(s => s.id === currentSessionId);
-      const title = currentSession?.title ||
-        (messages[0]?.content.slice(0, 50) + (messages[0]?.content.length > 50 ? '...' : '')) ||
-        t('aiChat.sharedConversation', '공유된 대화');
-
-      const result = await createSharedChat(sharedMessages, {
-        userId: user?.id,
-        title,
-        expiresInDays: 30, // 30일 후 만료
-      });
-
-      if (result) {
-        setShareUrl(result.shareUrl);
-        setShowShareModal(true);
-      } else {
-        throw new Error('Failed to create share link');
-      }
-    } catch (error) {
-      console.error('[AIChat] Share error:', error);
-      toast({
-        title: t('aiChat.shareError', '공유 링크 생성 실패'),
-        description: t('aiChat.shareErrorDesc', '잠시 후 다시 시도해주세요'),
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSharing(false);
-    }
+    await shareChat(messages, {
+      currentSessionId,
+      chatSessions,
+    });
   };
 
-  // 클립보드 복사 핸들러
+  // 클립보드 복사 핸들러 (useChatSharing 훅 사용)
   const handleCopyShareUrl = async () => {
-    if (!shareUrl) return;
-
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      toast({
-        title: t('aiChat.shareCopied', '링크가 복사되었습니다'),
-      });
-    } catch {
-      toast({
-        title: t('aiChat.shareCopyError', '복사 실패'),
-        variant: 'destructive',
-      });
-    }
+    await copyShareUrl();
   };
 
   // 보고서 아카이브 삭제 핸들러
@@ -762,64 +690,18 @@ const AIChat = () => {
     }
   }, [input]);
 
-  // 이미지 업로드 처리
-  const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-
-    Array.from(files).forEach((file) => {
-      if (file.type.startsWith("image/")) {
-        setImageFiles((prev) => [...prev, file]);
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          if (event.target?.result) {
-            setUploadedImages((prev) => [...prev, event.target!.result as string]);
-          }
-        };
-        reader.readAsDataURL(file);
-      }
-    });
-
-    e.target.value = "";
-  }, []);
-
-  // G-code 파일 업로드 처리
-  const handleGcodeUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && (file.name.endsWith('.gcode') || file.name.endsWith('.gco'))) {
-      setGcodeFile(file);
-      // 파일 내용 읽기 (코드 수정 컨텍스트용)
-      try {
-        const content = await file.text();
-        setGcodeFileContent(content);
-      } catch (err) {
-        console.error('[AIChat] Failed to read gcode file content:', err);
-      }
-      toast({
-        title: t('aiChat.gcodeUploaded', 'G-code 파일 업로드됨'),
-        description: file.name,
-      });
-    }
-    e.target.value = "";
-  }, [toast, t]);
-
-  // 이미지 제거
+  // 이미지 제거 (훅의 removeImage에 도구 선택 해제 로직 추가)
   const removeImage = (index: number) => {
-    setUploadedImages((prev) => {
-      const newImages = prev.filter((_, i) => i !== index);
-      // 모든 이미지가 제거되면 도구 선택 해제
-      if (newImages.length === 0 && selectedTool === "troubleshoot") {
-        setSelectedTool(null);
-      }
-      return newImages;
-    });
-    setImageFiles((prev) => prev.filter((_, i) => i !== index));
+    fileUploadRemoveImage(index);
+    // 모든 이미지가 제거되면 도구 선택 해제
+    if (uploadedImages.length <= 1 && selectedTool === "troubleshoot") {
+      setSelectedTool(null);
+    }
   };
 
-  // G-code 파일 제거
+  // G-code 파일 제거 (훅의 removeGcodeFile에 모드/도구 초기화 로직 추가)
   const removeGcodeFile = () => {
-    setGcodeFile(null);
-    setGcodeFileContent(null);
+    fileUploadRemoveGcodeFile();
     if (chatMode === "gcode") {
       setChatMode("general");
     }
@@ -827,90 +709,6 @@ const AIChat = () => {
       setSelectedTool(null);
     }
   };
-
-  // 이미지 파일 처리 공통 함수
-  const processImageFile = useCallback((file: File) => {
-    if (file.type.startsWith("image/")) {
-      setImageFiles((prev) => [...prev, file]);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setUploadedImages((prev) => [...prev, event.target!.result as string]);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  }, []);
-
-  // 드래그 앤 드롭 핸들러
-  const [isDragging, setIsDragging] = useState(false);
-  const dragCounterRef = useRef(0);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current++;
-    if (dragCounterRef.current === 1) {
-      setIsDragging(true);
-    }
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current--;
-    if (dragCounterRef.current === 0) {
-      setIsDragging(false);
-    }
-  }, []);
-
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current = 0;
-    setIsDragging(false);
-
-    const files = Array.from(e.dataTransfer.files);
-    for (const file of files) {
-      if (file.type.startsWith("image/")) {
-        processImageFile(file);
-      } else if (file.name.endsWith('.gcode') || file.name.endsWith('.gco')) {
-        setGcodeFile(file);
-        // 파일 내용 읽기 (코드 수정 컨텍스트용)
-        try {
-          const content = await file.text();
-          setGcodeFileContent(content);
-        } catch (err) {
-          console.error('[AIChat] Failed to read gcode file content:', err);
-        }
-        toast({
-          title: t('aiChat.gcodeUploaded', 'G-code 파일 업로드됨'),
-          description: file.name,
-        });
-      }
-    }
-  }, [processImageFile, toast, t]);
-
-  // 클립보드 붙여넣기 핸들러
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-
-    for (const item of Array.from(items)) {
-      if (item.type.startsWith("image/")) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file) {
-          processImageFile(file);
-        }
-      }
-    }
-  }, [processImageFile]);
 
   /**
    * 메시지 전송 (리팩토링된 orchestrator)
@@ -1522,80 +1320,6 @@ const AIChat = () => {
     });
   }, [startGcodeAnalysisPolling, user?.id, currentSessionId, t]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  // 도구 목록
-  const tools = [
-    {
-      id: "troubleshoot",
-      icon: Stethoscope,
-      label: t('ai.printerTroubleshooting', '프린터 문제 진단'),
-      description: t('ai.troubleshootDesc', '이미지로 프린터 문제를 분석합니다'),
-      color: "text-emerald-500",
-      bgColor: "bg-emerald-500/10",
-    },
-    {
-      id: "gcode",
-      icon: FileCode2,
-      label: t('ai.gcodeAnalysis', 'G-code 분석'),
-      description: t('ai.gcodeDesc', 'G-code 파일을 분석하고 최적화합니다'),
-      color: "text-blue-500",
-      bgColor: "bg-blue-500/10",
-    },
-    {
-      id: "modeling",
-      icon: Box,
-      label: t('ai.modeling3d', '3D 모델링'),
-      description: t('ai.modelingDesc', '텍스트로 3D 모델을 생성합니다'),
-      color: "text-purple-500",
-      bgColor: "bg-purple-500/10",
-    },
-  ];
-
-  // 선택된 도구 정보
-  const currentTool = tools.find(t => t.id === selectedTool);
-
-  // 도구 선택 핸들러
-  const handleToolSelect = (toolId: string) => {
-    // 익명 사용자는 general 외 도구 사용 불가 - 로그인 모달 표시
-    if (!user && toolId !== 'general') {
-      setShowLoginModal(true);
-      return;
-    }
-
-    // 3D 모델링 선택 시 create 페이지로 이동
-    if (toolId === 'modeling') {
-      navigate('/create');
-      return;
-    }
-
-    if (selectedTool === toolId) {
-      // 이미 선택된 도구를 다시 클릭하면 해제 (general로 되돌아감)
-      // 단, 이미 해당 도구로 메시지가 있으면 해제 불가
-      if (currentSessionToolType && currentSessionToolType !== 'general') {
-        // 이미 도구가 사용된 세션에서는 해제 불가
-        return;
-      }
-      setSelectedTool(null);
-    } else {
-      // 다른 도구 선택 시
-      // 1. general 모드에서는 자유롭게 도구 변경 가능
-      // 2. 이미 특정 도구(troubleshoot, gcode)가 사용된 세션에서는 다른 도구 선택 시 새 채팅 유도
-      if (currentSessionToolType && currentSessionToolType !== 'general' && currentSessionToolType !== toolId) {
-        // 이미 다른 도구가 사용된 세션 -> 새 채팅 유도 모달
-        setPendingToolId(toolId);
-        setShowNewChatModal(true);
-        return;
-      }
-      setSelectedTool(toolId);
-    }
-  };
-
   // 새 채팅 모달에서 "새 채팅 시작" 클릭 시
   const handleStartNewChatWithTool = () => {
     handleNewChat(); // 새 채팅 초기화
@@ -1771,321 +1495,35 @@ const AIChat = () => {
   }, [user, currentSessionId]);
 
   // 입력 박스 렌더링 (초기 화면과 채팅 화면에서 공통 사용)
-  const renderInputBox = (placeholder: string) => (
-    <div
-      className={cn(
-        "bg-muted/50 rounded-3xl border shadow-sm hover:shadow-md transition-all overflow-hidden",
-        isDragging
-          ? "border-primary border-2 bg-primary/5"
-          : "border-gray-300 dark:border-border"
-      )}
+  const renderInputBox = (placeholder?: string) => (
+    <ChatInput
+      input={input}
+      setInput={setInput}
+      isLoading={isLoading}
+      isDragging={isDragging}
+      uploadedImages={uploadedImages}
+      gcodeFile={gcodeFile}
+      selectedTool={selectedTool}
+      setSelectedTool={setSelectedTool}
+      selectedModel={selectedModel as SelectedModel}
+      setSelectedModel={setSelectedModel}
+      user={user}
+      userPlan={userPlan}
+      onSend={handleSend}
+      onLoginRequired={() => setShowLoginModal(true)}
+      fileInputRef={fileInputRef}
+      gcodeInputRef={gcodeInputRef}
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-    >
-      {/* 드래그 오버레이 */}
-      {isDragging && (
-        <div className="absolute inset-0 flex items-center justify-center bg-primary/10 z-10 rounded-3xl">
-          <p className="text-primary font-medium">이미지를 여기에 놓으세요</p>
-        </div>
-      )}
-      {/* 상단: 입력창 */}
-      <div className="relative flex items-end">
-        <Textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          placeholder={placeholder}
-          className="flex-1 min-h-[44px] max-h-[200px] py-3 px-5 resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base placeholder:text-muted-foreground/60 overflow-hidden"
-          rows={1}
-        />
-
-        {/* 전송 버튼 */}
-        <div className="flex items-center gap-1 pr-3 pb-2">
-          <Button
-            size="icon"
-            variant="ghost"
-            className={cn(
-              "shrink-0 rounded-full h-9 w-9 transition-colors",
-              (input.trim() || uploadedImages.length > 0 || gcodeFile)
-                ? "text-primary hover:text-primary/80 hover:bg-primary/10"
-                : "text-muted-foreground/50"
-            )}
-            disabled={(!input.trim() && uploadedImages.length === 0 && !gcodeFile) || isLoading}
-            onClick={handleSend}
-          >
-            {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
-          </Button>
-        </div>
-      </div>
-
-      {/* 하단: 도구 라인 */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-t border-border/50">
-        {/* + 버튼 - 선택된 도구에 따라 다른 파일 업로드 */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="shrink-0 h-9 w-9 rounded-full hover:bg-muted"
-          onClick={() => {
-            // G-code 분석 도구 선택 시 G-code 파일 업로드
-            if (selectedTool === 'gcode') {
-              gcodeInputRef.current?.click();
-            } else {
-              // 그 외에는 이미지 업로드
-              fileInputRef.current?.click();
-            }
-          }}
-          title={selectedTool === 'gcode' ? t('aiChat.attachGcode', 'G-code 파일 첨부') : t('aiChat.attachImage', '이미지 첨부')}
-        >
-          <Plus className="w-5 h-5 text-muted-foreground" />
-        </Button>
-
-        {/* 도구 드롭다운 */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "h-9 px-4 rounded-full text-sm font-medium gap-2 transition-colors",
-                selectedTool && currentTool
-                  ? `${currentTool.bgColor} ${currentTool.color} border border-current/30 hover:opacity-80`
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              )}
-            >
-              {currentTool ? (
-                <>
-                  <currentTool.icon className="w-4 h-4" />
-                  {currentTool.label}
-                </>
-              ) : (
-                <>
-                  <Settings2 className="w-4 h-4" />
-                  {t('aiChat.tools', '도구')}
-                </>
-              )}
-              <ChevronDown className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-80 p-3 rounded-3xl">
-            {tools.map((tool) => {
-              const Icon = tool.icon;
-              const isSelected = selectedTool === tool.id;
-              return (
-                <DropdownMenuItem
-                  key={tool.id}
-                  onClick={() => handleToolSelect(tool.id)}
-                  className={cn(
-                    "flex items-start gap-4 cursor-pointer rounded-2xl p-4 transition-all",
-                    isSelected ? `${tool.bgColor} ${tool.color}` : "hover:bg-muted"
-                  )}
-                >
-                  <div className={cn(
-                    "w-11 h-11 rounded-xl flex items-center justify-center shrink-0",
-                    isSelected ? "bg-background shadow-sm" : tool.bgColor
-                  )}>
-                    <Icon className={cn("w-6 h-6", tool.color)} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className={cn(
-                      "text-sm font-semibold",
-                      isSelected ? tool.color : "text-foreground"
-                    )}>
-                      {tool.label}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {tool.description}
-                    </div>
-                  </div>
-                  {isSelected && <Check className={cn("w-5 h-5 shrink-0 mt-1", tool.color)} />}
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* 선택된 도구가 있을 때 해제 버튼 */}
-        {selectedTool && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-9 px-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-            onClick={() => setSelectedTool(null)}
-          >
-            <X className="w-4 h-4" />
-          </Button>
-        )}
-
-        {/* 오른쪽 정렬을 위한 spacer */}
-        <div className="flex-1" />
-
-        {/* 모델 선택 드롭다운 */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-9 px-4 rounded-full text-sm font-medium gap-2 text-muted-foreground hover:text-foreground hover:bg-muted"
-            >
-              <Cpu className="w-4 h-4" />
-              {selectedModel.model === 'gemini-2.5-flash-lite' ? 'Gemini 2.5 Flash Lite' :
-                selectedModel.model === 'gemini-2.5-flash' ? 'Gemini 2.5 Flash' :
-                  selectedModel.model === 'gemini-2.5-pro' ? 'Gemini 2.5 Pro' :
-                    selectedModel.model === 'gpt-4o-mini' ? 'GPT-4o mini' :
-                      selectedModel.model === 'gpt-4o' ? 'GPT-4o' :
-                        selectedModel.model === 'gpt-4.1' ? 'GPT-4.1' :
-                          t('aiChat.model', '모델')}
-              <ChevronDown className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72 p-2 rounded-2xl">
-            {/* Google */}
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className={cn(
-                "flex items-center gap-3 cursor-pointer rounded-xl p-3",
-                selectedModel.provider === 'google' ? "bg-blue-500/10" : "hover:bg-muted"
-              )}>
-                <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                  <Cpu className="w-5 h-5 text-blue-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-foreground">Google</div>
-                  <div className="text-xs text-muted-foreground">Gemini 모델</div>
-                </div>
-                {selectedModel.provider === 'google' && <Check className="w-4 h-4 text-blue-500" />}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="w-64 p-2 rounded-2xl">
-                {/* 무료 모델 - 모든 사용자 */}
-                <DropdownMenuLabel className="text-xs text-muted-foreground px-3 py-1.5">{t('aiChat.freeModels', '무료 모델')}</DropdownMenuLabel>
-                <DropdownMenuItem
-                  className={cn(
-                    "flex items-center gap-3 cursor-pointer rounded-xl p-3 hover:bg-muted",
-                    selectedModel.provider === 'google' && selectedModel.model === 'gemini-2.5-flash-lite' && "bg-blue-500/10"
-                  )}
-                  onClick={() => setSelectedModel({ provider: 'google', model: 'gemini-2.5-flash-lite' })}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-foreground">Gemini 2.5 Flash Lite</div>
-                    <div className="text-xs text-muted-foreground">{t('aiChat.fastAndEfficient', '빠르고 효율적')}</div>
-                  </div>
-                  {selectedModel.provider === 'google' && selectedModel.model === 'gemini-2.5-flash-lite' && <Check className="w-4 h-4 text-blue-500" />}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {/* 유료 모델 - Starter 이상 */}
-                <DropdownMenuLabel className="text-xs text-muted-foreground px-3 py-1.5">{t('aiChat.paidModels', '유료 모델')}</DropdownMenuLabel>
-                <DropdownMenuItem
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl p-3",
-                    (!userPlan || userPlan === 'free') ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
-                    selectedModel.provider === 'google' && selectedModel.model === 'gemini-2.5-flash' && "bg-blue-500/10"
-                  )}
-                  disabled={!userPlan || userPlan === 'free'}
-                  onClick={() => userPlan && userPlan !== 'free' && setSelectedModel({ provider: 'google', model: 'gemini-2.5-flash' })}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-foreground">Gemini 2.5 Flash</div>
-                    <div className="text-xs text-muted-foreground">{t('aiChat.starterAndAbove', 'Starter 이상')}</div>
-                  </div>
-                  {selectedModel.provider === 'google' && selectedModel.model === 'gemini-2.5-flash' && <Check className="w-4 h-4 text-blue-500" />}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl p-3",
-                    (!userPlan || userPlan === 'free') ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
-                    selectedModel.provider === 'google' && selectedModel.model === 'gemini-2.5-pro' && "bg-blue-500/10"
-                  )}
-                  disabled={!userPlan || userPlan === 'free'}
-                  onClick={() => userPlan && userPlan !== 'free' && setSelectedModel({ provider: 'google', model: 'gemini-2.5-pro' })}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-foreground">Gemini 2.5 Pro</div>
-                    <div className="text-xs text-muted-foreground">{t('aiChat.latestModel', '최신 모델')}</div>
-                  </div>
-                  {selectedModel.provider === 'google' && selectedModel.model === 'gemini-2.5-pro' && <Check className="w-4 h-4 text-blue-500" />}
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-
-            {/* OpenAI - Starter 이상 */}
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className={cn(
-                "flex items-center gap-3 rounded-xl p-3",
-                (!userPlan || userPlan === 'free') ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
-                selectedModel.provider === 'openai' ? "bg-emerald-500/10" : "hover:bg-muted"
-              )}>
-                <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                  <Cpu className="w-5 h-5 text-emerald-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-foreground">OpenAI</div>
-                  <div className="text-xs text-muted-foreground">{(!userPlan || userPlan === 'free') ? t('aiChat.starterAndAbove', 'Starter 이상') : 'GPT 모델'}</div>
-                </div>
-                {selectedModel.provider === 'openai' && <Check className="w-4 h-4 text-emerald-500" />}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="w-64 p-2 rounded-2xl">
-                <DropdownMenuItem
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl p-3",
-                    (!userPlan || userPlan === 'free') ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
-                    selectedModel.provider === 'openai' && selectedModel.model === 'gpt-4o-mini' && "bg-emerald-500/10"
-                  )}
-                  disabled={!userPlan || userPlan === 'free'}
-                  onClick={() => userPlan && userPlan !== 'free' && setSelectedModel({ provider: 'openai', model: 'gpt-4o-mini' })}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-foreground">GPT-4o mini</div>
-                    <div className="text-xs text-muted-foreground">{t('aiChat.fastAndEfficient', '빠르고 효율적')}</div>
-                  </div>
-                  {selectedModel.provider === 'openai' && selectedModel.model === 'gpt-4o-mini' && <Check className="w-4 h-4 text-emerald-500" />}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl p-3",
-                    (!userPlan || userPlan === 'free') ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
-                    selectedModel.provider === 'openai' && selectedModel.model === 'gpt-4o' && "bg-emerald-500/10"
-                  )}
-                  disabled={!userPlan || userPlan === 'free'}
-                  onClick={() => userPlan && userPlan !== 'free' && setSelectedModel({ provider: 'openai', model: 'gpt-4o' })}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-foreground">GPT-4o</div>
-                    <div className="text-xs text-muted-foreground">{t('aiChat.webSearchEnabled', '웹 검색 지원')}</div>
-                  </div>
-                  {selectedModel.provider === 'openai' && selectedModel.model === 'gpt-4o' && <Check className="w-4 h-4 text-emerald-500" />}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl p-3",
-                    (!userPlan || userPlan === 'free') ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted",
-                    selectedModel.provider === 'openai' && selectedModel.model === 'gpt-4.1' && "bg-emerald-500/10"
-                  )}
-                  disabled={!userPlan || userPlan === 'free'}
-                  onClick={() => userPlan && userPlan !== 'free' && setSelectedModel({ provider: 'openai', model: 'gpt-4.1' })}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-foreground">GPT-4.1</div>
-                    <div className="text-xs text-muted-foreground">{t('aiChat.latestModel', '최신 모델')}</div>
-                  </div>
-                  {selectedModel.provider === 'openai' && selectedModel.model === 'gpt-4.1' && <Check className="w-4 h-4 text-emerald-500" />}
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
+      onPaste={handlePaste}
+      placeholder={placeholder}
+    />
   );
 
   return (
-    <div className="h-screen bg-background flex">
+    <div className={cn("h-screen bg-background flex", isMobile && "pb-16")}>
       {/* Hidden file inputs */}
       <input
         ref={fileInputRef}
@@ -2103,8 +1541,8 @@ const AIChat = () => {
         onChange={handleGcodeUpload}
       />
 
-      {/* 왼쪽 사이드바 */}
-      <AppSidebar
+      {/* 왼쪽 사이드바 - 모바일에서는 숨김 */}
+      {!isMobile && <AppSidebar
         isOpen={sidebarOpen}
         onToggle={toggleSidebar}
         sessions={chatSessions}
@@ -2124,7 +1562,7 @@ const AIChat = () => {
         onDeleteReport={handleDeleteReport}
         onViewMoreReports={handleArchiveToggle}
         archiveViewActive={archiveViewActive}
-      />
+      />}
 
       {/* 메인 컨텐츠 */}
       <div className="flex-1 flex flex-col min-w-0 relative transition-all duration-300">
@@ -2161,130 +1599,19 @@ const AIChat = () => {
             isClosing={archiveClosing}
           />
         ) : messages.length === 0 ? (
-          // Gemini 스타일 초기 화면
-          <div className="flex-1 flex flex-col px-4">
-            {/* 상단 여백 */}
-            <div className="flex-1" />
-            {/* 메인 컨텐츠 (중앙 정렬) */}
-            <div className="flex flex-col items-center">
-              {/* 인사말 */}
-              <div className="text-center mb-8">
-                {/* 스타카토 애니메이션 */}
-                <div className="flex justify-center gap-1.5 mb-4">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '450ms' }} />
-                </div>
-                <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 whitespace-pre-line">
-                  {t('aiChat.askAnything', '출력하다가\n뭔가 이상할 때')}
-                </h1>
-                <p className="text-xl sm:text-2xl font-medium text-muted-foreground">
-                  {t('aiChat.greeting', '지금 어떤 문제가 생겼는지 그대로 보여주세요')}
-                </p>
-              </div>
-
-              {/* 중앙 입력창 */}
-              <div className="w-full max-w-2xl mb-6">
-                {/* 업로드된 미리보기 */}
-                <FilePreviewList
-                  images={uploadedImages}
-                  gcodeFile={gcodeFile}
-                  onRemoveImage={removeImage}
-                  onRemoveGcode={removeGcodeFile}
-                  className="mb-3 px-2"
-                />
-
-                {renderInputBox(
-                  selectedTool === "troubleshoot"
-                    ? t('aiChat.troubleshootPlaceholder', '문제 상황에 대한 이미지와 증상 내용이 있으면 더 좋아요')
-                    : selectedTool === "gcode"
-                      ? t('aiChat.gcodePlaceholder', 'G-code 파일을 업로드하거나 문제 내용을 붙여넣어보세요')
-                      : selectedTool === "modeling"
-                        ? t('aiChat.modelingPlaceholder', '만들고 싶은 3D 모델을 설명해주세요')
-                        : t('aiChat.defaultPlaceholder', 'FACTOR AI에게 물어보세요')
-                )}
-
-                {/* 빠른 테스트 버튼 - 도구별 활용 예시 (첫째 줄 3개, 둘째 줄 2개) */}
-                <div className="flex flex-col items-center gap-2 mt-10">
-                  {/* 첫째 줄: G-code 2개 + 프린터 문제 진단 1개 */}
-                  <div className="flex flex-wrap justify-center gap-2">
-                    <button
-                      onClick={() => {
-                        if (!user) {
-                          setShowLoginModal(true);
-                          return;
-                        }
-                        setSelectedTool('gcode');
-                        setInput(t('aiChat.quickPrompt.gcodeOptimize', '출력 시간 줄이고 싶은데 G-code 봐줘'));
-                      }}
-                      className="px-4 py-2 text-sm bg-blue-500/10 hover:bg-blue-500/20 rounded-full border border-blue-500/30 transition-colors text-blue-600 dark:text-blue-400"
-                    >
-                      {t('aiChat.quickPrompt.gcodeOptimize', '출력 시간 줄이고 싶어')}
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (!user) {
-                          setShowLoginModal(true);
-                          return;
-                        }
-                        setSelectedTool('gcode');
-                        setInput(t('aiChat.quickPrompt.gcodeCheck', '이 G-code 문제 있는지 확인해줘'));
-                      }}
-                      className="px-4 py-2 text-sm bg-blue-500/10 hover:bg-blue-500/20 rounded-full border border-blue-500/30 transition-colors text-blue-600 dark:text-blue-400"
-                    >
-                      {t('aiChat.quickPrompt.gcodeCheck', 'G-code 문제 확인해줘')}
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (!user) {
-                          setShowLoginModal(true);
-                          return;
-                        }
-                        setSelectedTool('troubleshoot');
-                        setInput(t('aiChat.quickPrompt.stringing', '출력물에 실 같은 게 달려있어요'));
-                      }}
-                      className="px-4 py-2 text-sm bg-emerald-500/10 hover:bg-emerald-500/20 rounded-full border border-emerald-500/30 transition-colors text-emerald-600 dark:text-emerald-400"
-                    >
-                      {t('aiChat.quickPrompt.stringing', '실 같은 게 달려있어요')}
-                    </button>
-                  </div>
-
-                  {/* 둘째 줄: 프린터 문제 진단 1개 + 3D 모델링 1개 */}
-                  <div className="flex flex-wrap justify-center gap-2">
-                    <button
-                      onClick={() => {
-                        if (!user) {
-                          setShowLoginModal(true);
-                          return;
-                        }
-                        setSelectedTool('troubleshoot');
-                        setInput(t('aiChat.quickPrompt.warping', '첫 레이어가 베드에서 떨어져요'));
-                      }}
-                      className="px-4 py-2 text-sm bg-emerald-500/10 hover:bg-emerald-500/20 rounded-full border border-emerald-500/30 transition-colors text-emerald-600 dark:text-emerald-400"
-                    >
-                      {t('aiChat.quickPrompt.warping', '베드에서 떨어져요')}
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (!user) {
-                          setShowLoginModal(true);
-                          return;
-                        }
-                        const prompt = t('aiChat.quickPrompt.modeling', '스마트폰 거치대 만들어줘');
-                        navigate('/create', { state: { prompt } });
-                      }}
-                      className="px-4 py-2 text-sm bg-purple-500/10 hover:bg-purple-500/20 rounded-full border border-purple-500/30 transition-colors text-purple-600 dark:text-purple-400"
-                    >
-                      {t('aiChat.quickPrompt.modeling', '스마트폰 거치대 만들어줘')}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* 하단 여백 */}
-            <div className="flex-1" />
-          </div>
+          // WelcomeScreen 컴포넌트 (초기 화면)
+          <WelcomeScreen
+            uploadedImages={uploadedImages}
+            gcodeFile={gcodeFile}
+            onRemoveImage={removeImage}
+            onRemoveGcode={removeGcodeFile}
+            selectedTool={selectedTool}
+            setSelectedTool={setSelectedTool}
+            setInput={setInput}
+            user={user}
+            onLoginRequired={() => setShowLoginModal(true)}
+            renderInputBox={renderInputBox}
+          />
         ) : (
           // 채팅 화면 + 보고서 레이아웃
           <div className="flex-1 flex overflow-hidden h-full">
@@ -2865,6 +2192,8 @@ const AIChat = () => {
         </DialogContent>
       </Dialog>
 
+      {/* 모바일 하단 네비게이션 */}
+      {isMobile && <SharedBottomNavigation />}
     </div>
   );
 };

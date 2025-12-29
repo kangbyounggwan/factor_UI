@@ -114,6 +114,8 @@ interface ChatMessageProps {
   resolvedLines?: Set<number>;
   // 되돌리기 콜백 (수정코드 -> 원본코드로)
   onRevert?: (lineNumber: number, fixedCode: string, originalCode: string) => void;
+  // 제안 액션 클릭 콜백
+  onSuggestedAction?: (action: SuggestedAction) => void;
 }
 
 /**

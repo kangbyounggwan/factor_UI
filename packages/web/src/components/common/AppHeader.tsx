@@ -12,7 +12,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sun, Moon, Globe, MessageSquare, Printer, Sparkles, Rocket, Crown, Building2, Shield } from "lucide-react";
+import { Sun, Moon, Globe, MessageSquare, Printer, Sparkles, Rocket, Crown, Building2, Shield, Activity } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import type { SubscriptionPlan } from "@shared/types/subscription";
@@ -79,6 +80,7 @@ export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, show
   const { user } = useAuth();
   const { plan: userPlan } = useUserPlan(user?.id);
   const { isAdmin } = useUserRole();
+  const isMobile = useIsMobile();
 
   const currentLanguage = i18n.language || 'ko';
 
@@ -100,16 +102,25 @@ export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, show
     <header
       className={cn(
         "sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-all duration-300",
-        sidebarOpen ? "ml-52" : "ml-0"
+        !isMobile && sidebarOpen ? "ml-52" : "ml-0"
       )}
     >
-      <div className="relative flex h-16 items-center justify-center px-4">
-        {/* 왼쪽: 커스텀 콘텐츠 */}
-        {leftContent && (
-          <div className="absolute left-4 flex items-center">
-            {leftContent}
-          </div>
-        )}
+      <div className="relative flex h-14 sm:h-16 items-center justify-center px-4">
+        {/* 왼쪽: 모바일에서는 로고, 데스크탑에서는 커스텀 콘텐츠 */}
+        <div className="absolute left-4 flex items-center">
+          {isMobile ? (
+            <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center w-7 h-7 bg-primary rounded-lg">
+                <Activity className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <span className="text-lg font-bold font-orbitron text-primary tracking-wide">
+                FACTOR
+              </span>
+            </div>
+          ) : (
+            leftContent
+          )}
+        </div>
 
         {/* 중앙: 탭 스위치 */}
         {showTabSwitch && (
@@ -171,18 +182,18 @@ export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, show
         )}
 
         {/* 오른쪽: 언어/테마 그룹 + 플랜 배지 + 커스텀 콘텐츠 */}
-        <div className="absolute right-4 flex items-center gap-3">
+        <div className="absolute right-4 flex items-center gap-2 sm:gap-3">
           {/* 커스텀 오른쪽 콘텐츠 */}
           {rightContent}
           {/* 언어 + 테마 버튼 그룹 */}
-          <div className="flex items-center bg-muted rounded-full p-1">
+          <div className="flex items-center bg-muted rounded-full p-0.5 sm:p-1">
             {/* 언어 선택 */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 rounded-full hover:bg-background"
+                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-full hover:bg-background"
                 >
                   <Globe className="h-4 w-4" />
                 </Button>
@@ -202,20 +213,21 @@ export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, show
               variant="ghost"
               size="icon"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="h-9 w-9 rounded-full hover:bg-background"
+              className="h-8 w-8 sm:h-9 sm:w-9 rounded-full hover:bg-background"
             >
               <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
               <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             </Button>
           </div>
 
-          {/* 플랜 배지 - 로그인한 사용자만 표시 */}
+          {/* 플랜 배지 - 로그인한 사용자만 표시, 모바일에서는 아이콘만 */}
           {user && (
             <Button
               variant="ghost"
               onClick={() => navigate('/subscription')}
               className={cn(
-                "h-9 px-3 rounded-full text-sm font-medium transition-all flex items-center gap-1.5",
+                "h-8 sm:h-9 rounded-full text-sm font-medium transition-all flex items-center gap-1.5",
+                isMobile ? "w-8 p-0 justify-center" : "px-3",
                 currentPlanConfig.bgColor,
                 currentPlanConfig.textColor,
                 currentPlanConfig.hoverBgColor,
@@ -223,7 +235,7 @@ export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, show
               )}
             >
               <PlanIcon className="w-4 h-4" />
-              {currentPlanConfig.label}
+              {!isMobile && currentPlanConfig.label}
             </Button>
           )}
         </div>
