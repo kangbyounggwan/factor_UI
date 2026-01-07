@@ -79,12 +79,7 @@ export function WelcomeScreen({
   };
 
   return (
-    <div className="flex-1 flex flex-col px-4">
-      {/* 상단 여백 */}
-      <div className="flex-1" />
-
-      {/* 메인 컨텐츠 (중앙 정렬) */}
-      <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center px-4 py-8">
         {/* 인사말 */}
         <div className="text-center mb-8">
           {/* 스타카토 애니메이션 */}
@@ -156,10 +151,6 @@ export function WelcomeScreen({
             </div>
           </div>
         </div>
-      </div>
-
-      {/* 하단 여백 */}
-      <div className="flex-1" />
     </div>
   );
 }

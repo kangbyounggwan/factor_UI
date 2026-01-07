@@ -224,9 +224,11 @@ export default {
     // AI Tool names
     printerTroubleshooting: "Printer Troubleshooting",
     modeling3d: "3D Modeling",
+    priceComparison: "Price Comparison",
     // AI Tool descriptions
     troubleshootDesc: "Analyze printer issues with images",
     gcodeDesc: "Analyze and optimize G-code files",
+    priceComparisonDesc: "Compare prices for 3D printers, parts, and filaments",
     modelingDesc: "Generate 3D models from text",
     deleteImageConfirm: "Confirm Image Deletion",
     deleteImageQuestion: "Are you sure you want to delete this image?",
@@ -2502,6 +2504,7 @@ export default {
     troubleshootPlaceholder: "Images and symptom details help us diagnose better",
     gcodePlaceholder: "Upload a G-code file or paste the content",
     modelingPlaceholder: "Describe the 3D model you want to create",
+    priceComparisonPlaceholder: "Enter product name to compare (e.g., Ender 3 V2)",
     defaultPlaceholder: "Ask FACTOR AI",
     chatPlaceholder: "Type a message...",
     imageQuestionPlaceholder: "Ask about the image...",
@@ -2626,6 +2629,7 @@ export default {
     },
     // Chat sharing related
     share: "Share",
+    shareChat: "Share Conversation",
     shareTitle: "Share Conversation",
     shareDescription: "Share this conversation with others via link. The link is valid for 30 days.",
     copyLink: "Copy Link",
@@ -2675,5 +2679,19 @@ export default {
     startChat: "Get Started Free",
     poweredBy: "Powered by FACTOR - AI-Powered 3D Printing Assistant",
     learnMore: "Learn More About FACTOR"
+  },
+  priceComparison: {
+    title: "Price Comparison Results",
+    found: "{{count}} products",
+    noResults: "No results found",
+    lowestPrice: "Lowest Price",
+    outOfStock: "Out of Stock",
+    reviews: "Reviews",
+    showMore: "Show More",
+    goToProduct: "Go to product page",
+    naver: "Naver",
+    coupang: "Coupang",
+    amazon: "Amazon",
+    ebay: "eBay"
   }
 };

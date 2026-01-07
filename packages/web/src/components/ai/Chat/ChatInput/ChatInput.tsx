@@ -36,6 +36,7 @@ import {
   ChevronDown,
   Check,
   Box,
+  DollarSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SubscriptionPlan } from "@shared/types/subscription";
@@ -152,6 +153,14 @@ export function ChatInput({
       color: "text-purple-500",
       bgColor: "bg-purple-500/10",
     },
+    {
+      id: "price_comparison",
+      icon: DollarSign,
+      label: t("ai.priceComparison", "가격 비교"),
+      description: t("ai.priceComparisonDesc", "3D 프린터, 부품, 필라멘트 가격 비교"),
+      color: "text-amber-500",
+      bgColor: "bg-amber-500/10",
+    },
   ];
 
   // 현재 선택된 도구
@@ -214,6 +223,9 @@ export function ChatInput({
     }
     if (selectedTool === "modeling") {
       return t("aiChat.modelingPlaceholder", "만들고 싶은 3D 모델을 설명해주세요");
+    }
+    if (selectedTool === "price_comparison") {
+      return t("aiChat.priceComparisonPlaceholder", "비교하고 싶은 제품명을 입력하세요 (예: Ender 3 V2)");
     }
     return t("aiChat.defaultPlaceholder", "FACTOR AI에게 물어보세요");
   };

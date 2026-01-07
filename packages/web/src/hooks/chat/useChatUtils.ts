@@ -5,7 +5,7 @@
  */
 
 import type { ChatToolType, ChatFileInfo } from "@shared/services/supabaseService/chat";
-import type { ReferenceImages } from "@shared/services/chatApiService";
+import type { ReferenceImages, PriceComparisonData } from "@shared/services/chatApiService";
 
 // 참고 자료 타입
 export interface ReferenceInfo {
@@ -56,6 +56,8 @@ export interface Message {
   suggestedActions?: SuggestedAction[];
   // API 응답에서 받은 참조 이미지 (문제진단)
   referenceImages?: ReferenceImages;
+  // 가격비교 결과 데이터
+  priceComparisonData?: PriceComparisonData;
 }
 
 export type ChatMode = "general" | "troubleshoot" | "gcode" | "modeling";
@@ -70,6 +72,9 @@ export const detectToolType = (
 ): ChatToolType => {
   if (selectedTool === 'modeling') {
     return 'modeling';
+  }
+  if (selectedTool === 'price_comparison') {
+    return 'price_comparison';
   }
   if (selectedTool === 'troubleshoot' || uploadedImages.length > 0) {
     return 'troubleshoot';
@@ -127,6 +132,7 @@ export const createAssistantMessage = (
     references?: ReferenceInfo[];
     referenceImages?: ReferenceImages;
     suggestedActions?: SuggestedAction[];
+    priceComparisonData?: PriceComparisonData;
   }
 ): Message => {
   return {
@@ -137,6 +143,7 @@ export const createAssistantMessage = (
     references: options?.references,
     referenceImages: options?.referenceImages,
     suggestedActions: options?.suggestedActions,
+    priceComparisonData: options?.priceComparisonData,
   };
 };
 

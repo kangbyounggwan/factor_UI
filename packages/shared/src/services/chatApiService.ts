@@ -17,12 +17,13 @@ const getCurrentLanguage = (): 'ko' | 'en' => {
 // 타입 정의
 // ============================================
 
-export type ChatToolType = 'troubleshoot' | 'gcode' | 'modelling' | 'resolve_issue' | null;
+export type ChatToolType = 'troubleshoot' | 'gcode' | 'modelling' | 'resolve_issue' | 'price_comparison' | null;
 export type ChatIntent =
   | 'troubleshoot'
   | 'gcode_analysis'
   | 'modelling_text'
   | 'modelling_image'
+  | 'price_comparison'
   | 'general';
 
 // 첨부파일 타입
@@ -60,6 +61,23 @@ export interface IssueToResolve {
   lines?: number[];
 }
 
+// 가격비교 요청 옵션
+export interface PriceComparisonOptions {
+  // 검색할 마켓플레이스 (미지정시 전체)
+  marketplaces?: ('naver' | 'coupang' | 'amazon' | 'ebay')[];
+  // 가격 범위 필터
+  min_price?: number;
+  max_price?: number;
+  // 정렬 기준
+  sort_by?: 'price_asc' | 'price_desc' | 'rating' | 'review_count' | 'relevance';
+  // 최대 결과 수
+  max_results?: number;
+  // 카테고리 필터
+  category?: '3d_printer' | 'filament' | 'parts' | 'accessories';
+  // 재고 있는 상품만
+  in_stock_only?: boolean;
+}
+
 // API 요청 타입
 export interface ChatApiRequest {
   user_id?: string;
@@ -77,6 +95,8 @@ export interface ChatApiRequest {
   // G-code 이슈 해결용 필드
   analysis_id?: string;
   issue_to_resolve?: IssueToResolve;
+  // 가격비교 옵션
+  price_comparison_options?: PriceComparisonOptions;
 }
 
 // 출처 링크 타입
@@ -173,11 +193,36 @@ export interface ModellingData {
   thumbnail_url: string | null;
 }
 
+// 가격비교 상품 데이터
+export interface PriceComparisonProduct {
+  id: string;
+  title: string;
+  price: number;
+  currency: string;
+  price_krw: number;
+  original_price?: number;
+  discount_percent?: number;
+  marketplace: 'naver' | 'coupang' | 'amazon' | 'ebay';
+  product_url: string;
+  image_url?: string;
+  rating?: number;
+  review_count?: number;
+  in_stock: boolean;
+}
+
+// 가격비교 결과 데이터
+export interface PriceComparisonData {
+  query: string;
+  results_count: number;
+  products: PriceComparisonProduct[];
+  markets_searched: string[];
+}
+
 // 도구 실행 결과
 export interface ToolResult {
   tool_name: string;
   success: boolean;
-  data: TroubleshootData | GcodeAnalysisData | ModellingData | null;
+  data: TroubleshootData | GcodeAnalysisData | ModellingData | PriceComparisonData | null;
   error?: string;
   // G-code 분석용 필드 (편의를 위해 최상위에도 노출)
   analysis_id?: string;

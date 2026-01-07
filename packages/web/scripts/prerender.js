@@ -13,6 +13,8 @@ const routes = [
   { path: '/refund', outputFile: 'refund.html' },
   { path: '/subscription', outputFile: 'subscription.html' },
   { path: '/supported-printers', outputFile: 'supported-printers.html' },
+  { path: '/ai-chat', outputFile: 'ai-chat.html' },
+  { path: '/create', outputFile: 'create.html' },
   { path: '/payment/checkout', outputFile: 'payment-checkout.html' },
   { path: '/payment/success', outputFile: 'payment-success.html' },
   { path: '/payment/fail', outputFile: 'payment-fail.html' },
@@ -28,7 +30,7 @@ async function prerender() {
 
   // Create SPA fallback structure for preview server
   // Copy index.html to route directories so /privacy loads as /privacy/index.html
-  const spaRoutes = ['/privacy', '/terms', '/refund', '/subscription', '/supported-printers'];
+  const spaRoutes = ['/privacy', '/terms', '/refund', '/subscription', '/supported-printers', '/ai-chat', '/create'];
   const indexPath = path.join(distDir, 'index.html');
 
   if (fs.existsSync(indexPath)) {

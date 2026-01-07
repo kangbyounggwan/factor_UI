@@ -238,10 +238,12 @@ export default {
     // AI 도구 이름
     printerTroubleshooting: "프린터 문제 진단",
     modeling3d: "3D 모델링",
+    priceComparison: "가격 비교",
     // AI 도구 설명
     troubleshootDesc: "출력 중 출력 후 괜찮은지 확인",
     gcodeDesc: "이 출력 그대로 돌려도 될지 확인",
     modelingDesc: "내 캐릭터 생성하기",
+    priceComparisonDesc: "3D 프린터, 부품, 필라멘트 가격 비교",
     deleteImageConfirm: "이미지 삭제 확인",
     deleteImageQuestion: "이 이미지를 삭제하시겠습니까?",
     deleteImageWithModels: "이 이미지로 생성된",
@@ -542,6 +544,7 @@ export default {
     troubleshootPlaceholder: "질문을 잘 쓸 필요 없습니다. 보이는 그대로 적거나 올려주세요.",
     gcodePlaceholder: "G-code 파일을 업로드하거나 문제 내용을 붙여넣어보세요",
     modelingPlaceholder: "만들고 싶은 3D 모델을 설명해주세요",
+    priceComparisonPlaceholder: "비교하고 싶은 제품명을 입력하세요 (예: Ender 3 V2)",
     defaultPlaceholder: "FACTOR AI에게 물어보세요",
     chatPlaceholder: "메시지를 입력하세요...",
     imageQuestionPlaceholder: "이미지에 대해 질문하세요...",
@@ -666,6 +669,7 @@ export default {
     },
     // 채팅 공유 관련
     share: "공유",
+    shareChat: "대화 공유",
     shareTitle: "대화 공유",
     shareDescription: "이 링크를 통해 다른 사람과 대화 내용을 공유할 수 있습니다. 링크는 30일간 유효합니다.",
     copyLink: "링크 복사",
@@ -2626,5 +2630,19 @@ export default {
     startChat: "무료로 시작하기",
     poweredBy: "Powered by FACTOR - AI-Powered 3D Printing Assistant",
     learnMore: "FACTOR에 대해 더 알아보기"
+  },
+  priceComparison: {
+    title: "가격 비교 결과",
+    found: "{{count}}개 상품",
+    noResults: "검색 결과가 없습니다",
+    lowestPrice: "최저가",
+    outOfStock: "품절",
+    reviews: "리뷰",
+    showMore: "더보기",
+    goToProduct: "상품 페이지로 이동",
+    naver: "네이버",
+    coupang: "쿠팡",
+    amazon: "아마존",
+    ebay: "eBay"
   }
 };

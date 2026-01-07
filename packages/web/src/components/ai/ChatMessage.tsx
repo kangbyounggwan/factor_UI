@@ -107,7 +107,8 @@ import {
   DialogContent,
 } from "@/components/ui/dialog";
 import type { ChatFileInfo } from "@shared/services/supabaseService/chat";
-import type { ReferenceImages, ReferenceImage } from "@shared/services/chatApiService";
+import type { ReferenceImages, ReferenceImage, PriceComparisonData } from "@shared/services/chatApiService";
+import { PriceComparisonCard } from "./PriceComparison/PriceComparisonCard";
 
 // 참고 자료 타입
 export interface ReferenceInfo {
@@ -150,6 +151,8 @@ export interface ChatMessageData {
   suggestedActions?: SuggestedAction[];
   // API 응답에서 받은 참조 이미지 (문제진단)
   referenceImages?: ReferenceImages;
+  // 가격비교 결과 데이터
+  priceComparisonData?: PriceComparisonData;
 }
 
 interface ChatMessageProps {
@@ -305,21 +308,36 @@ const markdownComponents = {
       </li>
     );
   },
-  // 테이블 스타일링
+  // 테이블 스타일링 - 헤더와 내용 색상 구분
   table: ({ children }: { children?: React.ReactNode }) => (
-    <div className="overflow-x-auto my-5">
-      <table className="min-w-full border-collapse border border-border">
+    <div className="overflow-x-auto my-5 rounded-lg border border-border shadow-sm">
+      <table className="min-w-full border-collapse">
         {children}
       </table>
     </div>
   ),
+  thead: ({ children }: { children?: React.ReactNode }) => (
+    <thead className="bg-primary/10 dark:bg-primary/20">
+      {children}
+    </thead>
+  ),
+  tbody: ({ children }: { children?: React.ReactNode }) => (
+    <tbody className="bg-background divide-y divide-border">
+      {children}
+    </tbody>
+  ),
+  tr: ({ children }: { children?: React.ReactNode }) => (
+    <tr className="hover:bg-muted/50 transition-colors">
+      {children}
+    </tr>
+  ),
   th: ({ children }: { children?: React.ReactNode }) => (
-    <th className="border border-border bg-muted px-3 py-2 text-left font-semibold">
+    <th className="px-4 py-3 text-left font-bold text-primary text-sm uppercase tracking-wide border-b-2 border-primary/30">
       {children}
     </th>
   ),
   td: ({ children }: { children?: React.ReactNode }) => (
-    <td className="border border-border px-3 py-2">
+    <td className="px-4 py-3 text-sm">
       {children}
     </td>
   ),
@@ -361,10 +379,38 @@ const AssistantMessage: React.FC<{
 }) => {
   const { t } = useTranslation();
 
+  // 가격비교 데이터가 있으면 마크다운 본문의 상품 목록 부분 제거
+  const hasPriceComparisonData = message.priceComparisonData && message.priceComparisonData.products.length > 0;
+
   // 본문에서 출처 섹션 추출 및 분리
   const { cleanContent, sources } = useMemo(() => {
-    return extractSources(message.content);
-  }, [message.content]);
+    let content = message.content;
+
+    // 가격비교 데이터가 있으면 마크다운의 상품 목록 섹션 제거 (PriceComparisonCard가 대신 표시)
+    if (hasPriceComparisonData) {
+      console.log('[ChatMessage] ===== 상품목록 제거 전 =====');
+      console.log('[ChatMessage] Original content:', content);
+
+      // 상품 목록 섹션 전체 제거
+      // 형식: **🛍️ 상품 목록** + 번호 목록 + *...외 N개*
+      // 각 상품: **1. 상품명...**\n   ₩가격 | 판매처
+      content = content.replace(
+        /\*\*[🛍🛒📦]?\s*상품\s?목록\*\*\s*\n\n?((?:\*\*\d+\..+?\*\*\s*\n\s+[₩￦].+?\n\n?)+)(?:\*\.{3}외\s*\d+개\*)?/gi,
+        ''
+      );
+
+      // "---" 뒤에 남은 빈 내용 정리
+      content = content.replace(/---\s*\n\s*$/g, '').trim();
+
+      // 연속된 빈 줄 정리
+      content = content.replace(/\n{3,}/g, '\n\n').trim();
+
+      console.log('[ChatMessage] ===== 상품목록 제거 후 =====');
+      console.log('[ChatMessage] Cleaned content:', content);
+    }
+
+    return extractSources(content);
+  }, [message.content, hasPriceComparisonData]);
 
   // ~ 문자 이스케이프 - useMemo로 최적화
   const escapedContent = useMemo(() => {
@@ -531,6 +577,16 @@ const AssistantMessage: React.FC<{
           isOpen={reportPanelOpen && activeReportId === message.reportCard.reportId}
           isActive={!reportPanelOpen || activeReportId === message.reportCard.reportId}
           onClick={() => onReportCardClick(message.reportCard!.reportId)}
+        />
+      </div>
+    )}
+
+    {/* 가격비교 결과 카드 */}
+    {message.priceComparisonData && message.priceComparisonData.products.length > 0 && (
+      <div className="pl-8 mt-4">
+        <PriceComparisonCard
+          products={message.priceComparisonData.products}
+          query={message.priceComparisonData.query}
         />
       </div>
     )}

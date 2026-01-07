@@ -12,6 +12,12 @@ Disallow: /private/
 Disallow: /auth/callback
 Disallow: /setup/
 
+# 로그인 필요 페이지 (리디렉션 방지)
+Disallow: /user-settings
+Disallow: /gcode-analytics
+Disallow: /dashboard
+Disallow: /printer/
+
 # Sitemap 위치
 Sitemap: https://factor.io.kr/sitemap.xml
 

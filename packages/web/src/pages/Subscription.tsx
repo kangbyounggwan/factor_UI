@@ -460,8 +460,16 @@ const Subscription = () => {
       '@type': 'Product',
       name: '3D 프린터 관리 구독',
       description: desc,
+      image: [
+        `${window.location.origin}/FACTOR_LOGO_NEW.png`,
+        `${window.location.origin}/android-chrome-512x512.png`,
+      ],
+      brand: {
+        '@type': 'Brand',
+        name: 'FACTOR',
+      },
       offers,
-    } as const;
+    };
 
     const prev = document.getElementById('subscription-jsonld');
     if (prev) prev.remove();
