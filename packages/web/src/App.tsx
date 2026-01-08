@@ -33,6 +33,10 @@ const AIChat = lazy(() => import("./pages/AIChat"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Admin = lazy(() => import("./pages/Admin"));
 const AdminUsers = lazy(() => import("./pages/AdminUsers"));
+const AdminAIAnalytics = lazy(() => import("./pages/AdminAIAnalytics"));
+const AdminChatAnalytics = lazy(() => import("./pages/AdminChatAnalytics"));
+const AdminModelAnalytics = lazy(() => import("./pages/AdminModelAnalytics"));
+const AdminUsageAnalytics = lazy(() => import("./pages/AdminUsageAnalytics"));
 const DeviceRegister = lazy(() => import("./pages/DeviceRegister"));
 const DeviceSetup = lazy(() => import("./pages/DeviceSetup"));
 const EmailVerification = lazy(() => import("./pages/EmailVerification"));
@@ -162,6 +166,26 @@ const AppContent = () => {
             <Route path="/admin/device/register" element={
               <AdminRoute>
                 <DeviceRegister />
+              </AdminRoute>
+            } />
+            <Route path="/admin/ai-analytics" element={
+              <AdminRoute>
+                <AdminAIAnalytics />
+              </AdminRoute>
+            } />
+            <Route path="/admin/ai-analytics/chat" element={
+              <AdminRoute>
+                <AdminChatAnalytics />
+              </AdminRoute>
+            } />
+            <Route path="/admin/ai-analytics/models" element={
+              <AdminRoute>
+                <AdminModelAnalytics />
+              </AdminRoute>
+            } />
+            <Route path="/admin/ai-analytics/usage" element={
+              <AdminRoute>
+                <AdminUsageAnalytics />
               </AdminRoute>
             } />
             <Route path="/setup/:uuid" element={<DeviceSetup />} />
