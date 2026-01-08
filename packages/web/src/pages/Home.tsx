@@ -5,6 +5,7 @@ import { Monitor, Play, Bell, BarChart3, Settings, Zap, Shield, Smartphone, Code
 import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
+import { useSEO } from "@/hooks/useSEO";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,9 @@ const Home = () => {
   const location = useLocation();
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // SEO 메타데이터 적용
+  useSEO('home');
 
   const handleCopyUrl = async () => {
     try {

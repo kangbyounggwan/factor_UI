@@ -15,6 +15,7 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { useSEO } from "@/hooks/useSEO";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Share2, Cpu, FileCode2 } from "lucide-react";
@@ -73,6 +74,9 @@ const AIChat = () => {
   const [searchParams] = useSearchParams();
   const isMobile = useIsMobile();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // SEO 메타데이터 적용
+  useSEO('ai-chat');
 
   // 사용자 플랜
   const { plan: userPlan } = useUserPlan(user?.id);

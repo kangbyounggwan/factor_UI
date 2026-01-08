@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
+import { useSEO } from "@/hooks/useSEO";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -155,6 +156,9 @@ const Subscription = () => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [isYearly, setIsYearly] = useState(false);
+
+  // SEO 메타데이터 적용
+  useSEO('subscription');
   const [showDetailedTable, setShowDetailedTable] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [currentPlanId, setCurrentPlanId] = useState<string>('free');

@@ -9,6 +9,8 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
+    "prerender": "npm run build && npm run preview -- --port 4173 & sleep 5 && node scripts/prerender.js && kill %1",
+    "prerender:only": "node scripts/prerender.js",
     "server": "node ../shared/server.js --rest --port 5000",
     "start": "npm run build && npm run server",
     "dev:full": "concurrently \"npm run dev\" \"npm run server\""

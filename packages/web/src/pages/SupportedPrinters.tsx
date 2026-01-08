@@ -1,58 +1,16 @@
-import { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useSEO } from "@/hooks/useSEO";
 
 const SupportedPrinters = () => {
   const { t } = useTranslation();
 
-  useEffect(() => {
-    document.title = t('landing.supportedPrintersTitle') + ' | FACTOR';
-
-    const desc = t('landing.supportedPrintersSubtitle');
-    let meta = document.querySelector('meta[name="description"]');
-    if (!meta) {
-      meta = document.createElement('meta');
-      meta.setAttribute('name', 'description');
-      document.head.appendChild(meta);
-    }
-    meta.setAttribute('content', desc);
-
-    let canonical = document.querySelector('link[rel="canonical"]');
-    if (!canonical) {
-      canonical = document.createElement('link');
-      canonical.setAttribute('rel', 'canonical');
-      document.head.appendChild(canonical);
-    }
-    canonical.setAttribute('href', `${window.location.origin}/supported-printers`);
-
-    // JSON-LD 구조화 데이터
-    const jsonLd = {
-      '@context': 'https://schema.org',
-      '@type': 'SoftwareApplication',
-      name: 'FACTOR - 3D Printer Management',
-      description: desc,
-      applicationCategory: 'BusinessApplication',
-      operatingSystem: 'Web',
-      offers: {
-        '@type': 'Offer',
-        availability: 'https://schema.org/InStock',
-        price: '0',
-        priceCurrency: 'KRW'
-      }
-    };
-
-    const prev = document.getElementById('supported-printers-jsonld');
-    if (prev) prev.remove();
-    const script = document.createElement('script');
-    script.type = 'application/ld+json';
-    script.id = 'supported-printers-jsonld';
-    script.text = JSON.stringify(jsonLd);
-    document.head.appendChild(script);
-  }, [t]);
+  // SEO 메타데이터 적용
+  useSEO('supported-printers');
 
   const mainFeatures = [
     t('landing.mainFeature1'),

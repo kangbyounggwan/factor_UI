@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useSEO } from "@/hooks/useSEO";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -109,6 +110,9 @@ import { useSidebarState } from "@/hooks/useSidebarState";
 const AI = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
+
+  // SEO 메타데이터 적용
+  useSEO('create');
 
   // 사이드바 상태 (페이지 간 공유)
   const { isOpen: sidebarOpen, setIsOpen: setSidebarOpen, toggle: toggleSidebar } = useSidebarState(true);

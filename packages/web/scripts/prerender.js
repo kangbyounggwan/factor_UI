@@ -8,16 +8,10 @@ const __dirname = path.dirname(__filename);
 
 const routes = [
   { path: '/', outputFile: 'index.html' },
-  { path: '/privacy', outputFile: 'privacy.html' },
-  { path: '/terms', outputFile: 'terms.html' },
-  { path: '/refund', outputFile: 'refund.html' },
   { path: '/subscription', outputFile: 'subscription.html' },
   { path: '/supported-printers', outputFile: 'supported-printers.html' },
   { path: '/ai-chat', outputFile: 'ai-chat.html' },
   { path: '/create', outputFile: 'create.html' },
-  { path: '/payment/checkout', outputFile: 'payment-checkout.html' },
-  { path: '/payment/success', outputFile: 'payment-success.html' },
-  { path: '/payment/fail', outputFile: 'payment-fail.html' },
 ];
 
 // Read port from command line argument or use default
@@ -67,46 +61,35 @@ async function prerender() {
         }
       });
 
-      // Navigate to page
-      const isLegalPage = ['/privacy', '/terms', '/refund'].includes(route.path);
-      
-      let html;
-      if (isLegalPage) {
-        // For legal pages, navigate and immediately capture
-        await page.goto(`${baseUrl}${route.path}`, {
-          waitUntil: 'networkidle0',
-          timeout: 30000
-        }).catch(async (e) => {
-          console.warn(`Navigation slow for ${route.path}, will capture after delay...`);
-        });
+      // For SPA, first load the base URL then navigate using client-side routing
+      await page.goto(baseUrl, {
+        waitUntil: 'networkidle0',
+        timeout: 60000
+      });
 
-        // Give React time to hydrate regardless of navigation status
+      // Wait for React to hydrate
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // If not root, navigate using client-side routing
+      if (route.path !== '/') {
+        await page.evaluate((path) => {
+          window.history.pushState({}, '', path);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }, route.path);
+
+        // Wait for route change and content to render
         await new Promise(resolve => setTimeout(resolve, 3000));
-
-        // Wait for main content
-        try {
-          await page.waitForSelector('main, article, .content, h1', { timeout: 5000 });
-        } catch (e) {
-          console.warn('Content selector not found, using delay...');
-        }
-
-        html = await page.content().catch(() => '<html><body>Failed to capture</body></html>');
-        
-      } else {
-        await page.goto(`${baseUrl}${route.path}`, {
-          waitUntil: 'networkidle0',
-          timeout: 60000
-        });
-        
-        // Wait for main content to render
-        try {
-          await page.waitForSelector('h1, main, .container', { timeout: 10000 });
-        } catch (e) {
-          console.warn('Main content selector not found, using timeout...');
-        }
-        await new Promise(resolve => setTimeout(resolve, 500));
-        html = await page.content();
       }
+
+      // Wait for main content to render
+      try {
+        await page.waitForSelector('h1, main, .container, article', { timeout: 10000 });
+      } catch (e) {
+        console.warn('Main content selector not found, using timeout...');
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const html = await page.content();
 
       // Get the rendered HTML
       const outputPath = path.join(distDir, route.outputFile);
