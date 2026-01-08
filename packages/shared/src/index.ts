@@ -11,10 +11,10 @@ export { default as i18n } from "./i18n";
 export { MqttBridge, createSharedMqttClient, startDashStatusSubscriptionsForUser, stopDashStatusSubscriptions } from "./component/mqtt";
 export * from "./hooks/useWebSocket";
 export * from "./hooks/useAIImageUpload";
+export * from "./hooks/useUserRole";
 
 // api
 export * from "./api/http";
-export * from "./api/auth";
 export * from "./api/printer";
 export * from "./api/system";
 export * from "./api/config";

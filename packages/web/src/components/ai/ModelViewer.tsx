@@ -467,11 +467,12 @@ export default function ModelViewer({ className, height, showDemo = false, place
             labelColor={GIZMO_CONFIG.labelColor}
           />
         </GizmoHelper>
-        <OrbitControls
-          enableDamping={ORBIT_CONTROLS_CONFIG.enableDamping}
-          dampingFactor={ORBIT_CONTROLS_CONFIG.dampingFactor}
-          enabled={!!effectiveUrl || showDemo}
-        />
+        {(!!effectiveUrl || showDemo) && (
+          <OrbitControls
+            enableDamping={ORBIT_CONTROLS_CONFIG.enableDamping}
+            dampingFactor={ORBIT_CONTROLS_CONFIG.dampingFactor}
+          />
+        )}
       </Canvas>
 
       {/* 3개 메인 섹션 아코디언 */}

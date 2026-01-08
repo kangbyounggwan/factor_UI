@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import type { SubscriptionPlan } from "@shared/types/subscription";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useUserPlan } from "@shared/hooks/useUserPlan";
-import { useUserRole } from "@/hooks/useUserRole";
+import { useUserRole } from "@shared/hooks/useUserRole";
 
 // 플랜별 배지 스타일 설정 (밝고 투명한 색상)
 const planBadgeConfig: Record<SubscriptionPlan, {

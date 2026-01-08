@@ -682,8 +682,10 @@ export const GCodeViewerCanvas = ({
                 position={[bedSize.x / 2, 0, bedSize.y / 2]}
               />
 
-              {/* 카메라 컨트롤 */}
+              {/* 카메라 컨트롤 - viewMode가 2d가 아닐 때만 활성화 */}
               <OrbitControls
+                makeDefault
+                enabled={viewMode !== '2d'}
                 enableDamping
                 dampingFactor={0.05}
                 target={[bedSize.x / 2, 30, bedSize.y / 2]}

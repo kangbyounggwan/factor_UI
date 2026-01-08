@@ -310,7 +310,7 @@ export default function GCodeViewer({
                     args={[200, 200]}
                   />
                   <axesHelper args={[100]} />
-                  <OrbitControls enableDamping dampingFactor={0.05} />
+                  <OrbitControls makeDefault enableDamping dampingFactor={0.05} />
                 </Canvas>
               ) : (
                 <div className="flex items-center justify-center h-full">

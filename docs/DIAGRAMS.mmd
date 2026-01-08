@@ -1,0 +1,511 @@
+# FACTOR HIBRID 다이어그램 모음 (Mermaid)
+
+## 1. 시스템 아키텍처 개요
+
+```mermaid
+flowchart TB
+    subgraph Client["클라이언트"]
+        Web["Web App\n(React + Vite)"]
+        Mobile["Mobile App\n(Capacitor)"]
+    end
+
+    subgraph Backend["백엔드 서비스"]
+        Supabase["Supabase\n(PostgreSQL, Auth, Storage)"]
+        EdgeFn["Edge Functions"]
+        PythonAI["Python AI Server\n(FastAPI)"]
+    end
+
+    subgraph External["외부 서비스"]
+        Gemini["Gemini AI"]
+        Meshy["Meshy AI\n(3D 모델링)"]
+        SerpAPI["SerpAPI\n(가격 검색)"]
+    end
+
+    subgraph Printer["프린터 시스템"]
+        OctoPrint["OctoPrint\n+ Factor Plugin"]
+        MQTT["MQTT Broker"]
+        MediaMTX["MediaMTX\n(WebRTC)"]
+    end
+
+    Web --> Supabase
+    Mobile --> Supabase
+    Web --> PythonAI
+    Mobile --> PythonAI
+    Web <--> MQTT
+    Mobile <--> MQTT
+
+    Supabase --> EdgeFn
+    PythonAI --> Gemini
+    PythonAI --> Meshy
+    PythonAI --> SerpAPI
+
+    OctoPrint --> MQTT
+    OctoPrint --> MediaMTX
+    MediaMTX --> Web
+    MediaMTX --> Mobile
+```
+
+---
+
+## 2. AI 채팅 시스템 플로우
+
+```mermaid
+sequenceDiagram
+    participant U as 사용자
+    participant C as AIChat.tsx
+    participant H as Custom Hooks
+    participant API as Python AI Server
+    participant DB as Supabase
+    participant AI as AI Services
+
+    U->>C: 메시지 입력
+    C->>H: useChatComposer
+    H->>H: 도구 타입 결정
+
+    alt 권한 체크
+        H->>H: useChatPermissions
+        H-->>U: 로그인/업그레이드 유도
+    end
+
+    C->>H: useChatSessions
+    H->>DB: 세션 생성/로드
+
+    C->>DB: 사용자 메시지 저장
+    C->>API: Chat API 호출
+
+    alt general (일반 채팅)
+        API->>AI: Gemini Pro
+        AI-->>API: 응답
+    else troubleshoot (진단)
+        API->>AI: Gemini Vision
+        AI-->>API: 진단 결과 + 참조 이미지
+    else gcode (G-code 분석)
+        API->>API: G-code Parser
+        API->>AI: Gemini (분석)
+        AI-->>API: 분석 보고서
+    else modeling (3D 모델)
+        API->>AI: Meshy AI
+        AI-->>API: GLB/STL URL
+    else price_comparison
+        API->>AI: SerpAPI
+        AI-->>API: 가격 목록
+    end
+
+    API-->>C: 응답
+    C->>DB: AI 응답 저장
+    C-->>U: 메시지 표시
+```
+
+---
+
+## 3. 프린터 MQTT 통신 플로우
+
+```mermaid
+sequenceDiagram
+    participant OP as OctoPrint
+    participant MQTT as MQTT Broker
+    participant Web as Web Client
+    participant PM as PrinterStatusManager
+    participant DB as Supabase
+
+    Note over OP,DB: 상태 publish 루프
+
+    loop 매 2초
+        OP->>MQTT: publish octoprint/status/{uuid}
+        MQTT->>Web: message
+        Web->>PM: 상태 파싱
+        PM->>PM: 캐시 비교
+
+        alt 상태 변경됨
+            PM->>DB: UPDATE printers SET status
+        end
+
+        alt 프린팅 시작/완료
+            PM->>DB: INSERT/UPDATE model_print_history
+        end
+
+        PM-->>Web: 리스너 콜백
+        Web-->>Web: React 상태 업데이트
+    end
+
+    Note over OP,DB: 제어 명령 플로우
+
+    Web->>MQTT: publish control/{uuid}
+    MQTT->>OP: message
+    OP->>OP: 명령 실행
+    OP->>MQTT: publish control_result/{uuid}
+    MQTT->>Web: 결과
+```
+
+---
+
+## 4. MQTT 토픽 구조
+
+```mermaid
+graph LR
+    subgraph Status["상태 토픽"]
+        S1["octoprint/status/{uuid}"]
+        S1 --> S1a["state.flags"]
+        S1 --> S1b["temperatures"]
+        S1 --> S1c["progress"]
+        S1 --> S1d["job"]
+        S1 --> S1e["connection"]
+        S1 --> S1f["sd"]
+    end
+
+    subgraph Control["제어 토픽"]
+        C1["control/{uuid}"]
+        C1 --> C1a["start"]
+        C1 --> C1b["pause"]
+        C1 --> C1c["resume"]
+        C1 --> C1d["cancel"]
+        C1 --> C1e["temperature"]
+    end
+
+    subgraph Result["결과 토픽"]
+        R1["control_result/{uuid}"]
+    end
+
+    subgraph AI["AI 토픽"]
+        A1["ai/model/completed/{user_id}"]
+        A2["ai/model/failed/{user_id}"]
+        A3["ai/model/progress/{user_id}"]
+    end
+```
+
+---
+
+## 5. G-code 분석 플로우
+
+```mermaid
+flowchart TB
+    subgraph Input["입력"]
+        Upload["파일 업로드"]
+        Paste["텍스트 붙여넣기"]
+    end
+
+    subgraph Analysis["분석 단계"]
+        Parse["G-code 파싱"]
+        Segment["레이어 세그먼트화"]
+        Quality["품질 점수 계산"]
+        Issues["문제점 탐지"]
+    end
+
+    subgraph AI["AI 분석"]
+        LLM["Gemini LLM 분석"]
+        Fix["수정 제안 생성"]
+    end
+
+    subgraph Output["결과"]
+        Report["분석 보고서"]
+        Editor["코드 에디터"]
+        Share["보고서 공유"]
+    end
+
+    Upload --> Parse
+    Paste --> Parse
+    Parse --> Segment
+    Segment --> Quality
+    Segment --> Issues
+    Quality --> LLM
+    Issues --> LLM
+    LLM --> Fix
+    Fix --> Report
+    Report --> Editor
+    Report --> Share
+
+    Editor --> |"수정 적용"| Save["수정된 G-code 저장"]
+```
+
+---
+
+## 6. AI 모델 생성 플로우
+
+```mermaid
+flowchart LR
+    subgraph Input["입력 방식"]
+        T["텍스트 프롬프트"]
+        I["이미지 업로드"]
+    end
+
+    subgraph Process["처리 단계"]
+        API["Python AI Server"]
+        Meshy["Meshy AI API"]
+        Poll["진행률 폴링"]
+        Conv["GLB → STL 변환"]
+    end
+
+    subgraph Output["결과물"]
+        GLB["GLB 파일"]
+        STL["STL 파일"]
+        Thumb["썸네일"]
+    end
+
+    subgraph Storage["저장"]
+        Local["로컬 서버"]
+        Supabase["Supabase Storage"]
+        DB["ai_generated_models 테이블"]
+    end
+
+    T --> API
+    I --> API
+    API --> Meshy
+    Meshy --> Poll
+    Poll --> |"SUCCEEDED"| Conv
+    Conv --> GLB
+    Conv --> STL
+    Conv --> Thumb
+
+    GLB --> Local
+    STL --> Local
+    Thumb --> Local
+    Local --> Supabase
+    Supabase --> DB
+```
+
+---
+
+## 7. 인증 플로우
+
+```mermaid
+flowchart TB
+    subgraph Entry["진입점"]
+        Auth["Auth 페이지"]
+        OAuth["OAuth 버튼"]
+        Email["이메일/비밀번호"]
+    end
+
+    subgraph Supabase["Supabase Auth"]
+        Session["세션 생성"]
+        Token["JWT 토큰"]
+        Refresh["토큰 갱신"]
+    end
+
+    subgraph App["앱 상태"]
+        Context["AuthContext"]
+        Protected["ProtectedRoute"]
+        Admin["AdminRoute"]
+    end
+
+    subgraph Storage["데이터"]
+        Profile["user_profiles 테이블"]
+        Anon["localStorage\n(익명 사용자)"]
+    end
+
+    Auth --> OAuth
+    Auth --> Email
+    OAuth --> Session
+    Email --> Session
+    Session --> Token
+    Token --> Context
+    Context --> Protected
+    Context --> Admin
+
+    Session --> Profile
+    Session --> |"미로그인"| Anon
+
+    Refresh --> |"만료 시"| Token
+```
+
+---
+
+## 8. 데이터베이스 ERD (핵심 테이블)
+
+```mermaid
+erDiagram
+    user_profiles ||--o{ printers : owns
+    user_profiles ||--o{ chat_sessions : has
+    user_profiles ||--o{ ai_generated_models : creates
+
+    chat_sessions ||--o{ chat_messages : contains
+    chat_sessions ||--o{ shared_chats : shares
+
+    printers ||--o{ model_print_history : logs
+    printers ||--o{ temperature_logs : records
+
+    ai_generated_models ||--o{ model_print_history : prints
+
+    user_profiles {
+        uuid id PK
+        string email
+        string display_name
+        string plan
+        boolean is_admin
+        timestamp created_at
+    }
+
+    printers {
+        uuid id PK
+        uuid user_id FK
+        string device_uuid
+        string name
+        string status
+        jsonb settings
+        timestamp updated_at
+    }
+
+    chat_sessions {
+        uuid id PK
+        uuid user_id FK
+        string title
+        string tool_type
+        timestamp created_at
+    }
+
+    chat_messages {
+        uuid id PK
+        uuid session_id FK
+        uuid user_id FK
+        string type
+        text content
+        jsonb metadata
+        timestamp created_at
+    }
+
+    ai_generated_models {
+        uuid id PK
+        uuid user_id FK
+        string generation_type
+        string prompt
+        string glb_url
+        string stl_url
+        string thumbnail_url
+        timestamp created_at
+    }
+
+    gcode_analysis_reports {
+        uuid id PK
+        uuid user_id FK
+        string analysis_id
+        string file_name
+        integer quality_score
+        jsonb report_data
+        timestamp created_at
+    }
+```
+
+---
+
+## 9. WebRTC 카메라 스트리밍
+
+```mermaid
+sequenceDiagram
+    participant Cam as OctoPrint Camera
+    participant MTX as MediaMTX Server
+    participant Web as StreamPlayer
+    participant RTC as WebRTC
+
+    Cam->>MTX: RTSP Stream
+    Web->>MTX: WHEP Request
+    MTX-->>Web: SDP Offer
+    Web->>RTC: Create PeerConnection
+    RTC->>MTX: SDP Answer
+    MTX-->>RTC: ICE Candidates
+    RTC-->>RTC: Connection Established
+    MTX->>RTC: RTP Media
+    RTC->>Web: Video Frame
+    Web->>Web: Render <video>
+```
+
+---
+
+## 10. Edge Function 호출 플로우
+
+```mermaid
+flowchart LR
+    subgraph Client["클라이언트"]
+        React["React App"]
+    end
+
+    subgraph Supabase["Supabase"]
+        Auth["Auth Check"]
+        Edge["Edge Function"]
+        DB["PostgreSQL"]
+    end
+
+    React --> |"supabase.functions.invoke"| Auth
+    Auth --> |"JWT 검증"| Edge
+    Edge --> |"SQL 쿼리"| DB
+    DB --> Edge
+    Edge --> React
+
+    subgraph Functions["Edge Functions"]
+        F1["admin-ai-analytics"]
+        F2["admin-users"]
+        F3["save-temperature"]
+        F4["send-push-notification"]
+    end
+```
+
+---
+
+## 11. 컴포넌트 계층 구조
+
+```mermaid
+graph TB
+    subgraph App["App.tsx"]
+        Router["BrowserRouter"]
+    end
+
+    subgraph Pages["페이지"]
+        Home["Home"]
+        Dashboard["Dashboard"]
+        AIChat["AIChat"]
+        Admin["Admin"]
+    end
+
+    subgraph Shared["공통 컴포넌트"]
+        Header["AppHeader"]
+        Sidebar["AppSidebar"]
+        Footer["Footer"]
+    end
+
+    subgraph AIChat_Components["AIChat 컴포넌트"]
+        ChatInput["ChatInput"]
+        ChatMessage["ChatMessage"]
+        Welcome["WelcomeScreen"]
+        GCodeReport["GCodeAnalysisReport"]
+    end
+
+    subgraph Dashboard_Components["Dashboard 컴포넌트"]
+        PrinterCard["PrinterCard"]
+        PrinterDetail["PrinterDetail"]
+        TempChart["TemperatureChart"]
+        StreamPlayer["StreamPlayer"]
+    end
+
+    Router --> Pages
+    Pages --> Shared
+    AIChat --> AIChat_Components
+    Dashboard --> Dashboard_Components
+```
+
+---
+
+## 12. 상태 관리 구조
+
+```mermaid
+flowchart TB
+    subgraph Global["전역 상태"]
+        Auth["AuthContext\n(Supabase Auth)"]
+        Query["React Query\n(서버 상태)"]
+        Theme["ThemeProvider\n(테마)"]
+    end
+
+    subgraph Local["로컬 상태"]
+        Hooks["Custom Hooks"]
+        State["useState/useReducer"]
+    end
+
+    subgraph Persistent["영속 상태"]
+        LocalStorage["localStorage"]
+        Supabase["Supabase DB"]
+    end
+
+    Auth --> |"user, session"| Hooks
+    Query --> |"캐시된 데이터"| Hooks
+    Hooks --> State
+
+    State --> |"익명 채팅"| LocalStorage
+    State --> |"채팅/설정"| Supabase
+```
