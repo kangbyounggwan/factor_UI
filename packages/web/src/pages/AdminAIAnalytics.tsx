@@ -30,7 +30,7 @@ import {
   DailyUsageChart,
   ToolUsageChart,
   TopUsersList,
-  PopularPromptsList,
+  SharedChatsList,
 } from '@/components/admin/ai-analytics';
 
 // 타입 정의
@@ -94,11 +94,15 @@ interface TopUser {
   total_activity: number;
 }
 
-interface PopularPrompt {
-  prompt: string;
-  generation_type: string;
-  usage_count: number;
-  success_rate: number;
+interface SharedChat {
+  id: string;
+  share_id: string;
+  title: string | null;
+  message_count: number;
+  view_count: number;
+  created_at: string;
+  user_email: string | null;
+  user_name: string | null;
 }
 
 const AdminAIAnalytics = () => {
@@ -117,7 +121,7 @@ const AdminAIAnalytics = () => {
   const [dailyUsage, setDailyUsage] = useState<DailyUsage[]>([]);
   const [toolUsage, setToolUsage] = useState<ToolUsage[]>([]);
   const [topUsers, setTopUsers] = useState<TopUser[]>([]);
-  const [popularPrompts, setPopularPrompts] = useState<PopularPrompt[]>([]);
+  const [sharedChats, setSharedChats] = useState<SharedChat[]>([]);
 
   // API 호출 함수
   const callAnalyticsAPI = useCallback(async (action: string, params: Record<string, unknown> = {}) => {
@@ -150,14 +154,14 @@ const AdminAIAnalytics = () => {
         dailyData,
         toolData,
         topUsersData,
-        promptsData,
+        sharedChatsData,
       ] = await Promise.all([
-        callAnalyticsAPI('stats'),
+        callAnalyticsAPI('stats', { days }),
         callAnalyticsAPI('keywords', { days, source_type: sourceFilter, limit: 100 }),
         callAnalyticsAPI('daily-usage', { days }),
         callAnalyticsAPI('tool-usage', { days }),
-        callAnalyticsAPI('top-users', { limit: 10 }),
-        callAnalyticsAPI('popular-prompts', { days, limit: 10 }),
+        callAnalyticsAPI('top-users', { days, limit: 10 }),
+        callAnalyticsAPI('shared-chats', { days, limit: 10 }),
       ]);
 
       setStats(statsData);
@@ -165,7 +169,7 @@ const AdminAIAnalytics = () => {
       setDailyUsage(dailyData?.dailyUsage || []);
       setToolUsage(toolData?.toolUsage || []);
       setTopUsers(topUsersData?.topUsers || []);
-      setPopularPrompts(promptsData?.popularPrompts || []);
+      setSharedChats(sharedChatsData?.sharedChats || []);
     } catch (error) {
       console.error('Error loading analytics data:', error);
     } finally {
@@ -318,8 +322,8 @@ const AdminAIAnalytics = () => {
               {/* 도구별 사용량 */}
               <ToolUsageChart data={toolUsage} loading={loading} chartType="pie" />
 
-              {/* 인기 프롬프트 */}
-              <PopularPromptsList prompts={popularPrompts} loading={loading} />
+              {/* 공유된 채팅 */}
+              <SharedChatsList chats={sharedChats} loading={loading} />
             </div>
 
             {/* 상위 사용자 */}

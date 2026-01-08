@@ -169,6 +169,26 @@ export default {
       ctaDescLine2: "클라우드 기반 3D 프린터 관리 솔루션"
     }
   },
+  profileSetup: {
+    // 헤더
+    welcome: "환영합니다!",
+    socialWelcome: "{{provider}}로 시작하시는군요!",
+    description: "서비스 이용을 위해 간단한 정보를 입력해주세요.",
+    socialDescription: "메일 인증 없이 진행합니다! 간단한 정보로 바로 시작하세요.",
+    // 폼 필드
+    name: "이름",
+    namePlaceholder: "이름을 입력하세요",
+    nameRequired: "이름을 입력해주세요",
+    phone: "휴대폰 번호",
+    phonePlaceholder: "010-0000-0000",
+    phoneRequired: "휴대폰 번호를 입력해주세요",
+    // 버튼
+    start: "시작하기",
+    // 결과
+    success: "프로필 설정 완료",
+    successDesc: "환영합니다! 서비스를 이용해보세요.",
+    error: "프로필 설정 중 오류가 발생했습니다.",
+  },
   emailVerification: {
     title: "이메일을 확인해주세요",
     subtitle: "인증 링크가 포함된 이메일을 발송했습니다",

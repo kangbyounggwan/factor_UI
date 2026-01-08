@@ -143,10 +143,14 @@ Deno.serve(async (req) => {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-      // 모든 채팅 세션 조회 (tool_type 포함)
+      // 선택된 기간 시작일 계산
+      const startDate = new Date(Date.now() - days * 86400000).toISOString();
+
+      // 선택된 기간 내 채팅 세션 조회 (tool_type 포함)
       const { data: allSessions } = await supabaseAdmin
         .from('chat_sessions')
-        .select('id, tool_type, created_at');
+        .select('id, tool_type, created_at')
+        .gte('created_at', startDate);
 
       // 세션을 tool_type별로 분류
       const chatSessionIds: string[] = [];
@@ -189,46 +193,52 @@ Deno.serve(async (req) => {
       const totalChatSessions = chatSessionIds.length;
       const totalTroubleshootSessions = troubleshootSessionIds.length;
 
-      // AI 모델 통계
+      // AI 모델 통계 (선택된 기간 내)
       const { count: totalAiModels } = await supabaseAdmin
         .from('ai_generated_models')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', startDate);
 
       const { count: textTo3dCount } = await supabaseAdmin
         .from('ai_generated_models')
         .select('*', { count: 'exact', head: true })
-        .eq('generation_type', 'text_to_3d');
+        .eq('generation_type', 'text_to_3d')
+        .gte('created_at', startDate);
 
       const { count: imageTo3dCount } = await supabaseAdmin
         .from('ai_generated_models')
         .select('*', { count: 'exact', head: true })
-        .eq('generation_type', 'image_to_3d');
+        .eq('generation_type', 'image_to_3d')
+        .gte('created_at', startDate);
 
       const { count: textToImageCount } = await supabaseAdmin
         .from('ai_generated_models')
         .select('*', { count: 'exact', head: true })
-        .eq('generation_type', 'text_to_image');
+        .eq('generation_type', 'text_to_image')
+        .gte('created_at', startDate);
 
       const { count: aiModelsLastWeek } = await supabaseAdmin
         .from('ai_generated_models')
         .select('*', { count: 'exact', head: true })
         .gte('created_at', sevenDaysAgo.toISOString());
 
-      // G-code 분석 통계
+      // G-code 분석 통계 (선택된 기간 내)
       const { count: totalGcodeReports } = await supabaseAdmin
         .from('gcode_analysis_reports')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', startDate);
 
       const { data: gcodeScoreData } = await supabaseAdmin
         .from('gcode_analysis_reports')
         .select('overall_score')
-        .not('overall_score', 'is', null);
+        .not('overall_score', 'is', null)
+        .gte('created_at', startDate);
 
       const avgGcodeScore = gcodeScoreData && gcodeScoreData.length > 0
         ? gcodeScoreData.reduce((sum, r) => sum + (r.overall_score || 0), 0) / gcodeScoreData.length
         : 0;
 
-      // 사용량 통계
+      // 사용량 통계는 전체 누적 (user_usage 테이블은 기간 필터링 어려움)
       const { data: usageData } = await supabaseAdmin
         .from('user_usage')
         .select('ai_model_generation, ai_image_generation');
@@ -518,42 +528,113 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ===== ACTION: tool-usage (도구별 사용량) =====
+    // ===== ACTION: tool-usage (도구별 사용량 - 스탯 카드와 동일한 데이터) =====
     if (action === 'tool-usage') {
-      const { data: toolData, error: toolError } = await supabaseAdmin
-        .rpc('get_tool_usage_stats', { p_days: days });
+      const startDate = new Date(Date.now() - days * 86400000).toISOString();
 
-      if (toolError) {
-        // 직접 쿼리
-        const { data: sessions } = await supabaseAdmin
-          .from('chat_sessions')
-          .select('tool_type, id')
-          .gte('created_at', new Date(Date.now() - days * 86400000).toISOString());
+      // 스탯 카드와 동일한 방식으로 데이터 계산
+      // 1. 채팅 세션 조회 (tool_type 포함)
+      const { data: allSessions } = await supabaseAdmin
+        .from('chat_sessions')
+        .select('id, tool_type')
+        .gte('created_at', startDate);
 
-        const toolMap = new Map<string, { sessions: Set<string>; messages: number }>();
-        sessions?.forEach((s: { tool_type: string; id: string }) => {
-          const type = s.tool_type || 'general';
-          if (!toolMap.has(type)) {
-            toolMap.set(type, { sessions: new Set(), messages: 0 });
-          }
-          toolMap.get(type)!.sessions.add(s.id);
-        });
+      // 세션을 분류
+      const chatSessionIds: string[] = [];
+      const troubleshootSessionIds: string[] = [];
+      const priceComparisonSessionIds: string[] = [];
 
-        const toolUsage: ToolUsage[] = Array.from(toolMap.entries()).map(([type, data]) => ({
-          tool_type: type,
-          session_count: data.sessions.size,
-          message_count: 0,
-          avg_messages_per_session: 0,
-        }));
+      allSessions?.forEach((session: { id: string; tool_type: string }) => {
+        if (session.tool_type === 'troubleshoot') {
+          troubleshootSessionIds.push(session.id);
+        } else if (session.tool_type === 'price_comparison') {
+          priceComparisonSessionIds.push(session.id);
+        } else {
+          chatSessionIds.push(session.id);
+        }
+      });
 
-        return new Response(
-          JSON.stringify({ toolUsage, source: 'direct_query' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      // 2. 일반 채팅 메시지 수 (troubleshoot, price_comparison 제외한 모든 세션)
+      let chatMessages = 0;
+      if (chatSessionIds.length > 0) {
+        const { count } = await supabaseAdmin
+          .from('chat_messages')
+          .select('*', { count: 'exact', head: true })
+          .in('session_id', chatSessionIds);
+        chatMessages = count || 0;
       }
 
+      // 3. 문제진단 메시지 수
+      let troubleshootMessages = 0;
+      if (troubleshootSessionIds.length > 0) {
+        const { count } = await supabaseAdmin
+          .from('chat_messages')
+          .select('*', { count: 'exact', head: true })
+          .in('session_id', troubleshootSessionIds);
+        troubleshootMessages = count || 0;
+      }
+
+      // 4. 가격 비교 메시지 수
+      let priceComparisonMessages = 0;
+      if (priceComparisonSessionIds.length > 0) {
+        const { count } = await supabaseAdmin
+          .from('chat_messages')
+          .select('*', { count: 'exact', head: true })
+          .in('session_id', priceComparisonSessionIds);
+        priceComparisonMessages = count || 0;
+      }
+
+      // 5. AI 모델 생성 횟수
+      const { count: aiModelCount } = await supabaseAdmin
+        .from('ai_generated_models')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', startDate);
+
+      // 6. G-code 분석 횟수
+      const { count: gcodeCount } = await supabaseAdmin
+        .from('gcode_analysis_reports')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', startDate);
+
+      // 도넛 차트 데이터 구성 (스탯 카드와 동일)
+      const toolUsage: ToolUsage[] = [
+        {
+          tool_type: 'chat',
+          session_count: chatSessionIds.length,
+          message_count: chatMessages,
+          avg_messages_per_session: chatSessionIds.length > 0 ? Math.round(chatMessages / chatSessionIds.length * 10) / 10 : 0,
+        },
+        {
+          tool_type: 'troubleshoot',
+          session_count: troubleshootSessionIds.length,
+          message_count: troubleshootMessages,
+          avg_messages_per_session: troubleshootSessionIds.length > 0 ? Math.round(troubleshootMessages / troubleshootSessionIds.length * 10) / 10 : 0,
+        },
+        {
+          tool_type: 'ai_model',
+          session_count: aiModelCount || 0,
+          message_count: aiModelCount || 0,
+          avg_messages_per_session: 1,
+        },
+        {
+          tool_type: 'gcode',
+          session_count: gcodeCount || 0,
+          message_count: gcodeCount || 0,
+          avg_messages_per_session: 1,
+        },
+        {
+          tool_type: 'price_comparison',
+          session_count: priceComparisonSessionIds.length,
+          message_count: priceComparisonMessages,
+          avg_messages_per_session: priceComparisonSessionIds.length > 0 ? Math.round(priceComparisonMessages / priceComparisonSessionIds.length * 10) / 10 : 0,
+        },
+      ].filter(item => item.message_count > 0);
+
+      // message_count 기준 내림차순 정렬
+      toolUsage.sort((a, b) => b.message_count - a.message_count);
+
       return new Response(
-        JSON.stringify({ toolUsage: toolData, source: 'rpc_function' }),
+        JSON.stringify({ toolUsage, source: 'stats_matched' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -796,6 +877,47 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ===== ACTION: shared-chats (공유된 채팅 목록) =====
+    if (action === 'shared-chats') {
+      const startDate = new Date(Date.now() - days * 86400000).toISOString();
+
+      // 공유된 채팅 목록 조회
+      const { data: sharedChats } = await supabaseAdmin
+        .from('shared_chats')
+        .select('id, share_id, title, messages, view_count, created_at, user_id')
+        .eq('is_public', true)
+        .gte('created_at', startDate)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      // 사용자 정보 조회
+      const userIds = [...new Set(sharedChats?.map(c => c.user_id).filter(Boolean))];
+      const { data: profiles } = userIds.length > 0
+        ? await supabaseAdmin
+            .from('profiles')
+            .select('user_id, display_name, email')
+            .in('user_id', userIds)
+        : { data: [] };
+
+      const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
+
+      const result = sharedChats?.map(chat => ({
+        id: chat.id,
+        share_id: chat.share_id,
+        title: chat.title,
+        message_count: Array.isArray(chat.messages) ? chat.messages.length : 0,
+        view_count: chat.view_count || 0,
+        created_at: chat.created_at,
+        user_email: profileMap.get(chat.user_id)?.email || null,
+        user_name: profileMap.get(chat.user_id)?.display_name || null,
+      })) || [];
+
+      return new Response(
+        JSON.stringify({ sharedChats: result }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // ===== 기본 응답 =====
     return new Response(
       JSON.stringify({
@@ -808,6 +930,7 @@ Deno.serve(async (req) => {
           'model-stats',
           'top-users',
           'popular-prompts',
+          'shared-chats',
           'chat-analytics'
         ]
       }),

@@ -227,16 +227,18 @@ const AdminUsageAnalytics = () => {
     general: '일반 채팅',
     troubleshoot: '문제진단',
     gcode: 'G-code',
-    modeling: '모델링',
+    ai_model: 'AI 모델 생성',
     comparison: '비교 분석',
+    price_comparison: '가격 비교',
   };
 
   const toolColors: Record<string, string> = {
     general: '#3b82f6',
     troubleshoot: '#f59e0b',
     gcode: '#10b981',
-    modeling: '#8b5cf6',
+    ai_model: '#8b5cf6',
     comparison: '#6b7280',
+    price_comparison: '#ec4899',
   };
 
   return (

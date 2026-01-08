@@ -28,17 +28,23 @@ interface ToolUsageChartProps {
 }
 
 const toolLabels: Record<string, string> = {
+  chat: '채팅 메시지',
   general: '일반 채팅',
-  troubleshoot: '문제진단',
+  troubleshoot: '진단 메시지',
   gcode: 'G-code 분석',
-  modeling: '모델링',
+  ai_model: 'AI 모델 생성',
+  comparison: '비교 분석',
+  price_comparison: '가격 비교',
 };
 
 const toolColors: Record<string, string> = {
+  chat: '#3b82f6',
   general: '#3b82f6',
   troubleshoot: '#f59e0b',
   gcode: '#10b981',
-  modeling: '#8b5cf6',
+  ai_model: '#8b5cf6',
+  comparison: '#6b7280',
+  price_comparison: '#ec4899',
 };
 
 export function ToolUsageChart({
@@ -89,7 +95,7 @@ export function ToolUsageChart({
                   cy="50%"
                   innerRadius={50}
                   outerRadius={80}
-                  dataKey="session_count"
+                  dataKey="message_count"
                   nameKey="name"
                   label={({ name, percent }) =>
                     `${name}: ${(percent * 100).toFixed(0)}%`
@@ -106,7 +112,7 @@ export function ToolUsageChart({
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
-                  formatter={(value: number) => [`${value}회`, '세션 수']}
+                  formatter={(value: number) => [`${value}회`, '대화 수']}
                 />
                 <Legend />
               </PieChart>
@@ -130,7 +136,7 @@ export function ToolUsageChart({
                     borderRadius: '8px',
                   }}
                 />
-                <Bar dataKey="session_count" name="세션 수" radius={[0, 4, 4, 0]}>
+                <Bar dataKey="message_count" name="대화 수" radius={[0, 4, 4, 0]}>
                   {processedData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
@@ -155,7 +161,7 @@ export function ToolUsageChart({
                 <span className="text-sm">{item.name}</span>
               </div>
               <span className="text-sm font-medium">
-                {item.session_count}회
+                {item.message_count}회
               </span>
             </div>
           ))}

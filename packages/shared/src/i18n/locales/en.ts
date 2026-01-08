@@ -169,6 +169,26 @@ export default {
       ctaDescLine2: "ready to use without complex setup"
     }
   },
+  profileSetup: {
+    // Header
+    welcome: "Welcome!",
+    socialWelcome: "Getting started with {{provider}}!",
+    description: "Please enter some basic information to use the service.",
+    socialDescription: "No email verification needed! Get started with just a few details.",
+    // Form fields
+    name: "Name",
+    namePlaceholder: "Enter your name",
+    nameRequired: "Please enter your name",
+    phone: "Phone Number",
+    phonePlaceholder: "010-0000-0000",
+    phoneRequired: "Please enter your phone number",
+    // Button
+    start: "Get Started",
+    // Results
+    success: "Profile Setup Complete",
+    successDesc: "Welcome! Start exploring the service.",
+    error: "An error occurred during profile setup.",
+  },
   ai: {
     title: "AI Studio",
     modelGeneration: "Model Generation",
