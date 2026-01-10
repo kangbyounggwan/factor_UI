@@ -46,6 +46,7 @@ import type { User } from "@supabase/supabase-js";
 import type { SubscriptionPlan } from "@shared/types/subscription";
 import type { AIGeneratedModel } from "@shared/types/aiModelType";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Message {
   id: string;
@@ -209,6 +210,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const { t } = useTranslation();
   const location = useLocation();
+  const isMobile = useIsMobile();
 
   // userPlan이 undefined이거나 planConfig에 없는 경우 'free'로 fallback
   const safePlan = userPlan && planConfig[userPlan] ? userPlan : 'free';
@@ -971,40 +973,42 @@ export function AppSidebar({
         )}
       </div>
 
-      {/* 토글 버튼 + 로고 - 사이드바 상태에 따라 위치 변경 */}
-      <div className={cn(
-        "absolute h-14 z-30 flex items-center gap-3 transition-all duration-300",
-        isOpen ? "left-[21rem]" : "left-4"
-      )}>
-        {!isOpen && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 rounded-full bg-background shadow-md border"
-            onClick={onToggle}
+      {/* 토글 버튼 + 로고 - 사이드바 상태에 따라 위치 변경, 모바일에서는 숨김 (AppHeader에서 표시) */}
+      {!isMobile && (
+        <div className={cn(
+          "absolute h-14 z-30 flex items-center gap-3 transition-all duration-300",
+          isOpen ? "left-[21rem]" : "left-4"
+        )}>
+          {!isOpen && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-full bg-background shadow-md border"
+              onClick={onToggle}
+            >
+              <Menu className="w-5 h-5" />
+            </Button>
+          )}
+          {/* FACTOR 로고 - 클릭 시 새 채팅 시작 */}
+          <button
+            onClick={() => {
+              if (mode === 'chat' && onNewChat) {
+                onNewChat();
+              } else {
+                window.location.href = '/ai-chat';
+              }
+            }}
+            className="flex items-center space-x-2.5 cursor-pointer"
           >
-            <Menu className="w-5 h-5" />
-          </Button>
-        )}
-        {/* FACTOR 로고 - 클릭 시 새 채팅 시작 */}
-        <button
-          onClick={() => {
-            if (mode === 'chat' && onNewChat) {
-              onNewChat();
-            } else {
-              window.location.href = '/ai-chat';
-            }
-          }}
-          className="flex items-center space-x-2.5 cursor-pointer"
-        >
-          <div className="flex items-center justify-center w-8 h-8 bg-primary rounded-lg">
-            <Activity className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="text-3xl font-bold font-orbitron text-primary tracking-wide">
-            FACTOR
-          </span>
-        </button>
-      </div>
+            <div className="flex items-center justify-center w-8 h-8 bg-primary rounded-lg">
+              <Activity className="w-5 h-5 text-primary-foreground" />
+            </div>
+            <span className="text-3xl font-bold font-orbitron text-primary tracking-wide">
+              FACTOR
+            </span>
+          </button>
+        </div>
+      )}
     </>
   );
 }

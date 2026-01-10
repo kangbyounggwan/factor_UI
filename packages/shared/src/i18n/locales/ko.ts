@@ -545,7 +545,7 @@ export default {
     },
     // AI 채팅 페이지
     greeting: "지금 어떤 문제가 생겼는지 그대로 보여주세요",
-    askAnything: "출력 문제가 생겼나요? 뭔가 이상하다면",
+    askAnything: "출력 문제가 생겼나요?\n뭔가 이상하다면",
     newChat: "새 대화",
     recentChats: "최근 대화",
     reportArchive: "보고서 아카이브",

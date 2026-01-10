@@ -22,8 +22,8 @@ import { supabase } from '@shared/integrations/supabase/client';
 import { fetchAdminData } from '@shared/services/supabaseService/admin';
 import { useAuth } from '@shared/contexts/AuthContext';
 import { getUserPrintersWithGroup } from '@shared/services/supabaseService/printerList';
-import { createSharedMqttClient } from '@shared/component/mqtt';
-import { onDashStatusMessage } from '@shared/component/mqtt';
+import { createSharedMqttClient, onDashStatusMessage } from '@shared/component/mqtt';
+import { parseMqttPayload } from '@shared/utils/mqttUtils';
 import { useToast } from '@/hooks/use-toast';
 import { AppHeader } from '@/components/common/AppHeader';
 import { AppSidebar } from '@/components/common/AppSidebar';
@@ -166,11 +166,7 @@ const Admin = () => {
         try { await mqtt.unsubscribe(adminResultTopicRef.current, adminResultHandlerRef.current); } catch (err) { console.warn('Unsubscribe failed:', err); }
       }
       const handler = (t: string, payload: unknown) => {
-        let parsed: unknown = payload;
-        try {
-          if (typeof payload === 'string') parsed = JSON.parse(payload);
-          else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-        } catch (parseErr) { console.warn('Failed to parse payload:', parseErr); }
+        const parsed = parseMqttPayload(payload);
         setLogs((prev) => [...prev, { id: Date.now(), ts: Date.now(), dir: 'rx', topic: t, deviceId, payload: parsed }]);
       };
       await mqtt.subscribe(topic, handler);

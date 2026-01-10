@@ -68,7 +68,7 @@ export function useChatSharing(options?: UseChatSharingOptions): UseChatSharingR
 
     setIsSharing(true);
     try {
-      // Message를 SharedMessage 형식으로 변환 (references, referenceImages 포함)
+      // Message를 SharedMessage 형식으로 변환 (references, referenceImages, priceComparisonData 포함)
       const sharedMessages: SharedMessage[] = messages.map(msg => ({
         role: msg.role,
         content: msg.content,
@@ -82,6 +82,13 @@ export function useChatSharing(options?: UseChatSharingOptions): UseChatSharingR
           thumbnail_url: img.thumbnail_url,
           source_url: img.source_url,
         })),
+        // 가격비교 데이터도 저장
+        priceComparisonData: msg.priceComparisonData ? {
+          query: msg.priceComparisonData.query,
+          results_count: msg.priceComparisonData.results_count,
+          products: msg.priceComparisonData.products,
+          markets_searched: msg.priceComparisonData.markets_searched,
+        } : undefined,
       }));
 
       // 세션 제목 또는 첫 메시지에서 제목 추출

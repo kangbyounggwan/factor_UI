@@ -1,5 +1,6 @@
 import mqtt, { type MqttClient, type IClientOptions } from "mqtt";
 import { supabase } from "../integrations/supabase/client";
+import { parseMqttPayload } from "../utils/mqttUtils";
 
 // 플랫폼 감지 함수
 function getPlatform(): 'web' | 'mobile' {
@@ -276,18 +277,15 @@ const dashStatusListeners = new Set<DashStatusListener>();
 // - 프린트 히스토리 관리
 // ============================================================
 class PrinterStatusManager {
-  // 프린터별 마지막 상태 캐시
+  // 프린터별 마지막 상태 캐시 (DB 조회 최소화)
   private statusCache = new Map<string, string>();
-  // 프린터별 마지막 MQTT 메시지 수신 시간
+  // 프린터별 마지막 MQTT 메시지 수신 시간 (타임아웃 체크용)
   private lastMessageTime = new Map<string, number>();
-  // 프린터별 마지막 DB 동기화 시간 (Throttle용)
-  private lastSyncTime = new Map<string, number>();
   // 타임아웃 체크 인터벌 ID
   private timeoutCheckInterval: ReturnType<typeof setInterval> | null = null;
   // 설정
-  private readonly TIMEOUT_MS = 30000; // 30초
+  private readonly TIMEOUT_MS = 30000; // 30초 무응답 시 disconnected
   private readonly CHECK_INTERVAL_MS = 10000; // 10초마다 체크
-  private readonly SYNC_THROTTLE_MS = 30000; // DB 동기화 최소 간격 30초 (리퀘스트 절감)
 
   // 프린트 히스토리 관리
   // deviceUuid → { jobId, printerId, lastStatus, jobKey }
@@ -334,18 +332,22 @@ class PrinterStatusManager {
 
   /**
    * 프린터 상태를 DB와 동기화
-   * 최적화: 실제 상태 변경 시에만 업데이트, throttle 적용
+   * 최적화: 실제 상태 "전환" 시에만 DB 업데이트
+   * - 같은 상태 반복 → 스킵 (DB 조회/쓰기 없음)
+   * - 상태 전환 → 즉시 DB 업데이트 (throttle 없음, 전환은 중요)
    */
   async syncToDb(deviceUuid: string, newStatus: string): Promise<void> {
     if (!supabase) return;
 
     const cachedStatus = this.statusCache.get(deviceUuid);
 
-    // 1. 캐시가 있고 상태가 같으면 완전 스킵 (가장 빠름)
-    if (cachedStatus === newStatus) return;
+    // 1. 캐시에 상태가 있고 동일하면 완전 스킵 (DB 조회 없음)
+    if (cachedStatus === newStatus) {
+      return;
+    }
 
-    // 2. 캐시가 없으면 먼저 DB에서 읽어서 캐시 초기화 (업데이트 없이)
-    if (!cachedStatus) {
+    // 2. 캐시가 없으면 DB에서 현재 상태 조회하여 캐시 초기화
+    if (cachedStatus === undefined) {
       try {
         const { data: printer } = await supabase
           .from('printers')
@@ -354,39 +356,36 @@ class PrinterStatusManager {
           .maybeSingle();
 
         if (printer) {
+          // 캐시 초기화
           this.statusCache.set(deviceUuid, printer.status);
-          // DB 상태와 동일하면 리턴 (업데이트 불필요)
+          // DB 상태와 동일하면 업데이트 불필요
           if (printer.status === newStatus) {
             return;
           }
+        } else {
+          // 프린터 없으면 캐시에 빈 값 설정 (반복 조회 방지)
+          this.statusCache.set(deviceUuid, '');
+          return;
         }
       } catch {
         return;
       }
     }
 
-    // 3. 여기까지 왔다면 실제 상태 변경이 필요함 → Throttle 체크
-    const now = Date.now();
-    const lastSync = this.lastSyncTime.get(deviceUuid) || 0;
+    // 3. 여기까지 왔다면 실제 상태 "전환" 발생 → 즉시 DB 업데이트
+    // (상태 전환은 중요한 이벤트이므로 throttle 적용하지 않음)
+    const prevStatus = this.statusCache.get(deviceUuid);
 
-    if (now - lastSync < this.SYNC_THROTTLE_MS) {
-      // Throttle 중이면 캐시만 업데이트하고 DB는 나중에
-      // (다음 throttle 통과 시 업데이트됨)
-      return;
-    }
-
-    // 4. DB 업데이트 실행
     try {
-      this.lastSyncTime.set(deviceUuid, now);
-
       const { error: updateError } = await supabase
         .from('printers')
         .update({ status: newStatus, updated_at: new Date().toISOString() })
         .eq('device_uuid', deviceUuid);
 
       if (!updateError) {
+        // 성공 시 캐시 업데이트
         this.statusCache.set(deviceUuid, newStatus);
-        console.log(`[MQTT] ✅ 상태 동기화: ${deviceUuid.slice(0, 8)}... → ${newStatus}`);
+        console.log(`[MQTT] ✅ 상태 전환: ${deviceUuid.slice(0, 8)}... ${prevStatus} → ${newStatus}`);
       }
     } catch (error) {
       console.error('[MQTT] DB 동기화 실패:', error);
@@ -478,12 +477,6 @@ class PrinterStatusManager {
     // 상태가 동일하면 스킵
     if (prevStatus === newStatus) return;
 
-    // 디버그: 상태 변경 감지
-    console.log(`[MQTT] 📊 Status change detected: ${deviceUuid.slice(0, 8)}... ${prevStatus} → ${newStatus}`);
-    if (parsed?.job?.file) {
-      console.log(`[MQTT] 📄 Job file info:`, parsed.job.file);
-    }
-
     try {
       // 프린터 ID 조회
       const { data: printer } = await supabase
@@ -507,14 +500,28 @@ class PrinterStatusManager {
           return;
         }
 
-        // octoprint_job_id로 동일한 진행 중인 job이 DB에 있는지 확인 (앱 재시작/새로고침 시 중복 방지)
-        const { data: existingJob } = await supabase
-          .from('model_print_history')
-          .select('id, octoprint_job_id')
-          .eq('printer_id', printer.id)
-          .eq('print_status', 'printing')
-          .eq('octoprint_job_id', octoprintJobId)
-          .maybeSingle();
+        // 병렬 쿼리: existingJob과 oldJob을 동시에 조회
+        const [existingJobResult, oldJobResult] = await Promise.all([
+          // 동일한 octoprint_job_id로 진행 중인 job 확인
+          supabase
+            .from('model_print_history')
+            .select('id, octoprint_job_id')
+            .eq('printer_id', printer.id)
+            .eq('print_status', 'printing')
+            .eq('octoprint_job_id', octoprintJobId)
+            .maybeSingle(),
+          // 다른 octoprint_job_id로 진행 중인 job 확인
+          supabase
+            .from('model_print_history')
+            .select('id')
+            .eq('printer_id', printer.id)
+            .eq('print_status', 'printing')
+            .neq('octoprint_job_id', octoprintJobId)
+            .maybeSingle(),
+        ]);
+
+        const existingJob = existingJobResult.data;
+        const oldJob = oldJobResult.data;
 
         if (existingJob) {
           // 동일한 octoprint_job_id가 있으면 메모리에 복원하고 리턴
@@ -524,29 +531,24 @@ class PrinterStatusManager {
             lastStatus: 'printing',
             octoprintJobId: octoprintJobId,
           });
-          console.log(`[MQTT] 🔄 Restored existing print job: ${existingJob.id} (octoprint_job_id: ${octoprintJobId})`);
+          console.log(`[MQTT] 🔄 Restored existing print job: ${existingJob.id}`);
           return;
         }
 
-        // 다른 octoprint_job_id로 printing 중인 레코드가 있으면 cancelled 처리
-        const { data: oldJob } = await supabase
-          .from('model_print_history')
-          .select('id')
-          .eq('printer_id', printer.id)
-          .eq('print_status', 'printing')
-          .neq('octoprint_job_id', octoprintJobId)
-          .maybeSingle();
-
         if (oldJob) {
-          console.log(`[MQTT] ⚠️ Different job detected. Closing old job: ${oldJob.id}`);
-          await supabase
+          // 다른 job이 있으면 백그라운드로 cancelled 처리 (await 불필요)
+          supabase
             .from('model_print_history')
             .update({
               print_status: 'cancelled',
               completed_at: new Date().toISOString(),
               error_message: 'New job started, previous job auto-cancelled',
             })
-            .eq('id', oldJob.id);
+            .eq('id', oldJob.id)
+            .then(
+              () => console.log(`[MQTT] ⚠️ Old job cancelled: ${oldJob.id}`),
+              () => { }
+            );
         }
 
         // SD 카드/로컬 파일의 경우 gcode_url 구성
@@ -697,12 +699,7 @@ export async function startDashStatusSubscriptionsForUser(userId: string, opts?:
     const topic = `octoprint/status/${uuid}`;
     if (dashStatusSubscribed.has(topic)) continue;
     const handler = (t: string, payload: any) => {
-      let parsed: any = payload;
-      try {
-        if (typeof payload === 'string') parsed = JSON.parse(payload);
-        else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-      } catch { }
-      // console.log('[MQTT][octoprint/status]', t, parsed);
+      const parsed = parseMqttPayload(payload) ?? {};
       // 주제에서 uuid 추출하여 리스너 호출 (마지막 세그먼트 사용)
       const parts = t.split('/');
       const id = parts[parts.length - 1] || uuid;
@@ -1047,11 +1044,7 @@ export async function subscribeControlResult(
   await mqttClient.connect();
   const topic = `control_result/${deviceSerial}`;
   const handler: MqttMessageHandler = (t, payload) => {
-    let parsed: any = payload;
-    try {
-      if (typeof payload === 'string') parsed = JSON.parse(payload);
-      else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-    } catch { }
+    const parsed = parseMqttPayload(payload);
     const result = parsed as ControlResult;
     try { console.log('%c[MQTT]%c%c[CTRL]%c%c[RX]%c', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #F44336; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", "background: #2196F3; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #F44336; font-weight: bold;", { topic: t, deviceSerial, result }); } catch { }
     try { window.dispatchEvent(new CustomEvent('control_result', { detail: { deviceSerial, result } })); } catch { }
@@ -1067,11 +1060,7 @@ export async function subscribeControlResultForUser(userId: string, qos: 0 | 1 |
     userId,
     (uuid) => `control_result/${uuid}`,
     (deviceSerial) => (_t, payload) => {
-      let parsed: any = payload;
-      try {
-        if (typeof payload === 'string') parsed = JSON.parse(payload);
-        else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-      } catch { }
+      const parsed = parseMqttPayload(payload);
       try { console.log('%c[MQTT]%c%c[CTRL]%c%c[RX]%c', "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "", "background: #F44336; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "", "background: #2196F3; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;", "color: #F44336; font-weight: bold;", { topic: `control_result/${deviceSerial}`, deviceSerial, result: parsed }); } catch { }
       try { window.dispatchEvent(new CustomEvent('control_result', { detail: { deviceSerial, result: parsed } })); } catch { }
     },
@@ -1118,12 +1107,8 @@ export async function subscribeAIModelCompleted(
   await mqttClient.connect();
   const topic = `ai/model/completed/${userId}`;
 
-  const handler: MqttMessageHandler = (t, payload) => {
-    let parsed: any = payload;
-    try {
-      if (typeof payload === 'string') parsed = JSON.parse(payload);
-      else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-    } catch { }
+  const handler: MqttMessageHandler = (_t, payload) => {
+    const parsed = parseMqttPayload(payload);
 
     console.log('%c[MQTT]%c%c[AI-MODEL]%c%c[COMPLETED]%c',
       "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "",
@@ -1156,12 +1141,8 @@ export async function subscribeAIModelFailed(
   await mqttClient.connect();
   const topic = `ai/model/failed/${userId}`;
 
-  const handler: MqttMessageHandler = (t, payload) => {
-    let parsed: any = payload;
-    try {
-      if (typeof payload === 'string') parsed = JSON.parse(payload);
-      else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-    } catch { }
+  const handler: MqttMessageHandler = (_t, payload) => {
+    const parsed = parseMqttPayload(payload);
 
     console.log('%c[MQTT]%c%c[AI-MODEL]%c%c[FAILED]%c',
       "background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;", "",
@@ -1194,13 +1175,8 @@ export async function subscribeAIModelProgress(
   await mqttClient.connect();
   const topic = `ai/model/progress/${userId}`;
 
-  const handler: MqttMessageHandler = (t, payload) => {
-    let parsed: any = payload;
-    try {
-      if (typeof payload === 'string') parsed = JSON.parse(payload);
-      else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-    } catch { }
-
+  const handler: MqttMessageHandler = (_t, payload) => {
+    const parsed = parseMqttPayload(payload);
     onProgress(parsed as AIModelProgressPayload);
   };
 

@@ -24,7 +24,6 @@ export * from "./api/manufacturingPrinter";
 export * from "./api/account";
 
 // queries
-export * from "./queries/printer";
 export * from "./queries/system";
 export * from "./queries/wifi";
 export * from "./queries/data";

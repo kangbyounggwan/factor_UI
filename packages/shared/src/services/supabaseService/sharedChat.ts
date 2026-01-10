@@ -18,6 +18,31 @@ export interface SharedReferenceImage {
   source_url: string;
 }
 
+// 가격비교 상품 타입
+export interface SharedPriceComparisonProduct {
+  id: string;
+  title: string;
+  price: number;
+  currency: string;
+  price_krw: number;
+  original_price?: number;
+  discount_percent?: number;
+  marketplace: string;
+  product_url: string;
+  image_url?: string;
+  rating?: number;
+  review_count?: number;
+  in_stock: boolean;
+}
+
+// 가격비교 데이터 타입
+export interface SharedPriceComparisonData {
+  query: string;
+  results_count: number;
+  products: SharedPriceComparisonProduct[];
+  markets_searched?: string[];
+}
+
 // 공유 메시지 타입
 export interface SharedMessage {
   role: 'user' | 'assistant';
@@ -29,6 +54,8 @@ export interface SharedMessage {
   references?: SharedReference[];
   // AI 응답에 포함된 참조 이미지
   referenceImages?: SharedReferenceImage[];
+  // AI 응답에 포함된 가격비교 데이터
+  priceComparisonData?: SharedPriceComparisonData;
 }
 
 // 공유 채팅 타입

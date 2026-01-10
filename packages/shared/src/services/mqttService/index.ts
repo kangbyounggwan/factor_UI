@@ -1,4 +1,5 @@
 import { createSharedMqttClient, onDashStatusMessage as onDashStatus } from "../../component/mqtt";
+import { parseMqttPayload } from "../../utils/mqttUtils";
 
 // Singleton client for app/web
 const client = createSharedMqttClient();
@@ -272,11 +273,7 @@ export async function waitForSdUploadResult(
     console.log('[MQTT][SD] Subscribing to topic:', topic);
     const handler = (t: string, payload: any) => {
       console.log('[MQTT][SD] Received message on topic:', t);
-      let parsed: any = payload;
-      try {
-        if (typeof payload === 'string') parsed = JSON.parse(payload);
-        else if (payload instanceof Uint8Array) parsed = JSON.parse(new TextDecoder().decode(payload));
-      } catch {}
+      const parsed = parseMqttPayload(payload) ?? {};
       console.log('[MQTT][SD][RX]', parsed);
       // SD 업로드 진행률 처리
       if (parsed?.action === 'sd_upload_progress') {
@@ -547,12 +544,7 @@ export async function subscribeGCodeUploadResult(
         "background: #FF9800; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; margin-left: 4px;",
         "color: #FF9800; font-weight: bold;", { topic: _t, payload });
 
-      let parsed: any = payload;
-      if (typeof payload === 'string') {
-        parsed = JSON.parse(payload);
-      } else if (payload instanceof Uint8Array) {
-        parsed = JSON.parse(new TextDecoder().decode(payload));
-      }
+      const parsed = parseMqttPayload(payload) ?? {};
 
       // upload_result 타입만 처리
       if (parsed?.type === 'upload_result') {

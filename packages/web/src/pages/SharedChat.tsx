@@ -7,11 +7,11 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { getSharedChat, type SharedChat, type SharedReferenceImage } from '@shared/services/supabaseService/sharedChat';
+import { getSharedChat, type SharedChat, type SharedReferenceImage, type SharedPriceComparisonData } from '@shared/services/supabaseService/sharedChat';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle, ArrowLeft, Eye, Calendar, ExternalLink, Activity, MessageCircle, User, Cpu, ImageIcon, ZoomIn, X, File } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, Eye, Calendar, ExternalLink, Activity, MessageCircle, User, Cpu, ImageIcon, ZoomIn, X, File, Star, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -30,49 +30,6 @@ import LanguageSwitcher from '@/components/LanguageSwitcher';
  */
 function escapeMarkdownTildes(content: string): string {
   return content.replace(/(?<!\\)~(?!~)/g, '\\~');
-}
-
-/**
- * 마크다운 포맷팅 수정
- * AI 응답에서 제목과 내용이 붙어있는 경우 줄바꿈 추가
- */
-function fixMarkdownLineBreaks(content: string): string {
-  let result = content;
-
-  // 패턴 1: "추천 해결 방법:**1." → "추천 해결 방법:\n\n**1."
-  result = result.replace(/(추천\s*해결\s*방법:?)(\*\*\d+\.)/g, '$1\n\n$2');
-  result = result.replace(/(Recommended\s*Solutions?:?)(\*\*\d+\.)/gi, '$1\n\n$2');
-
-  // 패턴 1-1: "Recommended Solutions:1." → "Recommended Solutions:\n\n1." (볼드 없는 숫자)
-  result = result.replace(/(추천\s*해결\s*방법:?)(\d+\.)/g, '$1\n\n$2');
-  result = result.replace(/(Recommended\s*Solutions?:?)(\d+\.)/gi, '$1\n\n$2');
-
-  // 패턴 2: "**제목:**숫자." → "**제목:**\n\n숫자."
-  result = result.replace(/(\*\*[^*]+:\*\*)(\d+\.)/g, '$1\n\n$2');
-
-  // 패턴 3: "**제목:**\n숫자." → "**제목:**\n\n숫자."
-  result = result.replace(/(\*\*[^*]+:\*\*)\n(\d+\.)/g, '$1\n\n$2');
-
-  // 패턴 4: "제목:\n**1." → "제목:\n\n**1."
-  result = result.replace(/(방법:)\n(\*\*\d+\.)/g, '$1\n\n$2');
-  result = result.replace(/(Solutions?:)\n(\*\*\d+\.)/gi, '$1\n\n$2');
-
-  // 패턴 5: "🔧 Recommended Solutions:1." → 줄바꿈 추가 (이모지 뒤 패턴)
-  result = result.replace(/(🔧[^:]*:)(\*?\*?\d+\.)/g, '$1\n\n$2');
-
-  // 패턴 6: "Difficulty: xxx | Est. time: xxx" 뒤에 줄바꿈 (단계 목록 전)
-  // "Est. time: 20-30 minutes1." 또는 "Est. time: 20-30 minutes Step 1:" 패턴
-  result = result.replace(/(Est\.?\s*time:[^)]+(?:minutes?|hours?|시간|분))(\s*)(\d+\.|Step\s*\d+)/gi, '$1\n\n$3');
-
-  // 패턴 7: ") Difficulty:" 앞에 줄바꿈 추가 (솔루션 제목과 난이도 분리)
-  result = result.replace(/(\))\s*(Difficulty:)/gi, '$1\n\n$2');
-  result = result.replace(/(\))\s*(난이도:)/g, '$1\n\n$2');
-
-  // 난이도/예상 시간 줄과 단계 목록 사이 줄바꿈 확보
-  result = result.replace(/(예상 시간:[^\n]+)\n(\s*\d+\.)/g, '$1\n\n$2');
-  result = result.replace(/(estimated time:[^\n]+)\n(\s*\d+\.)/gi, '$1\n\n$2');
-
-  return result;
 }
 
 /**
@@ -270,6 +227,205 @@ const markdownComponents = {
     </blockquote>
   ),
 };
+
+/**
+ * 가격비교 카드 컴포넌트 (SharedChat 전용)
+ */
+const MARKETPLACE_COLORS: Record<string, string> = {
+  naver: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  coupang: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  amazon: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+  ebay: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+};
+
+interface SharedPriceComparisonCardProps {
+  data: SharedPriceComparisonData;
+  t: (key: string, defaultValue?: string, options?: Record<string, unknown>) => string;
+}
+
+function SharedPriceComparisonCard({ data, t }: SharedPriceComparisonCardProps) {
+  const [showAll, setShowAll] = useState(false);
+  const { products, query } = data;
+
+  if (!products || products.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        {t('priceComparison.noResults', '검색 결과가 없습니다')}
+      </div>
+    );
+  }
+
+  const lowestPrice = Math.min(...products.map(p => p.price_krw));
+  const displayProducts = showAll ? products : products.slice(0, 4);
+
+  const formatPrice = (price: number, currency: string) => {
+    if (currency === 'KRW') {
+      return `${price.toLocaleString()}원`;
+    }
+    return `$${price.toFixed(2)}`;
+  };
+
+  const getMarketplaceLabel = (marketplace: string) => {
+    const labels: Record<string, string> = {
+      naver: t('priceComparison.naver', '네이버'),
+      coupang: t('priceComparison.coupang', '쿠팡'),
+      amazon: t('priceComparison.amazon', '아마존'),
+      ebay: t('priceComparison.ebay', 'eBay'),
+    };
+    return labels[marketplace] || marketplace;
+  };
+
+  return (
+    <div className="space-y-4 my-6 p-4 bg-muted/30 rounded-lg border">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShoppingCart className="w-5 h-5 text-primary" />
+          <h3 className="font-semibold text-lg">
+            {t('priceComparison.title', '가격 비교 결과')}
+          </h3>
+        </div>
+        <span className="text-sm text-muted-foreground">
+          {t('priceComparison.found', '{{count}}개 상품', { count: products.length })}
+        </span>
+      </div>
+
+      {/* 검색어 표시 */}
+      <div className="text-sm text-muted-foreground">
+        <span className="font-medium">"{query}"</span>
+      </div>
+
+      {/* 상품 목록 */}
+      <div className="grid gap-3">
+        {displayProducts.map((product) => {
+          const isLowest = product.price_krw === lowestPrice;
+
+          return (
+            <Card
+              key={product.id}
+              className={cn(
+                'transition-all hover:shadow-md',
+                isLowest && 'ring-2 ring-amber-400 dark:ring-amber-500'
+              )}
+            >
+              <CardContent className="p-4">
+                <div className="flex gap-4">
+                  {/* 상품 이미지 */}
+                  {product.image_url && (
+                    <div className="shrink-0">
+                      <img
+                        src={product.image_url}
+                        alt={product.title}
+                        className="w-20 h-20 object-cover rounded-lg bg-muted"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* 상품 정보 */}
+                  <div className="flex-1 min-w-0">
+                    {/* 마켓 뱃지 & 최저가 */}
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <Badge className={MARKETPLACE_COLORS[product.marketplace] || 'bg-gray-100 text-gray-800'}>
+                        {getMarketplaceLabel(product.marketplace)}
+                      </Badge>
+                      {isLowest && (
+                        <Badge variant="outline" className="text-amber-600 border-amber-400 dark:text-amber-400">
+                          {t('priceComparison.lowestPrice', '최저가')}
+                        </Badge>
+                      )}
+                      {!product.in_stock && (
+                        <Badge variant="secondary" className="text-muted-foreground">
+                          {t('priceComparison.outOfStock', '품절')}
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* 상품명 */}
+                    <h4 className="font-medium text-sm line-clamp-2 mb-2">
+                      {product.title}
+                    </h4>
+
+                    {/* 가격 */}
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-xl font-bold text-primary">
+                        {formatPrice(product.price, product.currency)}
+                      </span>
+                      {product.original_price && product.discount_percent && (
+                        <>
+                          <span className="text-sm text-muted-foreground line-through">
+                            {formatPrice(product.original_price, product.currency)}
+                          </span>
+                          <span className="text-sm text-red-500 font-medium">
+                            -{product.discount_percent}%
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* 평점 & 리뷰 */}
+                    {(product.rating || product.review_count) && (
+                      <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                        {product.rating && (
+                          <span className="flex items-center gap-1">
+                            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                            {product.rating.toFixed(1)}
+                          </span>
+                        )}
+                        {product.review_count && (
+                          <span>
+                            {t('priceComparison.reviews', '리뷰')} {product.review_count.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 링크 버튼 */}
+                  <div className="shrink-0 flex items-start">
+                    <a
+                      href={product.product_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-lg hover:bg-muted transition-colors"
+                      title={t('priceComparison.goToProduct', '상품 페이지로 이동')}
+                    >
+                      <ExternalLink className="w-5 h-5 text-muted-foreground" />
+                    </a>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* 더보기/접기 버튼 */}
+      {products.length > 4 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full text-muted-foreground"
+          onClick={() => setShowAll(!showAll)}
+        >
+          {showAll ? (
+            <>
+              <ChevronUp className="w-4 h-4 mr-1" />
+              {t('common.showLess', '접기')}
+            </>
+          ) : (
+            <>
+              <ChevronDown className="w-4 h-4 mr-1" />
+              {t('priceComparison.showMore', '더보기')} ({products.length - 4})
+            </>
+          )}
+        </Button>
+      )}
+    </div>
+  );
+}
 
 export default function SharedChatPage() {
   const { shareId } = useParams<{ shareId: string }>();
@@ -493,9 +649,8 @@ export default function SharedChatPage() {
                 (() => {
                   // 출처 추출 및 본문 분리
                   const { cleanContent, sources } = extractSources(message.content);
-                  // 줄바꿈 수정 및 ~ 문자 이스케이프
-                  const fixedContent = fixMarkdownLineBreaks(cleanContent);
-                  const escapedContent = escapeMarkdownTildes(fixedContent);
+                  // ~ 문자 이스케이프 (ChatMessage.tsx와 동일하게 fixMarkdownLineBreaks 제거)
+                  const escapedContent = escapeMarkdownTildes(cleanContent);
                   // API에서 받은 참고 자료가 있으면 그것을 사용, 없으면 본문에서 추출한 sources 사용
                   const displayReferences = message.references && message.references.length > 0
                     ? message.references
@@ -522,6 +677,13 @@ export default function SharedChatPage() {
                           {escapedContent}
                         </ReactMarkdown>
                       </div>
+
+                      {/* 가격비교 섹션 */}
+                      {message.priceComparisonData && message.priceComparisonData.products && message.priceComparisonData.products.length > 0 && (
+                        <div className="pl-8">
+                          <SharedPriceComparisonCard data={message.priceComparisonData} t={t} />
+                        </div>
+                      )}
 
                       {/* 참고 자료 섹션 - GPT 스타일 (하단 별도 표시) */}
                       {displayReferences.length > 0 && (

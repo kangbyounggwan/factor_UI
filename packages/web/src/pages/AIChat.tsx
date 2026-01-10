@@ -444,8 +444,11 @@ const AIChat = () => {
   // 공유
   const handleShareChat = useCallback(async () => {
     if (chatMessages.messages.length === 0) return;
-    await sharing.shareChat(chatMessages.messages, chatSessions.currentSessionId);
-  }, [sharing, chatMessages.messages, chatSessions.currentSessionId]);
+    await sharing.shareChat(chatMessages.messages, {
+      currentSessionId: chatSessions.currentSessionId,
+      chatSessions: chatSessions.sessions,
+    });
+  }, [sharing, chatMessages.messages, chatSessions.currentSessionId, chatSessions.sessions]);
 
   // 도구 선택
   const handleToolSelect = useCallback((toolId: string | null) => {
@@ -547,10 +550,11 @@ const AIChat = () => {
           />
 
           {/* 메시지 영역 */}
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 w-full">
             <div className={cn(
-              "flex flex-col",
-              !hasMessages && "min-h-[calc(100vh-64px)] justify-center"
+              "flex flex-col w-full h-full",
+              !hasMessages && "min-h-[calc(100vh-64px-64px)] justify-center",
+              isMobile && !hasMessages && "min-h-[calc(100vh-56px-64px)]"
             )}>
               {!hasMessages ? (
                 <WelcomeScreen
