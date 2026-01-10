@@ -9,6 +9,7 @@
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { FilePreviewList } from "@/components/ai/FilePreviewList";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export interface WelcomeScreenProps {
   // 파일 상태
@@ -44,6 +45,7 @@ export function WelcomeScreen({
 }: WelcomeScreenProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   // 빠른 프롬프트 버튼 클릭 핸들러
   const handleQuickPrompt = (tool: string, prompt: string) => {
@@ -89,8 +91,13 @@ export function WelcomeScreen({
             <span className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
             <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '450ms' }} />
           </div>
-          <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-2 whitespace-pre-line break-words leading-tight">
-            {t('aiChat.askAnything', '출력하다가\n뭔가 이상할 때')}
+          <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-2 break-words leading-tight">
+            {isMobile
+              ? t('aiChat.askAnything', '출력 문제가 생겼나요?\n뭔가 이상하다면').split('\n').map((line, i) => (
+                  <span key={i}>{line}{i === 0 && <br />}</span>
+                ))
+              : t('aiChat.askAnythingDesktop', '출력 문제가 생겼나요? 뭔가 이상하다면')
+            }
           </h1>
           <p className="text-sm sm:text-base md:text-xl lg:text-2xl font-medium text-muted-foreground break-words">
             {t('aiChat.greeting', '지금 어떤 문제가 생겼는지 그대로 보여주세요')}
