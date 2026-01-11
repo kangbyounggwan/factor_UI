@@ -17,6 +17,7 @@
 7. **quality-checker** - 코드 품질 검사
 8. **realtime-engineer** - MQTT/실시간 통신
 9. **page-documenter** - 페이지별 종합 문서화 (15개 섹션 구조)
+10. **dev-finalize** - 개발 마무리 파이프라인 ⭐ (품질검사 → 마이그레이션 → 문서정리 → docs 업데이트)
 
 ## 사용 방법
 
@@ -95,6 +96,24 @@
 1. 페이지별 종합 문서 생성 (15개 섹션)
 2. PROJECT_STRUCTURE.md 링크 추가
 
+### 패턴 6: 개발 마무리 워크플로우 ⭐
+
+```
+@dev-finalize (4단계 자동 파이프라인)
+```
+
+1. **Quality Check** - TypeScript, ESLint, 빌드 검증
+2. **Migration Cleanup** - 중복/오래된 마이그레이션 정리
+3. **MD Cleanup** - 완료된 PLAN 문서 삭제
+4. **Docs Update** - 수정된 페이지 docs 업데이트
+
+**사용법:**
+```
+@dev-finalize
+또는
+개발 마무리
+```
+
 ## 에이전트 선택 가이드
 
 | 작업 유형 | 추천 에이전트 | 비고 |
@@ -108,6 +127,7 @@
 | 빌드 오류 | quality-checker | Lint, Type check |
 | iOS/Android 배포 | mobile-builder | Capacitor, Xcode |
 | 페이지 문서화 | page-documenter | 15개 섹션 구조 |
+| **개발 마무리** | **dev-finalize** | 4단계 자동 파이프라인 ⭐ |
 
 ## 주의사항
 
@@ -118,6 +138,6 @@
 
 ## 버전
 
-- **Version**: 1.0.0
+- **Version**: 1.1.0
 - **Last Updated**: 2026-01-12
 - **Compatible with**: FACTOR UI v1.2.0
