@@ -18,7 +18,7 @@ import { useAuth } from "@shared/contexts/AuthContext";
 import { useSEO } from "@/hooks/useSEO";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Share2, Cpu, FileCode2 } from "lucide-react";
+import { Loader2, Share2, Cpu, FileCode2, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserPlan } from "@shared/hooks/useUserPlan";
 import { AppSidebar } from "@/components/common/AppSidebar";
@@ -27,7 +27,7 @@ import { FilePreviewList } from "@/components/ai/FilePreviewList";
 import { ChatMessage } from "@/components/ai/ChatMessage";
 import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   getChatMessages,
   saveChatMessage,
@@ -38,11 +38,12 @@ import {
 import { generateChatTitle } from "@shared/services/geminiService";
 import { downloadAndUploadReferenceImages } from "@shared/services/supabaseService/aiStorage";
 import { supabase } from "@shared/integrations/supabase/client";
-import { uploadGCodeForAnalysis } from "@/lib/gcodeAnalysisDbService";
+import { uploadGCodeForAnalysis, getAnalysisReportById, convertDbReportToUiData, downloadGCodeContent } from "@/lib/gcodeAnalysisDbService";
 import { saveSegmentData } from "@/lib/gcodeSegmentService";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { GCodeAnalysisReport } from "@/components/ai/GCodeAnalytics";
+import GCodeAnalyticsArchive from "@/components/ai/GCodeAnalytics/GCodeAnalyticsArchive";
 import { WelcomeScreen } from "@/components/ai/Chat/WelcomeScreen";
 import { ChatInput } from "@/components/ai/Chat/ChatInput";
 
@@ -70,8 +71,8 @@ const AIChat = () => {
   const { t, i18n } = useTranslation();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
-  const location = useLocation();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -120,6 +121,15 @@ const AIChat = () => {
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [pendingToolId, setPendingToolId] = useState<string | null>(null);
 
+  // URL에서 reportId 파라미터 추출
+  const urlReportId = searchParams.get('reportId');
+  const urlView = searchParams.get('view');
+
+  // URL reportId로 로드된 보고서 상태
+  const [urlReportData, setUrlReportData] = useState<import("@/components/ai/GCodeAnalytics").GCodeAnalysisData | null>(null);
+  const [urlReportFileName, setUrlReportFileName] = useState<string>('');
+  const [isLoadingUrlReport, setIsLoadingUrlReport] = useState(false);
+
   // === 초기화 ===
 
   // 세션 로드
@@ -146,6 +156,71 @@ const AIChat = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages.messages]);
+
+  // URL 뷰가 archive일 때 사이드바의 보고서 목록 로드
+  useEffect(() => {
+    if (urlView === 'archive' && user?.id && gcode.reportArchive.length === 0) {
+      gcode.reloadReportHistory();
+    }
+  }, [urlView, user?.id, gcode.reportArchive.length]);
+
+  // URL의 reportId로 보고서 자동 로드
+  useEffect(() => {
+    const loadReportFromUrl = async () => {
+      if (!urlReportId || !user?.id) {
+        // reportId가 없으면 상태 초기화
+        if (!urlReportId && urlReportData) {
+          setUrlReportData(null);
+          setUrlReportFileName('');
+        }
+        return;
+      }
+
+      setIsLoadingUrlReport(true);
+
+      try {
+        const { data, error } = await getAnalysisReportById(urlReportId);
+
+        if (error || !data) {
+          toast({
+            title: t('gcodeAnalytics.reportLoadFailed', '보고서 로드 실패'),
+            description: error?.message || t('gcodeAnalytics.reportNotFound', '보고서를 찾을 수 없습니다'),
+            variant: 'destructive',
+          });
+          setIsLoadingUrlReport(false);
+          return;
+        }
+
+        // DB 보고서 데이터를 UI 데이터로 변환
+        const uiData = convertDbReportToUiData(data);
+
+        // G-code 컨텐츠 로드 (에디터용)
+        if (!uiData.gcodeContent && data.file_storage_path && data.total_issues_count > 0) {
+          try {
+            const content = await downloadGCodeContent(data.file_storage_path);
+            if (content) {
+              uiData.gcodeContent = content;
+            }
+          } catch (downloadErr) {
+            console.error('[AIChat] G-code download error:', downloadErr);
+          }
+        }
+
+        setUrlReportData(uiData);
+        setUrlReportFileName(data.file_name || '');
+        setIsLoadingUrlReport(false);
+      } catch (err) {
+        console.error('[AIChat] Load report error:', err);
+        toast({
+          title: t('gcodeAnalytics.reportLoadFailed', '보고서 로드 실패'),
+          variant: 'destructive',
+        });
+        setIsLoadingUrlReport(false);
+      }
+    };
+
+    loadReportFromUrl();
+  }, [urlReportId, user?.id, t, toast]);
 
   // === 핸들러 ===
 
@@ -510,47 +585,134 @@ const AIChat = () => {
           onSignOut={signOut}
           mode="chat"
           reports={gcode.reportArchive as any}
-          currentReportId={gcode.activeReportId}
-          onSelectReport={gcode.handleSelectReport}
+          currentReportId={urlReportId || gcode.activeReportId}
+          onSelectReport={(report) => {
+            // URL 네비게이션으로 전체 화면 보고서 뷰로 이동
+            navigate(`/ai-chat?view=archive&reportId=${report.id}`);
+          }}
           onDeleteReport={gcode.handleDeleteReport}
           onViewMoreReports={gcode.handleArchiveToggle}
-          archiveViewActive={gcode.archiveViewActive}
+          archiveViewActive={gcode.archiveViewActive || urlView === 'archive'}
         />
       )}
 
       {/* 메인 콘텐츠 */}
       <div className="flex-1 flex min-w-0">
-        {/* 채팅 영역 */}
-        <div className={cn(
-          "flex-1 flex flex-col min-w-0 transition-all duration-300",
-          gcode.reportPanelOpen && "flex-[0_0_48%]"
-        )}>
-          {/* 헤더 */}
-          <AppHeader
-            sidebarOpen={sidebar.isOpen}
-            onLoginRequired={() => permissions.setShowLoginModal(true)}
-            rightContent={
-              hasMessages && (
+        {/* URL reportId로 전체 화면 보고서 뷰 */}
+        {urlReportId && urlView === 'archive' && user && (
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* 헤더 */}
+            <AppHeader
+              onLoginRequired={() => permissions.setShowLoginModal(true)}
+            />
+
+            {/* 목록으로 버튼 + 파일명 */}
+            <div className="border-b bg-background px-4 py-2 flex items-center justify-between">
+              <div className="flex items-center gap-3">
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleShareChat}
-                  disabled={sharing.isSharing}
-                  className="gap-2 text-muted-foreground hover:text-foreground"
+                  onClick={() => navigate('/ai-chat?view=archive')}
+                  className="gap-2"
                 >
-                  {sharing.isSharing ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Share2 className="w-4 h-4" />
-                  )}
-                  <span className="hidden sm:inline">{t('aiChat.share', '공유')}</span>
+                  <ChevronLeft className="w-4 h-4" />
+                  {t('gcodeAnalytics.backToList', '목록으로')}
                 </Button>
-              )
-            }
-          />
+                {urlReportFileName && (
+                  <span className="text-sm text-muted-foreground truncate max-w-md">
+                    {urlReportFileName}
+                  </span>
+                )}
+              </div>
+            </div>
 
-          {/* 메시지 영역 */}
-          <ScrollArea className="flex-1 w-full">
+            {/* 보고서 로딩 중 */}
+            {isLoadingUrlReport && (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                  <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                  <p className="text-lg font-medium">{t('gcodeAnalytics.loadingReport', '보고서 로딩 중...')}</p>
+                </div>
+              </div>
+            )}
+
+            {/* 보고서 표시 */}
+            {!isLoadingUrlReport && urlReportData && (
+              <div className="flex-1 overflow-auto p-4">
+                <div className="max-w-6xl mx-auto">
+                  <div className="bg-card rounded-2xl border border-border/50 shadow-lg overflow-hidden">
+                    <GCodeAnalysisReport
+                      data={urlReportData}
+                      embedded={false}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 보고서 로드 실패 */}
+            {!isLoadingUrlReport && !urlReportData && (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-muted-foreground">{t('gcodeAnalytics.reportNotFound', '보고서를 찾을 수 없습니다')}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 아카이브 뷰 (더보기 클릭 시, URL reportId가 없을 때) */}
+        {(gcode.archiveViewActive || (urlView === 'archive' && !urlReportId)) && user && !urlReportId && (
+          <div className="flex-1 flex flex-col min-w-0 relative">
+            <AppHeader
+              onLoginRequired={() => permissions.setShowLoginModal(true)}
+            />
+            <GCodeAnalyticsArchive
+              userId={user.id}
+              onClose={() => {
+                gcode.closeArchiveView();
+                navigate('/ai-chat');
+              }}
+              onReportDeleted={gcode.reloadReportHistory}
+              isClosing={gcode.archiveClosing}
+              onLoadReport={(reportId) => {
+                // URL 네비게이션으로 전체 화면 보고서 뷰로 이동
+                navigate(`/ai-chat?view=archive&reportId=${reportId}`);
+              }}
+            />
+          </div>
+        )}
+
+        {/* 채팅 영역 (아카이브 뷰가 아니고 URL 보고서 뷰도 아닐 때) */}
+        {!gcode.archiveViewActive && !(urlView === 'archive') && (
+          <div className={cn(
+            "flex-1 flex flex-col min-w-0 transition-all duration-300",
+            gcode.reportPanelOpen && "flex-[0_0_48%]"
+          )}>
+            {/* 헤더 */}
+            <AppHeader
+              onLoginRequired={() => permissions.setShowLoginModal(true)}
+              rightContent={
+                hasMessages && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleShareChat}
+                    disabled={sharing.isSharing}
+                    className="gap-2 text-muted-foreground hover:text-foreground"
+                  >
+                    {sharing.isSharing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Share2 className="w-4 h-4" />
+                    )}
+                    <span className="hidden sm:inline">{t('aiChat.share', '공유')}</span>
+                  </Button>
+                )
+              }
+            />
+
+            {/* 메시지 영역 */}
+            <ScrollArea className="flex-1 w-full">
             <div className={cn(
               "flex flex-col w-full h-full",
               !hasMessages && "min-h-[calc(100vh-64px-64px)] justify-center",
@@ -695,9 +857,10 @@ const AIChat = () => {
             </div>
           )}
         </div>
+        )}
 
         {/* G-code 보고서 패널 */}
-        {(gcode.isAnalyzing || gcode.reportPanelOpen) && (
+        {!gcode.archiveViewActive && (gcode.isAnalyzing || gcode.reportPanelOpen) && (
           <div className="flex-[0_0_52%] w-full bg-muted/20 flex flex-col overflow-hidden h-full pr-4 py-4">
             {(gcode.isAnalyzing || (gcode.reportPanelOpen && !gcode.reportData)) ? (
               <div className="h-full rounded-2xl overflow-hidden bg-background border flex items-center justify-center">

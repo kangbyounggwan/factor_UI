@@ -10,7 +10,7 @@
  * - 보고서 카드 클릭 핸들러
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '@/hooks/use-toast';
 import { useGcodeEditor } from './useGcodeEditor';
@@ -23,6 +23,7 @@ import {
 import {
   convertDbReportToUiData,
   getAnalysisReportById,
+  getAnalysisReportsList,
   downloadGCodeContent,
   deleteAnalysisReport,
 } from '@/lib/gcodeAnalysisDbService';
@@ -114,6 +115,7 @@ export interface UseGcodeControllerReturn {
   handleSelectReport: (reportId: string) => Promise<void>;
   handleDeleteReport: (reportId: string) => Promise<void>;
   handleArchiveToggle: () => void;
+  reloadReportHistory: () => Promise<void>;
 
   // === 상태 설정 ===
   setReportData: React.Dispatch<React.SetStateAction<GCodeAnalysisData | null>>;
@@ -149,6 +151,48 @@ export function useGcodeController({
   // 내부 ref
   const localGcodeContentRef = useRef<string | null>(null);
   const effectiveGcodeContentRef = gcodeFileContentRef || localGcodeContentRef;
+
+  /**
+   * 보고서 히스토리 로드 함수
+   */
+  const loadReportHistory = useCallback(async () => {
+    if (!userId) return;
+
+    try {
+      const { data: reports, error } = await getAnalysisReportsList(userId, {
+        sort: { field: 'created_at', direction: 'desc' },
+        limit: 10,
+      });
+
+      if (error) {
+        console.error('[useGcodeController] Failed to load report history:', error);
+        return;
+      }
+
+      if (reports && reports.length > 0) {
+        const archiveItems: ReportArchiveItem[] = reports.map(report => ({
+          id: report.id,
+          fileName: report.file_name,
+          overallScore: report.overall_score ?? undefined,
+          overallGrade: report.overall_grade ?? undefined,
+          totalIssues: report.total_issues_count ?? undefined,
+          createdAt: new Date(report.created_at),
+        }));
+        setReportArchive(archiveItems);
+      } else {
+        setReportArchive([]);
+      }
+    } catch (err) {
+      console.error('[useGcodeController] Load report history exception:', err);
+    }
+  }, [userId]);
+
+  /**
+   * 초기 로드 시 DB에서 보고서 히스토리 불러오기
+   */
+  useEffect(() => {
+    loadReportHistory();
+  }, [loadReportHistory]);
 
   /**
    * 분석 시작 (폴링 래퍼)
@@ -702,6 +746,7 @@ export function useGcodeController({
     handleSelectReport,
     handleDeleteReport,
     handleArchiveToggle,
+    reloadReportHistory: loadReportHistory,
 
     // 상태 설정
     setReportData: polling.setReportData,

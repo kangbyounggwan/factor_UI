@@ -130,16 +130,17 @@ const UserSettings = () => {
   const shouldOpenPlanModal = searchParams.get('openPlanModal') === 'true';
 
   // Form states
-  const [displayName, setDisplayName] = useState(
+  const [fullName, setFullName] = useState(
     user?.user_metadata?.full_name || "",
   );
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState(user?.email || "");
   const [phone, setPhone] = useState("");
   const [avatarUrl, setAvatarUrl] = useState(user?.user_metadata?.avatar_url || "");
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
-  const [originalProfile, setOriginalProfile] = useState({ displayName: "", phone: "" });
+  const [originalProfile, setOriginalProfile] = useState({ fullName: "", displayName: "", phone: "" });
 
   // Notification preferences
   const [emailNotifications, setEmailNotifications] = useState(false);
@@ -241,23 +242,26 @@ const UserSettings = () => {
         setLoadingProfile(true);
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select('display_name, phone, avatar_url')
+          .select('full_name, display_name, phone, avatar_url')
           .eq('user_id', user.id)
           .maybeSingle();
 
         if (!error && profile) {
-          const name = profile.display_name || "";
+          const fn = profile.full_name || user.user_metadata?.full_name || "";
+          const dn = profile.display_name || "";
           const ph = profile.phone || "";
-          setDisplayName(name);
+          setFullName(fn);
+          setDisplayName(dn);
           setPhone(ph);
           if (profile.avatar_url) setAvatarUrl(profile.avatar_url);
-          setOriginalProfile({ displayName: name, phone: ph });
+          setOriginalProfile({ fullName: fn, displayName: dn, phone: ph });
         } else {
           // Fallback to user_metadata
-          const name = user.user_metadata?.full_name || "";
-          setDisplayName(name);
+          const fn = user.user_metadata?.full_name || "";
+          setFullName(fn);
+          setDisplayName("");
           if (user.user_metadata?.avatar_url) setAvatarUrl(user.user_metadata.avatar_url);
-          setOriginalProfile({ displayName: name, phone: "" });
+          setOriginalProfile({ fullName: fn, displayName: "", phone: "" });
         }
       } catch (err) {
         console.error('Error loading profile:', err);
@@ -769,21 +773,22 @@ const UserSettings = () => {
     if (!user) return;
 
     try {
-      // 1. Update auth user_metadata
+      // 1. Update auth user_metadata (실명 저장)
       const { error: authError } = await supabase.auth.updateUser({
         data: {
-          full_name: displayName,
+          full_name: fullName,
         }
       });
 
       if (authError) throw authError;
 
-      // 2. Update profiles table (including phone)
+      // 2. Update profiles table (실명 + 닉네임 + 전화번호)
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
           user_id: user.id,
-          display_name: displayName,
+          full_name: fullName,
+          display_name: displayName || null,
           phone: phone || null,
         }, {
           onConflict: 'user_id'
@@ -791,6 +796,7 @@ const UserSettings = () => {
 
       if (profileError) throw profileError;
 
+      setOriginalProfile({ fullName, displayName, phone });
       setIsEditingProfile(false);
       toast({
         title: t("userSettings.profileUpdated"),
@@ -913,6 +919,8 @@ const UserSettings = () => {
         {activeTab === 'profile' && (
           <ProfileTab
             user={user}
+            fullName={fullName}
+            setFullName={setFullName}
             displayName={displayName}
             setDisplayName={setDisplayName}
             email={email}

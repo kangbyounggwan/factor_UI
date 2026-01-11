@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +54,7 @@ import { AppSidebar, type ChatSession, type ReportArchiveItem } from "@/componen
 import { AppHeader } from "@/components/common/AppHeader";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { getChatSessions } from "@shared/services/supabaseService/chat";
-import { getAnalysisReportsList, convertDbReportToUiData } from "@/lib/gcodeAnalysisDbService";
+import { getAnalysisReportsList, getAnalysisReportById, convertDbReportToUiData, downloadGCodeContent } from "@/lib/gcodeAnalysisDbService";
 import { createReportShare } from "@/lib/sharedReportService";
 
 // ============================================================================
@@ -313,6 +313,7 @@ const GCodeAnalytics = () => {
   const { toast } = useToast();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { reportId } = useParams<{ reportId?: string }>();
   const { resolvedTheme } = useTheme();
   const isDarkMode = resolvedTheme === 'dark';
 
@@ -830,6 +831,63 @@ const GCodeAnalytics = () => {
     loadSidebarData();
   }, [user?.id]);
 
+  // URL의 reportId로 보고서 자동 로드
+  useEffect(() => {
+    const loadReportFromUrl = async () => {
+      if (!reportId || !user?.id) return;
+
+      setIsAnalyzing(true);
+      setAnalysisProgress({ stage: 'loading', progress: 50, message: t('gcodeAnalytics.loadingReport', '보고서 로딩 중...') });
+
+      try {
+        const { data, error } = await getAnalysisReportById(reportId);
+
+        if (error || !data) {
+          toast({
+            title: t('gcodeAnalytics.reportLoadFailed', '보고서 로드 실패'),
+            description: error?.message || t('gcodeAnalytics.reportNotFound', '보고서를 찾을 수 없습니다'),
+            variant: 'destructive',
+          });
+          setIsAnalyzing(false);
+          setAnalysisProgress(null);
+          return;
+        }
+
+        // DB 보고서 데이터를 UI 데이터로 변환
+        const uiData = convertDbReportToUiData(data);
+
+        // G-code 컨텐츠 로드 (에디터용)
+        if (!uiData.gcodeContent && data.file_storage_path && data.total_issues_count > 0) {
+          try {
+            const content = await downloadGCodeContent(data.file_storage_path);
+            if (content) {
+              uiData.gcodeContent = content;
+              setGcodeContent(content);
+            }
+          } catch (downloadErr) {
+            console.error('[GCodeAnalytics] G-code download error:', downloadErr);
+          }
+        }
+
+        setReportData(uiData);
+        setFileName(data.file_name);
+        setIsSaved(true); // 이미 저장된 보고서
+        setIsAnalyzing(false);
+        setAnalysisProgress(null);
+      } catch (err) {
+        console.error('[GCodeAnalytics] Load report error:', err);
+        toast({
+          title: t('gcodeAnalytics.reportLoadFailed', '보고서 로드 실패'),
+          variant: 'destructive',
+        });
+        setIsAnalyzing(false);
+        setAnalysisProgress(null);
+      }
+    };
+
+    loadReportFromUrl();
+  }, [reportId, user?.id, t, toast]);
+
   // 사이드바 핸들러
   const handleNewChat = useCallback(() => {
     navigate('/ai-chat');
@@ -868,26 +926,50 @@ const GCodeAnalytics = () => {
 
       {/* 메인 콘텐츠 */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* reportId가 있는 경우: 목록으로 버튼 + 파일명 표시 */}
+        {reportId && (
+          <div className="border-b bg-background px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/ai-chat?view=archive')}
+                className="gap-2"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                {t('gcodeAnalytics.backToList', '목록으로')}
+              </Button>
+              {fileName && (
+                <span className="text-sm text-muted-foreground truncate max-w-md">
+                  {fileName}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* 상단 헤더 */}
         <AppHeader
           sidebarOpen={sidebarOpen}
           rightContent={
             <div className="flex items-center gap-2">
               {/* 아카이브 버튼 */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (!user?.id) {
-                    setShowLoginPrompt(true);
-                    return;
-                  }
-                  navigate('/ai-chat?view=archive');
-                }}
-              >
-                <Archive className="h-4 w-4 mr-2" />
-                {t('gcodeAnalytics.archive')}
-              </Button>
+              {!reportId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (!user?.id) {
+                      setShowLoginPrompt(true);
+                      return;
+                    }
+                    navigate('/ai-chat?view=archive');
+                  }}
+                >
+                  <Archive className="h-4 w-4 mr-2" />
+                  {t('gcodeAnalytics.archive')}
+                </Button>
+              )}
 
               {fileName && (
                 <>

@@ -504,3 +504,303 @@ export async function deleteSegmentData(segmentId: string): Promise<{
     return { success: false, error: error as Error };
   }
 }
+
+// ============================================================================
+// Community Post Segment Functions
+// ============================================================================
+
+export interface SaveCommunitySegmentInput {
+  userId: string;
+  postId?: string;  // 게시물 생성 후 업데이트
+  gcodeEmbedId: string;  // 게시물 내 G-code 고유 ID
+  segmentResponse: GCodeAnalysisResponse;
+}
+
+/**
+ * 커뮤니티 게시물용 세그먼트 데이터 저장
+ * 게시물 작성 시 호출 (postId는 나중에 업데이트)
+ */
+export async function saveCommunitySegmentData(input: SaveCommunitySegmentInput): Promise<{
+  data: GCodeSegmentData | null;
+  segmentId: string | null;
+  error: Error | null;
+}> {
+  const { userId, postId, gcodeEmbedId, segmentResponse } = input;
+
+  try {
+    const segments = segmentResponse.segments;
+
+    // 레이어 통계 계산
+    let totalExtrusionPoints = 0;
+    let totalTravelPoints = 0;
+    let hasWipeData = false;
+    let hasSupportData = false;
+
+    for (const layer of segments.layers) {
+      totalExtrusionPoints += layer.extrusionCount || 0;
+      totalTravelPoints += layer.travelCount || 0;
+      if (layer.wipeData && layer.wipeCount && layer.wipeCount > 0) hasWipeData = true;
+      if (layer.supportData && layer.supportCount && layer.supportCount > 0) hasSupportData = true;
+    }
+
+    // 1. DB에 메타데이터 레코드 생성
+    const { data: insertedData, error: insertError } = await supabase
+      .from('gcode_segment_data')
+      .insert({
+        user_id: userId,
+        post_id: postId || null,
+        gcode_embed_id: gcodeEmbedId,
+        metadata: segments.metadata,
+        temperatures: segments.temperatures || [],
+        layer_count: segments.metadata.layerCount,
+        total_extrusion_points: totalExtrusionPoints,
+        total_travel_points: totalTravelPoints,
+        has_wipe_data: hasWipeData,
+        has_support_data: hasSupportData,
+        status: 'processing',
+      })
+      .select()
+      .single();
+
+    if (insertError || !insertedData) {
+      console.error('[gcodeSegmentService] Community insert error:', insertError);
+      throw insertError || new Error('Failed to insert community segment data');
+    }
+
+    const segmentId = insertedData.id;
+
+    // 2. Storage에 레이어 데이터 저장
+    const storagePath = `${userId}/${segmentId}.json`;
+    const layersJson = JSON.stringify(segments.layers);
+    const layersBlob = new Blob([layersJson], { type: 'application/json' });
+
+    const { error: uploadError } = await supabase.storage
+      .from('gcode-segments')
+      .upload(storagePath, layersBlob, {
+        contentType: 'application/json',
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error('[gcodeSegmentService] Community storage upload error:', uploadError);
+      await supabase
+        .from('gcode_segment_data')
+        .update({ status: 'error', error_message: uploadError.message })
+        .eq('id', segmentId);
+      throw uploadError;
+    }
+
+    // 3. Storage 경로 업데이트 및 상태를 ready로 변경
+    const { data: updatedData, error: updateError } = await supabase
+      .from('gcode_segment_data')
+      .update({
+        layers_storage_path: storagePath,
+        status: 'ready',
+      })
+      .eq('id', segmentId)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('[gcodeSegmentService] Community update error:', updateError);
+      throw updateError;
+    }
+
+    console.log('[gcodeSegmentService] Community segment saved:', {
+      segmentId,
+      gcodeEmbedId,
+      postId,
+    });
+
+    return { data: updatedData as GCodeSegmentData, segmentId, error: null };
+  } catch (error) {
+    console.error('[gcodeSegmentService] Community save error:', error);
+    return { data: null, segmentId: null, error: error as Error };
+  }
+}
+
+/**
+ * 게시물 생성 후 세그먼트 데이터에 post_id 연결
+ */
+export async function linkSegmentsToPost(
+  segmentIds: string[],
+  postId: string
+): Promise<{ success: boolean; error: Error | null }> {
+  try {
+    if (segmentIds.length === 0) {
+      return { success: true, error: null };
+    }
+
+    const { error } = await supabase
+      .from('gcode_segment_data')
+      .update({ post_id: postId })
+      .in('id', segmentIds);
+
+    if (error) throw error;
+
+    console.log('[gcodeSegmentService] Linked segments to post:', {
+      segmentIds,
+      postId,
+    });
+
+    return { success: true, error: null };
+  } catch (error) {
+    console.error('[gcodeSegmentService] Link to post error:', error);
+    return { success: false, error: error as Error };
+  }
+}
+
+/**
+ * 게시물 ID로 모든 세그먼트 데이터 조회 (메타데이터만)
+ */
+export async function getSegmentsByPostId(postId: string): Promise<{
+  data: GCodeSegmentData[] | null;
+  error: Error | null;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('gcode_segment_data')
+      .select('*')
+      .eq('post_id', postId)
+      .eq('status', 'ready');
+
+    if (error) throw error;
+
+    return { data: data as GCodeSegmentData[], error: null };
+  } catch (error) {
+    console.error('[gcodeSegmentService] Get by post ID error:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * gcode_embed_id로 세그먼트 데이터 조회
+ */
+export async function getSegmentByEmbedId(gcodeEmbedId: string): Promise<{
+  data: GCodeSegmentData | null;
+  error: Error | null;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('gcode_segment_data')
+      .select('*')
+      .eq('gcode_embed_id', gcodeEmbedId)
+      .eq('status', 'ready')
+      .maybeSingle();
+
+    if (error) throw error;
+
+    return { data: data as GCodeSegmentData | null, error: null };
+  } catch (error) {
+    console.error('[gcodeSegmentService] Get by embed ID error:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * 게시물 ID로 전체 세그먼트 데이터 로드 (레이어 데이터 포함)
+ * 여러 G-code가 있을 수 있으므로 Map으로 반환
+ */
+export async function loadFullSegmentsByPostId(postId: string): Promise<{
+  data: Map<string, {
+    metadata: SegmentMetadata;
+    temperatures: TemperatureData[];
+    layers: LayerSegmentData[];
+  }> | null;
+  error: Error | null;
+}> {
+  try {
+    // 1. DB에서 모든 세그먼트 메타데이터 조회
+    const { data: segmentsData, error: dbError } = await supabase
+      .from('gcode_segment_data')
+      .select('*')
+      .eq('post_id', postId)
+      .eq('status', 'ready');
+
+    if (dbError) throw dbError;
+
+    if (!segmentsData || segmentsData.length === 0) {
+      return { data: null, error: null };
+    }
+
+    // 2. 각 세그먼트의 레이어 데이터 로드
+    const resultMap = new Map<string, {
+      metadata: SegmentMetadata;
+      temperatures: TemperatureData[];
+      layers: LayerSegmentData[];
+    }>();
+
+    for (const segment of segmentsData) {
+      if (!segment.layers_storage_path || !segment.gcode_embed_id) continue;
+
+      const { data: layers, error: storageError } = await loadLayersFromStorage(
+        segment.layers_storage_path
+      );
+
+      if (storageError || !layers) {
+        console.warn('[gcodeSegmentService] Failed to load layers for:', segment.gcode_embed_id);
+        continue;
+      }
+
+      resultMap.set(segment.gcode_embed_id, {
+        metadata: segment.metadata,
+        temperatures: segment.temperatures,
+        layers,
+      });
+    }
+
+    return { data: resultMap, error: null };
+  } catch (error) {
+    console.error('[gcodeSegmentService] Load by post ID error:', error);
+    return { data: null, error: error as Error };
+  }
+}
+
+/**
+ * gcode_embed_id로 전체 세그먼트 데이터 로드 (레이어 데이터 포함)
+ */
+export async function loadFullSegmentByEmbedId(gcodeEmbedId: string): Promise<{
+  data: {
+    metadata: SegmentMetadata;
+    temperatures: TemperatureData[];
+    layers: LayerSegmentData[];
+  } | null;
+  error: Error | null;
+}> {
+  try {
+    // 1. DB에서 세그먼트 메타데이터 조회
+    const { data: segmentData, error: dbError } = await supabase
+      .from('gcode_segment_data')
+      .select('*')
+      .eq('gcode_embed_id', gcodeEmbedId)
+      .eq('status', 'ready')
+      .maybeSingle();
+
+    if (dbError) throw dbError;
+
+    if (!segmentData || !segmentData.layers_storage_path) {
+      return { data: null, error: null };
+    }
+
+    // 2. Storage에서 레이어 데이터 로드
+    const { data: layers, error: storageError } = await loadLayersFromStorage(
+      segmentData.layers_storage_path
+    );
+
+    if (storageError || !layers) {
+      throw storageError || new Error('Failed to load layers');
+    }
+
+    return {
+      data: {
+        metadata: segmentData.metadata,
+        temperatures: segmentData.temperatures,
+        layers,
+      },
+      error: null,
+    };
+  } catch (error) {
+    console.error('[gcodeSegmentService] Load by embed ID error:', error);
+    return { data: null, error: error as Error };
+  }
+}

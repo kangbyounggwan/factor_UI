@@ -1,0 +1,809 @@
+/**
+ * RichTextEditor 컴포넌트
+ * 네이버 카페 스타일의 리치 텍스트 에디터
+ * - 이미지 크기 조절 지원
+ * - 첨부 영역 동기화
+ */
+import { useCallback, useEffect, useMemo } from 'react';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Link from '@tiptap/extension-link';
+import Placeholder from '@tiptap/extension-placeholder';
+import TextAlign from '@tiptap/extension-text-align';
+import Underline from '@tiptap/extension-underline';
+import { TextStyle } from '@tiptap/extension-text-style';
+import { Color } from '@tiptap/extension-color';
+import Highlight from '@tiptap/extension-highlight';
+import { Model3DNode } from './Model3DNode';
+import { ResizableImageNode } from './ResizableImageNode';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
+import {
+  Bold,
+  Italic,
+  Underline as UnderlineIcon,
+  Strikethrough,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  List,
+  ListOrdered,
+  Quote,
+  Code,
+  Image as ImageIcon,
+  Link as LinkIcon,
+  Undo,
+  Redo,
+  Highlighter,
+  Palette,
+  Minus,
+  Box,
+  X,
+  ImagePlus,
+  Loader2,
+  FileCode,
+} from 'lucide-react';
+import { useState } from 'react';
+
+// 폰트 사이즈 옵션
+const FONT_SIZES = [
+  { value: '12px', label: '12' },
+  { value: '14px', label: '14' },
+  { value: '16px', label: '16' },
+  { value: '18px', label: '18' },
+  { value: '20px', label: '20' },
+  { value: '24px', label: '24' },
+  { value: '28px', label: '28' },
+  { value: '32px', label: '32' },
+];
+
+// 색상 프리셋
+const COLOR_PRESETS = [
+  '#000000', '#434343', '#666666', '#999999', '#cccccc',
+  '#ff0000', '#ff6600', '#ffcc00', '#00cc00', '#0066ff',
+  '#9933ff', '#ff3399', '#00cccc', '#663300', '#336600',
+];
+
+// 하이라이트 색상 프리셋
+const HIGHLIGHT_PRESETS = [
+  '#ffff00', '#00ff00', '#00ffff', '#ff00ff', '#ff6600',
+  '#ffcc99', '#ccff99', '#99ccff', '#ff99cc', '#ffffcc',
+];
+
+// 첨부 이미지 타입
+export interface AttachedImage {
+  url: string;
+  file?: File;
+  isInContent: boolean;
+}
+
+interface RichTextEditorProps {
+  content: string;
+  onChange: (content: string) => void;
+  placeholder?: string;
+  onImageUpload?: (file: File) => Promise<string | null>;
+  on3DUpload?: (file: File) => Promise<string | null>;
+  onGCodeUpload?: (file: File) => Promise<{ url: string; id: string } | null>;
+  minHeight?: string;
+  // 첨부 이미지 관련 props
+  attachedImages?: AttachedImage[];
+  onAttachedImagesChange?: (images: AttachedImage[]) => void;
+  showAttachmentSection?: boolean;
+  maxImages?: number;
+}
+
+export function RichTextEditor({
+  content,
+  onChange,
+  placeholder = '내용을 입력하세요',
+  onImageUpload,
+  on3DUpload,
+  onGCodeUpload,
+  minHeight = '300px',
+  attachedImages = [],
+  onAttachedImagesChange,
+  showAttachmentSection = true,
+  maxImages = 5,
+}: RichTextEditorProps) {
+  const [linkUrl, setLinkUrl] = useState('');
+  const [showLinkPopover, setShowLinkPopover] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: {
+          levels: [1, 2, 3],
+        },
+      }),
+      ResizableImageNode,
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'text-primary underline',
+        },
+      }),
+      Placeholder.configure({
+        placeholder,
+      }),
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+      }),
+      Underline,
+      TextStyle,
+      Color,
+      Highlight.configure({
+        multicolor: true,
+      }),
+      Model3DNode,
+    ],
+    content,
+    onUpdate: ({ editor }) => {
+      const html = editor.getHTML();
+      onChange(html);
+
+      // 첨부 이미지 동기화 - 콘텐츠 내 이미지 상태 업데이트
+      if (onAttachedImagesChange) {
+        syncAttachedImages(html);
+      }
+    },
+    editorProps: {
+      attributes: {
+        class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none',
+        style: `min-height: ${minHeight}; padding: 1rem;`,
+      },
+    },
+  });
+
+  // 콘텐츠 내 이미지 URL 추출
+  const extractImagesFromContent = useCallback((html: string): string[] => {
+    const imgRegex = /<img[^>]+src="([^"]+)"[^>]*>/gi;
+    const urls: string[] = [];
+    let match;
+    while ((match = imgRegex.exec(html)) !== null) {
+      urls.push(match[1]);
+    }
+    return urls;
+  }, []);
+
+  // 첨부 이미지와 콘텐츠 동기화
+  const syncAttachedImages = useCallback((html: string) => {
+    if (!onAttachedImagesChange) return;
+
+    const contentUrls = extractImagesFromContent(html);
+    const updatedImages = attachedImages.map(img => ({
+      ...img,
+      isInContent: contentUrls.includes(img.url),
+    }));
+
+    // 상태가 변경된 경우만 업데이트
+    const hasChanged = attachedImages.some((img, i) =>
+      img.isInContent !== updatedImages[i].isInContent
+    );
+
+    if (hasChanged) {
+      onAttachedImagesChange(updatedImages);
+    }
+  }, [attachedImages, onAttachedImagesChange, extractImagesFromContent]);
+
+  // 이미지 업로드 핸들러
+  const handleImageUpload = useCallback(async (file?: File) => {
+    if (!onImageUpload) return;
+
+    const processFile = async (f: File) => {
+      if (f.size > 5 * 1024 * 1024) {
+        alert('이미지가 너무 큽니다 (최대 5MB)');
+        return;
+      }
+
+      setUploading(true);
+      try {
+        const url = await onImageUpload(f);
+        if (url) {
+          // 에디터에 이미지 삽입
+          if (editor) {
+            editor.chain().focus().setResizableImage({ src: url }).run();
+          }
+
+          // 첨부 이미지 목록에 추가
+          if (onAttachedImagesChange) {
+            const newImage: AttachedImage = {
+              url,
+              file: f,
+              isInContent: true,
+            };
+            onAttachedImagesChange([...attachedImages, newImage]);
+          }
+        }
+      } catch (error) {
+        console.error('[RichTextEditor] Error uploading image:', error);
+      } finally {
+        setUploading(false);
+      }
+    };
+
+    if (file) {
+      await processFile(file);
+    } else {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.multiple = true;
+      input.onchange = async (e) => {
+        const files = (e.target as HTMLInputElement).files;
+        if (files) {
+          for (const f of Array.from(files)) {
+            if (attachedImages.length >= maxImages) break;
+            await processFile(f);
+          }
+        }
+      };
+      input.click();
+    }
+  }, [editor, onImageUpload, attachedImages, onAttachedImagesChange, maxImages]);
+
+  // 3D 모델 업로드 핸들러
+  const handle3DUpload = useCallback(async () => {
+    if (!on3DUpload) return;
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.stl,.obj,.3mf,.gltf,.glb';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file && editor) {
+        const fileName = file.name;
+        const fileExt = fileName.split('.').pop()?.toLowerCase() || '';
+        const tempUrl = `temp_3d_${Date.now()}`;
+
+        // 1. 먼저 로딩 상태로 노드 삽입
+        editor.chain().focus().setModel3D({
+          url: tempUrl,
+          filename: fileName,
+          filetype: fileExt,
+          isLoading: true,
+        }).run();
+
+        // 2. 실제 업로드 수행
+        const url = await on3DUpload(file);
+
+        if (url) {
+          // 3. 업로드 완료 - 노드 업데이트
+          editor.commands.updateModel3DLoading(tempUrl, url);
+        } else {
+          // 업로드 실패 - 노드 제거
+          const { state } = editor;
+          let posToDelete: number | null = null;
+          state.doc.descendants((node, pos) => {
+            if (node.type.name === 'model3d' && node.attrs.url === tempUrl) {
+              posToDelete = pos;
+              return false;
+            }
+            return true;
+          });
+          if (posToDelete !== null) {
+            editor.chain().focus().deleteRange({ from: posToDelete, to: posToDelete + 1 }).run();
+          }
+        }
+      }
+    };
+    input.click();
+  }, [editor, on3DUpload]);
+
+  // GCode 업로드 핸들러
+  const handleGCodeUpload = useCallback(async () => {
+    if (!onGCodeUpload) return;
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.gcode,.nc,.ngc';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file && editor) {
+        const fileName = file.name;
+        const fileExt = fileName.split('.').pop()?.toLowerCase() || 'gcode';
+        const tempUrl = `temp_gcode_${Date.now()}`;
+
+        // 1. 먼저 로딩 상태로 노드 삽입
+        editor.chain().focus().setModel3D({
+          url: tempUrl,
+          filename: fileName,
+          filetype: fileExt,
+          isLoading: true,
+        }).run();
+
+        // 2. 실제 업로드 수행
+        const result = await onGCodeUpload(file);
+
+        if (result) {
+          // 3. 업로드 완료 - gcodeId도 함께 업데이트
+          const { state, view } = editor;
+          state.doc.descendants((node, pos) => {
+            if (node.type.name === 'model3d' && node.attrs.url === tempUrl) {
+              const tr = state.tr.setNodeMarkup(pos, undefined, {
+                ...node.attrs,
+                url: result.url,
+                gcodeId: result.id,
+                isLoading: false,
+              });
+              view.dispatch(tr);
+              return false;
+            }
+            return true;
+          });
+        } else {
+          // 업로드 실패 - 노드 제거
+          const { state } = editor;
+          let posToDelete: number | null = null;
+          state.doc.descendants((node, pos) => {
+            if (node.type.name === 'model3d' && node.attrs.url === tempUrl) {
+              posToDelete = pos;
+              return false;
+            }
+            return true;
+          });
+          if (posToDelete !== null) {
+            editor.chain().focus().deleteRange({ from: posToDelete, to: posToDelete + 1 }).run();
+          }
+        }
+      }
+    };
+    input.click();
+  }, [editor, onGCodeUpload]);
+
+  // 링크 추가 핸들러
+  const handleAddLink = useCallback(() => {
+    if (!editor || !linkUrl) return;
+
+    if (linkUrl === '') {
+      editor.chain().focus().unsetLink().run();
+    } else {
+      editor.chain().focus().setLink({ href: linkUrl }).run();
+    }
+    setLinkUrl('');
+    setShowLinkPopover(false);
+  }, [editor, linkUrl]);
+
+  // 첨부 이미지 삭제 (목록에서만)
+  const handleRemoveAttachedImage = useCallback((index: number) => {
+    if (!onAttachedImagesChange) return;
+
+    const imageToRemove = attachedImages[index];
+    const newImages = attachedImages.filter((_, i) => i !== index);
+    onAttachedImagesChange(newImages);
+
+    // 콘텐츠에서 해당 이미지 제거
+    if (editor && imageToRemove.isInContent) {
+      const { state } = editor;
+      const { doc } = state;
+      let posToDelete: number | null = null;
+
+      doc.descendants((node, pos) => {
+        if (node.type.name === 'resizableImage' && node.attrs.src === imageToRemove.url) {
+          posToDelete = pos;
+          return false;
+        }
+        return true;
+      });
+
+      if (posToDelete !== null) {
+        editor.chain().focus().deleteRange({ from: posToDelete, to: posToDelete + 1 }).run();
+      }
+    }
+  }, [editor, attachedImages, onAttachedImagesChange]);
+
+  // 첨부 이미지를 콘텐츠에 삽입
+  const insertImageToContent = useCallback((url: string) => {
+    if (!editor) return;
+    editor.chain().focus().setResizableImage({ src: url }).run();
+  }, [editor]);
+
+  if (!editor) {
+    return null;
+  }
+
+  return (
+    <div className="border rounded-lg overflow-hidden bg-background">
+      {/* 툴바 */}
+      <div className="border-b bg-muted/30">
+        {/* 상단 툴바 - 미디어 버튼 */}
+        <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleImageUpload()}
+            className="h-8 px-2 text-xs gap-1"
+            disabled={!onImageUpload || uploading}
+          >
+            {uploading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <ImageIcon className="w-4 h-4" />
+            )}
+            이미지
+          </Button>
+
+          <Popover open={showLinkPopover} onOpenChange={setShowLinkPopover}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "h-8 px-2 text-xs gap-1",
+                  editor.isActive('link') && "bg-muted"
+                )}
+              >
+                <LinkIcon className="w-4 h-4" />
+                링크
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80">
+              <div className="space-y-2">
+                <Input
+                  placeholder="URL을 입력하세요"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddLink();
+                    }
+                  }}
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleAddLink}>
+                    적용
+                  </Button>
+                  {editor.isActive('link') && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        editor.chain().focus().unsetLink().run();
+                        setShowLinkPopover(false);
+                      }}
+                    >
+                      링크 제거
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handle3DUpload}
+            className="h-8 px-2 text-xs gap-1"
+            disabled={!on3DUpload}
+          >
+            <Box className="w-4 h-4" />
+            3D
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleGCodeUpload}
+            className="h-8 px-2 text-xs gap-1"
+            disabled={!onGCodeUpload}
+          >
+            <FileCode className="w-4 h-4" />
+            GCode
+          </Button>
+        </div>
+
+        {/* 하단 툴바 - 서식 버튼 */}
+        <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5">
+          {/* 폰트 크기 */}
+          <Select
+            value="16px"
+            onValueChange={(value) => {
+              editor.chain().focus().setMark('textStyle', { fontSize: value }).run();
+            }}
+          >
+            <SelectTrigger className="w-16 h-8 text-xs">
+              <SelectValue placeholder="크기" />
+            </SelectTrigger>
+            <SelectContent>
+              {FONT_SIZES.map((size) => (
+                <SelectItem key={size.value} value={size.value}>
+                  {size.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Separator orientation="vertical" className="mx-1 h-6" />
+
+          {/* 텍스트 스타일 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().toggleBold().run()}
+            className={cn("h-8 w-8", editor.isActive('bold') && "bg-muted")}
+          >
+            <Bold className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+            className={cn("h-8 w-8", editor.isActive('italic') && "bg-muted")}
+          >
+            <Italic className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+            className={cn("h-8 w-8", editor.isActive('underline') && "bg-muted")}
+          >
+            <UnderlineIcon className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().toggleStrike().run()}
+            className={cn("h-8 w-8", editor.isActive('strike') && "bg-muted")}
+          >
+            <Strikethrough className="w-4 h-4" />
+          </Button>
+
+          <Separator orientation="vertical" className="mx-1 h-6" />
+
+          {/* 색상 */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Palette className="w-4 h-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-2">
+              <div className="grid grid-cols-5 gap-1">
+                {COLOR_PRESETS.map((color) => (
+                  <button
+                    key={color}
+                    className="w-6 h-6 rounded border hover:scale-110 transition-transform"
+                    style={{ backgroundColor: color }}
+                    onClick={() => editor.chain().focus().setColor(color).run()}
+                  />
+                ))}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full mt-2 text-xs"
+                onClick={() => editor.chain().focus().unsetColor().run()}
+              >
+                색상 초기화
+              </Button>
+            </PopoverContent>
+          </Popover>
+
+          {/* 하이라이트 */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("h-8 w-8", editor.isActive('highlight') && "bg-muted")}
+              >
+                <Highlighter className="w-4 h-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-2">
+              <div className="grid grid-cols-5 gap-1">
+                {HIGHLIGHT_PRESETS.map((color) => (
+                  <button
+                    key={color}
+                    className="w-6 h-6 rounded border hover:scale-110 transition-transform"
+                    style={{ backgroundColor: color }}
+                    onClick={() => editor.chain().focus().setHighlight({ color }).run()}
+                  />
+                ))}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full mt-2 text-xs"
+                onClick={() => editor.chain().focus().unsetHighlight().run()}
+              >
+                하이라이트 제거
+              </Button>
+            </PopoverContent>
+          </Popover>
+
+          <Separator orientation="vertical" className="mx-1 h-6" />
+
+          {/* 리스트 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+            className={cn("h-8 w-8", editor.isActive('bulletList') && "bg-muted")}
+          >
+            <List className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            className={cn("h-8 w-8", editor.isActive('orderedList') && "bg-muted")}
+          >
+            <ListOrdered className="w-4 h-4" />
+          </Button>
+
+          <Separator orientation="vertical" className="mx-1 h-6" />
+
+          {/* 정렬 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().setTextAlign('left').run()}
+            className={cn("h-8 w-8", editor.isActive({ textAlign: 'left' }) && "bg-muted")}
+          >
+            <AlignLeft className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().setTextAlign('center').run()}
+            className={cn("h-8 w-8", editor.isActive({ textAlign: 'center' }) && "bg-muted")}
+          >
+            <AlignCenter className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().setTextAlign('right').run()}
+            className={cn("h-8 w-8", editor.isActive({ textAlign: 'right' }) && "bg-muted")}
+          >
+            <AlignRight className="w-4 h-4" />
+          </Button>
+
+          <Separator orientation="vertical" className="mx-1 h-6" />
+
+          {/* 인용, 코드 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+            className={cn("h-8 w-8", editor.isActive('blockquote') && "bg-muted")}
+          >
+            <Quote className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+            className={cn("h-8 w-8", editor.isActive('codeBlock') && "bg-muted")}
+          >
+            <Code className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().setHorizontalRule().run()}
+            className="h-8 w-8"
+          >
+            <Minus className="w-4 h-4" />
+          </Button>
+
+          <Separator orientation="vertical" className="mx-1 h-6" />
+
+          {/* Undo/Redo */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().undo().run()}
+            disabled={!editor.can().undo()}
+            className="h-8 w-8"
+          >
+            <Undo className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => editor.chain().focus().redo().run()}
+            disabled={!editor.can().redo()}
+            className="h-8 w-8"
+          >
+            <Redo className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* 에디터 영역 */}
+      <EditorContent editor={editor} className="overflow-auto" />
+
+      {/* 첨부 영역 */}
+      {showAttachmentSection && onAttachedImagesChange && (
+        <div className="border-t bg-muted/20 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium">첨부</span>
+            <span className="text-xs text-muted-foreground">
+              최대 {maxImages}장, 각 5MB 이하
+            </span>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            {/* 첨부된 이미지들 */}
+            {attachedImages.map((image, index) => (
+              <div
+                key={index}
+                className={cn(
+                  "relative group w-20 h-20 rounded-lg overflow-hidden border-2",
+                  image.isInContent
+                    ? "border-primary/50 bg-primary/5"
+                    : "border-dashed border-muted-foreground/30"
+                )}
+              >
+                <img
+                  src={image.url}
+                  alt=""
+                  className="w-full h-full object-cover cursor-pointer"
+                  onClick={() => !image.isInContent && insertImageToContent(image.url)}
+                  title={image.isInContent ? "본문에 삽입됨" : "클릭하여 본문에 삽입"}
+                />
+
+                {/* 삭제 버튼 */}
+                <button
+                  onClick={() => handleRemoveAttachedImage(index)}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                  title="삭제"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+
+                {/* 상태 표시 */}
+                {image.isInContent && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-primary/80 text-white text-[10px] text-center py-0.5">
+                    삽입됨
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* 추가 버튼 */}
+            {attachedImages.length < maxImages && (
+              <button
+                onClick={() => handleImageUpload()}
+                disabled={uploading}
+                className={cn(
+                  "w-20 h-20 border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-1",
+                  "text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-colors"
+                )}
+              >
+                {uploading ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                ) : (
+                  <>
+                    <ImagePlus className="w-6 h-6" />
+                    <span className="text-xs">추가</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default RichTextEditor;

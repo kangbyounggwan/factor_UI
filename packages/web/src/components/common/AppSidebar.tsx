@@ -38,6 +38,11 @@ import {
   Wrench,
   Brain,
   BarChart3,
+  Users,
+  TrendingUp,
+  HelpCircle,
+  Lightbulb,
+  Star,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link, useLocation } from "react-router-dom";
@@ -113,7 +118,7 @@ interface AppSidebarProps {
   userPlan?: SubscriptionPlan;
   onLoginClick?: () => void;
   onSignOut?: () => void;
-  mode?: 'chat' | 'dashboard' | 'settings' | 'create' | 'printer-detail' | 'archive' | 'admin'; // 사이드바 모드
+  mode?: 'chat' | 'dashboard' | 'settings' | 'create' | 'printer-detail' | 'archive' | 'admin' | 'community'; // 사이드바 모드
   // Settings 모드용 props
   activeSettingsTab?: SettingsTab;
   onSettingsTabChange?: (tab: SettingsTab) => void;
@@ -793,6 +798,92 @@ export function AppSidebar({
                 >
                   <Printer className="h-4 w-4 shrink-0" />
                   <span>{t('admin.printers', '프린터')}</span>
+                </Link>
+              </nav>
+            </>
+          ) : mode === 'community' ? (
+            /* Community 모드 - 커뮤니티 카테고리 메뉴 */
+            <>
+              <p className="text-sm font-semibold text-foreground px-2 py-2">
+                {t('community.title', '커뮤니티')}
+              </p>
+              <nav className="space-y-1">
+                <Link
+                  to="/community"
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    location.pathname === '/community' && !location.search
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <LayoutGrid className="h-4 w-4 shrink-0" />
+                  <span>{t('community.category.all', '전체')}</span>
+                </Link>
+
+                <Link
+                  to="/community?category=showcase"
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    location.search.includes('category=showcase')
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <Star className="h-4 w-4 shrink-0" />
+                  <span>{t('community.category.showcase', '자랑')}</span>
+                </Link>
+
+                <Link
+                  to="/community?category=question"
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    location.search.includes('category=question')
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <HelpCircle className="h-4 w-4 shrink-0" />
+                  <span>{t('community.category.question', '질문')}</span>
+                </Link>
+
+                <Link
+                  to="/community?category=tip"
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    location.search.includes('category=tip')
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <Lightbulb className="h-4 w-4 shrink-0" />
+                  <span>{t('community.category.tip', '팁')}</span>
+                </Link>
+
+                <Link
+                  to="/community?category=review"
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    location.search.includes('category=review')
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <TrendingUp className="h-4 w-4 shrink-0" />
+                  <span>{t('community.category.review', '리뷰')}</span>
+                </Link>
+
+                <Link
+                  to="/community?category=free"
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    location.search.includes('category=free')
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <MessageSquare className="h-4 w-4 shrink-0" />
+                  <span>{t('community.category.free', '자유')}</span>
                 </Link>
               </nav>
             </>

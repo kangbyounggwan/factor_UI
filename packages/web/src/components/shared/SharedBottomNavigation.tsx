@@ -4,7 +4,7 @@
  */
 
 import { Link, useLocation } from "react-router-dom";
-import { Home, MessageCircle, Settings, User } from "lucide-react";
+import { Home, MessageCircle, Users, User } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
@@ -24,9 +24,9 @@ export function SharedBottomNavigation() {
       label: t("nav.aiChat", "AI 도구"),
     },
     {
-      path: "/settings",
-      icon: Settings,
-      label: t("nav.settings", "설정"),
+      path: "/community",
+      icon: Users,
+      label: t("nav.community", "커뮤니티"),
     },
     {
       path: "/user-settings",

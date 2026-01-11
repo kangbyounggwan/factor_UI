@@ -20,6 +20,9 @@ export type {
 export { default as GCodeAnalyticsArchive } from './GCodeAnalyticsArchive';
 export type { GCodeAnalyticsArchiveProps } from './GCodeAnalyticsArchive';
 
+// Viewer Report Modal (커뮤니티, 보고서 아카이브에서 공통 사용)
+export { GCodeViewerReportModal } from './GCodeViewerReportModal';
+
 // Printable Report
 export * from './GCodeReportPrintable';
 

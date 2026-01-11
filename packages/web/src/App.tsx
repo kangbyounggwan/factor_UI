@@ -53,6 +53,10 @@ const GCodeAPITest = lazy(() => import("./pages/GCodeAPITest"));
 const GCodeAnalytics = lazy(() => import("./pages/GCodeAnalytics"));
 const SharedReport = lazy(() => import("@/components/ai/GCodeAnalytics/SharedReportPage"));
 const SharedChat = lazy(() => import("./pages/SharedChat"));
+const Community = lazy(() => import("./pages/Community"));
+const CommunityPost = lazy(() => import("./pages/CommunityPost"));
+const CreatePost = lazy(() => import("./pages/CreatePost"));
+const EditPost = lazy(() => import("./pages/EditPost"));
 
 const queryClient = new QueryClient();
 
@@ -80,7 +84,8 @@ const AppContent = () => {
     '/admin',
     '/gcode-analytics',
     '/shared',
-    '/share'
+    '/share',
+    '/community'
   ];
 
   // 현재 경로가 Header를 숨겨야 하는 경로인지 확인
@@ -98,7 +103,8 @@ const AppContent = () => {
     '/auth',
     '/gcode-analytics',
     '/shared',
-    '/share'
+    '/share',
+    '/community'
   ];
 
   // 현재 경로가 Footer를 숨겨야 하는 경로인지 확인
@@ -201,8 +207,26 @@ const AppContent = () => {
                 <GCodeAnalytics />
               </ProtectedRoute>
             } />
+            <Route path="/ai/gcode/:reportId" element={
+              <ProtectedRoute>
+                <GCodeAnalytics />
+              </ProtectedRoute>
+            } />
             <Route path="/shared/report/:shareId" element={<SharedReport />} />
             <Route path="/share/:shareId" element={<SharedChat />} />
+            {/* 커뮤니티 */}
+            <Route path="/community" element={<Community />} />
+            <Route path="/community/write" element={
+              <ProtectedRoute>
+                <CreatePost />
+              </ProtectedRoute>
+            } />
+            <Route path="/community/:postId" element={<CommunityPost />} />
+            <Route path="/community/:postId/edit" element={
+              <ProtectedRoute>
+                <EditPost />
+              </ProtectedRoute>
+            } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

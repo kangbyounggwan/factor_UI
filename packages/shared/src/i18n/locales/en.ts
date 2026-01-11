@@ -33,7 +33,8 @@ export default {
     logout: "Logout",
     hide: "Hide",
     show: "Show",
-    retry: "Retry"
+    retry: "Retry",
+    expand: "Expand"
   },
   nav: {
     home: "Home",
@@ -70,7 +71,8 @@ export default {
     themeLight: "Light",
     themeDark: "Dark",
     themeSystem: "System",
-    language: "Language"
+    language: "Language",
+    community: "Community"
   },
   auth: {
     login: "Login",
@@ -2046,6 +2048,11 @@ export default {
     deletePhoto: "Delete",
     name: "Name",
     namePlaceholder: "Enter your name",
+    fullName: "Full Name",
+    fullNamePlaceholder: "Enter your full name",
+    displayName: "Display Name",
+    displayNamePlaceholder: "Nickname shown in community",
+    displayNameHint: "This name will be publicly displayed in the community",
     email: "Email",
     verified: "Verified",
     emailChangeNotice: "Contact customer support to change email",
@@ -2505,6 +2512,7 @@ export default {
     // AI Chat Page
     greeting: "Show us exactly what's happening right now",
     askAnything: "Having print issues? Something seems off?",
+    askAnythingDesktop: "Having print issues? Something seems off?",
     newChat: "New Chat",
     recentChats: "Recent Chats",
     reportArchive: "Report Archive",
@@ -2713,5 +2721,94 @@ export default {
     coupang: "Coupang",
     amazon: "Amazon",
     ebay: "eBay"
+  },
+  // Time display
+  time: {
+    justNow: "Just now",
+    minutesAgo: "{{count}} minutes ago",
+    hoursAgo: "{{count}} hours ago",
+    daysAgo: "{{count}} days ago",
+    weeksAgo: "{{count}} weeks ago",
+    monthsAgo: "{{count}} months ago",
+    yearsAgo: "{{count}} years ago"
+  },
+  // Community
+  community: {
+    title: "Community",
+    category: {
+      all: "All",
+      showcase: "Showcase",
+      question: "Question",
+      troubleshooting: "Troubleshooting",
+      tip: "Tips",
+      review: "Review",
+      free: "General"
+    },
+    unsolved: "Unsolved",
+    solved: "Solved",
+    views: "Views",
+    likes: "Likes",
+    comments: "Comments",
+    write: "Write",
+    writePost: "Write Post",
+    noPostsYet: "No posts yet",
+    beFirstToPost: "Be the first to write a post!",
+    loadMore: "Load More",
+    searchPlaceholder: "Search...",
+    popularTags: "Popular Tags",
+    popularPosts: "Popular Posts",
+    trending: "Trending Posts",
+    recent: "Recent Posts",
+    backToList: "Back to list",
+    stats: "Community Stats",
+    totalPosts: "Total Posts",
+    totalComments: "Total Comments",
+    activeUsers: "Active Users",
+    totalLikes: "Total Likes",
+    todayPosts: "{{count}} new posts today",
+    sort: {
+      latest: "Latest",
+      popular: "Popular",
+      views: "Most Viewed"
+    },
+    submit: "Submit",
+    saveChanges: "Save",
+    postUpdated: "Post updated successfully",
+    postNotFound: "Post not found",
+    unauthorized: "You don't have permission to edit this post",
+    loginRequired: "Login Required",
+    loginRequiredDesc: "Please login to write a post.",
+    error: {
+      updateFailed: "Failed to update post"
+    },
+    form: {
+      category: "Category",
+      title: "Title",
+      titlePlaceholder: "Enter title",
+      author: "Author",
+      authorNickname: "Nickname",
+      authorRealname: "Real name",
+      authorAnonymous: "Anonymous",
+      content: "Content",
+      contentPlaceholder: "Enter content",
+      tags: "Tags",
+      tagPlaceholder: "Enter tag and press Enter",
+      images: "Attachments",
+      attachments: "Attachments",
+      model: "3D Model",
+      selectModel: "Select Model",
+      noModels: "No models",
+      untitledModel: "Untitled",
+      modelHint: "Attach your AI-generated 3D model",
+      submit: "Submit"
+    },
+    commentPlaceholder: "Write a comment...",
+    noComments: "Be the first to comment!",
+    author: "Author",
+    memberSince: "Member",
+    postInfo: "Post Info",
+    commentsCount: "Comments",
+    deleteCommentTitle: "Delete Comment",
+    deleteCommentDesc: "Are you sure you want to delete this comment?"
   }
 };

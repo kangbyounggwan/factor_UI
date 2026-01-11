@@ -1166,6 +1166,8 @@ interface GCodeAnalysisReportProps {
   // 패널 탭 관련 (embedded 모드에서 사용)
   activeTab?: ReportPanelTab;
   onTabChange?: (tab: ReportPanelTab) => void;
+  // 숨길 탭 목록 (예: ['editor'] - 에디터 탭 숨김)
+  hiddenTabs?: ReportPanelTab[];
   // AI 해결 콜백 (채팅 메시지로 추가)
   onAIResolveStart?: (info: AIResolveStartInfo) => void;  // 시작 시 (사용자 질문 + 로딩)
   onAIResolveComplete?: (info: AIResolveCompleteInfo) => void;  // 완료 시 (AI 응답)
@@ -1200,6 +1202,8 @@ interface GCodeAnalysisReportProps {
   // 공유 관련 (외부 제어용)
   onShare?: () => void;  // 외부에서 공유 핸들러 제공 시 사용
   showShareButton?: boolean;  // 공유 버튼 표시 여부 (기본: true)
+  // 온도 차트 숨김 (커뮤니티 임베드용)
+  hideTemperatureChart?: boolean;
 }
 
 import { updateGCodeFileContent } from '@/lib/gcodeAnalysisDbService';
@@ -1232,6 +1236,8 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   onViewCodeFix,
   onShare: externalOnShare,
   showShareButton = true,
+  hiddenTabs = [],
+  hideTemperatureChart: externalHideTemperatureChart = false,
 }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -1268,7 +1274,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
   const [showTravelPath, setShowTravelPath] = useState(true);
   const [showWipePath, setShowWipePath] = useState(true);
   const [showSupports, setShowSupports] = useState(true);
-  const [showTemperatureChart, setShowTemperatureChart] = useState(true); // 온도 차트 표시
+  const [showTemperatureChart, setShowTemperatureChart] = useState(!externalHideTemperatureChart); // 온도 차트 표시
   const [segmentLoadAttempted, setSegmentLoadAttempted] = useState(false); // 로드 시도 여부
 
   // 에디터 G-code 상태 (data.gcodeContent 또는 externalEditorContent가 우선)
@@ -1693,7 +1699,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
               { key: 'report' as ReportPanelTab, label: t('gcodeAnalytics.tabReport', '보고서') },
               { key: 'viewer' as ReportPanelTab, label: t('gcodeAnalytics.tabViewer', '뷰어') },
               { key: 'editor' as ReportPanelTab, label: t('gcodeAnalytics.tabEditor', '에디터') },
-            ].map((tab) => (
+            ].filter(tab => !hiddenTabs.includes(tab.key)).map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => handlePanelTabChange(tab.key)}
@@ -1744,15 +1750,17 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                 </Button>
               )
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handlePrint}
-              className="h-8 px-3 rounded-full text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
-              title={t('gcodeAnalytics.printPdf')}
-            >
-              <Printer className="h-4 w-4" />
-            </Button>
+            {!embedded && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handlePrint}
+                className="h-8 px-3 rounded-full text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+                title={t('gcodeAnalytics.printPdf')}
+              >
+                <Printer className="h-4 w-4" />
+              </Button>
+            )}
             {onClose && (
               <Button
                 variant="ghost"
@@ -1790,7 +1798,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
       {currentPanelTab === 'viewer' && (
         <div className={cn(
           "flex flex-col",
-          embedded ? "min-h-[500px]" : "min-h-[800px]",
+          embedded ? "h-full" : "min-h-[800px]",
           isDarkMode ? "bg-slate-900" : "bg-slate-100"
         )}>
           {/* 로딩 상태 */}
@@ -1845,8 +1853,8 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
             <>
               {/* 3D Canvas */}
               <div className={cn(
-                "relative",
-                embedded ? "h-[500px]" : "h-[70vh] min-h-[600px]"
+                "relative flex-1",
+                embedded ? "min-h-[350px]" : "h-[70vh] min-h-[600px]"
               )}>
                 <Canvas
                   camera={{
@@ -2371,13 +2379,14 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
               {activeTab === 'info' && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   {/* 주요 메트릭 카드 */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className={cn("grid grid-cols-2 lg:grid-cols-4", embedded ? "gap-2" : "gap-4")}>
                     {/* 출력 시간 */}
                     <MetricCard
                       icon={<Clock className="h-5 w-5" />}
                       label={t('gcodeAnalytics.printTime')}
                       value={metrics.printTime.value}
                       color="blue"
+                      compact={embedded}
                     />
 
                     {/* 필라멘트 사용량 */}
@@ -2387,6 +2396,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                       value={metrics.filamentUsage.length}
                       subValue={metrics.filamentUsage.weight}
                       color="green"
+                      compact={embedded}
                     />
 
                     {/* 레이어 수 */}
@@ -2396,6 +2406,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                       value={metrics.layerCount.value.toLocaleString()}
                       subValue={metrics.layerCount.layerHeight ? `${metrics.layerCount.layerHeight}mm` : undefined}
                       color="purple"
+                      compact={embedded}
                     />
 
                     {/* 리트렉션 횟수 */}
@@ -2404,6 +2415,7 @@ export const GCodeAnalysisReport: React.FC<GCodeAnalysisReportProps> = ({
                       label={t('gcodeAnalytics.retraction')}
                       value={`${metrics.retractionCount.value.toLocaleString()} ${t('gcodeAnalytics.retractionCount', '회')}`}
                       color="orange"
+                      compact={embedded}
                     />
                   </div>
 
@@ -2777,9 +2789,10 @@ interface MetricCardProps {
   value: string | number;
   subValue?: string;
   color: 'blue' | 'green' | 'purple' | 'orange';
+  compact?: boolean;
 }
 
-function MetricCard({ icon, label, value, subValue, color }: MetricCardProps) {
+function MetricCard({ icon, label, value, subValue, color, compact }: MetricCardProps) {
   const colorStyles = {
     blue: 'from-blue-50 to-white dark:from-blue-900/10 dark:to-slate-800 border-blue-100 dark:border-blue-500/20 text-blue-600 dark:text-blue-400',
     green: 'from-emerald-50 to-white dark:from-emerald-900/10 dark:to-slate-800 border-emerald-100 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400',
@@ -2796,21 +2809,35 @@ function MetricCard({ icon, label, value, subValue, color }: MetricCardProps) {
 
   return (
     <div className={cn(
-      "group relative overflow-hidden rounded-2xl p-5 border shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-1 bg-gradient-to-br",
+      "group relative overflow-hidden rounded-2xl border shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-1 bg-gradient-to-br",
+      compact ? "p-3" : "p-5",
       colorStyles[color]
     )}>
       {/* 라벨 + 아이콘 (한 줄에 정렬) */}
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <span className="text-xs font-heading font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">{label}</span>
-        <div className={cn("flex-shrink-0 p-2 rounded-xl transition-transform group-hover:scale-110", iconBgStyles[color])}>
-          {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement, { className: "h-4 w-4" }) : icon}
+      <div className={cn("flex items-center justify-between gap-2", compact ? "mb-2" : "mb-3")}>
+        <span className={cn(
+          "font-heading font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate",
+          compact ? "text-[10px]" : "text-xs"
+        )}>{label}</span>
+        <div className={cn(
+          "flex-shrink-0 rounded-xl transition-transform group-hover:scale-110",
+          compact ? "p-1.5" : "p-2",
+          iconBgStyles[color]
+        )}>
+          {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement, { className: compact ? "h-3 w-3" : "h-4 w-4" }) : icon}
         </div>
       </div>
       {/* 값 영역 */}
       <div className="space-y-1">
-        <div className="text-3xl font-score font-bold text-slate-900 dark:text-white tracking-tight leading-none">{value}</div>
+        <div className={cn(
+          "font-score font-bold text-slate-900 dark:text-white tracking-tight leading-none",
+          compact ? "text-xl" : "text-3xl"
+        )}>{value}</div>
         {subValue && (
-          <div className="text-sm font-medium text-slate-500 dark:text-slate-400">{subValue}</div>
+          <div className={cn(
+            "font-medium text-slate-500 dark:text-slate-400",
+            compact ? "text-xs" : "text-sm"
+          )}>{subValue}</div>
         )}
       </div>
     </div>

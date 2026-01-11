@@ -23,6 +23,8 @@ import { User, Camera, Check, RefreshCw } from "lucide-react";
 import type { ProfileTabProps } from "./types";
 
 export const ProfileTab = ({
+  fullName,
+  setFullName,
   displayName,
   setDisplayName,
   email,
@@ -101,15 +103,15 @@ export const ProfileTab = ({
           {/* Form */}
           <div className="grid gap-6 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="displayName">{t("userSettings.name")}</Label>
+              <Label htmlFor="fullName">{t("userSettings.fullName", "이름")}</Label>
               <Input
-                id="displayName"
-                value={displayName}
+                id="fullName"
+                value={fullName}
                 onChange={(e) => {
-                  setDisplayName(e.target.value);
+                  setFullName(e.target.value);
                   setIsEditingProfile(true);
                 }}
-                placeholder={t("userSettings.namePlaceholder")}
+                placeholder={t("userSettings.fullNamePlaceholder", "실명을 입력하세요")}
               />
             </div>
 
@@ -133,7 +135,23 @@ export const ProfileTab = ({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="phone">{t("userSettings.phone", "Phone")}</Label>
+              <Label htmlFor="displayName">{t("userSettings.displayName", "닉네임")}</Label>
+              <Input
+                id="displayName"
+                value={displayName}
+                onChange={(e) => {
+                  setDisplayName(e.target.value);
+                  setIsEditingProfile(true);
+                }}
+                placeholder={t("userSettings.displayNamePlaceholder", "커뮤니티에서 표시될 닉네임")}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("userSettings.displayNameHint", "커뮤니티에서 공개적으로 표시되는 이름입니다")}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">{t("userSettings.phone", "휴대폰 번호")}</Label>
               <Input
                 id="phone"
                 type="tel"
@@ -142,7 +160,7 @@ export const ProfileTab = ({
                   setPhone(e.target.value);
                   setIsEditingProfile(true);
                 }}
-                placeholder="010-0000-0000"
+                placeholder="01028811471"
               />
             </div>
           </div>
@@ -167,6 +185,7 @@ export const ProfileTab = ({
                     <AlertDialogCancel>{t("common.cancel", "Cancel")}</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={() => {
+                        setFullName(originalProfile.fullName);
                         setDisplayName(originalProfile.displayName);
                         setPhone(originalProfile.phone);
                         setIsEditingProfile(false);

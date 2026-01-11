@@ -83,15 +83,21 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   const aiFailedUnsubRef = useRef<null | (() => Promise<void>)>(null);
   const lastRoleLoadedUserIdRef = useRef<string | null>(null);
 
-  // 개발 환경에서만 렌더링 로그
+  // 개발 환경에서만 렌더링 로그 (상태 변경 시에만)
+  const prevStateRef = useRef<string>('');
   if (import.meta.env.DEV) {
-    console.log('[AuthProvider] Rendering:', {
-      variant,
-      loading,
-      user: !!user,
-      session: !!session,
-      timestamp: new Date().toISOString()
-    });
+    const currentState = `${loading}-${!!user}-${!!session}-${userRole}-${profileCheckComplete}`;
+    if (prevStateRef.current !== currentState) {
+      console.log('[AuthProvider] State changed:', {
+        variant,
+        loading,
+        user: !!user,
+        session: !!session,
+        userRole,
+        profileCheckComplete,
+      });
+      prevStateRef.current = currentState;
+    }
   }
 
 
@@ -316,7 +322,15 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     });
 
     // 초기 세션 체크 (onAuthStateChange가 INITIAL_SESSION을 보내지 않는 경우 대비)
+    // 약간의 지연을 두어 onAuthStateChange가 먼저 처리될 기회를 줌
     const initSession = async () => {
+      // onAuthStateChange의 INITIAL_SESSION이 이미 처리되었으면 스킵
+      if (currentUserIdRef.current) {
+        console.log('[Auth] Session already set by onAuthStateChange, skipping initSession');
+        if (isMounted) setLoading(false);
+        return;
+      }
+
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
 
@@ -337,8 +351,9 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
           }
         }
 
+        // 다시 한번 체크: onAuthStateChange가 그 사이에 처리했을 수 있음
         if (isMounted && session?.user && !currentUserIdRef.current) {
-          console.log('[Auth] Initial session found:', session.user.id);
+          console.log('[Auth] Initial session found (fallback):', session.user.id);
           setSession(session);
           setUser(session.user);
           currentUserIdRef.current = session.user.id;
@@ -350,7 +365,8 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
       }
     };
 
-    initSession();
+    // 약간의 지연을 두어 onAuthStateChange의 INITIAL_SESSION이 먼저 처리되도록 함
+    setTimeout(initSession, 50);
 
     return () => {
       isMounted = false;
@@ -498,6 +514,12 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     };
 
     const loadUserData = async () => {
+      // 이미 같은 유저의 Role이 로드되어 있으면 스킵 (중복 방지)
+      if (lastRoleLoadedUserIdRef.current === user.id) {
+        console.log('[Auth] User data already loaded, skipping:', user.id);
+        return;
+      }
+
       setProfileCheckComplete(false);
 
       try {
@@ -513,23 +535,28 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
         if (cancelled) return;
 
+        // 상태 업데이트를 한 번에 처리 (배치)
         if (error) {
           console.error('[Auth] Error loading profile:', error);
+          // React 18에서는 자동 배치되지만, 명시적으로 함께 호출
           setNeedsProfileSetup(false);
           setUserRole('user');
+          setProfileCheckComplete(true);
         } else {
-          setNeedsProfileSetup(!profile?.display_name || !profile?.phone);
-          setUserRole(profile?.role || 'user');
+          const needsSetup = !profile?.display_name || !profile?.phone;
+          const role = profile?.role || 'user';
           lastRoleLoadedUserIdRef.current = user.id;
+
+          // 상태를 한 번에 업데이트
+          setNeedsProfileSetup(needsSetup);
+          setUserRole(role);
+          setProfileCheckComplete(true);
         }
       } catch (err) {
         console.error('[Auth] Error loading user data:', err);
         if (!cancelled) {
           setNeedsProfileSetup(false);
           setUserRole('user');
-        }
-      } finally {
-        if (!cancelled) {
           setProfileCheckComplete(true);
         }
       }

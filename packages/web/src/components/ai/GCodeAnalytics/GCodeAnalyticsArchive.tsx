@@ -73,6 +73,8 @@ export interface GCodeAnalyticsArchiveProps {
   onReportDeleted?: () => void;
   /** 닫기 애니메이션 진행 중 여부 */
   isClosing?: boolean;
+  /** 보고서 불러오기 콜백 - reportId를 전달하면 외부에서 처리 */
+  onLoadReport?: (reportId: string, fileName?: string) => void;
 }
 
 export default function GCodeAnalyticsArchive({
@@ -80,6 +82,7 @@ export default function GCodeAnalyticsArchive({
   onClose,
   onReportDeleted,
   isClosing = false,
+  onLoadReport,
 }: GCodeAnalyticsArchiveProps) {
   const { t, i18n } = useTranslation();
   const { toast } = useToast();
@@ -148,8 +151,15 @@ export default function GCodeAnalyticsArchive({
     loadReports();
   }, [loadReports]);
 
-  // 상세 보기
+  // 상세 보기 - onLoadReport가 있으면 외부로 위임, 없으면 인라인 표시
   const handleViewReport = async (reportId: string, fileName?: string) => {
+    // 외부 콜백이 있으면 외부에서 처리 (더보기 → 보고서 불러오기)
+    if (onLoadReport) {
+      onLoadReport(reportId, fileName);
+      return;
+    }
+
+    // 외부 콜백이 없으면 기존처럼 인라인으로 표시
     setIsLoadingDetail(true);
     setSelectedReportName(fileName || t('gcodeAnalytics.reportTitle'));
 

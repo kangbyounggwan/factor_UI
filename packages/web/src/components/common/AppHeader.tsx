@@ -12,7 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sun, Moon, Globe, MessageSquare, Printer, Sparkles, Rocket, Crown, Building2, Shield, Activity } from "lucide-react";
+import { Sun, Moon, Globe, MessageSquare, Printer, Sparkles, Rocket, Crown, Building2, Shield, Activity, Users } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
@@ -72,7 +72,7 @@ interface AppHeaderProps {
   onLoginRequired?: () => void; // 로그인이 필요할 때 호출되는 콜백
 }
 
-export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, showTabSwitch = true, onLoginRequired }: AppHeaderProps) => {
+export const AppHeader = ({ leftContent, rightContent, showTabSwitch = true, onLoginRequired }: AppHeaderProps) => {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
   const location = useLocation();
@@ -96,13 +96,13 @@ export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, show
   // 현재 활성 탭
   const isAITools = location.pathname.includes('/ai-chat') || location.pathname.includes('/create');
   const isPrinter = location.pathname.includes('/dashboard') || location.pathname.includes('/printer');
+  const isCommunity = location.pathname.includes('/community');
   const isAdminPage = location.pathname.includes('/admin');
 
   return (
     <header
       className={cn(
-        "sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-all duration-300",
-        !isMobile && sidebarOpen ? "ml-52" : "ml-0"
+        "sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
       )}
     >
       <div className="relative flex h-14 sm:h-16 items-center justify-center px-4">
@@ -159,6 +159,20 @@ export const AppHeader = ({ sidebarOpen = false, leftContent, rightContent, show
               >
                 <Printer className="w-4 h-4 mr-2" />
                 {t('nav.printers', '프린터')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/community')}
+                className={cn(
+                  "rounded-full px-5 h-9 text-sm font-medium transition-colors",
+                  isCommunity
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Users className="w-4 h-4 mr-2" />
+                {t('nav.community', '커뮤니티')}
               </Button>
               {/* 관리자 탭 - 관리자만 표시 */}
               {isAdmin && (

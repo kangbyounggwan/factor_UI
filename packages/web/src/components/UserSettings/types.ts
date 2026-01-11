@@ -10,6 +10,8 @@ import type { ApiKey } from "@shared/services/supabaseService/apiKeys";
 // Profile Tab Props
 export interface ProfileTabProps {
   user: User | null;
+  fullName: string;
+  setFullName: (name: string) => void;
   displayName: string;
   setDisplayName: (name: string) => void;
   email: string;
@@ -21,7 +23,7 @@ export interface ProfileTabProps {
   setIsEditingProfile: (editing: boolean) => void;
   uploadingAvatar: boolean;
   setUploadingAvatar: (uploading: boolean) => void;
-  originalProfile: { displayName: string; phone: string };
+  originalProfile: { fullName: string; displayName: string; phone: string };
   onSaveProfile: () => Promise<void>;
   onAvatarUpload: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
 }

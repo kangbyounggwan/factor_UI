@@ -55,6 +55,86 @@ export interface GCodeAnalysisResponse {
 
 const API_BASE_URL = import.meta.env.VITE_AI_PYTHON_URL || 'http://localhost:7000';
 
+// ============================================================================
+// 커뮤니티용 세그먼트 생성 API
+// 엔드포인트: POST /api/v1/gcode/segments
+// ============================================================================
+
+/**
+ * 커뮤니티용 세그먼트 생성 요청 타입
+ * - gcode_content: G-code 파일 내용 (문자열)
+ * - 다른 분석 API와 동일한 형식 사용
+ */
+export interface CreateSegmentsRequest {
+  gcode_content: string;      // G-code 파일 내용 (문자열)
+  filename?: string;          // 파일명 (옵션)
+  binary_format?: boolean;    // Base64 인코딩 여부 (기본: true)
+  language?: 'ko' | 'en';     // 언어 (기본: 'ko')
+}
+
+/**
+ * 커뮤니티용 세그먼트 생성 응답 타입
+ */
+export interface CreateSegmentsResponse {
+  success: boolean;
+  segments: {
+    layers: LayerSegmentData[];
+    metadata: {
+      boundingBox: {
+        minX: number;
+        maxX: number;
+        minY: number;
+        maxY: number;
+        minZ: number;
+        maxZ: number;
+      };
+      layerCount: number;
+      totalFilament: number;
+      printTime: number;
+      layerHeight: number;
+      firstLayerHeight: number;
+      estimatedTime: string;
+      filamentType: string | null;
+      slicer: string;
+      slicerVersion: string | null;
+    };
+    temperatures: TemperatureData[];
+  };
+  layer_count: number;
+  processing_time_ms?: number;
+  message?: string;
+  error?: string;
+}
+
+/**
+ * 커뮤니티 G-code 세그먼트 생성 API 호출
+ * - gcode_content를 전달하면 백엔드에서 세그먼트 생성
+ * - analyzeGCodeWithSegments와 동일한 요청 형식 사용
+ */
+export async function createCommunitySegments(
+  request: CreateSegmentsRequest
+): Promise<CreateSegmentsResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/gcode/segments`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      gcode_content: request.gcode_content,
+      file_name: request.filename,
+      binary_format: request.binary_format ?? true,
+      language: request.language ?? 'ko',
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || `API 호출 실패: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
 /**
  * G-code 분석 API 호출 (Float32Array 형식)
  */

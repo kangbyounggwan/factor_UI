@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, Info, CheckCircle2, X, FileCode, Trash2, Edit3, Check, XCircle, Undo2, Wrench, Link2, Link2Off, Zap, ShieldAlert, ChevronRight, Clock, Layers, ThumbsUp, ThumbsDown, Plus } from 'lucide-react';
+import { AlertTriangle, Info, CheckCircle2, X, FileCode, Trash2, Edit3, Check, XCircle, Undo2, Wrench, Link2, Link2Off, Zap, ShieldAlert, ChevronRight, Clock, Layers, ThumbsUp, ThumbsDown, Plus, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DetailedIssue, PatchSuggestion } from '@/components/ai/GCodeAnalytics';
 import type { IssueEditItem, PatchFeedback } from '@shared/types/gcodeAnalysisDbTypes';
@@ -14,8 +14,8 @@ interface GCodeViewerModalProps {
     onClose: () => void;
     fileName: string;
     gcodeContent: string;
-    issues: DetailedIssue[];
-    patches: PatchSuggestion[];
+    issues?: DetailedIssue[];  // 선택적 - 커뮤니티 뷰어에서는 없을 수 있음
+    patches?: PatchSuggestion[];  // 선택적 - 커뮤니티 뷰어에서는 없을 수 있음
     reportId?: string;
     onSave?: (newContent: string) => Promise<void>;
     initialIssueIndex?: number;
@@ -34,6 +34,8 @@ interface GCodeViewerModalProps {
             value: number;
         };
     };
+    // URL 기반 로드 (커뮤니티용)
+    gcodeUrl?: string;
 }
 
 // G-code 구문 하이라이팅
@@ -89,15 +91,40 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
     onClose,
     fileName,
     gcodeContent,
-    issues,
-    patches,
+    issues = [],  // 기본값 빈 배열
+    patches = [],  // 기본값 빈 배열
     reportId,
     onSave,
     initialIssueIndex,
     initialLine,
-    metrics
+    metrics,
+    gcodeUrl
 }) => {
     const { user } = useAuth();
+
+    // URL에서 G-code 로드 (커뮤니티용)
+    const [loadedContent, setLoadedContent] = useState<string>('');
+    const [isLoadingUrl, setIsLoadingUrl] = useState(false);
+
+    useEffect(() => {
+        if (isOpen && gcodeUrl && !gcodeContent) {
+            setIsLoadingUrl(true);
+            fetch(gcodeUrl)
+                .then(res => res.text())
+                .then(text => {
+                    setLoadedContent(text);
+                })
+                .catch(err => {
+                    console.error('[GCodeViewerModal] Failed to load gcode from URL:', err);
+                })
+                .finally(() => {
+                    setIsLoadingUrl(false);
+                });
+        }
+    }, [isOpen, gcodeUrl, gcodeContent]);
+
+    // 실제 사용할 콘텐츠 (props 우선, 없으면 URL에서 로드한 콘텐츠)
+    const effectiveContent = gcodeContent || loadedContent;
 
     // 핵심 상태들
     const [lines, setLines] = useState<string[]>([]);
@@ -138,8 +165,8 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
 
     // 초기화
     useEffect(() => {
-        if (isOpen && gcodeContent) {
-            const newLines = gcodeContent.split('\n');
+        if (isOpen && effectiveContent) {
+            const newLines = effectiveContent.split('\n');
             setLines(newLines);
             setOriginalLines(newLines);
             setEditingLineIndex(null);
@@ -215,7 +242,7 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
                 }
             }, 300);
         }
-    }, [isOpen, gcodeContent, patches.length, issues.length, initialIssueIndex, initialLine]);
+    }, [isOpen, effectiveContent, patches.length, issues.length, initialIssueIndex, initialLine]);
 
     // 필터 상태
     const [activeTab, setActiveTab] = useState<'all' | 'critical' | 'warning'>('all');
@@ -253,39 +280,6 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
     const issuePatchMap = useMemo(() => {
         const map = new Map<number, number>(); // issueIndex -> patchIndex
 
-        // 디버그: 데이터 구조 확인 (전체 객체 출력)
-        console.log('[GCodeViewerModal] Issues:', issues.map(i => ({
-            id: i.id,
-            patch_id: i.patch_id,
-            line: i.line,
-            line_index: i.line_index
-        })));
-        console.log('[GCodeViewerModal] Patches (full):', patches);
-        console.log('[GCodeViewerModal] First Patch keys:', patches[0] ? Object.keys(patches[0]) : 'no patches');
-        console.log('[GCodeViewerModal] First Patch full:', patches[0]);
-
-        // 전체 패치 구조 상세 출력 (원본 그대로)
-        console.log('[GCodeViewerModal] ===== FULL PATCH STRUCTURE (RAW) =====');
-        console.table(patches.map((p, idx) => ({
-            idx,
-            id: p.id,
-            issue_id: p.issue_id,
-            line: p.line,
-            line_index: p.line_index,
-            layer: p.layer,
-            action: p.action,
-            position: p.position,
-            modified: p.modified,
-            new_line: p.new_line,
-            original: p.original,
-            original_line: p.original_line,
-            autofix_allowed: p.autofix_allowed,
-            issue_type: p.issue_type,
-            reason: p.reason?.substring(0, 50) + '...'
-        })));
-        console.log('[GCodeViewerModal] Raw patches array:', patches);
-        console.log('[GCodeViewerModal] ================================');
-
         // 1. issue.patch_id -> patch.id 또는 patch.patch_id 매칭
         issues.forEach((issue, issueIdx) => {
             if (issue.patch_id) {
@@ -295,7 +289,6 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
                 );
                 if (patchIdx !== -1) {
                     map.set(issueIdx, patchIdx);
-                    console.log(`[Match by patch_id] Issue ${issueIdx} (${issue.id}, patch_id: ${issue.patch_id}) -> Patch ${patchIdx}`);
                 }
             }
         });
@@ -306,7 +299,6 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
                 const issueIdx = issues.findIndex(i => i.id === patch.issue_id);
                 if (issueIdx !== -1 && !map.has(issueIdx)) {
                     map.set(issueIdx, patchIdx);
-                    console.log(`[Match by issue_id] Patch ${patchIdx} (issue_id: ${patch.issue_id}) -> Issue ${issueIdx}`);
                 }
             }
         });
@@ -323,13 +315,11 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
                     });
                     if (patchIdx !== -1 && !Array.from(map.values()).includes(patchIdx)) {
                         map.set(issueIdx, patchIdx);
-                        console.log(`[Match by Line] Issue ${issueIdx} (line: ${issueLine}) -> Patch ${patchIdx}`);
                     }
                 }
             }
         });
 
-        console.log('[GCodeViewerModal] Final issuePatchMap:', Array.from(map.entries()));
         return map;
     }, [issues, patches]);
 

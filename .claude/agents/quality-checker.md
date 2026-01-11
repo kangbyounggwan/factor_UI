@@ -375,3 +375,277 @@ jobs:
 - ❌ 보안 취약점 무시
 - ❌ 성능 이슈 방치
 - ❌ 기능 구현 (다른 에이전트의 역할)
+
+---
+
+## 🔍 코드 수정 시 필수 검증 스킬 (Code Modification Verification Skills)
+
+**중요**: 모든 코드 수정, 삭제, 추가 작업 전후에 아래 4가지 검증을 반드시 수행해야 합니다.
+
+---
+
+### Skill 1: 함수/로직 사용처 영향도 분석 (Impact Analysis)
+
+**목적**: 수정하려는 함수/로직이 다른 곳에서 사용 중인지 확인하고, 수정 시 미칠 영향을 분석
+
+**실행 시점**:
+- 함수 시그니처(매개변수, 반환 타입) 변경 전
+- 함수/메서드 삭제 전
+- 인터페이스/타입 수정 전
+- 컴포넌트 props 변경 전
+
+**검증 절차**:
+
+```bash
+# 1. 함수명/변수명 사용처 검색
+rg "함수명|변수명" --type ts --type tsx -l
+
+# 2. export된 항목인지 확인
+rg "export.*함수명" --type ts
+
+# 3. import되는 파일 확인
+rg "import.*함수명" --type ts --type tsx
+```
+
+**체크리스트**:
+- [ ] 해당 함수가 몇 곳에서 사용되는지 확인
+- [ ] 각 사용처에서 어떻게 호출되는지 확인
+- [ ] 매개변수 변경 시 모든 호출부 수정 필요 여부 확인
+- [ ] 반환 타입 변경 시 의존 코드 영향 확인
+- [ ] interface/type 변경 시 구현체 모두 확인
+
+**예시**:
+```typescript
+// ❌ 영향도 분석 없이 수정
+// handleSelectReport 함수 시그니처 변경
+const handleSelectReport = (reportId: string, fileName: string) => { ... }
+
+// ✅ 영향도 분석 후 수정
+// 1. rg "handleSelectReport" 실행
+// 2. AppSidebar.tsx, AIChat.tsx, GCodeAnalyticsArchive.tsx에서 사용 확인
+// 3. 모든 호출부에 fileName 파라미터 추가 필요 확인
+// 4. 수정 후 모든 사용처 함께 업데이트
+```
+
+---
+
+### Skill 2: 중복 코드/사용되지 않는 코드 탐지 (Dead Code Detection)
+
+**목적**: 코드 추가 시 기존에 사용하던 함수나 로직이 중복으로 남아있지 않은지 확인
+
+**실행 시점**:
+- 새로운 함수/컴포넌트 추가 후
+- 기존 코드 리팩토링 후
+- 파일 이동/이름 변경 후
+
+**검증 절차**:
+
+```bash
+# 1. 사용되지 않는 export 검색
+rg "export (const|function|class|interface|type)" 파일명 --type ts
+
+# 2. 해당 export가 import되는지 확인
+rg "import.*{.*해당이름.*}" --type ts --type tsx
+
+# 3. 파일 내 사용되지 않는 변수 (ESLint)
+npm run lint -- --rule '@typescript-eslint/no-unused-vars:error'
+```
+
+**체크리스트**:
+- [ ] 새로 추가한 함수와 유사한 기존 함수가 있는지 확인
+- [ ] 기존 함수를 대체했다면 이전 함수 삭제 여부 확인
+- [ ] 파일 내 사용되지 않는 변수/함수 제거
+- [ ] 주석 처리된 코드 삭제 (Git 히스토리로 복원 가능)
+- [ ] 빈 함수/컴포넌트 제거
+
+**예시**:
+```typescript
+// ❌ 중복 로직 남김
+// 기존 코드
+export function loadReport(id: string) { ... }
+
+// 새로 추가 (기존 것을 삭제하지 않음)
+export function handleLoadReport(id: string) { ... }
+
+// ✅ 중복 제거
+// 기존 loadReport를 handleLoadReport로 통합하고
+// loadReport 사용처를 모두 handleLoadReport로 변경 후
+// loadReport 함수 삭제
+```
+
+---
+
+### Skill 3: 미사용 Import 정리 (Unused Import Cleanup)
+
+**목적**: 현재 수정하는 파일에서 사용하지 않는 import를 확인하고 삭제
+
+**실행 시점**:
+- 파일 수정 완료 후
+- 함수/컴포넌트 삭제 후
+- 리팩토링 후
+
+**검증 절차**:
+
+```bash
+# 1. ESLint로 미사용 import 검사
+npx eslint 파일경로 --rule 'no-unused-vars:error' --rule '@typescript-eslint/no-unused-vars:error'
+
+# 2. 자동 수정
+npx eslint 파일경로 --fix
+
+# 3. TypeScript 컴파일러로 확인
+npx tsc --noEmit 파일경로
+```
+
+**체크리스트**:
+- [ ] 파일 상단의 모든 import가 실제 사용되는지 확인
+- [ ] type import는 `import type { }` 사용 권장
+- [ ] 삭제한 컴포넌트의 import 제거
+- [ ] 사용하지 않는 라이브러리 import 제거
+- [ ] 중복 import 제거 (같은 모듈에서 여러 번 import)
+
+**예시**:
+```typescript
+// ❌ 미사용 import 방치
+import { useState, useEffect, useCallback, useMemo } from 'react';  // useMemo 미사용
+import { Button, Card, Dialog } from '@/components/ui';  // Dialog 미사용
+import { loadReport, saveReport, deleteReport } from '@/lib/api';  // deleteReport 미사용
+
+// ✅ 사용하는 것만 import
+import { useState, useEffect, useCallback } from 'react';
+import { Button, Card } from '@/components/ui';
+import { loadReport, saveReport } from '@/lib/api';
+```
+
+---
+
+### Skill 4: 공용 컴포넌트/로직 재사용성 분석 (Reusability Analysis)
+
+**목적**: 개발하고자 하는 기능이 다른 코드에서 사용 중인 로직이 있는지, 컴포넌트 분리 후 공용으로 사용할 수 있는지 확인
+
+**실행 시점**:
+- 새 기능 개발 시작 전
+- 유사한 로직 구현 시
+- 컴포넌트 설계 시
+
+**검증 절차**:
+
+```bash
+# 1. 유사한 기능/패턴 검색
+rg "키워드|패턴" --type ts --type tsx -C 5
+
+# 2. 유사한 컴포넌트 검색
+rg "function.*Component|const.*=.*\(\)" --type tsx -l
+
+# 3. 공통 유틸리티 확인
+ls -la packages/shared/src/utils/
+ls -la packages/web/src/lib/
+```
+
+**체크리스트**:
+- [ ] 유사한 기능이 이미 구현되어 있는지 검색
+- [ ] 기존 유틸리티 함수 재사용 가능 여부 확인
+- [ ] 공용 컴포넌트로 분리 가능한지 검토
+- [ ] `packages/shared`에 있어야 할 로직인지 확인
+- [ ] 3곳 이상에서 사용되면 공용화 검토
+
+**판단 기준**:
+```
+사용처 1곳: 해당 파일에 로컬 함수로
+사용처 2곳: 더 적절한 위치의 파일로 이동 고려
+사용처 3곳+: 공용 유틸리티/컴포넌트로 분리
+```
+
+**예시**:
+```typescript
+// ❌ 여러 곳에 중복 구현
+// CreatePost.tsx
+const formatFileSize = (bytes: number) => { ... }
+
+// PostDetail.tsx
+const formatFileSize = (bytes: number) => { ... }
+
+// FileUpload.tsx
+const formatFileSize = (bytes: number) => { ... }
+
+// ✅ 공용 유틸리티로 분리
+// packages/shared/src/utils/format.ts
+export function formatFileSize(bytes: number): string { ... }
+
+// 각 파일에서 import
+import { formatFileSize } from '@shared/utils/format';
+```
+
+---
+
+## 🛠️ 통합 검증 스크립트
+
+모든 검증을 한 번에 실행하는 스크립트:
+
+```bash
+#!/bin/bash
+# scripts/verify-code-quality.sh
+
+echo "🔍 Step 1: 영향도 분석 (Impact Analysis)"
+echo "수정한 함수명을 입력하세요:"
+read FUNC_NAME
+rg "$FUNC_NAME" --type ts --type tsx -l
+echo ""
+
+echo "🔍 Step 2: 중복 코드 탐지 (Dead Code Detection)"
+npm run lint -- --rule '@typescript-eslint/no-unused-vars:error' 2>&1 | head -50
+echo ""
+
+echo "🔍 Step 3: 미사용 Import 정리 (Unused Import Cleanup)"
+npm run lint -- --fix
+echo ""
+
+echo "🔍 Step 4: 타입 체크"
+npx tsc --noEmit
+echo ""
+
+echo "🔍 Step 5: 빌드 검증"
+npm run build
+echo ""
+
+echo "✅ 검증 완료!"
+```
+
+---
+
+## 📋 코드 수정 전 필수 체크리스트
+
+매 코드 수정 전에 확인:
+
+### 수정 전
+- [ ] 수정할 함수/컴포넌트의 사용처 모두 파악했는가?
+- [ ] 유사한 기존 구현이 있는지 검색했는가?
+- [ ] 변경 범위가 적절한가? (최소 변경 원칙)
+
+### 수정 중
+- [ ] 새로운 import 추가 시 실제 사용 여부 확인
+- [ ] 기존 코드 삭제 시 사용처 없음 확인
+- [ ] 중복 로직 발생하지 않는지 확인
+
+### 수정 후
+- [ ] 미사용 import 제거 완료
+- [ ] 미사용 변수/함수 제거 완료
+- [ ] 모든 사용처 정상 동작 확인
+- [ ] 빌드 성공 확인
+- [ ] 린트 에러 없음 확인
+
+---
+
+## 🚨 위반 시 조치
+
+검증 스킬을 수행하지 않고 코드를 수정한 경우:
+
+1. **즉시 롤백**: 문제가 발견되면 변경 사항 되돌리기
+2. **검증 수행**: 4가지 스킬 모두 실행
+3. **수정 재적용**: 검증 결과에 따라 올바르게 수정
+4. **문서화**: 발견된 이슈와 해결 방법 기록
+
+```
+⚠️ 경고: 이 검증 스킬들은 코드 품질 유지를 위해 필수입니다.
+건너뛰지 마세요!
+```

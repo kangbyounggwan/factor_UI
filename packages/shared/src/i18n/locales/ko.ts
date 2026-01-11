@@ -33,7 +33,8 @@ export default {
     logout: "로그아웃",
     hide: "숨기기",
     show: "보기",
-    retry: "다시 시도"
+    retry: "다시 시도",
+    expand: "확대"
   },
   nav: {
     home: "홈",
@@ -70,7 +71,8 @@ export default {
     themeLight: "라이트",
     themeDark: "다크",
     themeSystem: "시스템",
-    language: "언어"
+    language: "언어",
+    community: "커뮤니티"
   },
   auth: {
     login: "로그인",
@@ -546,6 +548,7 @@ export default {
     // AI 채팅 페이지
     greeting: "지금 어떤 문제가 생겼는지 그대로 보여주세요",
     askAnything: "출력 문제가 생겼나요?\n뭔가 이상하다면",
+    askAnythingDesktop: "출력 문제가 생겼나요? 뭔가 이상하다면",
     newChat: "새 대화",
     recentChats: "최근 대화",
     reportArchive: "보고서 아카이브",
@@ -1347,6 +1350,10 @@ export default {
     archiveCount: "{{count}}개의 분석 보고서",
     newFile: "새 파일",
     newAnalysis: "새 분석",
+    backToList: "목록으로",
+    loadingReport: "보고서 로딩 중...",
+    reportLoadFailed: "보고서 로드 실패",
+    reportNotFound: "보고서를 찾을 수 없습니다",
 
     // 업로드 영역
     dragDropTitle: "G-code 파일을 드래그하세요",
@@ -2183,6 +2190,11 @@ export default {
     deletePhoto: "삭제",
     name: "이름",
     namePlaceholder: "이름을 입력하세요",
+    fullName: "이름",
+    fullNamePlaceholder: "실명을 입력하세요",
+    displayName: "닉네임",
+    displayNamePlaceholder: "커뮤니티에서 표시될 닉네임",
+    displayNameHint: "커뮤니티에서 공개적으로 표시되는 이름입니다",
     email: "이메일",
     verified: "인증됨",
     emailChangeNotice: "이메일 변경은 고객지원팀에 문의하세요",
@@ -2664,5 +2676,94 @@ export default {
     coupang: "쿠팡",
     amazon: "아마존",
     ebay: "eBay"
+  },
+  // 시간 표시
+  time: {
+    justNow: "방금 전",
+    minutesAgo: "{{count}}분 전",
+    hoursAgo: "{{count}}시간 전",
+    daysAgo: "{{count}}일 전",
+    weeksAgo: "{{count}}주 전",
+    monthsAgo: "{{count}}개월 전",
+    yearsAgo: "{{count}}년 전"
+  },
+  // 커뮤니티
+  community: {
+    title: "커뮤니티",
+    category: {
+      all: "전체",
+      showcase: "자랑",
+      question: "질문",
+      troubleshooting: "트러블슈팅",
+      tip: "팁",
+      review: "리뷰",
+      free: "자유"
+    },
+    unsolved: "미해결",
+    solved: "해결됨",
+    views: "조회",
+    likes: "좋아요",
+    comments: "댓글",
+    write: "글쓰기",
+    writePost: "글쓰기",
+    noPostsYet: "아직 게시물이 없습니다",
+    beFirstToPost: "첫 번째 게시물을 작성해보세요!",
+    loadMore: "더 보기",
+    searchPlaceholder: "검색어를 입력하세요",
+    popularTags: "인기 태그",
+    popularPosts: "인기 게시물",
+    trending: "인기 게시물",
+    recent: "최신 게시물",
+    backToList: "목록으로",
+    stats: "커뮤니티 현황",
+    totalPosts: "총 게시물",
+    totalComments: "총 댓글",
+    activeUsers: "활동 회원",
+    totalLikes: "총 좋아요",
+    todayPosts: "오늘 {{count}}개의 새 글",
+    sort: {
+      latest: "최신순",
+      popular: "인기순",
+      views: "조회순"
+    },
+    submit: "등록",
+    saveChanges: "수정",
+    postUpdated: "게시물이 수정되었습니다",
+    postNotFound: "게시물을 찾을 수 없습니다",
+    unauthorized: "수정 권한이 없습니다",
+    loginRequired: "로그인이 필요합니다",
+    loginRequiredDesc: "게시물을 작성하려면 로그인이 필요합니다.",
+    error: {
+      updateFailed: "게시물 수정 실패"
+    },
+    form: {
+      category: "카테고리",
+      title: "제목",
+      titlePlaceholder: "제목을 입력하세요",
+      author: "작성자",
+      authorNickname: "닉네임",
+      authorRealname: "실명",
+      authorAnonymous: "익명",
+      content: "내용",
+      contentPlaceholder: "내용을 입력하세요",
+      tags: "태그",
+      tagPlaceholder: "태그 입력 후 Enter",
+      images: "첨부",
+      attachments: "첨부",
+      model: "3D 모델",
+      selectModel: "모델 선택",
+      noModels: "내 모델 없음",
+      untitledModel: "제목 없음",
+      modelHint: "내가 생성한 3D 모델을 첨부할 수 있습니다",
+      submit: "등록"
+    },
+    commentPlaceholder: "댓글을 입력하세요",
+    noComments: "첫 번째 댓글을 작성해보세요!",
+    author: "작성자",
+    memberSince: "회원",
+    postInfo: "게시물 정보",
+    commentsCount: "댓글",
+    deleteCommentTitle: "댓글 삭제",
+    deleteCommentDesc: "이 댓글을 삭제하시겠습니까?"
   }
 };

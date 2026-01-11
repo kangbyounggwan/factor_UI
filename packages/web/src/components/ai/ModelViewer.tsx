@@ -43,6 +43,8 @@ interface ModelViewerProps {
   enableRotationControls?: boolean;
   // 모델 ID (DB 업데이트용)
   modelId?: string;
+  // 왼쪽 컨트롤 패널 숨기기 (커뮤니티 임베드용)
+  hideControls?: boolean;
   // 저장 콜백 함수
   onSave?: (data: {
     rotation: [number, number, number];
@@ -305,7 +307,7 @@ function STLModel({ url, scale = 1, version = 0, onSize, onReady }: { url: strin
   );
 }
 
-export default function ModelViewer({ className, height, showDemo = false, placeholderMessage, modelUrl, stlUrl, modelScale = 1, enableRotationControls = false, modelId, onSave }: ModelViewerProps) {
+export default function ModelViewer({ className, height, showDemo = false, placeholderMessage, modelUrl, stlUrl, modelScale = 1, enableRotationControls = false, modelId, hideControls = false, onSave }: ModelViewerProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const style: React.CSSProperties = { width: '100%' };
@@ -475,8 +477,8 @@ export default function ModelViewer({ className, height, showDemo = false, place
         )}
       </Canvas>
 
-      {/* 3개 메인 섹션 아코디언 */}
-      {effectiveUrl && (
+      {/* 3개 메인 섹션 아코디언 - hideControls가 true면 숨김 */}
+      {effectiveUrl && !hideControls && (
         <div
           style={{
             position: 'absolute', left: 12, top: 15,
