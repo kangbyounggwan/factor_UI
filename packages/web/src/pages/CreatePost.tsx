@@ -68,24 +68,16 @@ import type { AIGeneratedModel } from "@shared/types/aiModelType";
 import { createCommunitySegments, type GCodeAnalysisResponse } from "@/lib/api/gcode";
 import { saveCommunitySegmentData, linkSegmentsToPost } from "@/lib/gcodeSegmentService";
 
-// 카테고리 옵션
-const CATEGORIES: { value: PostCategory; label: string; icon: string; description?: string }[] = [
-  { value: 'showcase', label: '자랑', icon: '🎨', description: '출력물 공유' },
-  { value: 'question', label: '질문', icon: '❓', description: '일반 질문' },
-  { value: 'troubleshooting', label: '트러블슈팅', icon: '🔧', description: '출력 문제 해결' },
-  { value: 'tip', label: '팁', icon: '💡', description: '노하우 공유' },
-  { value: 'review', label: '리뷰', icon: '⭐', description: '장비/재료 리뷰' },
-  { value: 'free', label: '자유', icon: '💬', description: '자유 주제' },
-];
+// Constants (공용 상수)
+import {
+  getCategoryOptions,
+  FIRMWARE_OPTIONS,
+  FILAMENT_OPTIONS,
+  SLICER_OPTIONS,
+} from "@shared/constants/community";
 
-// 펌웨어 옵션
-const FIRMWARE_OPTIONS = ['Klipper', 'Marlin', 'RRF (RepRapFirmware)', 'Prusa Firmware', 'Other'];
-
-// 필라멘트 타입 옵션
-const FILAMENT_OPTIONS = ['PLA', 'PETG', 'ABS', 'ASA', 'TPU', 'Nylon', 'PC', 'CF/GF 강화', 'Other'];
-
-// 슬라이서 옵션
-const SLICER_OPTIONS = ['Cura', 'PrusaSlicer', 'OrcaSlicer', 'Bambu Studio', 'SuperSlicer', 'Simplify3D', 'Other'];
+// 글 작성용 카테고리 옵션 (all 제외)
+const CATEGORIES = getCategoryOptions(false);
 
 // 증상 태그 한글 매핑
 const SYMPTOM_LABELS: Record<string, string> = {

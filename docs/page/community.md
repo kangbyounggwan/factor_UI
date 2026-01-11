@@ -1317,7 +1317,250 @@ export async function getCommunityStats(): Promise<CommunityStats> {
 
 ---
 
-## 15. 확장 가능성
+## 15. 미사용 API 함수 (향후 기능용)
+
+아래 함수들은 `community.ts`에 구현되어 있으나, 현재 UI에서 사용하지 않습니다.
+향후 커뮤니티 기능 확장 시 활용될 예정입니다.
+
+### 15.1 markPostSolved
+
+**역할:** 게시물의 해결 상태를 표시합니다.
+
+**위치:** `packages/shared/src/services/supabaseService/community.ts:1032`
+
+```typescript
+export async function markPostSolved(
+  postId: string,
+  userId: string,
+  isSolved: boolean
+): Promise<boolean>
+```
+
+**파라미터:**
+| 파라미터 | 타입 | 설명 |
+|----------|------|------|
+| postId | string | 게시물 ID |
+| userId | string | 작성자 ID (권한 검증용) |
+| isSolved | boolean | 해결됨 여부 |
+
+**동작:**
+1. 작성자 권한 확인 (본인 게시물만 변경 가능)
+2. `community_posts.is_solved` 필드 업데이트
+3. 성공 여부 반환
+
+**사용 시나리오:**
+- 질문/트러블슈팅 게시물에서 문제가 해결되었을 때
+- "해결됨" 배지 표시 및 미해결 필터에서 제외
+
+---
+
+### 15.2 acceptAnswer
+
+**역할:** 댓글을 정답으로 채택합니다.
+
+**위치:** `packages/shared/src/services/supabaseService/community.ts:1058`
+
+```typescript
+export async function acceptAnswer(
+  postId: string,
+  commentId: string,
+  userId: string
+): Promise<boolean>
+```
+
+**파라미터:**
+| 파라미터 | 타입 | 설명 |
+|----------|------|------|
+| postId | string | 게시물 ID |
+| commentId | string | 채택할 댓글 ID |
+| userId | string | 게시물 작성자 ID (권한 검증용) |
+
+**동작:**
+1. 게시물 작성자 권한 확인
+2. 기존 채택된 답변 취소 (있는 경우)
+3. 새 댓글을 정답으로 채택 (`community_comments.is_accepted = true`)
+4. 게시물에 채택된 답변 ID 저장 (`community_posts.accepted_answer_id`)
+5. 게시물을 해결됨 상태로 변경 (`community_posts.is_solved = true`)
+
+**사용 시나리오:**
+- 질문 게시물에서 가장 도움이 된 댓글 선택
+- 채택된 답변은 상단에 하이라이트 표시
+
+---
+
+### 15.3 unacceptAnswer
+
+**역할:** 정답 채택을 취소합니다.
+
+**위치:** `packages/shared/src/services/supabaseService/community.ts:1111`
+
+```typescript
+export async function unacceptAnswer(
+  postId: string,
+  userId: string
+): Promise<boolean>
+```
+
+**파라미터:**
+| 파라미터 | 타입 | 설명 |
+|----------|------|------|
+| postId | string | 게시물 ID |
+| userId | string | 게시물 작성자 ID (권한 검증용) |
+
+**동작:**
+1. 게시물 작성자 권한 확인
+2. 현재 채택된 댓글의 `is_accepted` 해제
+3. 게시물의 `accepted_answer_id` 초기화
+4. (선택) 게시물의 `is_solved` 상태 유지 또는 해제
+
+**사용 시나리오:**
+- 더 나은 답변이 달렸을 때 기존 채택 취소
+- 실수로 잘못된 답변을 채택했을 때 취소
+
+---
+
+### 15.4 togglePostHelpful
+
+**역할:** 게시물에 "도움이 됨" 투표를 토글합니다.
+
+**위치:** `packages/shared/src/services/supabaseService/community.ts:1149`
+
+```typescript
+export async function togglePostHelpful(
+  postId: string,
+  userId: string
+): Promise<{ voted: boolean; helpfulCount: number } | null>
+```
+
+**파라미터:**
+| 파라미터 | 타입 | 설명 |
+|----------|------|------|
+| postId | string | 게시물 ID |
+| userId | string | 투표하는 사용자 ID |
+
+**반환값:**
+```typescript
+{
+  voted: boolean;      // 투표 상태 (true: 투표함, false: 취소함)
+  helpfulCount: number; // 현재 총 유용함 투표 수
+}
+```
+
+**동작:**
+1. `community_post_helpful` 테이블에서 기존 투표 확인
+2. 투표가 있으면 삭제 (취소), 없으면 추가
+3. `community_posts.helpful_count` 업데이트
+4. 새로운 상태 반환
+
+**사용 시나리오:**
+- "좋아요"와 별개로 "도움이 됐어요" 피드백
+- 팁/가이드 게시물의 유용성 평가
+- helpful 정렬 기준 제공
+
+---
+
+### 15.5 toggleCommentHelpful
+
+**역할:** 댓글에 "도움이 됨" 투표를 토글합니다.
+
+**위치:** `packages/shared/src/services/supabaseService/community.ts:1206`
+
+```typescript
+export async function toggleCommentHelpful(
+  commentId: string,
+  userId: string
+): Promise<{ voted: boolean; helpfulCount: number } | null>
+```
+
+**파라미터:**
+| 파라미터 | 타입 | 설명 |
+|----------|------|------|
+| commentId | string | 댓글 ID |
+| userId | string | 투표하는 사용자 ID |
+
+**반환값:**
+```typescript
+{
+  voted: boolean;      // 투표 상태
+  helpfulCount: number; // 현재 총 유용함 투표 수
+}
+```
+
+**동작:**
+1. `community_comment_helpful` 테이블에서 기존 투표 확인
+2. 투표가 있으면 삭제, 없으면 추가
+3. `community_comments.helpful_count` 업데이트
+4. 새로운 상태 반환
+
+**사용 시나리오:**
+- 질문에 대한 답변의 유용성 평가
+- 정답 채택 전에 다른 사용자들의 피드백 수집
+- 유용한 댓글 상단 정렬 기준
+
+---
+
+### 15.6 관련 데이터베이스 테이블
+
+이 미사용 함수들이 사용하는 테이블:
+
+| 테이블 | 함수 | 설명 |
+|--------|------|------|
+| `community_posts.is_solved` | markPostSolved | 해결 상태 |
+| `community_posts.accepted_answer_id` | acceptAnswer, unacceptAnswer | 채택된 답변 ID |
+| `community_comments.is_accepted` | acceptAnswer, unacceptAnswer | 댓글 채택 여부 |
+| `community_post_helpful` | togglePostHelpful | 게시물 유용함 투표 |
+| `community_comment_helpful` | toggleCommentHelpful | 댓글 유용함 투표 |
+| `community_posts.helpful_count` | togglePostHelpful | 유용함 투표 수 (캐시) |
+| `community_comments.helpful_count` | toggleCommentHelpful | 유용함 투표 수 (캐시) |
+
+---
+
+### 15.7 UI 구현 가이드
+
+향후 이 기능들을 UI에 추가할 때 참고:
+
+#### 해결됨 표시 (markPostSolved)
+```tsx
+// CommunityPost.tsx에 추가
+{isAuthor && (post.category === 'question' || post.category === 'troubleshooting') && (
+  <Button
+    variant="outline"
+    onClick={() => markPostSolved(post.id, user.id, !post.is_solved)}
+  >
+    {post.is_solved ? '미해결로 변경' : '해결됨으로 표시'}
+  </Button>
+)}
+```
+
+#### 정답 채택 (acceptAnswer)
+```tsx
+// 댓글 옆에 채택 버튼 추가
+{isPostAuthor && !comment.is_accepted && (
+  <Button
+    size="sm"
+    onClick={() => acceptAnswer(post.id, comment.id, user.id)}
+  >
+    정답으로 채택
+  </Button>
+)}
+```
+
+#### 도움이 됨 투표 (togglePostHelpful)
+```tsx
+// 좋아요 버튼 옆에 추가
+<Button
+  variant="ghost"
+  className={post.is_helpful_voted ? "text-green-500" : ""}
+  onClick={() => togglePostHelpful(post.id, user.id)}
+>
+  <ThumbsUp className="w-4 h-4 mr-1" />
+  도움됨 {post.helpful_count}
+</Button>
+```
+
+---
+
+## 16. 확장 가능성
 
 ### 향후 기능 아이디어
 
@@ -1328,3 +1571,5 @@ export async function getCommunityStats(): Promise<CommunityStats> {
 5. **추천 시스템** - 사용자 선호도 기반
 6. **소셜 기능** - 팔로우, DM, 뱃지
 7. **커뮤니티 이벤트** - 주간 챌린지, 공모전
+8. **정답 채택 시스템 활성화** - 15.2, 15.3 함수 UI 연결
+9. **도움이 됨 투표 시스템** - 15.4, 15.5 함수 UI 연결

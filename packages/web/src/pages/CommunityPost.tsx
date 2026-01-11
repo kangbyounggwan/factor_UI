@@ -85,25 +85,7 @@ import {
   type PostComment,
   type PostCategory,
 } from "@shared/services/supabaseService/community";
-
-// 카테고리 색상
-const CATEGORY_COLORS: Record<PostCategory, string> = {
-  showcase: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
-  question: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-  troubleshooting: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  tip: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-  review: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  free: 'bg-gray-100 text-gray-800 dark:bg-gray-800/50 dark:text-gray-400',
-};
-
-const CATEGORY_ICONS: Record<PostCategory, string> = {
-  showcase: '🎨',
-  question: '❓',
-  troubleshooting: '🔧',
-  tip: '💡',
-  review: '⭐',
-  free: '💬',
-};
+import { CATEGORY_COLORS, CATEGORY_ICONS } from "@shared/constants/community";
 
 export default function CommunityPostPage() {
   const { postId } = useParams<{ postId: string }>();

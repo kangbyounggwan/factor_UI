@@ -391,7 +391,7 @@ When making changes that affect project structure or architecture:
 
 ## Sub-Agent System for Distributed Development
 
-Factor UI uses **8 specialized sub-agents** to enable efficient parallel development. Each agent has clear responsibilities and manages specific files/domains.
+Factor UI uses **9 specialized sub-agents** to enable efficient parallel development. Each agent has clear responsibilities and manages specific files/domains.
 
 ### Quick Reference
 
@@ -405,6 +405,7 @@ Factor UI uses **8 specialized sub-agents** to enable efficient parallel develop
 | **i18n-manager** | Translations | `i18n/**/*.json` |
 | **quality-checker** | Lint, tests, builds | ESLint, TypeScript |
 | **realtime-engineer** | MQTT/WebSocket | `mqtt.ts`, `websocket.ts` |
+| **page-documenter** | Page documentation | `docs/page/*.md` |
 
 ### Usage Patterns
 

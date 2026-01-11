@@ -68,23 +68,14 @@ import {
   type CommunityStats,
 } from "@shared/services/supabaseService/community";
 
-// 카테고리 설정
-const CATEGORIES: { value: PostCategory | 'all'; labelKey: string; icon: string }[] = [
-  { value: 'all', labelKey: 'community.category.all', icon: '📋' },
-  { value: 'showcase', labelKey: 'community.category.showcase', icon: '🎨' },
-  { value: 'question', labelKey: 'community.category.question', icon: '❓' },
-  { value: 'troubleshooting', labelKey: 'community.category.troubleshooting', icon: '🔧' },
-  { value: 'tip', labelKey: 'community.category.tip', icon: '💡' },
-  { value: 'review', labelKey: 'community.category.review', icon: '⭐' },
-  { value: 'free', labelKey: 'community.category.free', icon: '💬' },
-];
+// Constants (공용 상수)
+import {
+  getCategoryOptions,
+  SORT_OPTIONS,
+} from "@shared/constants/community";
 
-// 정렬 옵션
-const SORT_OPTIONS: { value: GetPostsOptions['sortBy']; labelKey: string }[] = [
-  { value: 'latest', labelKey: 'community.sort.latest' },
-  { value: 'popular', labelKey: 'community.sort.popular' },
-  { value: 'views', labelKey: 'community.sort.views' },
-];
+// 필터용 카테고리 옵션 (all 포함)
+const CATEGORIES = getCategoryOptions(true);
 
 export default function Community() {
   const { t } = useTranslation();
@@ -197,7 +188,7 @@ export default function Community() {
   useEffect(() => {
     loadPosts(true);
     loadPopularTags();
-  }, [category, sortBy, searchQuery, selectedTag]);
+  }, [category, sortBy, searchQuery, selectedTag, loadPosts, loadPopularTags]);
 
   // 사이드 패널 데이터 로드 (웹에서만)
   useEffect(() => {

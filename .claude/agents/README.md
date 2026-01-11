@@ -16,6 +16,7 @@
 6. **i18n-manager** - 다국어 관리
 7. **quality-checker** - 코드 품질 검사
 8. **realtime-engineer** - MQTT/실시간 통신
+9. **page-documenter** - 페이지별 종합 문서화 (15개 섹션 구조)
 
 ## 사용 방법
 
@@ -85,6 +86,15 @@
 3. 타입 정의
 4. 문서화
 
+### 패턴 5: 페이지 문서화 워크플로우
+
+```
+@page-documenter → @docs-manager
+```
+
+1. 페이지별 종합 문서 생성 (15개 섹션)
+2. PROJECT_STRUCTURE.md 링크 추가
+
 ## 에이전트 선택 가이드
 
 | 작업 유형 | 추천 에이전트 | 비고 |
@@ -97,6 +107,7 @@
 | 번역 추가 | i18n-manager | i18next |
 | 빌드 오류 | quality-checker | Lint, Type check |
 | iOS/Android 배포 | mobile-builder | Capacitor, Xcode |
+| 페이지 문서화 | page-documenter | 15개 섹션 구조 |
 
 ## 주의사항
 

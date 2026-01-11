@@ -34,6 +34,9 @@ export * from "./types/printerType";
 export * from "./types/systemType";
 export * from "./types/commonType";
 export * from "./types/aiModelType";
+
+// constants
+export * from "./constants/community";
 export * from "./services/supabaseService/equipment";
 export * from "./services/supabaseService/printerList";
 export * from "./services/supabaseService/admin";

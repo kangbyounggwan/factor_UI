@@ -4,7 +4,7 @@
 
 FACTOR UI는 **전문화된 서브 에이전트 시스템**을 통해 효율적인 분산 개발을 지원합니다. 각 에이전트는 특정 도메인에 집중하여 병렬로 작업할 수 있으며, 명확한 책임과 협업 패턴을 가지고 있습니다.
 
-## 🎯 8개의 전문 에이전트
+## 🎯 9개의 전문 에이전트
 
 ### 1. **docs-manager** - 문서 관리자
 - **역할**: 모든 프로젝트 문서 유지 관리
@@ -78,6 +78,16 @@ FACTOR UI는 **전문화된 서브 에이전트 시스템**을 통해 효율적�
   - WebSocket 연결 관리
   - 실시간 메시지 핸들링
 
+### 9. **page-documenter** - 페이지 문서화 전문가
+- **역할**: 페이지별 종합 문서 생성
+- **관리 파일**: `docs/page/*.md`
+- **주요 작업**:
+  - 15개 표준 섹션 구조 문서화
+  - 컴포넌트/API/DB 분석 및 정리
+  - 데이터 흐름 다이어그램 작성
+  - 백엔드 로직 문서화
+- **참고**: [page-documenter.md](.claude/agents/page-documenter.md)
+
 ## 📊 에이전트 선택 가이드
 
 ### 파일 변경 기준
@@ -91,6 +101,7 @@ i18n/**/*.json            → i18n-manager
 mqtt.ts, websocket.ts     → realtime-engineer
 ios/, android/            → mobile-builder
 ESLint, TypeScript 설정   → quality-checker
+docs/page/*.md            → page-documenter
 ```
 
 ### 작업 유형 기준
@@ -103,6 +114,7 @@ ESLint, TypeScript 설정   → quality-checker
 | 실시간 기능 | realtime-engineer → type-safety → ui-components |
 | 버그 수정 | (해당 에이전트) → quality-checker |
 | 성능 최적화 | quality-checker → ui-components → quality-checker |
+| 페이지 문서화 | page-documenter → docs-manager |
 
 ## 🔄 협업 패턴
 
@@ -206,6 +218,7 @@ Step 4: UI 통합
 - **[.claude/agents/i18n-manager.md](./.claude/agents/i18n-manager.md)** - 다국어 관리
 - **[.claude/agents/quality-checker.md](./.claude/agents/quality-checker.md)** - 품질 검사
 - **[.claude/agents/realtime-engineer.md](./.claude/agents/realtime-engineer.md)** - 실시간 통신
+- **[.claude/agents/page-documenter.md](./.claude/agents/page-documenter.md)** - 페이지 문서화
 
 ## ⚠️ 주의사항
 
