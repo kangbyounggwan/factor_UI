@@ -4,7 +4,7 @@
  * - RichTextEditor로 본문 작성
  * - 이미지 첨부 및 크기 조절 지원
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -33,7 +33,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Loader2, X, ChevronDown, AlertTriangle, Wrench, Thermometer, Box } from "lucide-react";
+import { Loader2, X, ChevronDown, AlertTriangle, Wrench, Thermometer, Box, User } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { RichTextEditor, type AttachedImage } from "./RichTextEditor";
 import {
@@ -43,6 +44,7 @@ import {
   type PostCategory,
   type CreatePostInput,
   type TroubleshootingMeta,
+  type AuthorDisplayType,
   SYMPTOM_TAGS,
 } from "@shared/services/supabaseService/community";
 import { supabase } from "@shared/integrations/supabase/client";
@@ -109,6 +111,39 @@ export function CreatePostModal({ open, onOpenChange, onPostCreated }: CreatePos
   const [tags, setTags] = useState<string[]>([]);
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [authorDisplayType, setAuthorDisplayType] = useState<AuthorDisplayType>('nickname');
+
+  // 프로필 정보 상태
+  const [profile, setProfile] = useState<{
+    display_name?: string;
+    full_name?: string;
+    avatar_url?: string;
+  } | null>(null);
+
+  // 프로필 정보 로드
+  useEffect(() => {
+    if (!user || !open) return;
+
+    const loadProfile = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('display_name, full_name, avatar_url')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        console.log('[CreatePostModal] Profile loaded:', { data, error });
+
+        if (!error && data) {
+          setProfile(data);
+        }
+      } catch (err) {
+        console.error('[CreatePostModal] Error loading profile:', err);
+      }
+    };
+
+    loadProfile();
+  }, [user, open]);
 
   // 트러블슈팅 메타데이터 상태
   const [troubleshootingMeta, setTroubleshootingMeta] = useState<TroubleshootingMeta>({});
@@ -269,6 +304,7 @@ export function CreatePostModal({ open, onOpenChange, onPostCreated }: CreatePos
     setAttachedImages([]);
     setTroubleshootingMeta({});
     setSelectedSymptoms([]);
+    setAuthorDisplayType('nickname');
   };
 
   // 유효성 검사
@@ -341,6 +377,7 @@ export function CreatePostModal({ open, onOpenChange, onPostCreated }: CreatePos
         category,
         tags: tags.length > 0 ? tags : undefined,
         images: imageUrls.length > 0 ? imageUrls : undefined,
+        author_display_type: authorDisplayType,
         troubleshooting_meta: finalMeta,
       };
 
@@ -378,27 +415,68 @@ export function CreatePostModal({ open, onOpenChange, onPostCreated }: CreatePos
 
         <ScrollArea className="flex-1 px-6">
           <div className="space-y-4 py-4">
-            {/* 카테고리 선택 */}
-            <div className="space-y-2">
-              <Label>{t('community.form.category', '카테고리')}</Label>
-              <Select value={category} onValueChange={(v) => setCategory(v as PostCategory)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((cat) => (
-                    <SelectItem key={cat.value} value={cat.value}>
-                      <div className="flex items-center gap-2">
-                        <span>{cat.icon}</span>
-                        <span>{t(`community.category.${cat.value}`, cat.label)}</span>
-                        {cat.description && (
-                          <span className="text-xs text-muted-foreground">- {cat.description}</span>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* 작성자 표시 + 카테고리 선택 (한 줄) */}
+            <div className="flex items-end gap-4">
+              {/* 작성자 표시 방식 */}
+              <div className="flex items-center gap-3">
+                <Avatar className="w-9 h-9 border">
+                  {authorDisplayType !== 'anonymous' && profile?.avatar_url ? (
+                    <AvatarImage src={profile.avatar_url} alt="avatar" />
+                  ) : null}
+                  <AvatarFallback className="bg-muted">
+                    <User className="w-4 h-4 text-muted-foreground" />
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm font-medium">
+                    {authorDisplayType === 'nickname' && (profile?.display_name || t('community.author.unknown', '알 수 없음'))}
+                    {authorDisplayType === 'realname' && (profile?.full_name || profile?.display_name || t('community.author.unknown', '알 수 없음'))}
+                    {authorDisplayType === 'anonymous' && t('community.author.anonymous', '익명')}
+                  </span>
+                  <Select
+                    value={authorDisplayType}
+                    onValueChange={(v) => setAuthorDisplayType(v as AuthorDisplayType)}
+                  >
+                    <SelectTrigger className="h-6 w-[100px] text-xs px-2 py-0 border-dashed">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nickname">
+                        <span className="text-xs">{t('community.authorType.nickname', '닉네임')}</span>
+                      </SelectItem>
+                      <SelectItem value="realname">
+                        <span className="text-xs">{t('community.authorType.realname', '실명')}</span>
+                      </SelectItem>
+                      <SelectItem value="anonymous">
+                        <span className="text-xs">{t('community.authorType.anonymous', '익명')}</span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* 카테고리 선택 */}
+              <div className="flex-1 space-y-2">
+                <Label>{t('community.form.category', '카테고리')}</Label>
+                <Select value={category} onValueChange={(v) => setCategory(v as PostCategory)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map((cat) => (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        <div className="flex items-center gap-2">
+                          <span>{cat.icon}</span>
+                          <span>{t(`community.category.${cat.value}`, cat.label)}</span>
+                          {cat.description && (
+                            <span className="text-xs text-muted-foreground">- {cat.description}</span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* 제목 */}

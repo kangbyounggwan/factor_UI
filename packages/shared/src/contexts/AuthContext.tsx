@@ -394,7 +394,9 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
       // user_metadata에서 이메일 회원가입 시 저장된 정보 가져오기
       const metadata = user.user_metadata || {};
-      const displayName = metadata.display_name || user.email?.split('@')[0] || 'User';
+      // display_name: 회원가입 시 입력한 이름 (실명으로 사용)
+      // Google/Apple OAuth: full_name 또는 name에 실명이 있음
+      const inputName = metadata.display_name || metadata.full_name || metadata.name || user.email?.split('@')[0] || 'User';
       const phone = metadata.phone || null;
 
       // 1. 프로필 생성 (없으면)
@@ -407,9 +409,12 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
 
         if (!existingProfile) {
           console.log('[Auth] Creating profile for user:', userId);
+          // full_name: 실명 (회원가입 시 입력한 이름)
+          // display_name: 닉네임 (null로 설정, 나중에 커뮤니티에서 설정)
           await supabase.from('profiles').insert({
             user_id: userId,
-            display_name: displayName,
+            full_name: inputName,     // 실명
+            display_name: null,       // 닉네임은 별도 설정
             phone: phone,
             role: 'user',
           });

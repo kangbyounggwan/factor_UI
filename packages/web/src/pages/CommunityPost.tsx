@@ -53,8 +53,10 @@ import {
   ChevronDown,
   ChevronUp,
   X,
-  Calendar,
-  ExternalLink,
+  ImagePlus,
+  Flame,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -80,7 +82,13 @@ import {
   deletePost,
   deleteComment,
   togglePostLike,
+  togglePostDislike,
   toggleCommentLike,
+  toggleCommentDislike,
+  uploadPostImage,
+  getPopularPosts,
+  getDisplayName,
+  getDisplayAvatar,
   type CommunityPost,
   type PostComment,
   type PostCategory,
@@ -96,6 +104,12 @@ export default function CommunityPostPage() {
   const isMobile = useIsMobile();
   const { plan: userPlan } = useUserPlan(user?.id);
 
+  // i18n 번역된 폴백 텍스트
+  const authorFallbacks = {
+    unknown: t('community.unknownAuthor'),
+    anonymous: t('community.anonymous'),
+  };
+
   // SEO
   useSEO('community');
 
@@ -108,8 +122,14 @@ export default function CommunityPostPage() {
   const [loading, setLoading] = useState(true);
   const [commentLoading, setCommentLoading] = useState(false);
   const [newComment, setNewComment] = useState('');
+  const [commentImages, setCommentImages] = useState<string[]>([]);
+  const [uploadingCommentImage, setUploadingCommentImage] = useState(false);
   const [replyTo, setReplyTo] = useState<{ commentId: string; username: string } | null>(null);
+  const [replyContent, setReplyContent] = useState('');
+  const [replyImages, setReplyImages] = useState<string[]>([]);
+  const [uploadingReplyImage, setUploadingReplyImage] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [submittingReply, setSubmittingReply] = useState(false);
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
 
   // 모달 상태
@@ -117,6 +137,9 @@ export default function CommunityPostPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'post' | 'comment'; id: string } | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  // 인기 게시물 상태
+  const [popularPosts, setPopularPosts] = useState<CommunityPost[]>([]);
 
 
   // 로그아웃 핸들러
@@ -163,10 +186,21 @@ export default function CommunityPostPage() {
     }
   }, [postId, user?.id]);
 
+  // 인기 게시물 로드
+  const loadPopularPosts = useCallback(async () => {
+    try {
+      const data = await getPopularPosts(5);
+      setPopularPosts(data);
+    } catch (error) {
+      console.error('[CommunityPost] Error loading popular posts:', error);
+    }
+  }, []);
+
   useEffect(() => {
     loadPost();
     loadComments();
-  }, [loadPost, loadComments]);
+    loadPopularPosts();
+  }, [loadPost, loadComments, loadPopularPosts]);
 
   // 좋아요 토글
   const handleLikePost = async () => {
@@ -181,7 +215,29 @@ export default function CommunityPostPage() {
       setPost(prev => prev ? {
         ...prev,
         is_liked: result.liked,
+        is_disliked: result.disliked,
         like_count: result.likeCount,
+        dislike_count: result.dislikeCount,
+      } : null);
+    }
+  };
+
+  // 비추천 토글
+  const handleDislikePost = async () => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+    if (!post) return;
+
+    const result = await togglePostDislike(post.id, user.id);
+    if (result) {
+      setPost(prev => prev ? {
+        ...prev,
+        is_liked: result.liked,
+        is_disliked: result.disliked,
+        like_count: result.likeCount,
+        dislike_count: result.dislikeCount,
       } : null);
     }
   };
@@ -197,14 +253,26 @@ export default function CommunityPostPage() {
     if (result) {
       setComments(prev => prev.map(comment => {
         if (comment.id === commentId) {
-          return { ...comment, is_liked: result.liked, like_count: result.likeCount };
+          return {
+            ...comment,
+            is_liked: result.liked,
+            is_disliked: result.disliked,
+            like_count: result.likeCount,
+            dislike_count: result.dislikeCount,
+          };
         }
         if (comment.replies) {
           return {
             ...comment,
             replies: comment.replies.map(reply =>
               reply.id === commentId
-                ? { ...reply, is_liked: result.liked, like_count: result.likeCount }
+                ? {
+                    ...reply,
+                    is_liked: result.liked,
+                    is_disliked: result.disliked,
+                    like_count: result.likeCount,
+                    dislike_count: result.dislikeCount,
+                  }
                 : reply
             ),
           };
@@ -214,13 +282,227 @@ export default function CommunityPostPage() {
     }
   };
 
-  // 댓글 작성
+  // 댓글 비추천
+  const handleDislikeComment = async (commentId: string) => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+
+    const result = await toggleCommentDislike(commentId, user.id);
+    if (result) {
+      setComments(prev => prev.map(comment => {
+        if (comment.id === commentId) {
+          return {
+            ...comment,
+            is_liked: result.liked,
+            is_disliked: result.disliked,
+            like_count: result.likeCount,
+            dislike_count: result.dislikeCount,
+          };
+        }
+        if (comment.replies) {
+          return {
+            ...comment,
+            replies: comment.replies.map(reply =>
+              reply.id === commentId
+                ? {
+                    ...reply,
+                    is_liked: result.liked,
+                    is_disliked: result.disliked,
+                    like_count: result.likeCount,
+                    dislike_count: result.dislikeCount,
+                  }
+                : reply
+            ),
+          };
+        }
+        return comment;
+      }));
+    }
+  };
+
+  // 댓글 이미지 업로드 핸들러
+  const handleCommentImageUpload = async () => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+    if (commentImages.length >= 3) {
+      toast({
+        title: t('community.error.maxImages', '이미지는 최대 3개까지 첨부할 수 있습니다'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.onchange = async (e) => {
+      const files = Array.from((e.target as HTMLInputElement).files || []);
+      if (files.length === 0) return;
+
+      // 최대 3개 제한
+      const remainingSlots = 3 - commentImages.length;
+      const filesToUpload = files.slice(0, remainingSlots);
+
+      setUploadingCommentImage(true);
+      try {
+        const uploadedUrls: string[] = [];
+        for (const file of filesToUpload) {
+          if (file.size > 5 * 1024 * 1024) {
+            toast({
+              title: t('community.error.imageTooLarge', '이미지가 너무 큽니다 (최대 5MB)'),
+              variant: 'destructive',
+            });
+            continue;
+          }
+          const url = await uploadPostImage(user.id, file);
+          if (url) {
+            uploadedUrls.push(url);
+          }
+        }
+        if (uploadedUrls.length > 0) {
+          setCommentImages(prev => [...prev, ...uploadedUrls]);
+        }
+      } catch (error) {
+        console.error('[CommunityPost] Error uploading image:', error);
+        toast({
+          title: t('community.error.uploadFailed', '이미지 업로드 실패'),
+          variant: 'destructive',
+        });
+      } finally {
+        setUploadingCommentImage(false);
+      }
+    };
+    input.click();
+  };
+
+  // 댓글 이미지 삭제
+  const handleRemoveCommentImage = (index: number) => {
+    setCommentImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // 답글 이미지 업로드 핸들러
+  const handleReplyImageUpload = async () => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+    if (replyImages.length >= 3) {
+      toast({
+        title: t('community.error.maxImages', '이미지는 최대 3개까지 첨부할 수 있습니다'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.onchange = async (e) => {
+      const files = Array.from((e.target as HTMLInputElement).files || []);
+      if (files.length === 0) return;
+
+      const remainingSlots = 3 - replyImages.length;
+      const filesToUpload = files.slice(0, remainingSlots);
+
+      setUploadingReplyImage(true);
+      try {
+        const uploadedUrls: string[] = [];
+        for (const file of filesToUpload) {
+          if (file.size > 5 * 1024 * 1024) {
+            toast({
+              title: t('community.error.imageTooLarge', '이미지가 너무 큽니다 (최대 5MB)'),
+              variant: 'destructive',
+            });
+            continue;
+          }
+          const url = await uploadPostImage(user.id, file);
+          if (url) {
+            uploadedUrls.push(url);
+          }
+        }
+        if (uploadedUrls.length > 0) {
+          setReplyImages(prev => [...prev, ...uploadedUrls]);
+        }
+      } catch (error) {
+        console.error('[CommunityPost] Error uploading reply image:', error);
+        toast({
+          title: t('community.error.uploadFailed', '이미지 업로드 실패'),
+          variant: 'destructive',
+        });
+      } finally {
+        setUploadingReplyImage(false);
+      }
+    };
+    input.click();
+  };
+
+  // 답글 이미지 삭제
+  const handleRemoveReplyImage = (index: number) => {
+    setReplyImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // 답글창 닫기
+  const handleCancelReply = () => {
+    setReplyTo(null);
+    setReplyContent('');
+    setReplyImages([]);
+  };
+
+  // 답글 작성
+  const handleSubmitReply = async () => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+    if (!post || !replyTo || (!replyContent.trim() && replyImages.length === 0)) return;
+
+    setSubmittingReply(true);
+    try {
+      const comment = await createComment(
+        post.id,
+        user.id,
+        replyContent.trim(),
+        replyTo.commentId,
+        replyImages.length > 0 ? replyImages : undefined
+      );
+
+      if (comment) {
+        // 대댓글 추가
+        setComments(prev => prev.map(c =>
+          c.id === replyTo.commentId
+            ? { ...c, replies: [...(c.replies || []), comment] }
+            : c
+        ));
+        setExpandedReplies(prev => new Set(prev).add(replyTo.commentId));
+        setReplyContent('');
+        setReplyImages([]);
+        setReplyTo(null);
+        setPost(prev => prev ? { ...prev, comment_count: prev.comment_count + 1 } : null);
+      }
+    } catch (error) {
+      console.error('[CommunityPost] Error creating reply:', error);
+      toast({
+        title: t('community.error.commentFailed', '답글 작성 실패'),
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmittingReply(false);
+    }
+  };
+
+  // 댓글 작성 (최상위 댓글만)
   const handleSubmitComment = async () => {
     if (!user) {
       setShowLoginModal(true);
       return;
     }
-    if (!post || !newComment.trim()) return;
+    if (!post || (!newComment.trim() && commentImages.length === 0)) return;
 
     setSubmittingComment(true);
     try {
@@ -228,24 +510,15 @@ export default function CommunityPostPage() {
         post.id,
         user.id,
         newComment.trim(),
-        replyTo?.commentId
+        undefined,
+        commentImages.length > 0 ? commentImages : undefined
       );
 
       if (comment) {
-        if (replyTo) {
-          // 대댓글 추가
-          setComments(prev => prev.map(c =>
-            c.id === replyTo.commentId
-              ? { ...c, replies: [...(c.replies || []), comment] }
-              : c
-          ));
-          setExpandedReplies(prev => new Set(prev).add(replyTo.commentId));
-        } else {
-          // 새 댓글 추가
-          setComments(prev => [...prev, comment]);
-        }
+        // 새 댓글 추가
+        setComments(prev => [...prev, comment]);
         setNewComment('');
-        setReplyTo(null);
+        setCommentImages([]);
         setPost(prev => prev ? { ...prev, comment_count: prev.comment_count + 1 } : null);
       }
     } catch (error) {
@@ -365,27 +638,42 @@ export default function CommunityPostPage() {
           </Badge>
         </div>
         <h1 className="text-xl md:text-2xl font-bold mb-3">{post.title}</h1>
-        {/* 모바일에서만 작성자 정보 표시 (웹에서는 오른쪽 패널에 표시) */}
-        {isMobile && (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Avatar className="w-8 h-8">
-                <AvatarImage src={post.author?.avatar_url} />
-                <AvatarFallback>{post.author?.username?.charAt(0).toUpperCase()}</AvatarFallback>
-              </Avatar>
-              <div>
-                <span className="font-medium text-sm">{post.author?.username}</span>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{getRelativeTime(post.created_at)}</span>
-                  <span>·</span>
-                  <span className="flex items-center gap-1">
-                    <Eye className="w-3 h-3" /> {post.view_count}
-                  </span>
-                </div>
+        {/* 작성자 정보 및 게시물 정보 (웹/모바일 공통) */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Avatar className="w-8 h-8">
+              <AvatarImage src={getDisplayAvatar(post.author, post.author_display_type)} />
+              <AvatarFallback>{getDisplayName(post.author, post.author_display_type, authorFallbacks).charAt(0).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <div>
+              <span className="font-medium text-sm">{getDisplayName(post.author, post.author_display_type, authorFallbacks)}</span>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{new Date(post.created_at).toLocaleDateString('ko-KR', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}</span>
               </div>
             </div>
           </div>
-        )}
+          {/* 게시물 통계 */}
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Eye className="w-4 h-4" />
+              {post.view_count}
+            </span>
+            <span className="flex items-center gap-1">
+              <Heart className="w-4 h-4" />
+              {post.like_count}
+            </span>
+            <span className="flex items-center gap-1">
+              <MessageCircle className="w-4 h-4" />
+              {post.comment_count}
+            </span>
+          </div>
+        </div>
       </div>
 
       <Separator className="my-4" />
@@ -433,15 +721,34 @@ export default function CommunityPostPage() {
 
       {/* 액션 버튼 */}
       <div className="flex items-center gap-3 py-3 border-t border-b">
-        <Button
-          variant="ghost"
-          size="sm"
-          className={cn(post.is_liked && "text-red-500")}
-          onClick={handleLikePost}
-        >
-          <Heart className={cn("w-4 h-4 mr-1", post.is_liked && "fill-current")} />
-          {post.like_count}
-        </Button>
+        {/* 추천/비추천 버튼 그룹 */}
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-8 px-3 rounded-md",
+              post.is_liked && "bg-primary text-primary-foreground hover:bg-primary/90"
+            )}
+            onClick={handleLikePost}
+          >
+            <ThumbsUp className={cn("w-4 h-4 mr-1.5", post.is_liked && "fill-current")} />
+            <span className="font-medium">{post.like_count}</span>
+          </Button>
+          <div className="w-px h-5 bg-border" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-8 px-3 rounded-md",
+              post.is_disliked && "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            )}
+            onClick={handleDislikePost}
+          >
+            <ThumbsDown className={cn("w-4 h-4 mr-1.5", post.is_disliked && "fill-current")} />
+            <span className="font-medium">{post.dislike_count || 0}</span>
+          </Button>
+        </div>
         <Button variant="ghost" size="sm">
           <MessageCircle className="w-4 h-4 mr-1" />
           {post.comment_count}
@@ -481,44 +788,78 @@ export default function CommunityPostPage() {
 
   // 댓글 섹션 렌더링
   const renderComments = () => (
-    <div className="mt-6">
-      <h3 className="font-semibold mb-4">
-        {t('community.comments', '댓글')} {post.comment_count}
-      </h3>
+    <div className="mt-8">
+      {/* 댓글 헤더 */}
+      <div className="flex items-center gap-2 mb-6">
+        <MessageCircle className="w-5 h-5 text-primary" />
+        <h3 className="text-lg font-bold">
+          {t('community.comments', '댓글')}
+        </h3>
+        <span className="text-lg font-bold text-primary">{post.comment_count}</span>
+      </div>
 
       {/* 댓글 작성 */}
-      <Card className="mb-4">
-        <CardContent className="p-3">
-          {replyTo && (
-            <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
-              <span>@{replyTo.username}</span>
-              <button onClick={() => setReplyTo(null)}>
-                <X className="w-4 h-4" />
-              </button>
+      <Card className="mb-6 border-2 border-primary/20 shadow-sm">
+        <CardContent className="p-5">
+          {/* 첨부 이미지 미리보기 */}
+          {commentImages.length > 0 && (
+            <div className="flex gap-3 mb-4 flex-wrap">
+              {commentImages.map((url, index) => (
+                <div key={index} className="relative group">
+                  <img
+                    src={url}
+                    alt=""
+                    className="w-20 h-20 object-cover rounded-lg border-2 shadow-sm"
+                  />
+                  <button
+                    onClick={() => handleRemoveCommentImage(index)}
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
             </div>
           )}
-          <div className="flex gap-2">
-            <Textarea
-              placeholder={
-                replyTo
-                  ? t('community.replyPlaceholder', '답글을 입력하세요')
-                  : t('community.commentPlaceholder', '댓글을 입력하세요')
-              }
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              rows={2}
-              className="resize-none flex-1"
-            />
+          <Textarea
+            placeholder={t('community.commentPlaceholder', '댓글을 입력하세요')}
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            rows={3}
+            className="resize-none mb-4 text-base border-2 border-muted focus:border-primary transition-colors"
+          />
+          <div className="flex items-center justify-between">
             <Button
-              size="icon"
+              variant="outline"
+              size="default"
+              onClick={handleCommentImageUpload}
+              disabled={uploadingCommentImage || commentImages.length >= 3}
+              className="gap-2 h-10"
+            >
+              {uploadingCommentImage ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <ImagePlus className="w-4 h-4" />
+              )}
+              {t('community.addImage', '이미지')}
+              {commentImages.length > 0 && (
+                <Badge variant="secondary" className="ml-1">
+                  {commentImages.length}/3
+                </Badge>
+              )}
+            </Button>
+            <Button
               onClick={handleSubmitComment}
-              disabled={submittingComment || !newComment.trim()}
+              disabled={submittingComment || (!newComment.trim() && commentImages.length === 0)}
+              size="default"
+              className="gap-2 h-10 px-6"
             >
               {submittingComment ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Send className="w-4 h-4" />
               )}
+              {t('community.submit', '등록')}
             </Button>
           </div>
         </CardContent>
@@ -526,77 +867,226 @@ export default function CommunityPostPage() {
 
       {/* 댓글 목록 */}
       {commentLoading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="w-6 h-6 animate-spin" />
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       ) : comments.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          {t('community.noComments', '첫 번째 댓글을 작성해보세요!')}
+        <div className="text-center py-12">
+          <MessageCircle className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
+          <p className="text-muted-foreground text-base">
+            {t('community.noComments', '첫 번째 댓글을 작성해보세요!')}
+          </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {comments.map((comment) => (
+        <div className="space-y-1">
+          {comments.map((comment, index) => (
             <div key={comment.id}>
               {/* 댓글 */}
-              <div className="flex gap-3">
-                <Avatar className="w-8 h-8 shrink-0">
+              <div className={cn(
+                "flex gap-4 p-4 rounded-xl transition-colors hover:bg-muted/50",
+                index !== comments.length - 1 && "border-b"
+              )}>
+                <Avatar className="w-10 h-10 shrink-0 ring-2 ring-background shadow-sm">
                   <AvatarImage src={comment.author?.avatar_url} />
-                  <AvatarFallback>
+                  <AvatarFallback className="bg-primary/10 text-primary font-medium">
                     {comment.author?.username?.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-sm">{comment.author?.username}</span>
-                    <span className="text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-semibold text-base">{comment.author?.username}</span>
+                    <span className="text-sm text-muted-foreground">
                       {getRelativeTime(comment.created_at)}
                     </span>
                   </div>
-                  <p className="text-sm whitespace-pre-wrap mb-2">{comment.content}</p>
-                  <div className="flex items-center gap-3 text-xs">
+                  <p className="text-base whitespace-pre-wrap mb-3 leading-relaxed">{comment.content}</p>
+                  {/* 댓글 이미지 표시 */}
+                  {comment.images && comment.images.length > 0 && (
+                    <div className="flex gap-3 mb-3 flex-wrap">
+                      {comment.images.map((url, imgIndex) => (
+                        <img
+                          key={imgIndex}
+                          src={url}
+                          alt=""
+                          className="max-w-[220px] max-h-[160px] object-cover rounded-xl border-2 cursor-pointer hover:opacity-90 hover:shadow-lg transition-all"
+                          onClick={() => setSelectedImage(url)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {/* 댓글 액션 버튼 */}
+                  <div className="flex items-center gap-1">
+                    {/* 추천 버튼 */}
                     <button
                       className={cn(
-                        "flex items-center gap-1 text-muted-foreground hover:text-foreground",
-                        comment.is_liked && "text-red-500"
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                        comment.is_liked
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
                       )}
                       onClick={() => handleLikeComment(comment.id)}
                     >
-                      <Heart className={cn("w-3.5 h-3.5", comment.is_liked && "fill-current")} />
-                      {comment.like_count > 0 && comment.like_count}
+                      <ThumbsUp className={cn("w-4 h-4", comment.is_liked && "fill-current")} />
+                      <span>{comment.like_count || 0}</span>
                     </button>
+                    {/* 비추천 버튼 */}
                     <button
-                      className="text-muted-foreground hover:text-foreground"
-                      onClick={() => setReplyTo({ commentId: comment.id, username: comment.author?.username || '' })}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                        comment.is_disliked
+                          ? "bg-destructive/10 text-destructive"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                      onClick={() => handleDislikeComment(comment.id)}
                     >
+                      <ThumbsDown className={cn("w-4 h-4", comment.is_disliked && "fill-current")} />
+                      <span>{comment.dislike_count || 0}</span>
+                    </button>
+                    {/* 답글 버튼 */}
+                    <button
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                        replyTo?.commentId === comment.id
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                      onClick={() => {
+                        if (replyTo?.commentId === comment.id) {
+                          handleCancelReply();
+                        } else {
+                          setReplyTo({ commentId: comment.id, username: comment.author?.username || '' });
+                          setReplyContent('');
+                          setReplyImages([]);
+                        }
+                      }}
+                    >
+                      <MessageCircle className="w-4 h-4" />
                       {t('community.reply', '답글')}
                     </button>
+                    {/* 삭제 버튼 */}
                     {user?.id === comment.user_id && (
                       <button
-                        className="text-muted-foreground hover:text-destructive"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all ml-auto"
                         onClick={() => {
                           setDeleteTarget({ type: 'comment', id: comment.id });
                           setShowDeleteModal(true);
                         }}
                       >
+                        <Trash2 className="w-4 h-4" />
                         {t('common.delete', '삭제')}
                       </button>
                     )}
                   </div>
 
+                  {/* 인라인 답글 입력창 */}
+                  {replyTo?.commentId === comment.id && (
+                    <div className="mt-4 p-4 bg-muted/30 rounded-xl border-2 border-primary/20">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Badge variant="secondary" className="gap-1">
+                          <span className="text-primary font-medium">@{replyTo.username}</span>
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">{t('community.replyingTo', '님에게 답글 작성 중')}</span>
+                        <button
+                          onClick={handleCancelReply}
+                          className="ml-auto p-1 rounded-full hover:bg-muted transition-colors"
+                        >
+                          <X className="w-4 h-4 text-muted-foreground" />
+                        </button>
+                      </div>
+                      {/* 답글 이미지 미리보기 */}
+                      {replyImages.length > 0 && (
+                        <div className="flex gap-3 mb-3 flex-wrap">
+                          {replyImages.map((url, index) => (
+                            <div key={index} className="relative group">
+                              <img
+                                src={url}
+                                alt=""
+                                className="w-16 h-16 object-cover rounded-lg border-2 shadow-sm"
+                              />
+                              <button
+                                onClick={() => handleRemoveReplyImage(index)}
+                                className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <Textarea
+                        placeholder={t('community.replyPlaceholder', '답글을 입력하세요')}
+                        value={replyContent}
+                        onChange={(e) => setReplyContent(e.target.value)}
+                        rows={2}
+                        className="resize-none mb-3 text-base bg-background border-2"
+                        autoFocus
+                      />
+                      <div className="flex items-center justify-between">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleReplyImageUpload}
+                          disabled={uploadingReplyImage || replyImages.length >= 3}
+                          className="gap-1.5 h-9"
+                        >
+                          {uploadingReplyImage ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <ImagePlus className="w-4 h-4" />
+                          )}
+                          {t('community.addImage', '이미지')}
+                          {replyImages.length > 0 && (
+                            <Badge variant="secondary" className="ml-1 text-xs">
+                              {replyImages.length}/3
+                            </Badge>
+                          )}
+                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleCancelReply}
+                            className="h-9"
+                          >
+                            {t('common.cancel', '취소')}
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleSubmitReply}
+                            disabled={submittingReply || (!replyContent.trim() && replyImages.length === 0)}
+                            className="h-9 gap-1.5"
+                          >
+                            {submittingReply ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Send className="w-4 h-4" />
+                            )}
+                            {t('community.submitReply', '답글 등록')}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* 대댓글 토글 */}
                   {comment.replies && comment.replies.length > 0 && (
                     <button
-                      className="flex items-center gap-1 mt-2 text-xs text-primary"
+                      className={cn(
+                        "flex items-center gap-2 mt-4 px-3 py-2 rounded-lg text-sm font-medium transition-all",
+                        expandedReplies.has(comment.id)
+                          ? "bg-primary/10 text-primary"
+                          : "bg-muted/50 text-primary hover:bg-primary/10"
+                      )}
                       onClick={() => toggleReplies(comment.id)}
                     >
                       {expandedReplies.has(comment.id) ? (
                         <>
-                          <ChevronUp className="w-3.5 h-3.5" />
+                          <ChevronUp className="w-4 h-4" />
                           {t('community.hideReplies', '답글 숨기기')}
                         </>
                       ) : (
                         <>
-                          <ChevronDown className="w-3.5 h-3.5" />
+                          <ChevronDown className="w-4 h-4" />
                           {t('community.showReplies', '답글 {{count}}개 보기', { count: comment.replies.length })}
                         </>
                       )}
@@ -607,42 +1097,75 @@ export default function CommunityPostPage() {
 
               {/* 대댓글 목록 */}
               {comment.replies && comment.replies.length > 0 && expandedReplies.has(comment.id) && (
-                <div className="ml-11 mt-3 space-y-3 pl-3 border-l-2">
+                <div className="ml-14 mt-4 space-y-2 pl-4 border-l-2 border-primary/20">
                   {comment.replies.map((reply) => (
-                    <div key={reply.id} className="flex gap-3">
-                      <Avatar className="w-6 h-6 shrink-0">
+                    <div key={reply.id} className="flex gap-3 p-3 rounded-lg hover:bg-muted/30 transition-colors">
+                      <Avatar className="w-8 h-8 shrink-0 ring-2 ring-background shadow-sm">
                         <AvatarImage src={reply.author?.avatar_url} />
-                        <AvatarFallback className="text-xs">
+                        <AvatarFallback className="text-xs bg-primary/10 text-primary font-medium">
                           {reply.author?.username?.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-xs">{reply.author?.username}</span>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="font-semibold text-sm">{reply.author?.username}</span>
                           <span className="text-xs text-muted-foreground">
                             {getRelativeTime(reply.created_at)}
                           </span>
                         </div>
-                        <p className="text-sm whitespace-pre-wrap mb-1">{reply.content}</p>
-                        <div className="flex items-center gap-3 text-xs">
+                        <p className="text-sm whitespace-pre-wrap mb-2 leading-relaxed">{reply.content}</p>
+                        {/* 대댓글 이미지 표시 */}
+                        {reply.images && reply.images.length > 0 && (
+                          <div className="flex gap-2 mb-3 flex-wrap">
+                            {reply.images.map((url, imgIndex) => (
+                              <img
+                                key={imgIndex}
+                                src={url}
+                                alt=""
+                                className="max-w-[160px] max-h-[120px] object-cover rounded-lg border-2 cursor-pointer hover:opacity-90 hover:shadow-md transition-all"
+                                onClick={() => setSelectedImage(url)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                        {/* 대댓글 액션 버튼 */}
+                        <div className="flex items-center gap-1">
+                          {/* 추천 버튼 */}
                           <button
                             className={cn(
-                              "flex items-center gap-1 text-muted-foreground hover:text-foreground",
-                              reply.is_liked && "text-red-500"
+                              "flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all",
+                              reply.is_liked
+                                ? "bg-primary/10 text-primary"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
                             )}
                             onClick={() => handleLikeComment(reply.id)}
                           >
-                            <Heart className={cn("w-3 h-3", reply.is_liked && "fill-current")} />
-                            {reply.like_count > 0 && reply.like_count}
+                            <ThumbsUp className={cn("w-3.5 h-3.5", reply.is_liked && "fill-current")} />
+                            <span>{reply.like_count || 0}</span>
                           </button>
+                          {/* 비추천 버튼 */}
+                          <button
+                            className={cn(
+                              "flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all",
+                              reply.is_disliked
+                                ? "bg-destructive/10 text-destructive"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            )}
+                            onClick={() => handleDislikeComment(reply.id)}
+                          >
+                            <ThumbsDown className={cn("w-3.5 h-3.5", reply.is_disliked && "fill-current")} />
+                            <span>{reply.dislike_count || 0}</span>
+                          </button>
+                          {/* 삭제 버튼 */}
                           {user?.id === reply.user_id && (
                             <button
-                              className="text-muted-foreground hover:text-destructive"
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all ml-auto"
                               onClick={() => {
                                 setDeleteTarget({ type: 'comment', id: reply.id });
                                 setShowDeleteModal(true);
                               }}
                             >
+                              <Trash2 className="w-3.5 h-3.5" />
                               {t('common.delete', '삭제')}
                             </button>
                           )}
@@ -659,9 +1182,9 @@ export default function CommunityPostPage() {
     </div>
   );
 
-  // 웹 레이아웃 오른쪽 패널 (작성자 정보 + 게시물 정보)
+  // 웹 레이아웃 오른쪽 패널 (작성자 정보 + 인기 게시물)
   const renderRightPanel = () => (
-    <div className="w-72 shrink-0 space-y-4">
+    <div className="w-80 shrink-0 space-y-4">
       {/* 작성자 정보 카드 */}
       <Card>
         <CardHeader className="pb-3">
@@ -670,15 +1193,15 @@ export default function CommunityPostPage() {
           </h3>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3">
             <Avatar className="w-12 h-12">
-              <AvatarImage src={post.author?.avatar_url} />
+              <AvatarImage src={getDisplayAvatar(post.author, post.author_display_type)} />
               <AvatarFallback className="text-lg">
-                {post.author?.username?.charAt(0).toUpperCase()}
+                {getDisplayName(post.author, post.author_display_type, authorFallbacks).charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-semibold">{post.author?.username}</p>
+              <p className="font-semibold">{getDisplayName(post.author, post.author_display_type, authorFallbacks)}</p>
               <p className="text-xs text-muted-foreground">
                 {t('community.memberSince', '회원')}
               </p>
@@ -687,38 +1210,78 @@ export default function CommunityPostPage() {
         </CardContent>
       </Card>
 
-      {/* 게시물 정보 카드 */}
-      <Card>
-        <CardHeader className="pb-3">
-          <h3 className="text-sm font-semibold text-muted-foreground">
-            {t('community.postInfo', '게시물 정보')}
-          </h3>
-        </CardHeader>
-        <CardContent className="pt-0 space-y-3">
-          <div className="flex items-center gap-2 text-sm">
-            <Calendar className="w-4 h-4 text-muted-foreground" />
-            <span>{new Date(post.created_at).toLocaleDateString('ko-KR', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Eye className="w-4 h-4 text-muted-foreground" />
-            <span>{t('community.views', '조회수')} {post.view_count}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Heart className="w-4 h-4 text-muted-foreground" />
-            <span>{t('community.likes', '좋아요')} {post.like_count}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <MessageCircle className="w-4 h-4 text-muted-foreground" />
-            <span>{t('community.commentsCount', '댓글')} {post.comment_count}</span>
-          </div>
-        </CardContent>
-      </Card>
+      {/* 인기 게시물 카드 */}
+      {popularPosts.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <h3 className="text-sm font-medium flex items-center gap-2">
+              <Flame className="w-4 h-4 text-orange-500" />
+              {t('community.popularPosts', '인기 게시물')}
+            </h3>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="space-y-2.5">
+              {popularPosts.map((popularPost, index) => (
+                <div
+                  key={popularPost.id}
+                  className={cn(
+                    "flex items-start gap-2.5 p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors",
+                    popularPost.id === postId && "opacity-50 pointer-events-none"
+                  )}
+                  onClick={() => {
+                    if (popularPost.id !== postId) {
+                      navigate(`/community/${popularPost.id}`);
+                    }
+                  }}
+                >
+                  {/* 순위 */}
+                  <span className={cn(
+                    "shrink-0 w-5 h-5 rounded text-xs font-bold flex items-center justify-center",
+                    index === 0 ? "bg-red-500 text-white" :
+                    index === 1 ? "bg-orange-500 text-white" :
+                    index === 2 ? "bg-amber-500 text-white" :
+                    "bg-muted text-muted-foreground"
+                  )}>
+                    {index + 1}
+                  </span>
+                  {/* 게시물 정보 */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium line-clamp-1">
+                      {popularPost.title}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-0.5">
+                        <Eye className="w-3 h-3" />
+                        {popularPost.view_count}
+                      </span>
+                      <span className="flex items-center gap-0.5">
+                        <ThumbsUp className="w-3 h-3" />
+                        {popularPost.like_count}
+                      </span>
+                      <span>{getRelativeTime(popularPost.created_at)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 글등록 버튼 */}
+      <Button
+        className="w-full"
+        onClick={() => {
+          if (user) {
+            navigate('/community/write');
+          } else {
+            setShowLoginModal(true);
+          }
+        }}
+      >
+        <Edit className="w-4 h-4 mr-2" />
+        {t('community.write', '글등록')}
+      </Button>
 
       {/* 목록으로 돌아가기 버튼 */}
       <Button
@@ -810,8 +1373,8 @@ export default function CommunityPostPage() {
         />
 
         {/* 콘텐츠 영역 */}
-        <div className="flex-1 flex justify-center overflow-auto">
-          <div className="flex gap-6 w-full max-w-7xl px-6 py-6">
+        <div className="flex-1 overflow-auto">
+          <div className="flex gap-6 max-w-[1400px] mx-auto px-4 py-4">
             {/* 중앙 콘텐츠 영역 */}
             <div className="flex-1 min-w-0">
               <Card className="p-6">
@@ -822,7 +1385,9 @@ export default function CommunityPostPage() {
 
             {/* 오른쪽 패널 - lg 이상에서만 표시 */}
             <div className="hidden lg:block">
-              {renderRightPanel()}
+              <div className="sticky top-4">
+                {renderRightPanel()}
+              </div>
             </div>
           </div>
         </div>

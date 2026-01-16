@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Box, Maximize2, X, Download, Loader2 } from 'lucide-react';
+import { Box, Maximize2, X, Download, Loader2, Lock, FileCode } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -24,17 +24,21 @@ interface Model3DEmbedProps {
   filename: string;
   fileType: string;
   className?: string;
+  downloadable?: boolean;
 }
 
-export function Model3DEmbed({ url, filename, fileType, className }: Model3DEmbedProps) {
+export function Model3DEmbed({ url, filename, fileType, className, downloadable = true }: Model3DEmbedProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
 
   // 파일 확장자 확인
   const normalizedType = fileType.toLowerCase();
 
+  // G-code 파일인지 확인
+  const isGCode = ['gcode', 'nc', 'ngc'].includes(normalizedType);
+
   // 3D 파일 종류 확인
-  const isValid3DFile = ['stl', 'obj', '3mf', 'gltf', 'glb', 'gcode'].includes(normalizedType);
+  const isValid3DFile = ['stl', 'obj', '3mf', 'gltf', 'glb', 'gcode', 'nc', 'ngc'].includes(normalizedType);
 
   // Three.js ModelViewer가 지원하는 포맷 (STL, OBJ, GLTF, GLB)
   // 3MF, GCODE는 ZIP 기반 또는 텍스트 기반이라 별도 로더 필요
@@ -66,28 +70,46 @@ export function Model3DEmbed({ url, filename, fileType, className }: Model3DEmbe
   // 3MF, GCODE 등 뷰어 미지원 포맷 - 다운로드 전용 UI
   if (!isViewableFormat) {
     return (
-      <Card className={cn("overflow-hidden my-2", className)}>
+      <Card className={cn(
+        "overflow-hidden my-2",
+        isGCode ? "bg-orange-50/50 dark:bg-orange-950/10" : "",
+        className
+      )}>
         <div className="flex items-center justify-between px-4 py-3 bg-muted/50">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Box className="w-6 h-6 text-primary" />
+            <div className={cn(
+              "w-12 h-12 rounded-lg flex items-center justify-center",
+              isGCode ? "bg-orange-100 dark:bg-orange-900/30" : "bg-primary/10"
+            )}>
+              {isGCode ? (
+                <FileCode className="w-6 h-6 text-orange-500" />
+              ) : (
+                <Box className="w-6 h-6 text-primary" />
+              )}
             </div>
             <div>
               <p className="font-medium text-sm">{filename}</p>
               <p className="text-xs text-muted-foreground uppercase">
-                {normalizedType} {t('community.file3D', '3D 파일')}
+                {normalizedType} ({isGCode ? 'G-code' : t('community.file3D', '3D 파일')})
               </p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDownload}
-            className="gap-1.5"
-          >
-            <Download className="w-4 h-4" />
-            {t('common.download', '다운로드')}
-          </Button>
+          {downloadable ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownload}
+              className="gap-1.5"
+            >
+              <Download className="w-4 h-4" />
+              {t('common.download', '다운로드')}
+            </Button>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-3 py-1.5 bg-muted rounded-md">
+              <Lock className="w-3.5 h-3.5" />
+              {t('community.downloadNotAllowed', '다운로드 금지')}
+            </div>
+          )}
         </div>
       </Card>
     );
@@ -104,15 +126,22 @@ export function Model3DEmbed({ url, filename, fileType, className }: Model3DEmbe
           <span className="text-xs text-muted-foreground uppercase">({fileType})</span>
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleDownload}
-            className="h-7 px-2"
-          >
-            <Download className="w-3.5 h-3.5 mr-1" />
-            {t('common.download', '다운로드')}
-          </Button>
+          {downloadable ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDownload}
+              className="h-7 px-2"
+            >
+              <Download className="w-3.5 h-3.5 mr-1" />
+              {t('common.download', '다운로드')}
+            </Button>
+          ) : (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground px-2 py-1">
+              <Lock className="w-3 h-3" />
+              {t('community.downloadNotAllowed', '다운로드 금지')}
+            </div>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -155,14 +184,21 @@ export function Model3DEmbed({ url, filename, fileType, className }: Model3DEmbe
               {filename}
             </DialogTitle>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDownload}
-              >
-                <Download className="w-4 h-4 mr-1" />
-                {t('common.download', '다운로드')}
-              </Button>
+              {downloadable ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownload}
+                >
+                  <Download className="w-4 h-4 mr-1" />
+                  {t('common.download', '다운로드')}
+                </Button>
+              ) : (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-3 py-1.5 bg-muted rounded-md">
+                  <Lock className="w-3.5 h-3.5" />
+                  {t('community.downloadNotAllowed', '다운로드 금지')}
+                </div>
+              )}
               <Button
                 variant="ghost"
                 size="icon"

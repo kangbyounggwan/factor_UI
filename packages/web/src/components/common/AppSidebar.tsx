@@ -43,6 +43,9 @@ import {
   HelpCircle,
   Lightbulb,
   Star,
+  FileText,
+  ThumbsUp,
+  Clock,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link, useLocation } from "react-router-dom";
@@ -106,6 +109,15 @@ export interface PrinterAlert {
   timestamp: Date;
 }
 
+// 커뮤니티 통계 타입
+export interface CommunitySidebarStats {
+  totalPosts: number;
+  totalComments: number;
+  totalUsers: number;
+  totalLikes: number;
+  todayPosts: number;
+}
+
 interface AppSidebarProps {
   isOpen: boolean;
   onToggle: () => void;
@@ -146,6 +158,8 @@ interface AppSidebarProps {
   onSelectPrinter?: (printer: PrinterQuickItem) => void;
   alerts?: PrinterAlert[];
   onDismissAlert?: (alertId: string) => void;
+  // Community 모드용 props
+  communityStats?: CommunitySidebarStats | null;
 }
 
 // 플랜별 표시 설정
@@ -212,6 +226,8 @@ export function AppSidebar({
   onSelectPrinter,
   alerts = [],
   onDismissAlert,
+  // Community 모드용 props
+  communityStats,
 }: AppSidebarProps) {
   const { t } = useTranslation();
   const location = useLocation();
@@ -886,6 +902,52 @@ export function AppSidebar({
                   <span>{t('community.category.free', '자유')}</span>
                 </Link>
               </nav>
+
+              {/* 커뮤니티 통계 */}
+              {communityStats && (
+                <div className="mt-4 pt-4 border-t border-border/50">
+                  <p className="text-sm font-semibold text-foreground px-2 py-2 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-primary" />
+                    {t('community.stats', '커뮤니티 현황')}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 px-1">
+                    <div className="flex items-center gap-2 p-2.5 rounded-lg bg-background border border-border/60">
+                      <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-muted-foreground">{t('community.totalPosts', '총 게시물')}</p>
+                        <p className="font-semibold text-sm">{communityStats.totalPosts.toLocaleString()}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-2.5 rounded-lg bg-background border border-border/60">
+                      <MessageSquare className="w-4 h-4 text-green-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-muted-foreground">{t('community.totalComments', '총 댓글')}</p>
+                        <p className="font-semibold text-sm">{communityStats.totalComments.toLocaleString()}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-2.5 rounded-lg bg-background border border-border/60">
+                      <Users className="w-4 h-4 text-purple-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-muted-foreground">{t('community.activeUsers', '활동 회원')}</p>
+                        <p className="font-semibold text-sm">{communityStats.totalUsers.toLocaleString()}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-2.5 rounded-lg bg-background border border-border/60">
+                      <ThumbsUp className="w-4 h-4 text-red-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-muted-foreground">{t('community.totalLikes', '총 좋아요')}</p>
+                        <p className="font-semibold text-sm">{communityStats.totalLikes.toLocaleString()}</p>
+                      </div>
+                    </div>
+                  </div>
+                  {communityStats.todayPosts > 0 && (
+                    <div className="mt-2 mx-1 flex items-center gap-2 text-xs text-muted-foreground px-2">
+                      <Clock className="w-3.5 h-3.5" />
+                      {t('community.todayPosts', '오늘 {{count}}개의 새 글', { count: communityStats.todayPosts })}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           ) : (
             /* Dashboard 모드 - 프린터 빠른 선택 + 알림 */

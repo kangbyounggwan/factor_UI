@@ -63,11 +63,14 @@ const ProfileSetup = () => {
       if (authError) throw authError;
 
       // 2. profiles 테이블에 upsert (없으면 생성, 있으면 업데이트)
+      // display_name: 닉네임 (처음에는 실명과 동일하게 설정, 나중에 변경 가능)
+      // full_name: 실명 (본명)
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
           user_id: user.id,
-          display_name: displayName,
+          display_name: displayName, // 닉네임 (초기값은 실명과 동일)
+          full_name: displayName,    // 실명 (본명)
           phone: phone || null,
           role: 'user',
         }, {

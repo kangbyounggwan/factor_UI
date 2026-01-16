@@ -51,7 +51,11 @@ import { SharedBottomNavigation } from "@/components/shared/SharedBottomNavigati
 import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
 
 // Community Components
-import { RichTextEditor } from "@/components/community/RichTextEditor";
+import { RichTextEditor, type Attached3DFile, type AttachedGCodeFile, type RichTextEditorApi } from "@/components/community/RichTextEditor";
+import { NicknameSetupModal } from "@/components/community/NicknameSetupModal";
+
+// 3D Thumbnail utility
+import { generateModel3DThumbnail, dataUrlToFile } from "@/lib/model3dThumbnail";
 
 // Services
 import {
@@ -160,8 +164,57 @@ export default function CreatePost() {
   const [symptomSectionOpen, setSymptomSectionOpen] = useState(true);
   const [showTroubleshootingPanel, setShowTroubleshootingPanel] = useState(false);
 
+  // 닉네임 설정 모달 상태
+  const [showNicknameModal, setShowNicknameModal] = useState(false);
+  const [userNickname, setUserNickname] = useState<string | null>(null);
+  const [userFullName, setUserFullName] = useState<string | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // 에디터 API 상태
+  const [editorApi, setEditorApi] = useState<RichTextEditorApi | null>(null);
+
   // 트러블슈팅 폼 표시 여부
   const showTroubleshootingForm = category === 'troubleshooting' || category === 'question';
+
+  // 사용자 프로필 로드 (닉네임 확인용)
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (!user) {
+        setLoadingProfile(false);
+        return;
+      }
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('display_name, full_name')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        console.log('[CreatePost] Profile loaded:', { profile, error });
+        if (!error && profile) {
+          setUserNickname(profile.display_name);
+          setUserFullName(profile.full_name);
+          // 닉네임(display_name)이 없거나 빈 문자열이면 모달 표시
+          const hasNickname = profile.display_name && profile.display_name.trim() !== '';
+          console.log('[CreatePost] Has nickname:', hasNickname, 'display_name:', profile.display_name, 'full_name:', profile.full_name);
+          if (!hasNickname) {
+            setShowNicknameModal(true);
+          }
+        } else {
+          // 프로필이 없거나 에러인 경우에도 모달 표시
+          console.log('[CreatePost] No profile or error, showing modal');
+          setShowNicknameModal(true);
+        }
+      } catch (error) {
+        console.error('[CreatePost] Error loading profile:', error);
+        // 에러 발생 시에도 닉네임 설정 모달 표시
+        setShowNicknameModal(true);
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+    loadUserProfile();
+  }, [user]);
 
   // 사용자 모델 목록 로드
   useEffect(() => {
@@ -232,8 +285,8 @@ export default function CreatePost() {
     return url;
   }, [user, toast, t]);
 
-  // 에디터용 3D 파일 업로드
-  const handleEditor3DUpload = useCallback(async (file: File): Promise<string | null> => {
+  // 에디터용 3D 파일 업로드 (썸네일 자동 생성)
+  const handleEditor3DUpload = useCallback(async (file: File): Promise<{ url: string; thumbnail?: string } | null> => {
     if (!user) return null;
     if (file.size > 50 * 1024 * 1024) {
       toast({
@@ -254,22 +307,31 @@ export default function CreatePost() {
       return [...prev, { url: tempId, filename: file.name, filetype: ext, isLoading: true }];
     });
 
-    // 2. 실제 업로드 수행
-    // TODO: 3D 파일 업로드 서비스 구현 필요
-    // 임시로 이미지 업로드 서비스 사용 (실제로는 별도 버킷 필요)
-    const url = await uploadPostImage(user.id, file);
+    // 2. 3D 파일 업로드와 썸네일 생성을 병렬로 수행
+    const [modelUrl, thumbnailDataUrl] = await Promise.all([
+      uploadPostImage(user.id, file),
+      generateModel3DThumbnail(file, { width: 200, height: 200 }),
+    ]);
 
-    if (url) {
-      // 3. 업로드 완료 - 로딩 상태 해제 및 URL 업데이트
-      setUploaded3DFiles(prev =>
-        prev.map(f => f.url === tempId ? { ...f, url, isLoading: false } : f)
-      );
-    } else {
+    if (!modelUrl) {
       // 업로드 실패 - 로딩 카드 제거
       setUploaded3DFiles(prev => prev.filter(f => f.url !== tempId));
+      return null;
     }
 
-    return url;
+    // 3. 썸네일 이미지 업로드 (생성 성공한 경우만)
+    let thumbnailUrl: string | undefined;
+    if (thumbnailDataUrl) {
+      const thumbnailFile = dataUrlToFile(thumbnailDataUrl, `${file.name}_thumb.png`);
+      thumbnailUrl = await uploadPostImage(user.id, thumbnailFile) || undefined;
+    }
+
+    // 4. 업로드 완료 - 로딩 상태 해제 및 URL 업데이트
+    setUploaded3DFiles(prev =>
+      prev.map(f => f.url === tempId ? { ...f, url: modelUrl, isLoading: false } : f)
+    );
+
+    return { url: modelUrl, thumbnail: thumbnailUrl };
   }, [user, toast, t]);
 
   // 에디터용 GCode 파일 업로드 (세그먼트를 gcode_segment_data 테이블에 저장)
@@ -472,6 +534,7 @@ export default function CreatePost() {
         tags: tags.length > 0 ? tags : undefined,
         images: images.length > 0 ? images : undefined,
         model_id: selectedModelId || undefined,
+        author_display_type: authorDisplayType, // 작성자 표시 방식 (닉네임/실명/익명)
         // gcode_files는 더 이상 community_posts에 저장하지 않음
         // 대신 gcode_segment_data 테이블 사용
         troubleshooting_meta: finalMeta,
@@ -514,6 +577,38 @@ export default function CreatePost() {
   const handleBack = () => {
     navigate('/community');
   };
+
+  // 에디터 내용에서 3D 모델 노드 제거 (URL 기반) - 에디터 API 사용
+  const removeModel3DFromContent = useCallback((url: string) => {
+    if (editorApi) {
+      editorApi.removeModel3DByUrl(url);
+    }
+  }, [editorApi]);
+
+  // 에디터 내용에서 G-code 노드 제거 (URL 기반) - 에디터 API 사용
+  const removeGCodeFromContent = useCallback((url: string) => {
+    if (editorApi) {
+      editorApi.removeGCodeByUrl(url);
+    }
+  }, [editorApi]);
+
+  // 3D 파일 첨부 삭제 핸들러 (첨부 목록 + 에디터 내용 동시 삭제)
+  const handleRemove3DFile = useCallback((index: number) => {
+    const fileToRemove = uploaded3DFiles[index];
+    if (fileToRemove && fileToRemove.url && !fileToRemove.url.startsWith('temp_')) {
+      removeModel3DFromContent(fileToRemove.url);
+    }
+    setUploaded3DFiles(prev => prev.filter((_, i) => i !== index));
+  }, [uploaded3DFiles, removeModel3DFromContent]);
+
+  // G-code 파일 첨부 삭제 핸들러 (첨부 목록 + 에디터 내용 동시 삭제)
+  const handleRemoveGCodeFile = useCallback((index: number) => {
+    const fileToRemove = gcodeFiles[index];
+    if (fileToRemove && fileToRemove.url && !fileToRemove.url.startsWith('temp_')) {
+      removeGCodeFromContent(fileToRemove.url);
+    }
+    setGcodeFiles(prev => prev.filter((_, i) => i !== index));
+  }, [gcodeFiles, removeGCodeFromContent]);
 
   return (
     <div className={cn("h-screen bg-background flex", isMobile && "pb-16")}>
@@ -595,15 +690,15 @@ export default function CreatePost() {
                         <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-xs text-primary-foreground">
                           {authorDisplayType === 'anonymous'
                             ? '?'
-                            : (user?.user_metadata?.full_name || user?.email || '?')[0].toUpperCase()}
+                            : (userNickname || userFullName || user?.email || '?')[0].toUpperCase()}
                         </div>
                       )}
                       <span className="text-sm font-medium">
                         {authorDisplayType === 'anonymous'
                           ? t('common.anonymous', '익명')
                           : authorDisplayType === 'realname'
-                            ? (user?.user_metadata?.full_name || user?.email?.split('@')[0] || t('common.anonymous', '익명'))
-                            : (user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || t('common.anonymous', '익명'))
+                            ? (userFullName || userNickname || user?.email?.split('@')[0] || t('common.anonymous', '익명'))
+                            : (userNickname || userFullName || user?.email?.split('@')[0] || t('common.anonymous', '익명'))
                         }
                       </span>
                     </div>
@@ -884,6 +979,13 @@ export default function CreatePost() {
                   on3DUpload={handleEditor3DUpload}
                   onGCodeUpload={handleEditorGCodeUpload}
                   minHeight="350px"
+                  // 3D 모델/G-code 동기화 콜백
+                  attached3DFiles={uploaded3DFiles}
+                  on3DFilesChange={setUploaded3DFiles}
+                  attachedGCodeFiles={gcodeFiles}
+                  onGCodeFilesChange={setGcodeFiles}
+                  // 에디터 API 콜백 (첨부에서 삭제 시 에디터 내용도 삭제)
+                  onEditorReady={setEditorApi}
                 />
               </div>
 
@@ -1012,7 +1114,7 @@ export default function CreatePost() {
                             {!file3d.isLoading && (
                               <button
                                 type="button"
-                                onClick={() => setUploaded3DFiles(prev => prev.filter((_, i) => i !== index))}
+                                onClick={() => handleRemove3DFile(index)}
                                 className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                               >
                                 <X className="w-3 h-3" />
@@ -1046,7 +1148,7 @@ export default function CreatePost() {
                             {!gcode.isLoading && (
                               <button
                                 type="button"
-                                onClick={() => setGcodeFiles(prev => prev.filter((_, i) => i !== index))}
+                                onClick={() => handleRemoveGCodeFile(index)}
                                 className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                               >
                                 <X className="w-3 h-3" />
@@ -1177,6 +1279,19 @@ export default function CreatePost() {
         title={t('community.loginRequired', '로그인이 필요합니다')}
         description={t('community.loginRequiredDesc', '게시물을 작성하려면 로그인이 필요합니다.')}
       />
+
+      {/* 닉네임 설정 모달 */}
+      {user && (
+        <NicknameSetupModal
+          open={showNicknameModal}
+          onClose={() => setShowNicknameModal(false)}
+          userId={user.id}
+          currentFullName={userFullName || undefined}
+          onSuccess={(nickname) => {
+            setUserNickname(nickname);
+          }}
+        />
+      )}
     </div>
   );
 }

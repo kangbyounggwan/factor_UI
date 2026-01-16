@@ -42,9 +42,9 @@ import {
   MessageCircle,
   Flame,
   Users,
-  FileText,
   ThumbsUp,
   Hash,
+  Edit,
 } from "lucide-react";
 
 // Layout Components
@@ -264,56 +264,6 @@ export default function Community() {
   // 오른쪽 패널 렌더링 (웹에서만)
   const renderRightPanel = () => (
     <div className="w-80 shrink-0 space-y-4">
-      {/* 커뮤니티 통계 */}
-      {communityStats && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-primary" />
-              {t('community.stats', '커뮤니티 현황')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/50">
-                <FileText className="w-4 h-4 text-blue-500" />
-                <div>
-                  <p className="text-xs text-muted-foreground">{t('community.totalPosts', '총 게시물')}</p>
-                  <p className="font-semibold text-sm">{communityStats.totalPosts.toLocaleString()}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/50">
-                <MessageCircle className="w-4 h-4 text-green-500" />
-                <div>
-                  <p className="text-xs text-muted-foreground">{t('community.totalComments', '총 댓글')}</p>
-                  <p className="font-semibold text-sm">{communityStats.totalComments.toLocaleString()}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/50">
-                <Users className="w-4 h-4 text-purple-500" />
-                <div>
-                  <p className="text-xs text-muted-foreground">{t('community.activeUsers', '활동 회원')}</p>
-                  <p className="font-semibold text-sm">{communityStats.totalUsers.toLocaleString()}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/50">
-                <ThumbsUp className="w-4 h-4 text-red-500" />
-                <div>
-                  <p className="text-xs text-muted-foreground">{t('community.totalLikes', '총 좋아요')}</p>
-                  <p className="font-semibold text-sm">{communityStats.totalLikes.toLocaleString()}</p>
-                </div>
-              </div>
-            </div>
-            {communityStats.todayPosts > 0 && (
-              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                <Clock className="w-3.5 h-3.5" />
-                {t('community.todayPosts', '오늘 {{count}}개의 새 글', { count: communityStats.todayPosts })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {/* 인기 게시물 */}
       {popularPosts.length > 0 && (
         <Card>
@@ -361,6 +311,21 @@ export default function Community() {
         </Card>
       )}
 
+      {/* 글등록 버튼 */}
+      <Button
+        className="w-full"
+        onClick={() => {
+          if (user) {
+            navigate('/community/write');
+          } else {
+            setShowLoginModal(true);
+          }
+        }}
+      >
+        <Edit className="w-4 h-4 mr-2" />
+        {t('community.write', '글등록')}
+      </Button>
+
       {/* 인기 태그 (데스크탑 사이드바 버전) */}
       {popularTags.length > 0 && (
         <Card>
@@ -400,6 +365,7 @@ export default function Community() {
           onToggle={toggleSidebar}
           user={user}
           onLoginClick={() => setShowLoginModal(true)}
+          communityStats={communityStats}
         />
       )}
 
@@ -409,12 +375,6 @@ export default function Community() {
         <AppHeader
           sidebarOpen={sidebarOpen}
           onLoginRequired={() => setShowLoginModal(true)}
-          rightContent={
-            <Button onClick={handleCreateClick} size="sm" className="gap-1">
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('community.write', '글쓰기')}</span>
-            </Button>
-          }
         />
 
         {/* 콘텐츠 영역 */}
@@ -550,7 +510,9 @@ export default function Community() {
             {/* 오른쪽 패널 - lg 이상에서만 표시 */}
             {!isMobile && (
               <div className="hidden lg:block">
-                {renderRightPanel()}
+                <div className="sticky top-[120px]">
+                  {renderRightPanel()}
+                </div>
               </div>
             )}
           </div>

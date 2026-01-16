@@ -3,12 +3,14 @@
  * TipTap 에디터 내에서 3D 모델을 표시하고 삭제할 수 있는 컴포넌트
  */
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { NodeViewWrapper, NodeViewProps } from '@tiptap/react';
-import { Box, X, Loader2, FileCode } from 'lucide-react';
+import { Box, X, Loader2, FileCode, Download, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export function Model3DNodeComponent({ node, deleteNode, selected }: NodeViewProps) {
-  const { url, filename, filetype, isLoading } = node.attrs;
+export function Model3DNodeComponent({ node, deleteNode, selected, editor }: NodeViewProps) {
+  const { t } = useTranslation();
+  const { url, filename, filetype, isLoading, downloadable = true } = node.attrs;
   const [showControls, setShowControls] = useState(false);
 
   // 모델 삭제
@@ -17,6 +19,13 @@ export function Model3DNodeComponent({ node, deleteNode, selected }: NodeViewPro
     e.stopPropagation();
     deleteNode();
   }, [deleteNode]);
+
+  // 다운로드 가능 여부 변경
+  const handleDownloadableChange = useCallback((value: boolean) => {
+    if (editor && url) {
+      editor.commands.updateModel3DDownloadable(url, value);
+    }
+  }, [editor, url]);
 
   // 파일 확장자 표시용
   const displayType = filetype?.toUpperCase() || '3D';
@@ -62,9 +71,47 @@ export function Model3DNodeComponent({ node, deleteNode, selected }: NodeViewPro
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm truncate">{filename || '3D Model'}</p>
               <p className="text-xs text-muted-foreground">
-                {isLoading ? '업로드 중...' : `${displayType} (${isGCode ? 'G-code' : '3D 모델'})`}
+                {isLoading ? t('community.uploading', '업로드 중...') : `${displayType} (${isGCode ? 'G-code' : '3D 모델'})`}
               </p>
             </div>
+
+            {/* 다운로드 가능 여부 라디오 버튼 - 로딩 중에는 숨김 */}
+            {!isLoading && (
+              <div className="flex items-center gap-3 shrink-0">
+                <label className={cn(
+                  "flex items-center gap-1.5 cursor-pointer text-xs px-2.5 py-1.5 rounded-md border transition-colors",
+                  downloadable
+                    ? "bg-green-50 dark:bg-green-950/30 border-green-300 dark:border-green-700 text-green-700 dark:text-green-400"
+                    : "bg-muted/50 border-border text-muted-foreground hover:bg-muted"
+                )}>
+                  <input
+                    type="radio"
+                    name={`downloadable-${url}`}
+                    checked={downloadable}
+                    onChange={() => handleDownloadableChange(true)}
+                    className="sr-only"
+                  />
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{t('community.downloadAllowed', '다운로드 허용')}</span>
+                </label>
+                <label className={cn(
+                  "flex items-center gap-1.5 cursor-pointer text-xs px-2.5 py-1.5 rounded-md border transition-colors",
+                  !downloadable
+                    ? "bg-red-50 dark:bg-red-950/30 border-red-300 dark:border-red-700 text-red-700 dark:text-red-400"
+                    : "bg-muted/50 border-border text-muted-foreground hover:bg-muted"
+                )}>
+                  <input
+                    type="radio"
+                    name={`downloadable-${url}`}
+                    checked={!downloadable}
+                    onChange={() => handleDownloadableChange(false)}
+                    className="sr-only"
+                  />
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>{t('community.downloadNotAllowed', '다운로드 금지')}</span>
+                </label>
+              </div>
+            )}
           </div>
         </div>
 
@@ -73,7 +120,7 @@ export function Model3DNodeComponent({ node, deleteNode, selected }: NodeViewPro
           <button
             onClick={handleDelete}
             className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center shadow-md hover:bg-destructive/90 transition-colors z-10"
-            title="삭제"
+            title={t('common.delete', '삭제')}
           >
             <X className="w-4 h-4" />
           </button>

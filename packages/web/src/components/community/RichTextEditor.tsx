@@ -4,7 +4,7 @@
  * - 이미지 크기 조절 지원
  * - 첨부 영역 동기화
  */
-import { useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -14,6 +14,7 @@ import Underline from '@tiptap/extension-underline';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
+import Youtube from '@tiptap/extension-youtube';
 import { Model3DNode } from './Model3DNode';
 import { ResizableImageNode } from './ResizableImageNode';
 import { Button } from '@/components/ui/button';
@@ -56,8 +57,9 @@ import {
   ImagePlus,
   Loader2,
   FileCode,
+  Youtube as YoutubeIcon,
+  ExternalLink,
 } from 'lucide-react';
-import { useState } from 'react';
 
 // 폰트 사이즈 옵션
 const FONT_SIZES = [
@@ -91,12 +93,35 @@ export interface AttachedImage {
   isInContent: boolean;
 }
 
+// 3D 모델 파일 타입
+export interface Attached3DFile {
+  url: string;
+  filename: string;
+  filetype: string;
+  isLoading?: boolean;
+}
+
+// G-code 파일 타입
+export interface AttachedGCodeFile {
+  gcodeEmbedId: string;
+  segmentId: string;
+  url: string;
+  filename: string;
+  isLoading?: boolean;
+}
+
+// 에디터 API를 외부에 노출
+export interface RichTextEditorApi {
+  removeModel3DByUrl: (url: string) => void;
+  removeGCodeByUrl: (url: string) => void;
+}
+
 interface RichTextEditorProps {
   content: string;
   onChange: (content: string) => void;
   placeholder?: string;
   onImageUpload?: (file: File) => Promise<string | null>;
-  on3DUpload?: (file: File) => Promise<string | null>;
+  on3DUpload?: (file: File) => Promise<{ url: string; thumbnail?: string } | null>;
   onGCodeUpload?: (file: File) => Promise<{ url: string; id: string } | null>;
   minHeight?: string;
   // 첨부 이미지 관련 props
@@ -104,6 +129,13 @@ interface RichTextEditorProps {
   onAttachedImagesChange?: (images: AttachedImage[]) => void;
   showAttachmentSection?: boolean;
   maxImages?: number;
+  // 3D 모델/G-code 동기화 관련 props
+  attached3DFiles?: Attached3DFile[];
+  on3DFilesChange?: (files: Attached3DFile[]) => void;
+  attachedGCodeFiles?: AttachedGCodeFile[];
+  onGCodeFilesChange?: (files: AttachedGCodeFile[]) => void;
+  // 에디터 API 콜백 (에디터 준비되면 호출)
+  onEditorReady?: (api: RichTextEditorApi) => void;
 }
 
 export function RichTextEditor({
@@ -118,39 +150,82 @@ export function RichTextEditor({
   onAttachedImagesChange,
   showAttachmentSection = true,
   maxImages = 5,
+  attached3DFiles = [],
+  on3DFilesChange,
+  attachedGCodeFiles = [],
+  onGCodeFilesChange,
+  onEditorReady,
 }: RichTextEditorProps) {
   const [linkUrl, setLinkUrl] = useState('');
   const [showLinkPopover, setShowLinkPopover] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  // YouTube URL 감지 함수
+  const isYoutubeUrl = useCallback((url: string): boolean => {
+    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/|shorts\/)|youtu\.be\/)/i;
+    return youtubeRegex.test(url);
+  }, []);
+
+  // YouTube Video ID 추출 함수
+  const extractYoutubeVideoId = useCallback((url: string): string | null => {
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=)([^&\s]+)/,
+      /(?:youtu\.be\/)([^?\s]+)/,
+      /(?:youtube\.com\/embed\/)([^?\s]+)/,
+      /(?:youtube\.com\/shorts\/)([^?\s]+)/,
+    ];
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    return null;
+  }, []);
+
+  // 현재 입력된 URL이 YouTube인지 확인
+  const isCurrentUrlYoutube = isYoutubeUrl(linkUrl);
+  const youtubeVideoId = isCurrentUrlYoutube ? extractYoutubeVideoId(linkUrl) : null;
+
+  // 확장 배열을 메모이제이션하여 중복 경고 방지
+  const extensions = useMemo(() => [
+    StarterKit.configure({
+      heading: {
+        levels: [1, 2, 3],
+      },
+    }),
+    ResizableImageNode,
+    Link.configure({
+      openOnClick: false,
+      HTMLAttributes: {
+        class: 'text-primary underline',
+      },
+    }),
+    Placeholder.configure({
+      placeholder,
+    }),
+    TextAlign.configure({
+      types: ['heading', 'paragraph'],
+    }),
+    Underline,
+    TextStyle,
+    Color,
+    Highlight.configure({
+      multicolor: true,
+    }),
+    Model3DNode,
+    Youtube.configure({
+      inline: false,
+      nocookie: true, // privacy-enhanced mode
+      allowFullscreen: true,
+      HTMLAttributes: {
+        class: 'youtube-embed rounded-lg overflow-hidden my-4',
+      },
+    }),
+  ], [placeholder]);
+
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: {
-          levels: [1, 2, 3],
-        },
-      }),
-      ResizableImageNode,
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: {
-          class: 'text-primary underline',
-        },
-      }),
-      Placeholder.configure({
-        placeholder,
-      }),
-      TextAlign.configure({
-        types: ['heading', 'paragraph'],
-      }),
-      Underline,
-      TextStyle,
-      Color,
-      Highlight.configure({
-        multicolor: true,
-      }),
-      Model3DNode,
-    ],
+    extensions,
     content,
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
@@ -159,6 +234,16 @@ export function RichTextEditor({
       // 첨부 이미지 동기화 - 콘텐츠 내 이미지 상태 업데이트
       if (onAttachedImagesChange) {
         syncAttachedImages(html);
+      }
+
+      // 3D 파일 동기화 - 에디터에서 삭제 시 첨부 목록에서도 삭제
+      if (on3DFilesChange) {
+        sync3DFiles(html);
+      }
+
+      // G-code 파일 동기화 - 에디터에서 삭제 시 첨부 목록에서도 삭제
+      if (onGCodeFilesChange) {
+        syncGCodeFiles(html);
       }
     },
     editorProps: {
@@ -180,6 +265,55 @@ export function RichTextEditor({
     return urls;
   }, []);
 
+  // 콘텐츠 내 3D 모델 URL 추출 (G-code 제외)
+  const extract3DModelsFromContent = useCallback((html: string): string[] => {
+    // model-3d-embed 클래스를 가진 div에서 data-url과 data-type 추출
+    // G-code가 아닌 3D 모델만 추출 (stl, obj, gltf, glb, 3mf)
+    const urls: string[] = [];
+
+    // 각 model-3d-embed 블록을 찾아서 분석
+    const blockRegex = /<div[^>]*class="model-3d-embed"[^>]*>/gi;
+    let blockMatch;
+    while ((blockMatch = blockRegex.exec(html)) !== null) {
+      const block = blockMatch[0];
+      const urlMatch = block.match(/data-url="([^"]+)"/i);
+      const typeMatch = block.match(/data-type="([^"]+)"/i);
+
+      if (urlMatch && urlMatch[1] && !urlMatch[1].startsWith('temp_')) {
+        const fileType = typeMatch ? typeMatch[1].toLowerCase() : '';
+        // G-code 타입이 아닌 경우만 포함
+        if (!['gcode', 'nc', 'ngc'].includes(fileType)) {
+          urls.push(urlMatch[1]);
+        }
+      }
+    }
+    return [...new Set(urls)]; // 중복 제거
+  }, []);
+
+  // 콘텐츠 내 G-code URL 추출
+  const extractGCodesFromContent = useCallback((html: string): string[] => {
+    // model-3d-embed 클래스를 가진 div에서 G-code 타입만 추출
+    const urls: string[] = [];
+
+    // 각 model-3d-embed 블록을 찾아서 분석
+    const blockRegex = /<div[^>]*class="model-3d-embed"[^>]*>/gi;
+    let blockMatch;
+    while ((blockMatch = blockRegex.exec(html)) !== null) {
+      const block = blockMatch[0];
+      const urlMatch = block.match(/data-url="([^"]+)"/i);
+      const typeMatch = block.match(/data-type="([^"]+)"/i);
+
+      if (urlMatch && urlMatch[1] && !urlMatch[1].startsWith('temp_')) {
+        const fileType = typeMatch ? typeMatch[1].toLowerCase() : '';
+        // G-code 타입인 경우만 포함
+        if (['gcode', 'nc', 'ngc'].includes(fileType)) {
+          urls.push(urlMatch[1]);
+        }
+      }
+    }
+    return [...new Set(urls)]; // 중복 제거
+  }, []);
+
   // 첨부 이미지와 콘텐츠 동기화
   const syncAttachedImages = useCallback((html: string) => {
     if (!onAttachedImagesChange) return;
@@ -199,6 +333,36 @@ export function RichTextEditor({
       onAttachedImagesChange(updatedImages);
     }
   }, [attachedImages, onAttachedImagesChange, extractImagesFromContent]);
+
+  // 첨부 3D 파일과 콘텐츠 동기화 (에디터에서 삭제 시 첨부 목록에서도 삭제)
+  const sync3DFiles = useCallback((html: string) => {
+    if (!on3DFilesChange || attached3DFiles.length === 0) return;
+
+    const contentUrls = extract3DModelsFromContent(html);
+    // 에디터에 없는 3D 파일은 첨부 목록에서 제거 (로딩 중인 파일은 유지)
+    const updatedFiles = attached3DFiles.filter(f =>
+      f.isLoading || contentUrls.includes(f.url)
+    );
+
+    if (updatedFiles.length !== attached3DFiles.length) {
+      on3DFilesChange(updatedFiles);
+    }
+  }, [attached3DFiles, on3DFilesChange, extract3DModelsFromContent]);
+
+  // 첨부 G-code 파일과 콘텐츠 동기화 (에디터에서 삭제 시 첨부 목록에서도 삭제)
+  const syncGCodeFiles = useCallback((html: string) => {
+    if (!onGCodeFilesChange || attachedGCodeFiles.length === 0) return;
+
+    const contentUrls = extractGCodesFromContent(html);
+    // 에디터에 없는 G-code 파일은 첨부 목록에서 제거 (로딩 중인 파일은 유지)
+    const updatedFiles = attachedGCodeFiles.filter(f =>
+      f.isLoading || contentUrls.includes(f.url)
+    );
+
+    if (updatedFiles.length !== attachedGCodeFiles.length) {
+      onGCodeFilesChange(updatedFiles);
+    }
+  }, [attachedGCodeFiles, onGCodeFilesChange, extractGCodesFromContent]);
 
   // 이미지 업로드 핸들러
   const handleImageUpload = useCallback(async (file?: File) => {
@@ -278,12 +442,12 @@ export function RichTextEditor({
           isLoading: true,
         }).run();
 
-        // 2. 실제 업로드 수행
-        const url = await on3DUpload(file);
+        // 2. 실제 업로드 수행 (썸네일 포함)
+        const result = await on3DUpload(file);
 
-        if (url) {
-          // 3. 업로드 완료 - 노드 업데이트
-          editor.commands.updateModel3DLoading(tempUrl, url);
+        if (result) {
+          // 3. 업로드 완료 - 노드 업데이트 (썸네일 포함)
+          editor.commands.updateModel3DLoading(tempUrl, result.url, result.thumbnail);
         } else {
           // 업로드 실패 - 노드 제거
           const { state } = editor;
@@ -378,6 +542,26 @@ export function RichTextEditor({
     setShowLinkPopover(false);
   }, [editor, linkUrl]);
 
+  // YouTube 임베드 핸들러
+  const handleAddYoutubeEmbed = useCallback(() => {
+    if (!editor || !linkUrl) return;
+
+    const videoId = extractYoutubeVideoId(linkUrl);
+    if (!videoId) return;
+
+    // YouTube URL을 정규화
+    const normalizedUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+    editor.commands.setYoutubeVideo({
+      src: normalizedUrl,
+      width: 640,
+      height: 360,
+    });
+
+    setLinkUrl('');
+    setShowLinkPopover(false);
+  }, [editor, linkUrl, extractYoutubeVideoId]);
+
   // 첨부 이미지 삭제 (목록에서만)
   const handleRemoveAttachedImage = useCallback((index: number) => {
     if (!onAttachedImagesChange) return;
@@ -405,6 +589,30 @@ export function RichTextEditor({
       }
     }
   }, [editor, attachedImages, onAttachedImagesChange]);
+
+  // 3D 파일을 에디터에서 삭제하는 헬퍼 함수
+  const removeModel3DFromEditor = useCallback((url: string) => {
+    if (!editor) return;
+    // TipTap 커맨드 사용하여 삭제
+    editor.commands.removeModel3DByUrl(url);
+  }, [editor]);
+
+  // G-code 파일을 에디터에서 삭제하는 헬퍼 함수 (URL 기반)
+  const removeGCodeFromEditor = useCallback((url: string) => {
+    if (!editor) return;
+    // 3D 모델과 동일한 노드 타입(model3d) 사용
+    editor.commands.removeModel3DByUrl(url);
+  }, [editor]);
+
+  // 에디터 준비 완료 시 API 제공
+  useEffect(() => {
+    if (editor && onEditorReady) {
+      onEditorReady({
+        removeModel3DByUrl: removeModel3DFromEditor,
+        removeGCodeByUrl: removeGCodeFromEditor,
+      });
+    }
+  }, [editor, onEditorReady, removeModel3DFromEditor, removeGCodeFromEditor]);
 
   // 첨부 이미지를 콘텐츠에 삽입
   const insertImageToContent = useCallback((url: string) => {
@@ -451,21 +659,71 @@ export function RichTextEditor({
                 링크
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-80">
-              <div className="space-y-2">
-                <Input
-                  placeholder="URL을 입력하세요"
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleAddLink();
-                    }
-                  }}
-                />
+            <PopoverContent className="w-96">
+              <div className="space-y-3">
+                {/* URL 입력 */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">URL을 입력하세요</label>
+                  <Input
+                    placeholder="https://example.com 또는 YouTube 링크"
+                    value={linkUrl}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (isCurrentUrlYoutube) {
+                          handleAddYoutubeEmbed();
+                        } else {
+                          handleAddLink();
+                        }
+                      }
+                    }}
+                    className="h-9"
+                  />
+                </div>
+
+                {/* YouTube 감지 시 미리보기 및 옵션 */}
+                {isCurrentUrlYoutube && youtubeVideoId && (
+                  <div className="space-y-2 p-3 bg-muted/50 rounded-lg border">
+                    <div className="flex items-center gap-2 text-sm font-medium text-red-600">
+                      <YoutubeIcon className="w-4 h-4" />
+                      YouTube 영상 감지됨
+                    </div>
+                    {/* 썸네일 미리보기 */}
+                    <div className="relative aspect-video w-full rounded-md overflow-hidden bg-black/10">
+                      <img
+                        src={`https://img.youtube.com/vi/${youtubeVideoId}/mqdefault.jpg`}
+                        alt="YouTube 썸네일"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center">
+                          <div className="w-0 h-0 border-t-[8px] border-t-transparent border-l-[14px] border-l-white border-b-[8px] border-b-transparent ml-1" />
+                        </div>
+                      </div>
+                    </div>
+                    {/* 임베드 버튼 */}
+                    <Button
+                      size="sm"
+                      onClick={handleAddYoutubeEmbed}
+                      className="w-full gap-2 bg-red-600 hover:bg-red-700"
+                    >
+                      <YoutubeIcon className="w-4 h-4" />
+                      영상 삽입
+                    </Button>
+                  </div>
+                )}
+
+                {/* 일반 링크 버튼 */}
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={handleAddLink}>
-                    적용
+                  <Button
+                    size="sm"
+                    variant={isCurrentUrlYoutube ? "outline" : "default"}
+                    onClick={handleAddLink}
+                    disabled={!linkUrl.trim()}
+                    className="gap-1.5"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    {isCurrentUrlYoutube ? '링크로 추가' : '적용'}
                   </Button>
                   {editor.isActive('link') && (
                     <Button

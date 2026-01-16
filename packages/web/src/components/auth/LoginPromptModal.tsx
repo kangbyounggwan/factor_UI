@@ -47,7 +47,8 @@ const MicrosoftLogo = () => (
 
 interface LoginPromptModalProps {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
+  onOpenChange?: (open: boolean) => void;
+  onClose?: () => void;
   title?: string;
   description?: string;
 }
@@ -55,9 +56,18 @@ interface LoginPromptModalProps {
 export function LoginPromptModal({
   open,
   onOpenChange,
+  onClose,
   title,
   description,
 }: LoginPromptModalProps) {
+  // onClose를 onOpenChange로 변환
+  const handleOpenChange = (newOpen: boolean) => {
+    if (onOpenChange) {
+      onOpenChange(newOpen);
+    } else if (!newOpen && onClose) {
+      onClose();
+    }
+  };
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { signInWithGoogle, signInWithApple } = useAuth();
@@ -69,7 +79,7 @@ export function LoginPromptModal({
     setIsLoading("google");
     try {
       await signInWithGoogle();
-      onOpenChange(false);
+      handleOpenChange(false);
     } catch (error) {
       console.error("Google login error:", error);
     } finally {
@@ -81,7 +91,7 @@ export function LoginPromptModal({
     setIsLoading("apple");
     try {
       await signInWithApple();
-      onOpenChange(false);
+      handleOpenChange(false);
     } catch (error) {
       console.error("Apple login error:", error);
     } finally {
@@ -92,10 +102,10 @@ export function LoginPromptModal({
   const handleEmailContinue = () => {
     if (email.trim()) {
       navigate(`/auth?email=${encodeURIComponent(email)}`);
-      onOpenChange(false);
+      handleOpenChange(false);
     } else {
       navigate("/auth");
-      onOpenChange(false);
+      handleOpenChange(false);
     }
   };
 
@@ -111,7 +121,7 @@ export function LoginPromptModal({
     );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[440px] p-0 gap-0 overflow-hidden border-0 shadow-2xl">
         {/* 헤더 */}
         <DialogHeader className="px-8 pt-8 pb-2 text-left">

@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { FileCode, Download, Loader2, Maximize2 } from 'lucide-react';
+import { FileCode, Download, Loader2, Maximize2, Lock } from 'lucide-react';
 import { GCodeViewerReportModal } from '@/components/ai/GCodeAnalytics/GCodeViewerReportModal';
 import { GCodeAnalysisReport, type GCodeAnalysisData, type ReportPanelTab } from '@/components/ai/GCodeAnalytics/GCodeAnalysisReport';
 import type { LayerSegmentData, TemperatureData } from '@/lib/api/gcode';
@@ -133,9 +133,11 @@ interface GCodeEmbedProps {
   className?: string;
   /** G-code 임베드 고유 ID (gcode_segment_data 테이블 조회용) */
   gcodeEmbedId?: string;
+  /** 다운로드 허용 여부 */
+  downloadable?: boolean;
 }
 
-export function GCodeEmbed({ url, filename, className, gcodeEmbedId }: GCodeEmbedProps) {
+export function GCodeEmbed({ url, filename, className, gcodeEmbedId, downloadable = true }: GCodeEmbedProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [gcodeContent, setGcodeContent] = useState<string>('');
@@ -295,15 +297,22 @@ export function GCodeEmbed({ url, filename, className, gcodeEmbedId }: GCodeEmbe
             )}
           </div>
           <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleDownload}
-              className="h-7 px-2"
-            >
-              <Download className="w-3.5 h-3.5 mr-1" />
-              {t('common.download', '다운로드')}
-            </Button>
+            {downloadable ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDownload}
+                className="h-7 px-2"
+              >
+                <Download className="w-3.5 h-3.5 mr-1" />
+                {t('common.download', '다운로드')}
+              </Button>
+            ) : (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground px-2 py-1">
+                <Lock className="w-3 h-3" />
+                {t('community.downloadNotAllowed')}
+              </div>
+            )}
             <Button
               variant="ghost"
               size="sm"

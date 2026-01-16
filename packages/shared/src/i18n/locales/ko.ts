@@ -2764,6 +2764,24 @@ export default {
     postInfo: "게시물 정보",
     commentsCount: "댓글",
     deleteCommentTitle: "댓글 삭제",
-    deleteCommentDesc: "이 댓글을 삭제하시겠습니까?"
+    deleteCommentDesc: "이 댓글을 삭제하시겠습니까?",
+    addImage: "이미지",
+    reply: "답글",
+    replyingTo: "님에게 답글 작성 중",
+    replyPlaceholder: "답글을 입력하세요",
+    downloadNotAllowed: "다운로드 금지",
+    anonymous: "익명",
+    unknownAuthor: "알 수 없음",
+    // 닉네임 설정 모달
+    setNickname: "닉네임 설정",
+    setNicknameDesc: "커뮤니티에서 사용할 닉네임을 설정해주세요. 닉네임은 다른 사용자에게 공개됩니다.",
+    nickname: "닉네임",
+    nicknamePlaceholder: "닉네임을 입력하세요",
+    nicknameHint: "2~20자, 특수문자 사용 가능",
+    nicknameSaved: "닉네임이 설정되었습니다",
+    nicknameError: "닉네임 설정 실패",
+    submitReply: "답글 등록",
+    showReplies: "답글 {{count}}개 보기",
+    hideReplies: "답글 숨기기"
   }
 };

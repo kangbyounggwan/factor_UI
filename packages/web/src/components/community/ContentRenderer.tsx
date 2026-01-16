@@ -35,6 +35,28 @@ function sanitizeHtml(html: string): string {
     return match;
   });
 
+  // YouTube iframe에 반응형 스타일 및 래퍼 추가
+  // youtube-nocookie.com 또는 youtube.com/embed URL만 허용
+  safe = safe.replace(
+    /<div[^>]*data-youtube-video[^>]*>[\s\S]*?<iframe[^>]*src="(https:\/\/www\.youtube(-nocookie)?\.com\/embed\/[^"]+)"[^>]*>[\s\S]*?<\/iframe>[\s\S]*?<\/div>/gi,
+    (match, src) => {
+      // YouTube URL 검증 (youtube.com 또는 youtube-nocookie.com의 embed URL만 허용)
+      if (!/^https:\/\/www\.youtube(-nocookie)?\.com\/embed\//.test(src)) {
+        return ''; // 잘못된 URL은 제거
+      }
+      return `<div class="youtube-embed-wrapper my-4" style="position: relative; width: 100%; max-width: 640px; margin: 0 auto;">
+        <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+          <iframe
+            src="${src}"
+            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; border-radius: 0.5rem;"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen
+          ></iframe>
+        </div>
+      </div>`;
+    }
+  );
+
   return safe;
 }
 
@@ -54,6 +76,7 @@ interface Model3DInfo {
   filename: string;
   type: string;
   gcodeId?: string;  // G-code 파일 고유 ID (gcode_embed_id)
+  downloadable: boolean;  // 다운로드 허용 여부
   originalHtml: string;
   startIndex: number;
   endIndex: number;
@@ -79,6 +102,9 @@ function extract3DModels(content: string): Model3DInfo[] {
     const filename = extractDataAttribute(html, 'filename');
     const type = extractDataAttribute(html, 'type');
     const gcodeId = extractDataAttribute(html, 'gcode-id');
+    const downloadableAttr = extractDataAttribute(html, 'downloadable');
+    // 기본값은 true, 'false' 문자열인 경우에만 false
+    const downloadable = downloadableAttr !== 'false';
 
     // url이 있는 경우에만 모델로 처리
     if (url) {
@@ -87,6 +113,7 @@ function extract3DModels(content: string): Model3DInfo[] {
         filename: filename || 'model',
         type: type || 'unknown',
         gcodeId: gcodeId || undefined,
+        downloadable,
         originalHtml: html,
         startIndex: match.index,
         endIndex: match.index + html.length,
@@ -203,12 +230,14 @@ export function ContentRenderer({ content, className, postId }: ContentRendererP
                 url={model.url}
                 filename={model.filename}
                 gcodeEmbedId={model.gcodeId}
+                downloadable={model.downloadable}
               />
             ) : (
               <Model3DEmbed
                 url={model.url}
                 filename={model.filename}
                 fileType={model.type}
+                downloadable={model.downloadable}
               />
             )}
           </Suspense>

@@ -16,11 +16,19 @@ declare module '@tiptap/core' {
       /**
        * 3D 모델을 삽입합니다
        */
-      setModel3D: (options: { url: string; filename: string; filetype: string; gcodeId?: string; isLoading?: boolean }) => ReturnType;
+      setModel3D: (options: { url: string; filename: string; filetype: string; gcodeId?: string; isLoading?: boolean; thumbnail?: string; downloadable?: boolean }) => ReturnType;
       /**
        * 특정 URL의 3D 모델 로딩 상태를 업데이트합니다
        */
-      updateModel3DLoading: (tempUrl: string, newUrl: string) => ReturnType;
+      updateModel3DLoading: (tempUrl: string, newUrl: string, thumbnail?: string) => ReturnType;
+      /**
+       * 특정 URL의 3D 모델 다운로드 가능 여부를 업데이트합니다
+       */
+      updateModel3DDownloadable: (url: string, downloadable: boolean) => ReturnType;
+      /**
+       * 특정 URL의 3D 모델을 삭제합니다
+       */
+      removeModel3DByUrl: (url: string) => ReturnType;
     };
   }
 }
@@ -85,6 +93,23 @@ export const Model3DNode = Node.create<Model3DOptions>({
         parseHTML: () => false,
         renderHTML: () => ({}),
       },
+      thumbnail: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-thumbnail'),
+        renderHTML: attributes => {
+          if (!attributes.thumbnail) {
+            return {};
+          }
+          return { 'data-thumbnail': attributes.thumbnail };
+        },
+      },
+      downloadable: {
+        default: true,
+        parseHTML: element => element.getAttribute('data-downloadable') !== 'false',
+        renderHTML: attributes => {
+          return { 'data-downloadable': attributes.downloadable ? 'true' : 'false' };
+        },
+      },
     };
   },
 
@@ -129,7 +154,7 @@ export const Model3DNode = Node.create<Model3DOptions>({
           });
         },
       updateModel3DLoading:
-        (tempUrl: string, newUrl: string) =>
+        (tempUrl: string, newUrl: string, thumbnail?: string) =>
         ({ tr, state, dispatch }) => {
           let found = false;
           state.doc.descendants((node, pos) => {
@@ -139,6 +164,7 @@ export const Model3DNode = Node.create<Model3DOptions>({
                   ...node.attrs,
                   url: newUrl,
                   isLoading: false,
+                  thumbnail: thumbnail || node.attrs.thumbnail,
                 });
               }
               found = true;
@@ -147,6 +173,50 @@ export const Model3DNode = Node.create<Model3DOptions>({
             return true;
           });
           if (found && dispatch) {
+            dispatch(tr);
+          }
+          return found;
+        },
+      updateModel3DDownloadable:
+        (url: string, downloadable: boolean) =>
+        ({ tr, state, dispatch }) => {
+          let found = false;
+          state.doc.descendants((node, pos) => {
+            if (node.type.name === 'model3d' && node.attrs.url === url) {
+              if (dispatch) {
+                tr.setNodeMarkup(pos, undefined, {
+                  ...node.attrs,
+                  downloadable,
+                });
+              }
+              found = true;
+              return false;
+            }
+            return true;
+          });
+          if (found && dispatch) {
+            dispatch(tr);
+          }
+          return found;
+        },
+      removeModel3DByUrl:
+        (url: string) =>
+        ({ tr, state, dispatch }) => {
+          let found = false;
+          // 역순으로 탐색하여 위치 인덱스가 변하지 않도록 함
+          const nodesToRemove: { pos: number; size: number }[] = [];
+          state.doc.descendants((node, pos) => {
+            if (node.type.name === 'model3d' && node.attrs.url === url) {
+              nodesToRemove.push({ pos, size: node.nodeSize });
+              found = true;
+            }
+            return true;
+          });
+          if (found && dispatch) {
+            // 역순으로 삭제하여 위치가 변하지 않도록
+            nodesToRemove.reverse().forEach(({ pos, size }) => {
+              tr.delete(pos, pos + size);
+            });
             dispatch(tr);
           }
           return found;

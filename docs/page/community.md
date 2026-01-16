@@ -8,7 +8,7 @@ FACTOR-HIBRID 커뮤니티는 3D 프린팅 사용자들이 출력물을 공유�
 - 6가지 카테고리 게시물 (자랑, 질문, 트러블슈팅, 팁, 리뷰, 자유)
 - 리치 텍스트 에디터 (이미지, 3D 모델, G-code 임베드)
 - 댓글 및 대댓글
-- 좋아요 및 유용함 투표
+- 추천/비추천 시스템 (루리웹 스타일 - 상호 배제)
 - 트러블슈팅 메타데이터 (프린터, 필라멘트, 슬라이서 정보)
 - 정답 채택 시스템
 
@@ -26,35 +26,40 @@ FACTOR-HIBRID 커뮤니티는 3D 프린팅 사용자들이 출력물을 공유�
 ```
 packages/
 ├── shared/
-│   └── src/services/supabaseService/
-│       └── community.ts                    # 핵심 API 서비스 (1283줄)
+│   ├── src/services/supabaseService/
+│   │   └── community.ts                    # 핵심 API 서비스 (1283줄)
+│   │
+│   └── supabase/migrations/
+│       ├── 20260110000000_community_tables.sql
+│       ├── 20260112100000_add_model_to_community_posts.sql
+│       ├── 20260112150000_add_gcode_files_to_community_posts.sql
+│       ├── 20260115100000_add_images_to_community_comments.sql
+│       └── 20260116000000_add_dislike_system.sql
 │
 └── web/
-    ├── src/
-    │   ├── pages/
-    │   │   ├── Community.tsx               # 커뮤니티 메인 페이지
-    │   │   ├── CommunityPost.tsx           # 게시물 상세 페이지
-    │   │   ├── CreatePost.tsx              # 게시물 작성 페이지
-    │   │   └── EditPost.tsx                # 게시물 수정 페이지
-    │   │
-    │   └── components/community/
-    │       ├── index.ts                    # Export 파일
-    │       ├── CreatePostModal.tsx         # 게시물 작성 모달
-    │       ├── PostCard.tsx                # 게시물 카드 컴포넌트
-    │       ├── RichTextEditor.tsx          # TipTap 리치 텍스트 에디터
-    │       ├── ContentRenderer.tsx         # 게시물 콘텐츠 렌더러
-    │       ├── GCodeEmbed.tsx              # G-code 파일 임베드
-    │       ├── Model3DEmbed.tsx            # 3D 모델 파일 임베드
-    │       ├── Model3DNode.ts              # TipTap 3D 모델 커스텀 노드
-    │       ├── Model3DNodeComponent.tsx    # 3D 모델 노드 React 컴포넌트
-    │       ├── ResizableImageNode.ts       # TipTap 크기 조절 이미지 노드
-    │       ├── ResizableImage.tsx          # 크기 조절 이미지 컴포넌트
-    │       └── PrinterSelector.tsx         # 프린터 선택 컴포넌트
-    │
-    └── supabase/migrations/
-        ├── 20260110000000_community_tables.sql
-        ├── 20260112100000_add_model_to_community_posts.sql
-        └── 20260112150000_add_gcode_files_to_community_posts.sql
+    └── src/
+        ├── pages/
+        │   ├── Community.tsx               # 커뮤니티 메인 페이지
+        │   ├── CommunityPost.tsx           # 게시물 상세 페이지
+        │   ├── CreatePost.tsx              # 게시물 작성 페이지
+        │   └── EditPost.tsx                # 게시물 수정 페이지
+        │
+        ├── lib/
+        │   └── model3dThumbnail.ts         # 3D 모델 썸네일 생성 유틸리티
+        │
+        └── components/community/
+            ├── index.ts                    # Export 파일
+            ├── CreatePostModal.tsx         # 게시물 작성 모달
+            ├── PostCard.tsx                # 게시물 카드 컴포넌트
+            ├── RichTextEditor.tsx          # TipTap 리치 텍스트 에디터
+            ├── ContentRenderer.tsx         # 게시물 콘텐츠 렌더러
+            ├── GCodeEmbed.tsx              # G-code 파일 임베드
+            ├── Model3DEmbed.tsx            # 3D 모델 파일 임베드
+            ├── Model3DNode.ts              # TipTap 3D 모델 커스텀 노드
+            ├── Model3DNodeComponent.tsx    # 3D 모델 노드 React 컴포넌트
+            ├── ResizableImageNode.ts       # TipTap 크기 조절 이미지 노드
+            ├── ResizableImage.tsx          # 크기 조절 이미지 컴포넌트
+            └── PrinterSelector.tsx         # 프린터 선택 컴포넌트
 ```
 
 ---
@@ -87,9 +92,11 @@ packages/
 | tags | TEXT[] | 태그 배열 |
 | model_id | UUID | AI 모델 ID (FK → ai_generated_models) |
 | view_count | INTEGER | 조회수 |
-| like_count | INTEGER | 좋아요 수 |
+| like_count | INTEGER | 추천 수 |
+| dislike_count | INTEGER | 비추천 수 |
 | comment_count | INTEGER | 댓글 수 |
 | helpful_count | INTEGER | 유용함 투표 수 |
+| author_display_type | TEXT | 작성자 표시 방식 ('nickname', 'realname', 'anonymous') |
 | is_pinned | BOOLEAN | 고정 여부 |
 | is_solved | BOOLEAN | 해결됨 여부 |
 | accepted_answer_id | UUID | 채택된 답변 ID |
@@ -114,7 +121,9 @@ packages/
 | user_id | UUID | 작성자 ID (FK) |
 | parent_id | UUID | 상위 댓글 ID (대댓글용) |
 | content | TEXT | 댓글 내용 |
-| like_count | INTEGER | 좋아요 수 |
+| images | TEXT[] | 첨부 이미지 URL 배열 |
+| like_count | INTEGER | 추천 수 |
+| dislike_count | INTEGER | 비추천 수 |
 | helpful_count | INTEGER | 유용함 투표 수 |
 | is_accepted | BOOLEAN | 정답 채택 여부 |
 | created_at | TIMESTAMPTZ | 생성 시간 |
@@ -129,9 +138,29 @@ packages/
 | user_id | UUID | 사용자 ID (FK) |
 | created_at | TIMESTAMPTZ | 생성 시간 |
 
-**제약조건:** UNIQUE(post_id, user_id) - 중복 좋아요 방지
+**제약조건:** UNIQUE(post_id, user_id) - 중복 추천 방지
 
-#### community_comment_likes (댓글 좋아요)
+#### community_post_dislikes (게시물 비추천)
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | UUID | PK |
+| post_id | UUID | 게시물 ID (FK) |
+| user_id | UUID | 사용자 ID (FK) |
+| created_at | TIMESTAMPTZ | 생성 시간 |
+
+**제약조건:** UNIQUE(post_id, user_id) - 중복 비추천 방지
+
+#### community_comment_likes (댓글 추천)
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | UUID | PK |
+| comment_id | UUID | 댓글 ID (FK) |
+| user_id | UUID | 사용자 ID (FK) |
+| created_at | TIMESTAMPTZ | 생성 시간 |
+
+#### community_comment_dislikes (댓글 비추천)
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
@@ -237,6 +266,7 @@ interface CommunityPost {
   model_id?: string;
   view_count: number;
   like_count: number;
+  dislike_count: number;
   comment_count: number;
   helpful_count: number;
   is_pinned: boolean;
@@ -248,6 +278,7 @@ interface CommunityPost {
   author?: ProfileInfo;
   model?: ModelInfo;
   is_liked?: boolean;
+  is_disliked?: boolean;
   is_helpful_voted?: boolean;
 }
 
@@ -257,7 +288,9 @@ interface PostComment {
   user_id: string;
   parent_id?: string;
   content: string;
+  images?: string[];      // 첨부 이미지 URL 배열
   like_count: number;
+  dislike_count: number;
   helpful_count: number;
   is_accepted: boolean;
   created_at: string;
@@ -265,6 +298,7 @@ interface PostComment {
   author?: ProfileInfo;
   replies?: PostComment[];
   is_liked?: boolean;
+  is_disliked?: boolean;
   is_helpful_voted?: boolean;
 }
 
@@ -325,17 +359,24 @@ interface GetPostsOptions {
 | 함수 | 설명 |
 |------|------|
 | `getComments(postId, userId?)` | 댓글 목록 조회 (대댓글 포함) |
-| `createComment(postId, userId, content, parentId?)` | 댓글/대댓글 작성 |
+| `createComment(postId, userId, content, parentId?, images?)` | 댓글/대댓글 작성 (이미지 첨부 지원) |
 | `deleteComment(commentId, userId, postId)` | 댓글 삭제 |
 
-#### 좋아요/투표 관련
+#### 추천/비추천 관련
 
 | 함수 | 설명 |
 |------|------|
-| `togglePostLike(postId, userId)` | 게시물 좋아요 토글 |
-| `toggleCommentLike(commentId, userId)` | 댓글 좋아요 토글 |
+| `togglePostLike(postId, userId)` | 게시물 추천 토글 (비추천 시 자동 취소) |
+| `togglePostDislike(postId, userId)` | 게시물 비추천 토글 (추천 시 자동 취소) |
+| `toggleCommentLike(commentId, userId)` | 댓글 추천 토글 (비추천 시 자동 취소) |
+| `toggleCommentDislike(commentId, userId)` | 댓글 비추천 토글 (추천 시 자동 취소) |
 | `togglePostHelpful(postId, userId)` | 게시물 유용함 투표 토글 |
 | `toggleCommentHelpful(commentId, userId)` | 댓글 유용함 투표 토글 |
+
+**추천/비추천 상호 배제:**
+- 추천 클릭 시 기존 비추천 자동 취소
+- 비추천 클릭 시 기존 추천 자동 취소
+- 같은 버튼 재클릭 시 토글 (취소)
 
 #### 정답 채택
 
@@ -399,10 +440,40 @@ interface PostCardProps {
 **표시 정보:**
 - 썸네일 (이미지 또는 모델)
 - 카테고리 배지 (색상 구분)
-- 제목, 요약
+- 제목, 요약 (본문에서 추출)
 - 작성자 (아바타 + 닉네임)
-- 메타데이터 (생성일, 조회수, 좋아요, 댓글)
+- 메타데이터 (생성일, 조회수, 추천/비추천, 댓글)
 - 핀/해결됨 상태
+
+**추천/비추천 표시:**
+- ThumbsUp 아이콘 + 추천 수
+- ThumbsDown 아이콘 + 비추천 수
+- 사용자가 추천/비추천한 경우 아이콘 색상 변경
+
+**썸네일 추출 우선순위:**
+1. 첨부된 이미지 (`post.images[0]`)
+2. 첨부된 3D 모델의 썸네일 (`post.model.thumbnail_url`)
+3. 본문 HTML에서 첫 번째 이미지 추출 (`<img src="...">`)
+4. 본문 HTML에서 3D 모델 임베드의 썸네일 추출 (`data-thumbnail`)
+5. 본문 3D 모델 임베드가 있으나 썸네일이 없으면 3D 아이콘 표시
+
+**헬퍼 함수:**
+```typescript
+// 본문에서 첫 번째 이미지 URL 추출
+function extractFirstImageFromContent(content: string): string | null;
+
+// 본문에서 3D 모델 임베드 정보 추출
+interface Model3DEmbedInfo {
+  url: string;
+  filename: string;
+  type: string;
+  thumbnail?: string;
+}
+function extractFirst3DModelFromContent(content: string): Model3DEmbedInfo | null;
+
+// 본문 요약 추출 (HTML 태그 제거)
+function extractContentSummary(content: string, maxLength?: number): string;
+```
 
 **카테고리별 색상:**
 | 카테고리 | 색상 | 아이콘 |
@@ -425,7 +496,7 @@ interface RichTextEditorProps {
   onChange: (content: string) => void;
   placeholder?: string;
   onImageUpload?: (file: File) => Promise<string | null>;
-  on3DUpload?: (file: File) => Promise<string | null>;
+  on3DUpload?: (file: File) => Promise<{ url: string; thumbnail?: string } | null>;
   onGCodeUpload?: (file: File) => Promise<{ url: string; id: string } | null>;
   minHeight?: string;
   attachedImages?: AttachedImage[];
@@ -540,7 +611,67 @@ interface PrinterInfo {
 - 직접 입력 모드 지원
 - 비동기 데이터 로딩
 
-### 6.8 TipTap 커스텀 노드
+### 6.8 3D 모델 썸네일 생성 유틸리티
+
+**위치:** `packages/web/src/lib/model3dThumbnail.ts`
+
+**역할:** Three.js를 사용하여 3D 모델 파일의 스냅샷 이미지를 오프스크린에서 생성
+
+**지원 포맷:**
+- STL (STLLoader)
+- OBJ (OBJLoader)
+- GLTF/GLB (GLTFLoader)
+
+**주요 함수:**
+```typescript
+// 3D 모델 파일에서 썸네일 이미지 생성
+export async function generateModel3DThumbnail(
+  file: File,
+  options?: {
+    width?: number;      // 기본값: 200
+    height?: number;     // 기본값: 200
+    backgroundColor?: string;  // 기본값: '#f8fafc'
+  }
+): Promise<string | null>;  // Base64 PNG 데이터 URL 반환
+
+// Base64 데이터 URL을 Blob으로 변환
+export function dataUrlToBlob(dataUrl: string): Blob;
+
+// Base64 데이터 URL을 File로 변환
+export function dataUrlToFile(dataUrl: string, filename: string): File;
+```
+
+**썸네일 생성 흐름:**
+1. FileReader로 파일을 ArrayBuffer로 읽기
+2. 파일 확장자에 따라 적절한 Three.js Loader 사용
+3. Scene에 모델 추가 + 조명 설정 (Ambient + Directional)
+4. 모델 크기 기반으로 카메라 위치 자동 조정
+5. WebGLRenderer로 오프스크린 렌더링
+6. Canvas.toDataURL()로 PNG 추출
+
+**사용 예시 (CreatePost.tsx):**
+```typescript
+import { generateModel3DThumbnail, dataUrlToFile } from '@/lib/model3dThumbnail';
+
+const handleEditor3DUpload = async (file: File) => {
+  // 모델 업로드와 썸네일 생성 병렬 처리
+  const [modelUrl, thumbnailDataUrl] = await Promise.all([
+    uploadPostImage(user.id, file),
+    generateModel3DThumbnail(file, { width: 200, height: 200 }),
+  ]);
+
+  // 썸네일도 Storage에 업로드
+  let thumbnailUrl: string | undefined;
+  if (thumbnailDataUrl) {
+    const thumbnailFile = dataUrlToFile(thumbnailDataUrl, `${file.name}_thumb.png`);
+    thumbnailUrl = await uploadPostImage(user.id, thumbnailFile) || undefined;
+  }
+
+  return modelUrl ? { url: modelUrl, thumbnail: thumbnailUrl } : null;
+};
+```
+
+### 6.9 TipTap 커스텀 노드
 
 #### Model3DNode
 
@@ -553,11 +684,18 @@ model3d: {
     filetype: string;
     gcodeId?: string;
     isLoading?: boolean;
+    thumbnail?: string;
   }) => ReturnType;
 
-  updateModel3DLoading: (tempUrl: string, newUrl: string) => ReturnType;
+  updateModel3DLoading: (tempUrl: string, newUrl: string, thumbnail?: string) => ReturnType;
 }
 ```
+
+**HTML 속성:**
+- `data-url` - 3D 모델 파일 URL
+- `data-filename` - 파일명
+- `data-type` - 파일 타입 (stl, obj, gltf, glb 등)
+- `data-thumbnail` - 썸네일 이미지 URL (자동 생성)
 
 #### ResizableImageNode
 
@@ -590,6 +728,7 @@ resizableImage: {
 - 커뮤니티 통계 (총 게시물, 댓글, 활동 회원, 좋아요)
 - 인기 게시물 (Top 5)
 - 인기 태그 (Top 10)
+- **스티키 동작** - 스크롤 시 오른쪽 패널이 화면에 고정되어 따라다님
 
 **URL 파라미터:**
 - `category` - 카테고리 필터
@@ -605,12 +744,82 @@ resizableImage: {
 - 좋아요/공유 버튼
 - 댓글 목록 및 작성
 - 대댓글 지원
+- 댓글 이미지 첨부 (최대 여러 장)
 - 게시물 수정/삭제 (작성자)
 - 댓글 좋아요/삭제
 
 **오른쪽 패널 (웹):**
 - 작성자 정보
 - 게시물 통계 (조회수, 좋아요, 댓글, 생성일)
+- **인기 게시물 카드** (Top 5) - 현재 게시물은 비활성화 표시
+- **스티키 동작** - 스크롤 시 오른쪽 패널이 화면에 고정되어 따라다님 (댓글 영역까지)
+
+**인기 게시물 카드 UI:**
+```tsx
+// 인기 게시물 카드 구성
+<Card>
+  <CardHeader>
+    <Flame className="w-4 h-4 text-orange-500" /> 인기 게시물
+  </CardHeader>
+  <CardContent>
+    {popularPosts.map((post, index) => (
+      <div key={post.id}>
+        {/* 순위 배지 색상 */}
+        {/* 1위: bg-red-500 */}
+        {/* 2위: bg-orange-500 */}
+        {/* 3위: bg-amber-500 */}
+        {/* 4위+: bg-muted */}
+        <span>{index + 1}</span>
+        <p>{post.title}</p>
+        <div>
+          <Eye /> {post.view_count}
+          <ThumbsUp /> {post.like_count}
+          {getRelativeTime(post.created_at)}
+        </div>
+      </div>
+    ))}
+  </CardContent>
+</Card>
+```
+
+**댓글 이미지 첨부 기능:**
+```typescript
+// 상태 관리
+const [commentImages, setCommentImages] = useState<string[]>([]);
+const [uploadingCommentImage, setUploadingCommentImage] = useState(false);
+
+// 이미지 업로드 핸들러
+const handleCommentImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file || !user) return;
+
+  setUploadingCommentImage(true);
+  try {
+    const url = await uploadPostImage(user.id, file);
+    if (url) setCommentImages(prev => [...prev, url]);
+  } finally {
+    setUploadingCommentImage(false);
+  }
+};
+
+// 댓글 작성 시 이미지 포함
+const handleSubmitComment = async () => {
+  const newComment = await createComment(
+    postId,
+    user.id,
+    newComment,
+    undefined,       // parentId
+    commentImages    // 이미지 배열
+  );
+  setCommentImages([]);  // 초기화
+};
+```
+
+**UI 구성:**
+- 댓글 입력창 하단에 이미지 업로드 버튼
+- 업로드된 이미지 미리보기 (삭제 버튼 포함)
+- 댓글에 이미지가 있으면 그리드로 표시
+- 이미지 클릭 시 확대 모달
 
 ### 7.3 CreatePost.tsx (작성 페이지)
 
@@ -789,6 +998,50 @@ community.deleteCommentDesc
 - `tags GIN` - 태그 필터링
 - `category` - 카테고리 필터링
 
+### 11.5 스티키 오른쪽 패널
+
+스크롤 시 오른쪽 패널이 화면에 고정되어 따라다니는 UI 개선:
+
+**Community.tsx:**
+```tsx
+{/* 오른쪽 패널 - lg 이상에서만 표시 */}
+{!isMobile && (
+  <div className="hidden lg:block">
+    <div className="sticky top-4">
+      {renderRightPanel()}
+    </div>
+  </div>
+)}
+```
+
+**CommunityPost.tsx:**
+```tsx
+{/* 콘텐츠 영역 */}
+<div className="flex-1 overflow-auto">
+  <div className="flex gap-6 w-full max-w-7xl mx-auto px-6 py-6">
+    {/* 중앙 콘텐츠 영역 */}
+    <div className="flex-1 min-w-0">
+      <Card className="p-6">
+        {renderPostContent()}
+        {renderComments()}
+      </Card>
+    </div>
+
+    {/* 오른쪽 패널 - lg 이상에서만 표시 */}
+    <div className="hidden lg:block">
+      <div className="sticky top-6">
+        {renderRightPanel()}
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+**핵심 CSS:**
+- `sticky` - position: sticky 활성화
+- `top-4` / `top-6` - 상단에서의 고정 위치
+- 부모 컨테이너에 `overflow-auto` 필수 (스크롤 컨텍스트 생성)
+
 ---
 
 ## 12. 보안
@@ -820,6 +1073,7 @@ community.deleteCommentDesc
 | 2026-01-10 | community_tables.sql | 6개 핵심 테이블, 스토리지 버킷 생성 |
 | 2026-01-12 | add_model_to_community_posts.sql | model_id 컬럼 추가 |
 | 2026-01-12 | add_gcode_files_to_community_posts.sql | gcode_segment_data 확장 |
+| 2026-01-15 | add_images_to_community_comments.sql | 댓글 이미지 첨부 기능 (images 컬럼) |
 
 ---
 
@@ -1146,9 +1400,10 @@ export async function createComment(
   postId: string,
   userId: string,
   content: string,
-  parentId?: string
+  parentId?: string,
+  images?: string[]  // 첨부 이미지 URL 배열 (선택)
 ): Promise<PostComment | null> {
-  // 1. 댓글 INSERT
+  // 1. 댓글 INSERT (이미지 포함)
   const { data } = await supabase
     .from('community_comments')
     .insert({
@@ -1156,6 +1411,7 @@ export async function createComment(
       user_id: userId,
       content,
       parent_id: parentId || null,
+      images: images || [],  // 이미지 배열 저장
     })
     .select('*')
     .single();

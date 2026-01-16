@@ -2809,6 +2809,24 @@ export default {
     postInfo: "Post Info",
     commentsCount: "Comments",
     deleteCommentTitle: "Delete Comment",
-    deleteCommentDesc: "Are you sure you want to delete this comment?"
+    deleteCommentDesc: "Are you sure you want to delete this comment?",
+    addImage: "Image",
+    reply: "Reply",
+    replyingTo: "Replying to",
+    replyPlaceholder: "Write a reply...",
+    downloadNotAllowed: "Download not allowed",
+    anonymous: "Anonymous",
+    unknownAuthor: "Unknown",
+    // Nickname setup modal
+    setNickname: "Set Nickname",
+    setNicknameDesc: "Set a nickname to use in the community. Your nickname will be visible to other users.",
+    nickname: "Nickname",
+    nicknamePlaceholder: "Enter nickname",
+    nicknameHint: "2-20 characters, special characters allowed",
+    nicknameSaved: "Nickname saved successfully",
+    nicknameError: "Failed to set nickname",
+    submitReply: "Submit Reply",
+    showReplies: "Show {{count}} replies",
+    hideReplies: "Hide replies"
   }
 };
