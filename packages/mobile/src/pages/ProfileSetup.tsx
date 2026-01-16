@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { User, Phone, Sparkles, LogOut } from "lucide-react";
+import { User, Phone, Sparkles, LogOut, AtSign } from "lucide-react";
 
 const ProfileSetup = () => {
   const { user, checkProfileSetup, signOut } = useAuth();
@@ -21,9 +21,12 @@ const ProfileSetup = () => {
                        socialProvider === 'apple' ? 'Apple' :
                        socialProvider || '';
 
-  const [displayName, setDisplayName] = useState(
+  // 실명 (소셜 로그인에서 가져온 이름으로 초기화)
+  const [fullName, setFullName] = useState(
     user?.user_metadata?.full_name || user?.user_metadata?.name || ""
   );
+  // 닉네임 (커뮤니티에서 표시될 이름, 선택사항)
+  const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -32,7 +35,7 @@ const ProfileSetup = () => {
 
     if (!user) return;
 
-    if (!displayName.trim()) {
+    if (!fullName.trim()) {
       toast({
         title: t("profileSetup.nameRequired", "이름을 입력해주세요"),
         variant: "destructive",
@@ -54,7 +57,7 @@ const ProfileSetup = () => {
       // 1. user_metadata 업데이트
       const { error: authError } = await supabase.auth.updateUser({
         data: {
-          full_name: displayName,
+          full_name: fullName,
           phone: phone,
         }
       });
@@ -62,14 +65,14 @@ const ProfileSetup = () => {
       if (authError) throw authError;
 
       // 2. profiles 테이블에 upsert (없으면 생성, 있으면 업데이트)
-      // display_name: 닉네임 (처음에는 실명과 동일하게 설정, 나중에 변경 가능)
-      // full_name: 실명 (본명)
+      // full_name: 실명 (본명, 필수)
+      // display_name: 닉네임 (선택, 입력하지 않으면 null - 나중에 커뮤니티에서 설정)
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
           user_id: user.id,
-          display_name: displayName, // 닉네임 (초기값은 실명과 동일)
-          full_name: displayName,    // 실명 (본명)
+          full_name: fullName.trim(),
+          display_name: displayName.trim() || null, // 닉네임 (입력하지 않으면 null)
           phone: phone || null,
           role: 'user',
         }, {
@@ -162,23 +165,47 @@ const ProfileSetup = () => {
 
       {/* 폼 */}
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-6">
-        {/* 이름 입력 */}
+        {/* 실명 입력 */}
+        <div className="space-y-2">
+          <Label htmlFor="fullName" className="flex items-center gap-2">
+            <User className="h-4 w-4" />
+            {t("profileSetup.fullName", "이름 (실명)")}
+            <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="fullName"
+            type="text"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder={t("profileSetup.fullNamePlaceholder", "실명을 입력하세요")}
+            required
+            autoFocus
+            className="h-12"
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("profileSetup.fullNameHint", "본인 확인용으로 사용되며 다른 사용자에게 공개되지 않습니다.")}
+          </p>
+        </div>
+
+        {/* 닉네임 입력 */}
         <div className="space-y-2">
           <Label htmlFor="displayName" className="flex items-center gap-2">
-            <User className="h-4 w-4" />
-            {t("profileSetup.name", "이름")}
-            <span className="text-destructive">*</span>
+            <AtSign className="h-4 w-4" />
+            {t("profileSetup.nickname", "닉네임")}
+            <span className="text-muted-foreground text-xs ml-1">{t("common.optional", "(선택)")}</span>
           </Label>
           <Input
             id="displayName"
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            placeholder={t("profileSetup.namePlaceholder", "이름을 입력하세요")}
-            required
-            autoFocus
+            placeholder={t("profileSetup.nicknamePlaceholder", "커뮤니티에서 사용할 닉네임")}
+            maxLength={20}
             className="h-12"
           />
+          <p className="text-xs text-muted-foreground">
+            {t("profileSetup.nicknameHint", "커뮤니티에서 다른 사용자에게 표시됩니다. 나중에 설정해도 됩니다.")}
+          </p>
         </div>
 
         {/* 휴대폰 번호 입력 */}
@@ -203,7 +230,7 @@ const ProfileSetup = () => {
         <Button
           type="submit"
           className="w-full h-12 text-base"
-          disabled={isSubmitting || !displayName.trim() || !phone.trim()}
+          disabled={isSubmitting || !fullName.trim() || !phone.trim()}
         >
           {isSubmitting ? (
             <div className="flex items-center gap-2">

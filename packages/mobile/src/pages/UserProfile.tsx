@@ -352,7 +352,7 @@ const UserProfile = () => {
 
               if (editingField.key === 'name') {
                 updateData.full_name = value;
-                profileUpdateData.display_name = value;
+                profileUpdateData.full_name = value;  // 실명만 업데이트 (display_name은 닉네임이므로 별도 관리)
               } else if (editingField.key === 'phone') {
                 updateData.phone = value;
                 profileUpdateData.phone = value;

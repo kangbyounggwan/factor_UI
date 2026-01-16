@@ -1350,10 +1350,6 @@ export default {
     archiveCount: "{{count}}개의 분석 보고서",
     newFile: "새 파일",
     newAnalysis: "새 분석",
-    backToList: "목록으로",
-    loadingReport: "보고서 로딩 중...",
-    reportLoadFailed: "보고서 로드 실패",
-    reportNotFound: "보고서를 찾을 수 없습니다",
 
     // 업로드 영역
     dragDropTitle: "G-code 파일을 드래그하세요",

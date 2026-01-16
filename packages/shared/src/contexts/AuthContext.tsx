@@ -101,7 +101,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   }
 
 
-  // 프로필 설정 필요 여부 체크 (display_name과 phone 모두 필수)
+  // 프로필 설정 필요 여부 체크 (full_name과 phone 필수, display_name은 선택)
   const checkProfileSetup = async () => {
     if (!user) {
       setNeedsProfileSetup(false);
@@ -111,15 +111,16 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, display_name, phone")
+        .select("id, full_name, phone")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      // 프로필이 없거나 display_name 또는 phone이 없으면 설정 필요
-      if (error || !data || !data.display_name || !data.phone) {
+      // 프로필이 없거나 full_name(실명) 또는 phone이 없으면 설정 필요
+      // display_name(닉네임)은 선택사항이므로 체크하지 않음
+      if (error || !data || !data.full_name || !data.phone) {
         console.log('[Auth] Profile setup needed for user:', user.id, {
           hasProfile: !!data,
-          hasDisplayName: !!data?.display_name,
+          hasFullName: !!data?.full_name,
           hasPhone: !!data?.phone
         });
         setNeedsProfileSetup(true);
@@ -534,7 +535,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         // 그 다음 프로필 로드
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select('id, display_name, phone, role')
+          .select('id, full_name, phone, role')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -548,7 +549,9 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
           setUserRole('user');
           setProfileCheckComplete(true);
         } else {
-          const needsSetup = !profile?.display_name || !profile?.phone;
+          // full_name(실명)과 phone(휴대폰)이 있어야 프로필 설정 완료
+          // display_name(닉네임)은 선택사항이므로 체크하지 않음
+          const needsSetup = !profile?.full_name || !profile?.phone;
           const role = profile?.role || 'user';
           lastRoleLoadedUserIdRef.current = user.id;
 

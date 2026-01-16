@@ -446,10 +446,14 @@ export default function CreatePost() {
     }
   };
 
-  // 이미지 삭제
-  const handleRemoveImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
-  };
+  // 이미지 삭제 (첨부 목록 + 에디터 내용 동시 삭제)
+  const handleRemoveImage = useCallback((index: number) => {
+    const imageToRemove = images[index];
+    if (imageToRemove && editorApi) {
+      editorApi.removeImageByUrl(imageToRemove);
+    }
+    setImages(prev => prev.filter((_, i) => i !== index));
+  }, [images, editorApi]);
 
   // 유효성 검사
   const validateForm = (): boolean => {

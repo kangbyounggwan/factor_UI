@@ -114,6 +114,7 @@ export interface AttachedGCodeFile {
 export interface RichTextEditorApi {
   removeModel3DByUrl: (url: string) => void;
   removeGCodeByUrl: (url: string) => void;
+  removeImageByUrl: (url: string) => void;
 }
 
 interface RichTextEditorProps {
@@ -604,15 +605,39 @@ export function RichTextEditor({
     editor.commands.removeModel3DByUrl(url);
   }, [editor]);
 
+  // 이미지를 에디터에서 삭제하는 헬퍼 함수 (URL 기반)
+  const removeImageFromEditor = useCallback((url: string) => {
+    if (!editor) return;
+    const { state } = editor;
+    const { doc, tr } = state;
+    const nodesToRemove: { pos: number; size: number }[] = [];
+
+    doc.descendants((node, pos) => {
+      if (node.type.name === 'resizableImage' && node.attrs.src === url) {
+        nodesToRemove.push({ pos, size: node.nodeSize });
+      }
+      return true;
+    });
+
+    if (nodesToRemove.length > 0) {
+      // 역순으로 삭제하여 위치가 변하지 않도록
+      nodesToRemove.reverse().forEach(({ pos, size }) => {
+        tr.delete(pos, pos + size);
+      });
+      editor.view.dispatch(tr);
+    }
+  }, [editor]);
+
   // 에디터 준비 완료 시 API 제공
   useEffect(() => {
     if (editor && onEditorReady) {
       onEditorReady({
         removeModel3DByUrl: removeModel3DFromEditor,
         removeGCodeByUrl: removeGCodeFromEditor,
+        removeImageByUrl: removeImageFromEditor,
       });
     }
-  }, [editor, onEditorReady, removeModel3DFromEditor, removeGCodeFromEditor]);
+  }, [editor, onEditorReady, removeModel3DFromEditor, removeGCodeFromEditor, removeImageFromEditor]);
 
   // 첨부 이미지를 콘텐츠에 삽입
   const insertImageToContent = useCallback((url: string) => {
