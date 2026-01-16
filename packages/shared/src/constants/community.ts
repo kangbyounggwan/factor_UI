@@ -14,6 +14,7 @@ import type { PostCategory } from '../services/supabaseService/community';
  * 카테고리 아이콘 맵
  */
 export const CATEGORY_ICONS: Record<PostCategory, string> = {
+  announcement: '📢',
   showcase: '🎨',
   question: '❓',
   troubleshooting: '🔧',
@@ -26,6 +27,7 @@ export const CATEGORY_ICONS: Record<PostCategory, string> = {
  * 카테고리 색상 맵 (Tailwind CSS 클래스)
  */
 export const CATEGORY_COLORS: Record<PostCategory, string> = {
+  announcement: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400',
   showcase: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
   question: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
   troubleshooting: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
@@ -38,6 +40,7 @@ export const CATEGORY_COLORS: Record<PostCategory, string> = {
  * 카테고리 i18n 키 맵
  */
 export const CATEGORY_LABEL_KEYS: Record<PostCategory, string> = {
+  announcement: 'community.category.announcement',
   showcase: 'community.category.showcase',
   question: 'community.category.question',
   troubleshooting: 'community.category.troubleshooting',
@@ -50,6 +53,7 @@ export const CATEGORY_LABEL_KEYS: Record<PostCategory, string> = {
  * 카테고리 설명 맵
  */
 export const CATEGORY_DESCRIPTIONS: Record<PostCategory, string> = {
+  announcement: '공지사항',
   showcase: '출력물 공유',
   question: '일반 질문',
   troubleshooting: '출력 문제 해결',
@@ -75,6 +79,14 @@ export const POST_CATEGORIES: PostCategory[] = [
  */
 export const FILTER_CATEGORIES: (PostCategory | 'all')[] = [
   'all',
+  ...POST_CATEGORIES,
+];
+
+/**
+ * 관리자 전용 카테고리 목록 (공지사항 포함)
+ */
+export const ADMIN_POST_CATEGORIES: PostCategory[] = [
+  'announcement',
   ...POST_CATEGORIES,
 ];
 
@@ -158,9 +170,18 @@ export function getCategoryInfo(category: PostCategory) {
 /**
  * 카테고리 목록을 Select/Dropdown용 옵션으로 변환
  * @param includeAll 'all' 옵션 포함 여부
+ * @param isAdmin 관리자 여부 (true면 공지사항 카테고리 포함)
  */
-export function getCategoryOptions(includeAll = false) {
-  const categories = includeAll ? FILTER_CATEGORIES : POST_CATEGORIES;
+export function getCategoryOptions(includeAll = false, isAdmin = false) {
+  let categories: (PostCategory | 'all')[];
+
+  if (includeAll) {
+    categories = FILTER_CATEGORIES;
+  } else if (isAdmin) {
+    categories = ADMIN_POST_CATEGORIES;
+  } else {
+    categories = POST_CATEGORIES;
+  }
 
   return categories.map(category => ({
     value: category,

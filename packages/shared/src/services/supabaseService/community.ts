@@ -154,7 +154,7 @@ async function getProfileInfo(userId: string): Promise<ProfileInfo> {
 }
 
 // 게시물 카테고리
-export type PostCategory = 'showcase' | 'question' | 'tip' | 'review' | 'free' | 'troubleshooting';
+export type PostCategory = 'showcase' | 'question' | 'tip' | 'review' | 'free' | 'troubleshooting' | 'announcement';
 
 // 작성자 표시 방식
 export type AuthorDisplayType = 'nickname' | 'realname' | 'anonymous';
@@ -1605,6 +1605,53 @@ export async function getMyRecentComments(userId: string, limit: number = 5): Pr
     }));
   } catch (error) {
     console.error('[community] Error fetching my comments:', error);
+    return [];
+  }
+}
+
+/**
+ * 공지사항 목록 조회 (상단 고정용)
+ */
+export async function getAnnouncements(limit: number = 5): Promise<CommunityPost[]> {
+  try {
+    const { data, error } = await supabase
+      .from('community_posts')
+      .select(`
+        id,
+        title,
+        content,
+        category,
+        tags,
+        images,
+        view_count,
+        like_count,
+        dislike_count,
+        comment_count,
+        created_at,
+        updated_at,
+        user_id,
+        profiles!community_posts_user_id_fkey (
+          user_id,
+          full_name,
+          display_name,
+          avatar_url
+        )
+      `)
+      .eq('category', 'announcement')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('[community] Error fetching announcements:', error);
+      return [];
+    }
+
+    return (data || []).map(post => ({
+      ...post,
+      profiles: post.profiles as unknown as CommunityPost['profiles'],
+    })) as CommunityPost[];
+  } catch (error) {
+    console.error('[community] Error fetching announcements:', error);
     return [];
   }
 }

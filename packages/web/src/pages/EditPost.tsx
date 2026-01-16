@@ -6,6 +6,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { useUserRole } from "@shared/hooks/useUserRole";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useSidebarState } from "@/hooks/useSidebarState";
@@ -80,8 +81,7 @@ import {
   SLICER_OPTIONS,
 } from "@shared/constants/community";
 
-// 카테고리 옵션 (shared에서 가져옴)
-const CATEGORIES = getCategoryOptions(false);
+// 카테고리 옵션은 useUserRole hook에서 isAdmin 상태에 따라 동적으로 결정됨
 
 // 증상 태그 한글 매핑
 const SYMPTOM_LABELS: Record<string, string> = {
@@ -112,9 +112,13 @@ export default function EditPost() {
   const navigate = useNavigate();
   const { postId } = useParams<{ postId: string }>();
   const { user } = useAuth();
+  const { isAdmin } = useUserRole();
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 관리자인 경우 공지사항 카테고리 포함
+  const CATEGORIES = getCategoryOptions(false, isAdmin);
 
   // 사이드바 상태 (localStorage 연동)
   const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);

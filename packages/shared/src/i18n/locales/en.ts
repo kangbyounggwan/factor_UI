@@ -2737,6 +2737,7 @@ export default {
     title: "Community",
     category: {
       all: "All",
+      announcement: "Notice",
       showcase: "Showcase",
       question: "Question",
       troubleshooting: "Troubleshooting",

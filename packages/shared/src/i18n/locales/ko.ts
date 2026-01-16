@@ -2688,6 +2688,7 @@ export default {
     title: "커뮤니티",
     category: {
       all: "전체",
+      announcement: "공지",
       showcase: "자랑",
       question: "질문",
       troubleshooting: "트러블슈팅",

@@ -65,6 +65,7 @@ import {
   getCommunityStats,
   getMyRecentPosts,
   getMyRecentComments,
+  getAnnouncements,
   type CommunityPost,
   type PostCategory,
   type GetPostsOptions,
@@ -100,6 +101,7 @@ export default function Community() {
   const [totalPages, setTotalPages] = useState(1);
   const [popularTags, setPopularTags] = useState<{ tag: string; count: number }[]>([]);
   const [popularPosts, setPopularPosts] = useState<CommunityPost[]>([]);
+  const [announcements, setAnnouncements] = useState<CommunityPost[]>([]);
   const [communityStats, setCommunityStats] = useState<CommunityStats | null>(null);
   const [myPosts, setMyPosts] = useState<MyRecentPost[]>([]);
   const [myComments, setMyComments] = useState<MyRecentComment[]>([]);
@@ -181,6 +183,16 @@ export default function Community() {
     }
   }, []);
 
+  // 공지사항 로드
+  const loadAnnouncements = useCallback(async () => {
+    try {
+      const data = await getAnnouncements(3);
+      setAnnouncements(data);
+    } catch (error) {
+      console.error('[Community] Error loading announcements:', error);
+    }
+  }, []);
+
   // 커뮤니티 통계 로드
   const loadCommunityStats = useCallback(async () => {
     try {
@@ -214,7 +226,8 @@ export default function Community() {
   useEffect(() => {
     loadPosts(true);
     loadPopularTags();
-  }, [category, sortBy, searchQuery, selectedTag, loadPosts, loadPopularTags]);
+    loadAnnouncements();
+  }, [category, sortBy, searchQuery, selectedTag, loadPosts, loadPopularTags, loadAnnouncements]);
 
   // 사이드 패널 데이터 로드 (웹에서만)
   useEffect(() => {
@@ -501,6 +514,27 @@ export default function Community() {
           )}>
             {/* 게시물 목록 */}
             <div className="flex-1 min-w-0">
+              {/* 공지사항 (상단 고정) */}
+              {announcements.length > 0 && category === 'all' && (
+                <div className="mb-4 space-y-2">
+                  {announcements.map((post) => (
+                    <div
+                      key={post.id}
+                      onClick={() => handlePostClick(post.id)}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/50 cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-950/30 transition-colors"
+                    >
+                      <Badge className="shrink-0 bg-rose-500 text-white hover:bg-rose-600">
+                        📢 {t('community.category.announcement', '공지')}
+                      </Badge>
+                      <span className="font-medium truncate flex-1">{post.title}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {new Date(post.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {loading ? (
                 <div className="flex items-center justify-center py-20">
                   <Loader2 className="w-8 h-8 animate-spin text-primary" />
