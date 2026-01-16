@@ -6,9 +6,9 @@
  * - 좋아요/공유
  * - 웹/모바일 반응형 레이아웃 (웹: 사이드바+헤더, 모바일: 기존 레이아웃)
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useSEO, createCommunityPostSEO } from "@/hooks/useSEO";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -106,16 +106,27 @@ export default function CommunityPostPage() {
   const { postId } = useParams<{ postId: string }>();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const { plan: userPlan } = useUserPlan(user?.id);
+
+  // 댓글 하이라이트를 위한 ref와 상태
+  const commentRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
 
   // i18n 번역된 폴백 텍스트
   const authorFallbacks = {
     unknown: t('community.unknownAuthor'),
     anonymous: t('community.anonymous'),
   };
+
+  // 사이드바 상태 (localStorage 연동)
+  const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
+
+  // 상태 - post를 먼저 선언해야 SEO에서 사용 가능
+  const [post, setPost] = useState<CommunityPost | null>(null);
 
   // SEO - 게시물 데이터 기반 동적 SEO
   const seoData = post
@@ -129,12 +140,6 @@ export default function CommunityPostPage() {
       })
     : { title: '게시물 로딩 중... | FACTOR 커뮤니티', description: '', keywords: [] };
   useSEO(seoData);
-
-  // 사이드바 상태 (localStorage 연동)
-  const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
-
-  // 상태
-  const [post, setPost] = useState<CommunityPost | null>(null);
   const [comments, setComments] = useState<PostComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [commentLoading, setCommentLoading] = useState(false);
@@ -203,6 +208,14 @@ export default function CommunityPostPage() {
     try {
       const data = await getComments(postId, user?.id);
       setComments(data);
+
+      // 답글이 있는 모든 댓글을 기본으로 펼치기
+      const commentsWithReplies = data
+        .filter(c => c.replies && c.replies.length > 0)
+        .map(c => c.id);
+      if (commentsWithReplies.length > 0) {
+        setExpandedReplies(new Set(commentsWithReplies));
+      }
     } catch (error) {
       console.error('[CommunityPost] Error loading comments:', error);
     } finally {
@@ -239,6 +252,41 @@ export default function CommunityPostPage() {
       });
     }
   }, [loadPost, loadComments, loadPopularPosts, user]);
+
+  // URL hash에서 댓글 ID 추출 후 스크롤 및 하이라이트
+  useEffect(() => {
+    const hash = location.hash;
+    if (hash && hash.startsWith('#comment-') && comments.length > 0) {
+      const commentId = hash.replace('#comment-', '');
+
+      // 먼저 댓글인지 대댓글인지 확인
+      const isTopLevelComment = comments.some(c => c.id === commentId);
+
+      if (!isTopLevelComment) {
+        // 대댓글인 경우, 부모 댓글을 찾아서 replies 펼치기
+        const parentComment = comments.find(c =>
+          c.replies?.some(r => r.id === commentId)
+        );
+        if (parentComment) {
+          setExpandedReplies(prev => new Set([...prev, parentComment.id]));
+        }
+      }
+
+      // 약간의 딜레이 후 스크롤 (DOM 렌더링 대기)
+      setTimeout(() => {
+        const commentElement = commentRefs.current.get(commentId);
+        if (commentElement) {
+          commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setHighlightedCommentId(commentId);
+
+          // 3초 후 하이라이트 해제
+          setTimeout(() => {
+            setHighlightedCommentId(null);
+          }, 3000);
+        }
+      }, 500); // 대댓글 펼치는 시간을 위해 딜레이 약간 증가
+    }
+  }, [location.hash, comments]);
 
   // 좋아요 토글
   const handleLikePost = async () => {
@@ -918,11 +966,18 @@ export default function CommunityPostPage() {
       ) : (
         <div className="space-y-1">
           {comments.map((comment, index) => (
-            <div key={comment.id}>
+            <div
+              key={comment.id}
+              id={`comment-${comment.id}`}
+              ref={(el) => {
+                if (el) commentRefs.current.set(comment.id, el);
+              }}
+            >
               {/* 댓글 */}
               <div className={cn(
-                "flex gap-4 p-4 rounded-xl transition-colors hover:bg-muted/50",
-                index !== comments.length - 1 && "border-b"
+                "flex gap-4 p-4 rounded-xl transition-all hover:bg-muted/50",
+                index !== comments.length - 1 && "border-b",
+                highlightedCommentId === comment.id && "bg-primary/10 ring-2 ring-primary/50 animate-pulse"
               )}>
                 <Avatar className="w-10 h-10 shrink-0 ring-2 ring-background shadow-sm">
                   <AvatarImage src={comment.author?.avatar_url} />
@@ -1137,7 +1192,17 @@ export default function CommunityPostPage() {
               {comment.replies && comment.replies.length > 0 && expandedReplies.has(comment.id) && (
                 <div className="ml-14 mt-4 space-y-2 pl-4 border-l-2 border-primary/20">
                   {comment.replies.map((reply) => (
-                    <div key={reply.id} className="flex gap-3 p-3 rounded-lg hover:bg-muted/30 transition-colors">
+                    <div
+                      key={reply.id}
+                      id={`comment-${reply.id}`}
+                      ref={(el) => {
+                        if (el) commentRefs.current.set(reply.id, el);
+                      }}
+                      className={cn(
+                        "flex gap-3 p-3 rounded-lg hover:bg-muted/30 transition-all",
+                        highlightedCommentId === reply.id && "bg-primary/10 ring-2 ring-primary/50 animate-pulse"
+                      )}
+                    >
                       <Avatar className="w-8 h-8 shrink-0 ring-2 ring-background shadow-sm">
                         <AvatarImage src={reply.author?.avatar_url} />
                         <AvatarFallback className="text-xs bg-primary/10 text-primary font-medium">

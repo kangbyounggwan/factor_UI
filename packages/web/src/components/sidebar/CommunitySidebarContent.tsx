@@ -174,7 +174,7 @@ export function CommunitySidebarContent({
             {myComments.map((comment) => (
               <Link
                 key={comment.id}
-                to={`/community/${comment.post_id}`}
+                to={`/community/${comment.post_id}#comment-${comment.id}`}
                 className={cn(
                   "flex items-center gap-2 p-2 rounded-lg transition-colors",
                   "hover:bg-muted/50 group"

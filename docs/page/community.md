@@ -5,9 +5,11 @@
 FACTOR-HIBRID 커뮤니티는 3D 프린팅 사용자들이 출력물을 공유하고, 질문하고, 문제를 해결할 수 있는 플랫폼입니다.
 
 ### 1.1 주요 기능
-- 6가지 카테고리 게시물 (자랑, 질문, 트러블슈팅, 팁, 리뷰, 자유)
+- 7가지 카테고리 게시물 (공지, 자랑, 질문, 트러블슈팅, 팁, 리뷰, 자유)
+- 관리자 전용 공지사항 기능 (상단 고정 표시)
 - 리치 텍스트 에디터 (이미지, 3D 모델, G-code 임베드)
-- 댓글 및 대댓글
+- 댓글 및 대댓글 (기본 펼침)
+- 내가 쓴 댓글 클릭 시 해당 위치로 스크롤 및 하이라이트
 - 추천/비추천 시스템 (루리웹 스타일 - 상호 배제)
 - 트러블슈팅 메타데이터 (프린터, 필라멘트, 슬라이서 정보)
 - 정답 채택 시스템
@@ -105,6 +107,7 @@ packages/
 | updated_at | TIMESTAMPTZ | 수정 시간 |
 
 **카테고리 종류:**
+- `announcement` - 공지사항 (관리자 전용)
 - `showcase` - 자랑 (출력물 공유)
 - `question` - 질문
 - `troubleshooting` - 트러블슈팅 (문제 해결)
@@ -253,7 +256,7 @@ idx_gcode_segment_data_embed_id      (gcode_embed_id)
 ### 5.1 타입 정의
 
 ```typescript
-type PostCategory = 'showcase' | 'question' | 'tip' | 'review' | 'free' | 'troubleshooting';
+type PostCategory = 'announcement' | 'showcase' | 'question' | 'tip' | 'review' | 'free' | 'troubleshooting';
 
 interface CommunityPost {
   id: string;
@@ -478,6 +481,7 @@ function extractContentSummary(content: string, maxLength?: number): string;
 **카테고리별 색상:**
 | 카테고리 | 색상 | 아이콘 |
 |---------|------|--------|
+| announcement | Rose | 📢 |
 | showcase | Purple | 🎨 |
 | question | Blue | ❓ |
 | troubleshooting | Red | 🔧 |
@@ -732,6 +736,7 @@ resizableImage: {
 
 **주요 기능:**
 - 게시물 목록 (PostCard 그리드)
+- **공지사항 상단 고정** - 관리자가 작성한 공지가 목록 상단에 핀 표시
 - 카테고리 탭 필터
 - 정렬 옵션 (최신, 인기, 조회수)
 - 검색 기능
@@ -757,7 +762,8 @@ resizableImage: {
 - 이미지 갤러리
 - 좋아요/공유 버튼
 - 댓글 목록 및 작성
-- 대댓글 지원
+- 대댓글 지원 (**기본 펼침** - 답글이 있으면 자동으로 펼쳐짐)
+- **URL hash 기반 댓글 스크롤** - `#comment-{id}` 형식으로 해당 댓글로 자동 스크롤 및 하이라이트
 - 댓글 이미지 첨부 (최대 여러 장)
 - 게시물 수정/삭제 (작성자)
 - 댓글 좋아요/삭제
