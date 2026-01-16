@@ -111,4 +111,85 @@
     <priority>0.5</priority>
   </url>
 
+  <!-- 커뮤니티 메인 -->
+  <url>
+    <loc>https://factor.io.kr/community</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://factor.io.kr/community" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://factor.io.kr/community?lang=en" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://factor.io.kr/community" />
+    <lastmod>2026-01-17</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- 커뮤니티 - 자랑 (Showcase) -->
+  <url>
+    <loc>https://factor.io.kr/community?category=showcase</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://factor.io.kr/community?category=showcase" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://factor.io.kr/community?category=showcase&amp;lang=en" />
+    <lastmod>2026-01-17</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- 커뮤니티 - 질문 (Question) -->
+  <url>
+    <loc>https://factor.io.kr/community?category=question</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://factor.io.kr/community?category=question" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://factor.io.kr/community?category=question&amp;lang=en" />
+    <lastmod>2026-01-17</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- 커뮤니티 - 트러블슈팅 (Troubleshooting) -->
+  <url>
+    <loc>https://factor.io.kr/community?category=troubleshooting</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://factor.io.kr/community?category=troubleshooting" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://factor.io.kr/community?category=troubleshooting&amp;lang=en" />
+    <lastmod>2026-01-17</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- 커뮤니티 - 팁 (Tip) -->
+  <url>
+    <loc>https://factor.io.kr/community?category=tip</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://factor.io.kr/community?category=tip" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://factor.io.kr/community?category=tip&amp;lang=en" />
+    <lastmod>2026-01-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- 커뮤니티 - 리뷰 (Review) -->
+  <url>
+    <loc>https://factor.io.kr/community?category=review</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://factor.io.kr/community?category=review" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://factor.io.kr/community?category=review&amp;lang=en" />
+    <lastmod>2026-01-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- 커뮤니티 - 자유 (Free) -->
+  <url>
+    <loc>https://factor.io.kr/community?category=free</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://factor.io.kr/community?category=free" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://factor.io.kr/community?category=free&amp;lang=en" />
+    <lastmod>2026-01-17</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- 커뮤니티 - 글쓰기 -->
+  <url>
+    <loc>https://factor.io.kr/community/write</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://factor.io.kr/community/write" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://factor.io.kr/community/write?lang=en" />
+    <lastmod>2026-01-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
 </urlset>
