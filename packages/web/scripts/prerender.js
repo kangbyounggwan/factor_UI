@@ -13,6 +13,7 @@ const routes = [
   { path: '/supported-printers', outputFile: 'supported-printers.html' },
   { path: '/ai-chat', outputFile: 'ai-chat.html' },
   { path: '/create', outputFile: 'create.html' },
+  { path: '/community', outputFile: 'community.html' },
 ];
 
 // 설정

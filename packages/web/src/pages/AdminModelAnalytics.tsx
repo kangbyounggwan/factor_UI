@@ -40,6 +40,7 @@ import { supabase } from '@shared/integrations/supabase/client';
 import { useAuth } from '@shared/contexts/AuthContext';
 import { AppHeader } from '@/components/common/AppHeader';
 import { AppSidebar } from '@/components/common/AppSidebar';
+import { AdminSidebarContent } from '@/components/sidebar';
 import { useSidebarState } from '@/hooks/useSidebarState';
 import { KeywordCloud } from '@/components/admin/ai-analytics';
 
@@ -150,8 +151,9 @@ const AdminModelAnalytics = () => {
           onToggle={toggleSidebar}
           user={user}
           onSignOut={signOut}
-          mode="admin"
-        />
+        >
+          <AdminSidebarContent />
+        </AppSidebar>
         <div className="flex-1 flex flex-col min-w-0">
           <AppHeader sidebarOpen={sidebarOpen} />
           <div className="flex-1 overflow-y-auto bg-background p-6">
@@ -187,8 +189,9 @@ const AdminModelAnalytics = () => {
         onToggle={toggleSidebar}
         user={user}
         onSignOut={signOut}
-        mode="admin"
-      />
+      >
+        <AdminSidebarContent />
+      </AppSidebar>
 
       <div className="flex-1 flex flex-col min-w-0">
         <AppHeader sidebarOpen={sidebarOpen} />

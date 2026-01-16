@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
-import { useSEO } from "@/hooks/useSEO";
+import { useSEO, createCommunityPostSEO } from "@/hooks/useSEO";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { useSidebarState } from "@/hooks/useSidebarState";
@@ -68,6 +68,7 @@ import {
 // Layout Components
 import { AppHeader } from "@/components/common/AppHeader";
 import { AppSidebar } from "@/components/common/AppSidebar";
+import { CommunitySidebarContent } from "@/components/sidebar";
 import { SharedBottomNavigation } from "@/components/shared/SharedBottomNavigation";
 import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
 
@@ -89,9 +90,15 @@ import {
   getPopularPosts,
   getDisplayName,
   getDisplayAvatar,
+  getCommunityStats,
+  getMyRecentPosts,
+  getMyRecentComments,
   type CommunityPost,
   type PostComment,
   type PostCategory,
+  type CommunityStats,
+  type MyRecentPost,
+  type MyRecentComment,
 } from "@shared/services/supabaseService/community";
 import { CATEGORY_COLORS, CATEGORY_ICONS } from "@shared/constants/community";
 
@@ -110,8 +117,18 @@ export default function CommunityPostPage() {
     anonymous: t('community.anonymous'),
   };
 
-  // SEO
-  useSEO('community');
+  // SEO - 게시물 데이터 기반 동적 SEO
+  const seoData = post
+    ? createCommunityPostSEO({
+        title: post.title,
+        category: post.category,
+        content: post.content,
+        author: post.profiles?.display_name || post.profiles?.full_name,
+        created_at: post.created_at,
+        thumbnail: post.images?.[0],
+      })
+    : { title: '게시물 로딩 중... | FACTOR 커뮤니티', description: '', keywords: [] };
+  useSEO(seoData);
 
   // 사이드바 상태 (localStorage 연동)
   const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
@@ -140,6 +157,13 @@ export default function CommunityPostPage() {
 
   // 인기 게시물 상태
   const [popularPosts, setPopularPosts] = useState<CommunityPost[]>([]);
+
+  // 커뮤니티 통계 상태
+  const [communityStats, setCommunityStats] = useState<CommunityStats | null>(null);
+
+  // 내 글/댓글 상태
+  const [myPosts, setMyPosts] = useState<MyRecentPost[]>([]);
+  const [myComments, setMyComments] = useState<MyRecentComment[]>([]);
 
 
   // 로그아웃 핸들러
@@ -200,7 +224,21 @@ export default function CommunityPostPage() {
     loadPost();
     loadComments();
     loadPopularPosts();
-  }, [loadPost, loadComments, loadPopularPosts]);
+    // 커뮤니티 통계 로드
+    getCommunityStats().then(stats => {
+      if (stats) setCommunityStats(stats);
+    });
+    // 내 글/댓글 로드
+    if (user) {
+      Promise.all([
+        getMyRecentPosts(user.id, 5),
+        getMyRecentComments(user.id, 5),
+      ]).then(([posts, comments]) => {
+        setMyPosts(posts);
+        setMyComments(comments);
+      });
+    }
+  }, [loadPost, loadComments, loadPopularPosts, user]);
 
   // 좋아요 토글
   const handleLikePost = async () => {
@@ -1355,14 +1393,26 @@ export default function CommunityPostPage() {
     <div className="h-screen bg-background flex">
       {/* 사이드바 (데스크탑) - Community.tsx와 동일한 구조 */}
       <AppSidebar
-        mode="community"
         isOpen={sidebarOpen}
         onToggle={toggleSidebar}
         user={user}
         userPlan={userPlan}
         onLoginClick={() => setShowLoginModal(true)}
         onSignOut={handleSignOut}
-      />
+        hidePlanCard
+      >
+        <CommunitySidebarContent
+          communityStats={communityStats ? {
+            totalPosts: communityStats.totalPosts,
+            totalComments: communityStats.totalComments,
+            totalUsers: communityStats.totalUsers,
+            totalLikes: communityStats.totalLikes,
+            todayPosts: communityStats.todayPosts,
+          } : null}
+          myPosts={myPosts}
+          myComments={myComments}
+        />
+      </AppSidebar>
 
       {/* 메인 콘텐츠 */}
       <div className="flex-1 flex flex-col min-w-0">

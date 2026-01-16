@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { AppHeader } from "@/components/common/AppHeader";
-import { AppSidebar, type SettingsTab } from "@/components/common/AppSidebar";
+import { AppSidebar } from "@/components/common/AppSidebar";
+import { SettingsSidebarContent, type SettingsTab } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -901,10 +902,12 @@ const UserSettings = () => {
         onToggle={toggleSidebar}
         user={user}
         onSignOut={signOut}
-        mode="settings"
-        activeSettingsTab={activeTab}
-        onSettingsTabChange={setActiveTab}
-      />
+      >
+        <SettingsSidebarContent
+          activeSettingsTab={activeTab}
+          onSettingsTabChange={setActiveTab}
+        />
+      </AppSidebar>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">

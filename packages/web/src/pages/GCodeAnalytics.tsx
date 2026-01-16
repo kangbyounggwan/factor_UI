@@ -50,7 +50,8 @@ import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
 import { analyzeGCodeWithSegments, type GCodeAnalysisResponse } from "@/lib/api/gcode";
 import { GCodePath3DFromAPI } from "@/components/PrinterDetail/GCodePath3DFromAPI";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { AppSidebar, type ChatSession, type ReportArchiveItem } from "@/components/common/AppSidebar";
+import { AppSidebar } from "@/components/common/AppSidebar";
+import { ChatSidebarContent, type ChatSession, type ReportArchiveItem } from "@/components/sidebar";
 import { AppHeader } from "@/components/common/AppHeader";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { getChatSessions } from "@shared/services/supabaseService/chat";
@@ -912,17 +913,19 @@ const GCodeAnalytics = () => {
       <AppSidebar
         isOpen={sidebarOpen}
         onToggle={toggleSidebar}
-        sessions={chatSessions}
-        onNewChat={handleNewChat}
-        onLoadSession={handleLoadSession}
         user={user}
         onLoginClick={() => setShowLoginPrompt(true)}
         onSignOut={signOut}
-        mode="chat"
-        reports={reportArchive}
-        onSelectReport={handleSelectReport}
-        onDeleteReport={handleDeleteReport}
-      />
+      >
+        <ChatSidebarContent
+          sessions={chatSessions}
+          onNewChat={handleNewChat}
+          onLoadSession={handleLoadSession}
+          reports={reportArchive}
+          onSelectReport={handleSelectReport}
+          onDeleteReport={handleDeleteReport}
+        />
+      </AppSidebar>
 
       {/* 메인 콘텐츠 */}
       <div className="flex-1 flex flex-col min-w-0">

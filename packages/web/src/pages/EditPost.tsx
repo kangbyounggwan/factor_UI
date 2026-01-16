@@ -45,6 +45,7 @@ import {
 // Layout Components
 import { AppHeader } from "@/components/common/AppHeader";
 import { AppSidebar } from "@/components/common/AppSidebar";
+import { CommunitySidebarContent } from "@/components/sidebar";
 import { SharedBottomNavigation } from "@/components/shared/SharedBottomNavigation";
 import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
 
@@ -56,9 +57,15 @@ import {
   getPost,
   updatePost,
   uploadPostImage,
+  getCommunityStats,
+  getMyRecentPosts,
+  getMyRecentComments,
   type PostCategory,
   type UpdatePostInput,
   type TroubleshootingMeta,
+  type CommunityStats,
+  type MyRecentPost,
+  type MyRecentComment,
   SYMPTOM_TAGS,
 } from "@shared/services/supabaseService/community";
 import { listAIModels } from "@shared/services/supabaseService/aiModel";
@@ -145,6 +152,13 @@ export default function EditPost() {
   const [symptomSectionOpen, setSymptomSectionOpen] = useState(true);
   const [showTroubleshootingPanel, setShowTroubleshootingPanel] = useState(false);
 
+  // 커뮤니티 통계
+  const [communityStats, setCommunityStats] = useState<CommunityStats | null>(null);
+
+  // 내 글/댓글 상태
+  const [myPosts, setMyPosts] = useState<MyRecentPost[]>([]);
+  const [myComments, setMyComments] = useState<MyRecentComment[]>([]);
+
   // 트러블슈팅 폼 표시 여부
   const showTroubleshootingForm = category === 'troubleshooting' || category === 'question';
 
@@ -222,6 +236,29 @@ export default function EditPost() {
       }
     };
     loadUserModels();
+  }, [user]);
+
+  // 커뮤니티 통계 및 내 글/댓글 로드
+  useEffect(() => {
+    const loadCommunityStats = async () => {
+      try {
+        const stats = await getCommunityStats();
+        setCommunityStats(stats);
+      } catch (error) {
+        console.error('[EditPost] Error loading community stats:', error);
+      }
+    };
+    loadCommunityStats();
+    // 내 글/댓글 로드
+    if (user) {
+      Promise.all([
+        getMyRecentPosts(user.id, 5),
+        getMyRecentComments(user.id, 5),
+      ]).then(([posts, comments]) => {
+        setMyPosts(posts);
+        setMyComments(comments);
+      });
+    }
   }, [user]);
 
   // 선택된 모델 정보
@@ -493,12 +530,24 @@ export default function EditPost() {
       {/* 사이드바 (데스크탑) */}
       {!isMobile && (
         <AppSidebar
-          mode="community"
           isOpen={sidebarOpen}
           onToggle={toggleSidebar}
           user={user}
           onLoginClick={() => setShowLoginModal(true)}
-        />
+          hidePlanCard
+        >
+          <CommunitySidebarContent
+            communityStats={communityStats ? {
+              totalPosts: communityStats.totalPosts,
+              totalComments: communityStats.totalComments,
+              totalUsers: communityStats.totalUsers,
+              totalLikes: communityStats.totalLikes,
+              todayPosts: communityStats.todayPosts,
+            } : null}
+            myPosts={myPosts}
+            myComments={myComments}
+          />
+        </AppSidebar>
       )}
 
       {/* 메인 콘텐츠 */}

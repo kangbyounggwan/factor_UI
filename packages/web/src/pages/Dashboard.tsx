@@ -10,7 +10,8 @@ import { SettingsContent } from "@/components/Settings/SettingsContent";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useUserPlan } from "@shared/hooks/useUserPlan";
 import { AppHeader } from "@/components/common/AppHeader";
-import { AppSidebar, type PrinterQuickItem } from "@/components/common/AppSidebar";
+import { AppSidebar } from "@/components/common/AppSidebar";
+import { DashboardSidebarContent, type PrinterQuickItem } from "@/components/sidebar";
 import { supabase } from "@shared/integrations/supabase/client"
 import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { useToast } from "@/hooks/use-toast";
@@ -630,17 +631,20 @@ const Home = () => {
         onToggle={toggleSidebar}
         user={user}
         onSignOut={signOut}
-        mode="dashboard"
-        printers={printers.map((p): PrinterQuickItem => ({
-          id: p.id,
-          name: p.name,
-          model: p.model,
-          isOnline: p.connected,
-          progress: p.printing ? p.completion : undefined,
-          currentJob: p.current_file,
-        }))}
-        onSelectPrinter={(printer) => navigate(`/printer/${printer.id}`)}
-      />
+      >
+        <DashboardSidebarContent
+          printers={printers.map((p): PrinterQuickItem => ({
+            id: p.id,
+            name: p.name,
+            model: p.model,
+            isOnline: p.connected,
+            progress: p.printing ? p.completion : undefined,
+            currentJob: p.current_file,
+          }))}
+          onSelectPrinter={(printer) => navigate(`/printer/${printer.id}`)}
+          alerts={[]}
+        />
+      </AppSidebar>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">

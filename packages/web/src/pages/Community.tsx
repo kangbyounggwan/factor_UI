@@ -50,6 +50,7 @@ import {
 // Layout Components
 import { AppHeader } from "@/components/common/AppHeader";
 import { AppSidebar } from "@/components/common/AppSidebar";
+import { CommunitySidebarContent } from "@/components/sidebar";
 import { SharedBottomNavigation } from "@/components/shared/SharedBottomNavigation";
 import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
 
@@ -62,10 +63,14 @@ import {
   getPopularTags,
   getPopularPosts,
   getCommunityStats,
+  getMyRecentPosts,
+  getMyRecentComments,
   type CommunityPost,
   type PostCategory,
   type GetPostsOptions,
   type CommunityStats,
+  type MyRecentPost,
+  type MyRecentComment,
 } from "@shared/services/supabaseService/community";
 
 // Constants (공용 상수)
@@ -96,6 +101,8 @@ export default function Community() {
   const [popularTags, setPopularTags] = useState<{ tag: string; count: number }[]>([]);
   const [popularPosts, setPopularPosts] = useState<CommunityPost[]>([]);
   const [communityStats, setCommunityStats] = useState<CommunityStats | null>(null);
+  const [myPosts, setMyPosts] = useState<MyRecentPost[]>([]);
+  const [myComments, setMyComments] = useState<MyRecentComment[]>([]);
 
   // 필터 상태
   const [category, setCategory] = useState<PostCategory | 'all'>(
@@ -184,6 +191,25 @@ export default function Community() {
     }
   }, []);
 
+  // 내 글/댓글 로드
+  const loadMyActivity = useCallback(async () => {
+    if (!user) {
+      setMyPosts([]);
+      setMyComments([]);
+      return;
+    }
+    try {
+      const [posts, comments] = await Promise.all([
+        getMyRecentPosts(user.id, 5),
+        getMyRecentComments(user.id, 5),
+      ]);
+      setMyPosts(posts);
+      setMyComments(comments);
+    } catch (error) {
+      console.error('[Community] Error loading my activity:', error);
+    }
+  }, [user]);
+
   // 초기 로드
   useEffect(() => {
     loadPosts(true);
@@ -195,8 +221,9 @@ export default function Community() {
     if (!isMobile) {
       loadPopularPosts();
       loadCommunityStats();
+      loadMyActivity();
     }
-  }, [isMobile, loadPopularPosts, loadCommunityStats]);
+  }, [isMobile, loadPopularPosts, loadCommunityStats, loadMyActivity]);
 
   // URL 파라미터 업데이트
   useEffect(() => {
@@ -222,13 +249,15 @@ export default function Community() {
     }
   };
 
-  // 글쓰기 클릭 - 페이지로 이동
+  // 글쓰기 클릭 - 페이지로 이동 (현재 카테고리 전달)
   const handleCreateClick = () => {
     if (!user) {
       setShowLoginModal(true);
       return;
     }
-    navigate('/community/write');
+    // 'all'인 경우 'free'로 기본값 설정, 그 외에는 현재 카테고리 전달
+    const targetCategory = category === 'all' ? 'free' : category;
+    navigate(`/community/write?category=${targetCategory}`);
   };
 
   // 게시물 클릭
@@ -316,7 +345,9 @@ export default function Community() {
         className="w-full"
         onClick={() => {
           if (user) {
-            navigate('/community/write');
+            // 'all'인 경우 'free'로 기본값 설정, 그 외에는 현재 카테고리 전달
+            const targetCategory = category === 'all' ? 'free' : category;
+            navigate(`/community/write?category=${targetCategory}`);
           } else {
             setShowLoginModal(true);
           }
@@ -360,13 +391,24 @@ export default function Community() {
       {/* 사이드바 (데스크탑) */}
       {!isMobile && (
         <AppSidebar
-          mode="community"
           isOpen={sidebarOpen}
           onToggle={toggleSidebar}
           user={user}
           onLoginClick={() => setShowLoginModal(true)}
-          communityStats={communityStats}
-        />
+          hidePlanCard
+        >
+          <CommunitySidebarContent
+            communityStats={communityStats ? {
+              totalPosts: communityStats.totalPosts,
+              totalComments: communityStats.totalComments,
+              totalUsers: communityStats.totalUsers,
+              totalLikes: communityStats.totalLikes,
+              todayPosts: communityStats.todayPosts,
+            } : null}
+            myPosts={myPosts}
+            myComments={myComments}
+          />
+        </AppSidebar>
       )}
 
       {/* 메인 콘텐츠 */}

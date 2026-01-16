@@ -447,27 +447,19 @@ export async function getPosts(options: GetPostsOptions = {}): Promise<Paginated
       }
     }
 
-    // 좋아요/비추천 여부 확인
+    // 좋아요/비추천 여부 확인 (통합 테이블 사용)
     if (userId && posts.length > 0) {
       const postIds = posts.map(p => p.id);
 
-      // 좋아요 확인
-      const { data: likes } = await supabase
-        .from('community_post_likes')
-        .select('post_id')
+      // 투표 확인 (한 번의 쿼리로 like/dislike 모두 확인)
+      const { data: votes } = await supabase
+        .from('community_post_votes')
+        .select('post_id, vote_type')
         .eq('user_id', userId)
         .in('post_id', postIds);
 
-      const likedPostIds = new Set(likes?.map(l => l.post_id) || []);
-
-      // 비추천 확인
-      const { data: dislikes } = await supabase
-        .from('community_post_dislikes')
-        .select('post_id')
-        .eq('user_id', userId)
-        .in('post_id', postIds);
-
-      const dislikedPostIds = new Set(dislikes?.map(d => d.post_id) || []);
+      const likedPostIds = new Set(votes?.filter(v => v.vote_type === 'like').map(v => v.post_id) || []);
+      const dislikedPostIds = new Set(votes?.filter(v => v.vote_type === 'dislike').map(v => v.post_id) || []);
 
       posts = posts.map(post => ({
         ...post,
@@ -522,23 +514,18 @@ export async function getPost(postId: string, userId?: string): Promise<Communit
       .update({ view_count: (post.view_count || 0) + 1 })
       .eq('id', postId);
 
-    // 좋아요/비추천 여부 확인
+    // 좋아요/비추천 여부 확인 (통합 테이블 사용)
     if (userId) {
-      const { data: like } = await supabase
-        .from('community_post_likes')
-        .select('id')
+      const { data: votes } = await supabase
+        .from('community_post_votes')
+        .select('vote_type')
         .eq('post_id', postId)
-        .eq('user_id', userId)
-        .maybeSingle();
+        .eq('user_id', userId);
 
-      const { data: dislike } = await supabase
-        .from('community_post_dislikes')
-        .select('id')
-        .eq('post_id', postId)
-        .eq('user_id', userId)
-        .maybeSingle();
+      const hasLike = votes?.some(v => v.vote_type === 'like') || false;
+      const hasDislike = votes?.some(v => v.vote_type === 'dislike') || false;
 
-      post = { ...post, is_liked: !!like, is_disliked: !!dislike };
+      post = { ...post, is_liked: hasLike, is_disliked: hasDislike };
     }
 
     return post;
@@ -647,25 +634,20 @@ export async function deletePost(postId: string, userId: string): Promise<boolea
 }
 
 /**
- * 게시물 좋아요 토글
+ * 게시물 좋아요 토글 (통합 테이블 사용)
  * - 비추천이 있으면 비추천을 취소하고 좋아요 추가 (추천/비추천 동시 불가)
  */
 export async function togglePostLike(postId: string, userId: string): Promise<{ liked: boolean; disliked: boolean; likeCount: number; dislikeCount: number } | null> {
   try {
-    // 현재 좋아요/비추천 상태 확인
-    const { data: existingLike } = await supabase
-      .from('community_post_likes')
-      .select('id')
+    // 현재 투표 상태 확인 (한 번의 쿼리)
+    const { data: votes } = await supabase
+      .from('community_post_votes')
+      .select('vote_type')
       .eq('post_id', postId)
-      .eq('user_id', userId)
-      .maybeSingle();
+      .eq('user_id', userId);
 
-    const { data: existingDislike } = await supabase
-      .from('community_post_dislikes')
-      .select('id')
-      .eq('post_id', postId)
-      .eq('user_id', userId)
-      .maybeSingle();
+    const existingLike = votes?.some(v => v.vote_type === 'like');
+    const existingDislike = votes?.some(v => v.vote_type === 'dislike');
 
     // 현재 게시물 정보 가져오기
     const { data: currentPost } = await supabase
@@ -680,27 +662,29 @@ export async function togglePostLike(postId: string, userId: string): Promise<{ 
     if (existingLike) {
       // 좋아요 취소
       await supabase
-        .from('community_post_likes')
+        .from('community_post_votes')
         .delete()
         .eq('post_id', postId)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('vote_type', 'like');
 
       newLikeCount = Math.max(0, newLikeCount - 1);
     } else {
       // 비추천이 있으면 먼저 취소
       if (existingDislike) {
         await supabase
-          .from('community_post_dislikes')
+          .from('community_post_votes')
           .delete()
           .eq('post_id', postId)
-          .eq('user_id', userId);
+          .eq('user_id', userId)
+          .eq('vote_type', 'dislike');
         newDislikeCount = Math.max(0, newDislikeCount - 1);
       }
 
       // 좋아요 추가
       await supabase
-        .from('community_post_likes')
-        .insert({ post_id: postId, user_id: userId });
+        .from('community_post_votes')
+        .insert({ post_id: postId, user_id: userId, vote_type: 'like' });
 
       newLikeCount = newLikeCount + 1;
     }
@@ -724,25 +708,20 @@ export async function togglePostLike(postId: string, userId: string): Promise<{ 
 }
 
 /**
- * 게시물 비추천 토글
+ * 게시물 비추천 토글 (통합 테이블 사용)
  * - 좋아요가 있으면 좋아요를 취소하고 비추천 추가 (추천/비추천 동시 불가)
  */
 export async function togglePostDislike(postId: string, userId: string): Promise<{ liked: boolean; disliked: boolean; likeCount: number; dislikeCount: number } | null> {
   try {
-    // 현재 좋아요/비추천 상태 확인
-    const { data: existingLike } = await supabase
-      .from('community_post_likes')
-      .select('id')
+    // 현재 투표 상태 확인 (한 번의 쿼리)
+    const { data: votes } = await supabase
+      .from('community_post_votes')
+      .select('vote_type')
       .eq('post_id', postId)
-      .eq('user_id', userId)
-      .maybeSingle();
+      .eq('user_id', userId);
 
-    const { data: existingDislike } = await supabase
-      .from('community_post_dislikes')
-      .select('id')
-      .eq('post_id', postId)
-      .eq('user_id', userId)
-      .maybeSingle();
+    const existingLike = votes?.some(v => v.vote_type === 'like');
+    const existingDislike = votes?.some(v => v.vote_type === 'dislike');
 
     // 현재 게시물 정보 가져오기
     const { data: currentPost } = await supabase
@@ -757,27 +736,29 @@ export async function togglePostDislike(postId: string, userId: string): Promise
     if (existingDislike) {
       // 비추천 취소
       await supabase
-        .from('community_post_dislikes')
+        .from('community_post_votes')
         .delete()
         .eq('post_id', postId)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('vote_type', 'dislike');
 
       newDislikeCount = Math.max(0, newDislikeCount - 1);
     } else {
       // 좋아요가 있으면 먼저 취소
       if (existingLike) {
         await supabase
-          .from('community_post_likes')
+          .from('community_post_votes')
           .delete()
           .eq('post_id', postId)
-          .eq('user_id', userId);
+          .eq('user_id', userId)
+          .eq('vote_type', 'like');
         newLikeCount = Math.max(0, newLikeCount - 1);
       }
 
       // 비추천 추가
       await supabase
-        .from('community_post_dislikes')
-        .insert({ post_id: postId, user_id: userId });
+        .from('community_post_votes')
+        .insert({ post_id: postId, user_id: userId, vote_type: 'dislike' });
 
       newDislikeCount = newDislikeCount + 1;
     }
@@ -858,28 +839,22 @@ export async function getComments(postId: string, userId?: string): Promise<Post
       }));
     }
 
-    // 좋아요/비추천 여부 확인
+    // 좋아요/비추천 여부 확인 (통합 테이블 사용)
     if (userId && comments.length > 0) {
       const allCommentIds = [
         ...comments.map(c => c.id),
         ...comments.flatMap(c => c.replies?.map(r => r.id) || []),
       ];
 
-      const { data: likes } = await supabase
-        .from('community_comment_likes')
-        .select('comment_id')
+      // 투표 확인 (한 번의 쿼리로 like/dislike 모두 확인)
+      const { data: votes } = await supabase
+        .from('community_comment_votes')
+        .select('comment_id, vote_type')
         .eq('user_id', userId)
         .in('comment_id', allCommentIds);
 
-      const likedCommentIds = new Set(likes?.map(l => l.comment_id) || []);
-
-      const { data: dislikes } = await supabase
-        .from('community_comment_dislikes')
-        .select('comment_id')
-        .eq('user_id', userId)
-        .in('comment_id', allCommentIds);
-
-      const dislikedCommentIds = new Set(dislikes?.map(d => d.comment_id) || []);
+      const likedCommentIds = new Set(votes?.filter(v => v.vote_type === 'like').map(v => v.comment_id) || []);
+      const dislikedCommentIds = new Set(votes?.filter(v => v.vote_type === 'dislike').map(v => v.comment_id) || []);
 
       comments = comments.map(comment => ({
         ...comment,
@@ -989,24 +964,20 @@ export async function deleteComment(commentId: string, userId: string, postId: s
 }
 
 /**
- * 댓글 좋아요 토글
+ * 댓글 좋아요 토글 (통합 테이블 사용)
  * - 비추천이 있으면 비추천을 취소하고 좋아요 추가
  */
 export async function toggleCommentLike(commentId: string, userId: string): Promise<{ liked: boolean; disliked: boolean; likeCount: number; dislikeCount: number } | null> {
   try {
-    const { data: existingLike } = await supabase
-      .from('community_comment_likes')
-      .select('id')
+    // 현재 투표 상태 확인 (한 번의 쿼리)
+    const { data: votes } = await supabase
+      .from('community_comment_votes')
+      .select('vote_type')
       .eq('comment_id', commentId)
-      .eq('user_id', userId)
-      .maybeSingle();
+      .eq('user_id', userId);
 
-    const { data: existingDislike } = await supabase
-      .from('community_comment_dislikes')
-      .select('id')
-      .eq('comment_id', commentId)
-      .eq('user_id', userId)
-      .maybeSingle();
+    const existingLike = votes?.some(v => v.vote_type === 'like');
+    const existingDislike = votes?.some(v => v.vote_type === 'dislike');
 
     const { data: currentComment } = await supabase
       .from('community_comments')
@@ -1020,27 +991,29 @@ export async function toggleCommentLike(commentId: string, userId: string): Prom
     if (existingLike) {
       // 좋아요 취소
       await supabase
-        .from('community_comment_likes')
+        .from('community_comment_votes')
         .delete()
         .eq('comment_id', commentId)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('vote_type', 'like');
 
       newLikeCount = Math.max(0, newLikeCount - 1);
     } else {
       // 비추천이 있으면 먼저 취소
       if (existingDislike) {
         await supabase
-          .from('community_comment_dislikes')
+          .from('community_comment_votes')
           .delete()
           .eq('comment_id', commentId)
-          .eq('user_id', userId);
+          .eq('user_id', userId)
+          .eq('vote_type', 'dislike');
         newDislikeCount = Math.max(0, newDislikeCount - 1);
       }
 
       // 좋아요 추가
       await supabase
-        .from('community_comment_likes')
-        .insert({ comment_id: commentId, user_id: userId });
+        .from('community_comment_votes')
+        .insert({ comment_id: commentId, user_id: userId, vote_type: 'like' });
 
       newLikeCount = newLikeCount + 1;
     }
@@ -1063,24 +1036,20 @@ export async function toggleCommentLike(commentId: string, userId: string): Prom
 }
 
 /**
- * 댓글 비추천 토글
+ * 댓글 비추천 토글 (통합 테이블 사용)
  * - 좋아요가 있으면 좋아요를 취소하고 비추천 추가
  */
 export async function toggleCommentDislike(commentId: string, userId: string): Promise<{ liked: boolean; disliked: boolean; likeCount: number; dislikeCount: number } | null> {
   try {
-    const { data: existingLike } = await supabase
-      .from('community_comment_likes')
-      .select('id')
+    // 현재 투표 상태 확인 (한 번의 쿼리)
+    const { data: votes } = await supabase
+      .from('community_comment_votes')
+      .select('vote_type')
       .eq('comment_id', commentId)
-      .eq('user_id', userId)
-      .maybeSingle();
+      .eq('user_id', userId);
 
-    const { data: existingDislike } = await supabase
-      .from('community_comment_dislikes')
-      .select('id')
-      .eq('comment_id', commentId)
-      .eq('user_id', userId)
-      .maybeSingle();
+    const existingLike = votes?.some(v => v.vote_type === 'like');
+    const existingDislike = votes?.some(v => v.vote_type === 'dislike');
 
     const { data: currentComment } = await supabase
       .from('community_comments')
@@ -1094,27 +1063,29 @@ export async function toggleCommentDislike(commentId: string, userId: string): P
     if (existingDislike) {
       // 비추천 취소
       await supabase
-        .from('community_comment_dislikes')
+        .from('community_comment_votes')
         .delete()
         .eq('comment_id', commentId)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('vote_type', 'dislike');
 
       newDislikeCount = Math.max(0, newDislikeCount - 1);
     } else {
       // 좋아요가 있으면 먼저 취소
       if (existingLike) {
         await supabase
-          .from('community_comment_likes')
+          .from('community_comment_votes')
           .delete()
           .eq('comment_id', commentId)
-          .eq('user_id', userId);
+          .eq('user_id', userId)
+          .eq('vote_type', 'like');
         newLikeCount = Math.max(0, newLikeCount - 1);
       }
 
       // 비추천 추가
       await supabase
-        .from('community_comment_dislikes')
-        .insert({ comment_id: commentId, user_id: userId });
+        .from('community_comment_votes')
+        .insert({ comment_id: commentId, user_id: userId, vote_type: 'dislike' });
 
       newDislikeCount = newDislikeCount + 1;
     }
@@ -1196,16 +1167,16 @@ export async function getCommunityStats(): Promise<CommunityStats> {
       .from('community_comments')
       .select('*', { count: 'exact', head: true });
 
-    // 총 좋아요 수
+    // 총 좋아요 수 (통합 테이블 사용)
     const { count: totalLikes } = await supabase
-      .from('community_post_likes')
-      .select('*', { count: 'exact', head: true });
+      .from('community_post_votes')
+      .select('*', { count: 'exact', head: true })
+      .eq('vote_type', 'like');
 
-    // 활동 사용자 수 (게시물 작성자 기준)
-    const { data: users } = await supabase
-      .from('community_posts')
-      .select('user_id');
-    const uniqueUsers = new Set(users?.map(u => u.user_id) || []);
+    // 총 가입자 수 (profiles 테이블 기준)
+    const { count: totalUsers } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true });
 
     // 오늘 작성된 게시물 수
     const today = new Date();
@@ -1219,7 +1190,7 @@ export async function getCommunityStats(): Promise<CommunityStats> {
       totalPosts: totalPosts || 0,
       totalComments: totalComments || 0,
       totalLikes: totalLikes || 0,
-      totalUsers: uniqueUsers.size,
+      totalUsers: totalUsers || 0,
       todayPosts: todayPosts || 0,
     };
   } catch (error) {
@@ -1411,24 +1382,26 @@ export async function unacceptAnswer(postId: string, userId: string): Promise<bo
 }
 
 /**
- * 유용함 투표 토글 (게시물)
+ * 유용함 투표 토글 (게시물) - 통합 테이블 사용
  */
 export async function togglePostHelpful(postId: string, userId: string): Promise<{ voted: boolean; helpfulCount: number } | null> {
   try {
     const { data: existingVote } = await supabase
-      .from('community_post_helpful')
+      .from('community_post_votes')
       .select('id')
       .eq('post_id', postId)
       .eq('user_id', userId)
+      .eq('vote_type', 'helpful')
       .maybeSingle();
 
     if (existingVote) {
       // 투표 취소
       await supabase
-        .from('community_post_helpful')
+        .from('community_post_votes')
         .delete()
         .eq('post_id', postId)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('vote_type', 'helpful');
 
       const { data: currentPost } = await supabase
         .from('community_posts')
@@ -1445,8 +1418,8 @@ export async function togglePostHelpful(postId: string, userId: string): Promise
     } else {
       // 투표 추가
       await supabase
-        .from('community_post_helpful')
-        .insert({ post_id: postId, user_id: userId });
+        .from('community_post_votes')
+        .insert({ post_id: postId, user_id: userId, vote_type: 'helpful' });
 
       const { data: currentPost } = await supabase
         .from('community_posts')
@@ -1468,23 +1441,25 @@ export async function togglePostHelpful(postId: string, userId: string): Promise
 }
 
 /**
- * 유용함 투표 토글 (댓글)
+ * 유용함 투표 토글 (댓글) - 통합 테이블 사용
  */
 export async function toggleCommentHelpful(commentId: string, userId: string): Promise<{ voted: boolean; helpfulCount: number } | null> {
   try {
     const { data: existingVote } = await supabase
-      .from('community_comment_helpful')
+      .from('community_comment_votes')
       .select('id')
       .eq('comment_id', commentId)
       .eq('user_id', userId)
+      .eq('vote_type', 'helpful')
       .maybeSingle();
 
     if (existingVote) {
       await supabase
-        .from('community_comment_helpful')
+        .from('community_comment_votes')
         .delete()
         .eq('comment_id', commentId)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('vote_type', 'helpful');
 
       const { data: comment } = await supabase
         .from('community_comments')
@@ -1500,8 +1475,8 @@ export async function toggleCommentHelpful(commentId: string, userId: string): P
       return { voted: false, helpfulCount: Math.max(0, (comment?.helpful_count || 1) - 1) };
     } else {
       await supabase
-        .from('community_comment_helpful')
-        .insert({ comment_id: commentId, user_id: userId });
+        .from('community_comment_votes')
+        .insert({ comment_id: commentId, user_id: userId, vote_type: 'helpful' });
 
       const { data: comment } = await supabase
         .from('community_comments')
@@ -1547,3 +1522,89 @@ export const SYMPTOM_TAGS = [
 ] as const;
 
 export type SymptomTag = typeof SYMPTOM_TAGS[number];
+
+// 내 최근 글 아이템 타입 (사이드바용)
+export interface MyRecentPost {
+  id: string;
+  title: string;
+  category: PostCategory;
+  created_at: string;
+  comment_count: number;
+  like_count: number;
+}
+
+// 내 최근 댓글 아이템 타입 (사이드바용)
+export interface MyRecentComment {
+  id: string;
+  content: string;
+  post_id: string;
+  post_title: string;
+  created_at: string;
+}
+
+/**
+ * 내가 쓴 최근 게시물 조회 (사이드바용)
+ */
+export async function getMyRecentPosts(userId: string, limit: number = 5): Promise<MyRecentPost[]> {
+  if (!userId) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('community_posts')
+      .select('id, title, category, created_at, comment_count, like_count')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('[community] Error fetching my posts:', error);
+      return [];
+    }
+
+    return data as MyRecentPost[];
+  } catch (error) {
+    console.error('[community] Error fetching my posts:', error);
+    return [];
+  }
+}
+
+/**
+ * 내가 쓴 최근 댓글 조회 (사이드바용)
+ */
+export async function getMyRecentComments(userId: string, limit: number = 5): Promise<MyRecentComment[]> {
+  if (!userId) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('community_comments')
+      .select('id, content, post_id, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('[community] Error fetching my comments:', error);
+      return [];
+    }
+
+    // 게시물 제목 조회
+    const postIds = [...new Set((data || []).map(c => c.post_id))];
+    const { data: posts } = await supabase
+      .from('community_posts')
+      .select('id, title')
+      .in('id', postIds);
+
+    const postTitleMap = new Map((posts || []).map(p => [p.id, p.title]));
+
+    return (data || []).map(comment => ({
+      id: comment.id,
+      content: comment.content,
+      post_id: comment.post_id,
+      post_title: postTitleMap.get(comment.post_id) || '삭제된 게시물',
+      created_at: comment.created_at,
+    }));
+  } catch (error) {
+    console.error('[community] Error fetching my comments:', error);
+    return [];
+  }
+}

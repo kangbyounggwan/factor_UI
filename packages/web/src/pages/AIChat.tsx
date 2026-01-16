@@ -21,7 +21,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Share2, Cpu, FileCode2, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserPlan } from "@shared/hooks/useUserPlan";
-import { AppSidebar } from "@/components/common/AppSidebar";
+import { AppSidebar, NewChatButton } from "@/components/common/AppSidebar";
+import { ChatSidebarContent } from "@/components/sidebar";
 import { AppHeader } from "@/components/common/AppHeader";
 import { FilePreviewList } from "@/components/ai/FilePreviewList";
 import { ChatMessage } from "@/components/ai/ChatMessage";
@@ -574,26 +575,30 @@ const AIChat = () => {
         <AppSidebar
           isOpen={sidebar.isOpen}
           onToggle={sidebar.toggle}
-          sessions={chatSessions.sessions as any}
-          currentSessionId={chatSessions.currentSessionId}
-          onNewChat={handleNewChat}
-          onLoadSession={handleLoadSession}
-          onDeleteSession={handleDeleteSession}
           user={user}
           userPlan={userPlan}
           onLoginClick={() => permissions.setShowLoginModal(true)}
           onSignOut={signOut}
-          mode="chat"
-          reports={gcode.reportArchive as any}
-          currentReportId={urlReportId || gcode.activeReportId}
-          onSelectReport={(report) => {
-            // URL 네비게이션으로 전체 화면 보고서 뷰로 이동
-            navigate(`/ai-chat?view=archive&reportId=${report.id}`);
-          }}
-          onDeleteReport={gcode.handleDeleteReport}
-          onViewMoreReports={gcode.handleArchiveToggle}
-          archiveViewActive={gcode.archiveViewActive || urlView === 'archive'}
-        />
+          headerAction={<NewChatButton onClick={handleNewChat} />}
+          onLogoClick={handleNewChat}
+        >
+          <ChatSidebarContent
+            user={user}
+            sessions={chatSessions.sessions as any}
+            currentSessionId={chatSessions.currentSessionId}
+            onLoadSession={handleLoadSession}
+            onDeleteSession={handleDeleteSession}
+            reports={gcode.reportArchive as any}
+            currentReportId={urlReportId || gcode.activeReportId}
+            onSelectReport={(report) => {
+              // URL 네비게이션으로 전체 화면 보고서 뷰로 이동
+              navigate(`/ai-chat?view=archive&reportId=${report.id}`);
+            }}
+            onDeleteReport={gcode.handleDeleteReport}
+            onViewMoreReports={gcode.handleArchiveToggle}
+            archiveViewActive={gcode.archiveViewActive || urlView === 'archive'}
+          />
+        </AppSidebar>
       )}
 
       {/* 메인 콘텐츠 */}

@@ -314,7 +314,112 @@ export const SEO_DATA: Record<string, SEOData> = {
       },
     },
   },
+
+  community: {
+    title: '3D 프린팅 커뮤니티 - 팁, 질문, 트러블슈팅 | FACTOR',
+    description: '3D 프린터 사용자들의 커뮤니티입니다. 출력 팁, 트러블슈팅 해결법, 모델 쇼케이스, 장비 리뷰를 공유하세요. 초보자부터 전문가까지 함께하는 3D 프린팅 커뮤니티.',
+    keywords: [
+      ...COMMON_KEYWORDS,
+      // 커뮤니티 키워드
+      '3D 프린팅 커뮤니티',
+      '3D printing community',
+      '3D 프린터 포럼',
+      '3D printer forum',
+      '3D 프린터 커뮤니티',
+      // 콘텐츠 유형
+      '3D 프린터 팁',
+      '3D printing tips',
+      '3D 프린터 트러블슈팅',
+      '3D printer troubleshooting',
+      '출력 문제 해결',
+      'print quality issues',
+      // 쇼케이스
+      '3D 프린팅 작품',
+      '3D print showcase',
+      '출력물 갤러리',
+      // 리뷰
+      '3D 프린터 리뷰',
+      '3D printer review',
+      '필라멘트 리뷰',
+      'filament review',
+      // 질문/답변
+      '3D 프린팅 질문',
+      '3D printing Q&A',
+      '초보자 가이드',
+      'beginner guide',
+    ],
+    ogType: 'website',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'DiscussionForumPosting',
+      name: 'FACTOR 3D 프린팅 커뮤니티',
+      description: '3D 프린터 사용자들의 지식 공유 커뮤니티',
+      publisher: {
+        '@type': 'Organization',
+        name: 'FACTOR',
+        url: 'https://factor.io.kr',
+      },
+    },
+  },
 };
+
+// 커뮤니티 게시물용 동적 SEO 데이터 생성 함수
+export function createCommunityPostSEO(post: {
+  title: string;
+  category: string;
+  content?: string;
+  author?: string;
+  created_at?: string;
+  thumbnail?: string;
+}): SEOData {
+  const categoryLabels: Record<string, string> = {
+    showcase: '쇼케이스',
+    question: '질문',
+    tip: '팁',
+    review: '리뷰',
+    free: '자유',
+    troubleshooting: '트러블슈팅',
+  };
+
+  const categoryLabel = categoryLabels[post.category] || post.category;
+  const description = post.content
+    ? post.content.replace(/<[^>]*>/g, '').slice(0, 150) + '...'
+    : `${categoryLabel} 카테고리의 게시물입니다.`;
+
+  return {
+    title: `${post.title} - ${categoryLabel} | FACTOR 커뮤니티`,
+    description,
+    keywords: [
+      ...COMMON_KEYWORDS,
+      '3D 프린팅 커뮤니티',
+      categoryLabel,
+      post.category,
+      '3D 프린터',
+    ],
+    ogType: 'article',
+    ogImage: post.thumbnail || DEFAULT_IMAGE,
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'DiscussionForumPosting',
+      headline: post.title,
+      description,
+      author: post.author ? {
+        '@type': 'Person',
+        name: post.author,
+      } : undefined,
+      datePublished: post.created_at,
+      publisher: {
+        '@type': 'Organization',
+        name: 'FACTOR',
+        url: 'https://factor.io.kr',
+      },
+      mainEntityOfPage: {
+        '@type': 'WebPage',
+        '@id': `https://factor.io.kr/community`,
+      },
+    },
+  };
+}
 
 /**
  * SEO 메타 태그를 동적으로 업데이트하는 훅

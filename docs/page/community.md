@@ -503,6 +503,18 @@ interface RichTextEditorProps {
   onAttachedImagesChange?: (images: AttachedImage[]) => void;
   showAttachmentSection?: boolean;
   maxImages?: number;
+  attached3DFiles?: Attached3DFile[];
+  on3DFilesChange?: (files: Attached3DFile[]) => void;
+  attachedGCodeFiles?: AttachedGCodeFile[];
+  onGCodeFilesChange?: (files: AttachedGCodeFile[]) => void;
+  onEditorReady?: (api: RichTextEditorApi) => void;  // 에디터 API 콜백
+}
+
+// 에디터 API 인터페이스 - 첨부 파일 삭제 시 본문과 동기화
+interface RichTextEditorApi {
+  removeModel3DByUrl: (url: string) => void;   // 3D 모델 삭제
+  removeGCodeByUrl: (url: string) => void;     // G-code 삭제
+  removeImageByUrl: (url: string) => void;     // 이미지 삭제
 }
 ```
 
@@ -688,6 +700,8 @@ model3d: {
   }) => ReturnType;
 
   updateModel3DLoading: (tempUrl: string, newUrl: string, thumbnail?: string) => ReturnType;
+
+  removeModel3DByUrl: (url: string) => ReturnType;  // 3D 모델 삭제
 }
 ```
 

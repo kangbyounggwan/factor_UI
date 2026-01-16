@@ -27,6 +27,7 @@ import { parseMqttPayload } from '@shared/utils/mqttUtils';
 import { useToast } from '@/hooks/use-toast';
 import { AppHeader } from '@/components/common/AppHeader';
 import { AppSidebar } from '@/components/common/AppSidebar';
+import { AdminSidebarContent } from '@/components/sidebar';
 import { useSidebarState } from '@/hooks/useSidebarState';
 
 interface EdgeDevice {
@@ -242,8 +243,9 @@ const Admin = () => {
           onToggle={toggleSidebar}
           user={user}
           onSignOut={signOut}
-          mode="admin"
-        />
+        >
+          <AdminSidebarContent />
+        </AppSidebar>
         <div className="flex-1 flex flex-col min-w-0">
           <AppHeader sidebarOpen={sidebarOpen} />
           <div className="flex-1 overflow-y-auto bg-background p-6">
@@ -267,8 +269,9 @@ const Admin = () => {
         onToggle={toggleSidebar}
         user={user}
         onSignOut={signOut}
-        mode="admin"
-      />
+      >
+        <AdminSidebarContent />
+      </AppSidebar>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">

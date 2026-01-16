@@ -6,7 +6,8 @@ import { Thermometer, Camera, Code, FolderOpen, FileCode, Eye, Loader2, Trash2, 
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { AppHeader } from "@/components/common/AppHeader";
-import { AppSidebar, PrinterDetailTab } from "@/components/common/AppSidebar";
+import { AppSidebar } from "@/components/common/AppSidebar";
+import { PrinterDetailSidebarContent, PrinterDetailTab } from "@/components/sidebar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import {
   DropdownMenu,
@@ -1246,14 +1247,16 @@ const PrinterDetail = () => {
         onToggle={toggleSidebar}
         user={user}
         onSignOut={signOut}
-        mode="printer-detail"
-        printerName={printerName}
-        printerUuid={deviceUuid || undefined}
-        printerConnected={data.printerStatus.connected}
-        activePrinterTab={activeTab}
-        onPrinterTabChange={setActiveTab}
-        onBackClick={() => window.history.back()}
-      />
+      >
+        <PrinterDetailSidebarContent
+          printerName={printerName}
+          printerUuid={deviceUuid || undefined}
+          printerConnected={data.printerStatus.connected}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onBackClick={() => window.history.back()}
+        />
+      </AppSidebar>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">

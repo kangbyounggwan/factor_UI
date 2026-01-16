@@ -4,7 +4,7 @@
  */
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -42,11 +42,14 @@ import {
   ArrowLeft,
   Check,
   FileCode,
+  Save,
+  FolderOpen,
 } from "lucide-react";
 
 // Layout Components
 import { AppHeader } from "@/components/common/AppHeader";
 import { AppSidebar } from "@/components/common/AppSidebar";
+import { CommunitySidebarContent } from "@/components/sidebar";
 import { SharedBottomNavigation } from "@/components/shared/SharedBottomNavigation";
 import { LoginPromptModal } from "@/components/auth/LoginPromptModal";
 
@@ -61,12 +64,25 @@ import { generateModel3DThumbnail, dataUrlToFile } from "@/lib/model3dThumbnail"
 import {
   createPost,
   uploadPostImage,
+  getCommunityStats,
+  getMyRecentPosts,
+  getMyRecentComments,
   type PostCategory,
   type CreatePostInput,
   type TroubleshootingMeta,
+  type CommunityStats,
+  type MyRecentPost,
+  type MyRecentComment,
   SYMPTOM_TAGS,
 } from "@shared/services/supabaseService/community";
 import { listAIModels } from "@shared/services/supabaseService/aiModel";
+import {
+  getEquipmentPresets,
+  addEquipmentPreset,
+  presetToTroubleshootingMeta,
+  troubleshootingMetaToPresetInput,
+  type EquipmentPreset,
+} from "@shared/services/supabaseService/equipmentPreset";
 import { supabase } from "@shared/integrations/supabase/client";
 import type { AIGeneratedModel } from "@shared/types/aiModelType";
 import { createCommunitySegments, type GCodeAnalysisResponse } from "@/lib/api/gcode";
@@ -110,6 +126,7 @@ const SYMPTOM_LABELS: Record<string, string> = {
 export default function CreatePost() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -119,10 +136,13 @@ export default function CreatePost() {
   const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
 
+  // URL에서 카테고리 파라미터 읽기 (Community.tsx에서 전달)
+  const initialCategory = (searchParams.get('category') as PostCategory) || 'free';
+
   // 폼 상태
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [category, setCategory] = useState<PostCategory>('free');
+  const [category, setCategory] = useState<PostCategory>(initialCategory);
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [images, setImages] = useState<string[]>([]);
@@ -151,6 +171,11 @@ export default function CreatePost() {
   const [troubleshootingMeta, setTroubleshootingMeta] = useState<TroubleshootingMeta>({});
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
 
+  // 장비 프리셋 상태
+  const [equipmentPresets, setEquipmentPresets] = useState<EquipmentPreset[]>([]);
+  const [loadingPresets, setLoadingPresets] = useState(false);
+  const [savingPreset, setSavingPreset] = useState(false);
+
   // 모델 선택 상태
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [userModels, setUserModels] = useState<AIGeneratedModel[]>([]);
@@ -168,13 +193,38 @@ export default function CreatePost() {
   const [showNicknameModal, setShowNicknameModal] = useState(false);
   const [userNickname, setUserNickname] = useState<string | null>(null);
   const [userFullName, setUserFullName] = useState<string | null>(null);
+  const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
   // 에디터 API 상태
   const [editorApi, setEditorApi] = useState<RichTextEditorApi | null>(null);
 
+  // 커뮤니티 통계 상태
+  const [communityStats, setCommunityStats] = useState<CommunityStats | null>(null);
+
+  // 내 글/댓글 상태
+  const [myPosts, setMyPosts] = useState<MyRecentPost[]>([]);
+  const [myComments, setMyComments] = useState<MyRecentComment[]>([]);
+
   // 트러블슈팅 폼 표시 여부
   const showTroubleshootingForm = category === 'troubleshooting' || category === 'question';
+
+  // 커뮤니티 통계 로드
+  useEffect(() => {
+    getCommunityStats().then(stats => {
+      if (stats) setCommunityStats(stats);
+    });
+    // 내 글/댓글 로드
+    if (user) {
+      Promise.all([
+        getMyRecentPosts(user.id, 5),
+        getMyRecentComments(user.id, 5),
+      ]).then(([posts, comments]) => {
+        setMyPosts(posts);
+        setMyComments(comments);
+      });
+    }
+  }, [user]);
 
   // 사용자 프로필 로드 (닉네임 확인용)
   useEffect(() => {
@@ -186,7 +236,7 @@ export default function CreatePost() {
       try {
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select('display_name, full_name')
+          .select('display_name, full_name, avatar_url')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -194,6 +244,7 @@ export default function CreatePost() {
         if (!error && profile) {
           setUserNickname(profile.display_name);
           setUserFullName(profile.full_name);
+          setUserAvatarUrl(profile.avatar_url);
           // 닉네임(display_name)이 없거나 빈 문자열이면 모달 표시
           const hasNickname = profile.display_name && profile.display_name.trim() !== '';
           console.log('[CreatePost] Has nickname:', hasNickname, 'display_name:', profile.display_name, 'full_name:', profile.full_name);
@@ -232,6 +283,29 @@ export default function CreatePost() {
     };
     loadUserModels();
   }, [user]);
+
+  // 장비 프리셋 로드
+  useEffect(() => {
+    const loadPresets = async () => {
+      if (!user) return;
+      setLoadingPresets(true);
+      try {
+        const presets = await getEquipmentPresets(user.id);
+        setEquipmentPresets(presets);
+        // 기본 프리셋이 있으면 자동 적용
+        const defaultPreset = presets.find(p => p.is_default);
+        if (defaultPreset && showTroubleshootingForm) {
+          const meta = presetToTroubleshootingMeta(defaultPreset);
+          setTroubleshootingMeta(meta);
+        }
+      } catch (error) {
+        console.error('[CreatePost] Error loading presets:', error);
+      } finally {
+        setLoadingPresets(false);
+      }
+    };
+    loadPresets();
+  }, [user, showTroubleshootingForm]);
 
   // 선택된 모델 정보
   const selectedModel = userModels.find(m => m.id === selectedModelId);
@@ -577,6 +651,45 @@ export default function CreatePost() {
     setTroubleshootingMeta(prev => ({ ...prev, [key]: value }));
   };
 
+  // 프리셋 적용
+  const handleApplyPreset = (preset: EquipmentPreset) => {
+    const meta = presetToTroubleshootingMeta(preset);
+    setTroubleshootingMeta(prev => ({ ...prev, ...meta }));
+    toast({
+      title: `'${preset.name}' 프리셋이 적용되었습니다`,
+    });
+  };
+
+  // 현재 설정을 프리셋으로 저장
+  const handleSaveAsPreset = async () => {
+    if (!user) return;
+
+    const presetName = prompt('프리셋 이름을 입력하세요:', '내 프린터');
+    if (!presetName || !presetName.trim()) return;
+
+    setSavingPreset(true);
+    try {
+      const input = troubleshootingMetaToPresetInput(presetName.trim(), troubleshootingMeta);
+      const newPreset = await addEquipmentPreset(user.id, input);
+      if (newPreset) {
+        setEquipmentPresets(prev => [...prev, newPreset]);
+        toast({
+          title: `'${newPreset.name}' 프리셋이 저장되었습니다`,
+        });
+      } else {
+        throw new Error('Failed to save preset');
+      }
+    } catch (error) {
+      console.error('[CreatePost] Error saving preset:', error);
+      toast({
+        title: '프리셋 저장 실패',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingPreset(false);
+    }
+  };
+
   // 뒤로가기
   const handleBack = () => {
     navigate('/community');
@@ -619,12 +732,24 @@ export default function CreatePost() {
       {/* 사이드바 (데스크탑) */}
       {!isMobile && (
         <AppSidebar
-          mode="community"
           isOpen={sidebarOpen}
           onToggle={toggleSidebar}
           user={user}
           onLoginClick={() => setShowLoginModal(true)}
-        />
+          hidePlanCard
+        >
+          <CommunitySidebarContent
+            communityStats={communityStats ? {
+              totalPosts: communityStats.totalPosts,
+              totalComments: communityStats.totalComments,
+              totalUsers: communityStats.totalUsers,
+              totalLikes: communityStats.totalLikes,
+              todayPosts: communityStats.todayPosts,
+            } : null}
+            myPosts={myPosts}
+            myComments={myComments}
+          />
+        </AppSidebar>
       )}
 
       {/* 메인 콘텐츠 */}
@@ -684,19 +809,15 @@ export default function CreatePost() {
                   {/* 작성자 정보 */}
                   <div className="hidden sm:flex items-center gap-3 px-4 py-2 border-l bg-muted/30">
                     <div className="flex items-center gap-2">
-                      {authorDisplayType !== 'anonymous' && user?.user_metadata?.avatar_url ? (
-                        <img
-                          src={user.user_metadata.avatar_url}
-                          alt=""
-                          className="w-6 h-6 rounded-full"
-                        />
-                      ) : (
-                        <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-xs text-primary-foreground">
-                          {authorDisplayType === 'anonymous'
-                            ? '?'
-                            : (userNickname || userFullName || user?.email || '?')[0].toUpperCase()}
-                        </div>
-                      )}
+                      {/* 아바타: 표시 방식에 따라 첫 글자 결정 */}
+                      <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-xs text-primary-foreground">
+                        {authorDisplayType === 'anonymous'
+                          ? '?'
+                          : authorDisplayType === 'realname'
+                            ? (userFullName || userNickname || user?.email || '?')[0].toUpperCase()
+                            : (userNickname || userFullName || user?.email || '?')[0].toUpperCase()
+                        }
+                      </div>
                       <span className="text-sm font-medium">
                         {authorDisplayType === 'anonymous'
                           ? t('common.anonymous', '익명')
@@ -764,6 +885,63 @@ export default function CreatePost() {
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="px-4 py-4 bg-muted/20 border-b space-y-4">
+                      {/* 프리셋 불러오기/저장 버튼 */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* 프리셋 선택 드롭다운 */}
+                        {equipmentPresets.length > 0 && (
+                          <Select onValueChange={(presetId) => {
+                            const preset = equipmentPresets.find(p => p.id === presetId);
+                            if (preset) handleApplyPreset(preset);
+                          }}>
+                            <SelectTrigger className="h-8 text-xs w-auto gap-1">
+                              <FolderOpen className="w-3.5 h-3.5" />
+                              <SelectValue placeholder="프리셋 불러오기" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {equipmentPresets.map(preset => (
+                                <SelectItem key={preset.id} value={preset.id}>
+                                  <div className="flex items-center gap-2">
+                                    <span>{preset.name}</span>
+                                    {preset.is_default && (
+                                      <Badge variant="secondary" className="text-[10px] px-1 py-0">기본</Badge>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                        {loadingPresets && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <span>프리셋 로딩...</span>
+                          </div>
+                        )}
+                        {/* 현재 설정 저장 버튼 */}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs gap-1"
+                          onClick={handleSaveAsPreset}
+                          disabled={savingPreset || !troubleshootingMeta.printer_model}
+                        >
+                          {savingPreset ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Save className="w-3.5 h-3.5" />
+                          )}
+                          <span>현재 설정 저장</span>
+                        </Button>
+                        {equipmentPresets.length === 0 && !loadingPresets && (
+                          <span className="text-xs text-muted-foreground">
+                            자주 사용하는 장비 설정을 저장해두세요
+                          </span>
+                        )}
+                      </div>
+
+                      <Separator />
+
                       {/* 프린터 정보 */}
                       <Collapsible open={printerSectionOpen} onOpenChange={setPrinterSectionOpen}>
                         <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium w-full">
