@@ -14,7 +14,7 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
       .from('user_subscriptions')
       .select('*')
       .eq('user_id', userId)
-      .in('status', ['active', 'trialing'])
+      .eq('status', 'active')
       .maybeSingle();
 
     if (error) {
@@ -36,7 +36,7 @@ export async function getUserPlan(userId: string): Promise<SubscriptionPlan> {
   try {
     const subscription = await getUserSubscription(userId);
 
-    if (!subscription || (subscription.status !== 'active' && subscription.status !== 'trialing')) {
+    if (!subscription || subscription.status !== 'active') {
       return 'free';
     }
 
@@ -167,7 +167,7 @@ export async function getUserPrinterCount(userId: string): Promise<number> {
 export async function upsertSubscription(params: {
   userId: string;
   planName: string;
-  status: 'active' | 'cancelled' | 'expired' | 'trialing';
+  status: 'active' | 'cancelled' | 'expired' | 'past_due';
   periodStart: Date;
   periodEnd: Date;
   paddleSubscriptionId?: string;

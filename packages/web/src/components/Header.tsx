@@ -323,6 +323,30 @@ export const Header = () => {
   const isAuthPage = location.pathname === "/auth";
   const isSubscriptionPage = location.pathname === "/subscription";
 
+  // 현재 경로에 따른 로고 클릭 시 이동할 경로 결정
+  const getLogoDestination = () => {
+    const path = location.pathname;
+
+    // 커뮤니티 섹션
+    if (path.startsWith('/community')) {
+      return '/community';
+    }
+    // AI 도구 섹션
+    if (path.startsWith('/ai-chat') || path.startsWith('/create') || path.startsWith('/gcode')) {
+      return '/ai-chat';
+    }
+    // 프린터/대시보드 섹션
+    if (path.startsWith('/dashboard') || path.startsWith('/printers') || path.startsWith('/printer/')) {
+      return '/dashboard';
+    }
+    // 설정 페이지
+    if (path.startsWith('/settings') || path.startsWith('/user-settings')) {
+      return user ? '/dashboard' : '/';
+    }
+    // 기본: 로그인 시 대시보드, 비로그인 시 홈
+    return user ? '/dashboard' : '/';
+  };
+
   // 로그인 상태에 따른 네비게이션 분기
   const currentNavigation = (isHomePage || isSubscriptionPage)
     ? homeNavigation
@@ -382,8 +406,8 @@ export const Header = () => {
   return (
     <header className="sticky top-0 z-50 w-full border-b-2 border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto relative flex h-16 items-center justify-between px-4">
-        {/* 로고 - 로그인 시 대시보드로, 비로그인 시 홈으로 */}
-        <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-3">
+        {/* 로고 - 현재 섹션의 인덱스 페이지로 이동 */}
+        <Link to={getLogoDestination()} className="flex items-center space-x-3">
           <div className="flex items-center justify-center w-10 h-10 bg-primary rounded-lg">
             <Activity className="w-6 h-6 text-primary-foreground" />
           </div>
@@ -1065,9 +1089,9 @@ export const Header = () => {
           </SheetTrigger>
           <SheetContent side="right" className="w-[300px] sm:w-[400px]">
             <div className="flex flex-col space-y-4">
-              {/* 모바일 로고 */}
+              {/* 모바일 로고 - 현재 섹션의 인덱스 페이지로 이동 */}
               <Link
-                to="/"
+                to={getLogoDestination()}
                 className="flex items-center space-x-3 pb-4 border-b"
                 onClick={() => setMobileMenuOpen(false)}
               >

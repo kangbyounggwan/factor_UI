@@ -16,6 +16,7 @@ import { useTheme } from 'next-themes';
 import { GCodeAnalysisReport, type GCodeAnalysisData } from "@/components/ai/GCodeAnalytics";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { useUserPlan } from "@shared/hooks/useUserPlan";
 import { analyzeGCodeFile, GCodeAnalysisError, pollAnalysisProgress } from "@/lib/gcodeAnalysisService";
 import { saveAnalysisReport, uploadGCodeForAnalysis } from "@/lib/gcodeAnalysisDbService";
 import type { AnalysisProgress, AnalysisResult } from "@shared/types/gcodeAnalysisTypes";
@@ -313,6 +314,7 @@ const GCodeAnalytics = () => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { user, signOut } = useAuth();
+  const { plan: userPlan } = useUserPlan(user?.id);
   const navigate = useNavigate();
   const { reportId } = useParams<{ reportId?: string }>();
   const { resolvedTheme } = useTheme();
@@ -914,6 +916,7 @@ const GCodeAnalytics = () => {
         isOpen={sidebarOpen}
         onToggle={toggleSidebar}
         user={user}
+        userPlan={userPlan}
         onLoginClick={() => setShowLoginPrompt(true)}
         onSignOut={signOut}
       >

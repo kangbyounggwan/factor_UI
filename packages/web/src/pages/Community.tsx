@@ -11,6 +11,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { useUserPlan } from "@shared/hooks/useUserPlan";
 import { useSEO } from "@/hooks/useSEO";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
@@ -88,6 +89,7 @@ export default function Community() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
+  const { plan: userPlan } = useUserPlan(user?.id);
   const { toast } = useToast();
   const isMobile = useIsMobile();
 
@@ -407,6 +409,7 @@ export default function Community() {
           isOpen={sidebarOpen}
           onToggle={toggleSidebar}
           user={user}
+          userPlan={userPlan}
           onLoginClick={() => setShowLoginModal(true)}
           hidePlanCard
         >

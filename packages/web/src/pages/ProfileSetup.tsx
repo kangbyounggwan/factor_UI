@@ -68,14 +68,14 @@ const ProfileSetup = () => {
       // 2. profiles 테이블에 upsert (없으면 생성, 있으면 업데이트)
       // full_name: 실명 (본명, 필수)
       // display_name: 닉네임 (선택, 입력하지 않으면 null - 나중에 커뮤니티에서 설정)
+      // 주의: role은 DB 트리거로 보호됨 - 클라이언트에서 설정하지 않음 (DB DEFAULT: 'user')
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
           user_id: user.id,
           full_name: fullName.trim(),
-          display_name: displayName.trim() || null, // 닉네임 (입력하지 않으면 null)
+          display_name: displayName.trim() || null,
           phone: phone || null,
-          role: 'user',
         }, {
           onConflict: 'user_id'
         });
@@ -111,8 +111,8 @@ const ProfileSetup = () => {
         .from('user_subscriptions')
         .upsert({
           user_id: user.id,
-          plan_name: 'free',  // 'basic' → 'free'로 변경 (PLAN_FEATURES와 일치)
-          status: 'trial',    // 'trialing' → 'trial'로 변경 (DB CHECK constraint와 일치)
+          plan_name: 'free',
+          status: 'active',  // DB CHECK constraint: 'active', 'cancelled', 'expired', 'past_due'
           current_period_start: new Date().toISOString(),
           current_period_end: trialEndDate.toISOString(),
           cancel_at_period_end: false,

@@ -22,7 +22,7 @@ import {
   Building2,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import type { User } from "@supabase/supabase-js";
 import type { SubscriptionPlan } from "@shared/types/subscription";
@@ -97,17 +97,46 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
+  const location = useLocation();
 
   // userPlan이 undefined이거나 planConfig에 없는 경우 'free'로 fallback
   const safePlan = userPlan && planConfig[userPlan] ? userPlan : 'free';
   const currentPlanConfig = planConfig[safePlan];
   const PlanIcon = currentPlanConfig.icon;
 
+  // 현재 경로에 따른 로고 클릭 시 이동할 경로 결정
+  const getLogoDestination = () => {
+    const path = location.pathname;
+
+    // 커뮤니티 섹션
+    if (path.startsWith('/community')) {
+      return '/community';
+    }
+    // AI 도구 섹션
+    if (path.startsWith('/ai-chat') || path.startsWith('/create') || path.startsWith('/gcode')) {
+      return '/ai-chat';
+    }
+    // 프린터/대시보드 섹션
+    if (path.startsWith('/dashboard') || path.startsWith('/printers') || path.startsWith('/printer/')) {
+      return '/dashboard';
+    }
+    // 관리자 섹션
+    if (path.startsWith('/admin')) {
+      return '/admin';
+    }
+    // 설정 페이지
+    if (path.startsWith('/settings') || path.startsWith('/user-settings')) {
+      return user ? '/dashboard' : '/';
+    }
+    // 기본: AI Chat
+    return '/ai-chat';
+  };
+
   const handleLogoClick = () => {
     if (onLogoClick) {
       onLogoClick();
     } else {
-      window.location.href = '/ai-chat';
+      window.location.href = getLogoDestination();
     }
   };
 

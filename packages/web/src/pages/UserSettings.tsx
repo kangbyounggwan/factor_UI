@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { useUserPlan } from "@shared/hooks/useUserPlan";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -107,6 +108,7 @@ const PLAN_PRICES = {
 
 const UserSettings = () => {
   const { user, signOut, linkGoogleAccount, unlinkProvider } = useAuth();
+  const { plan: userPlan } = useUserPlan(user?.id);
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -901,6 +903,7 @@ const UserSettings = () => {
         isOpen={sidebarOpen}
         onToggle={toggleSidebar}
         user={user}
+        userPlan={userPlan}
         onSignOut={signOut}
       >
         <SettingsSidebarContent

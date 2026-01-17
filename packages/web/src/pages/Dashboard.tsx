@@ -630,6 +630,7 @@ const Home = () => {
         isOpen={sidebarOpen}
         onToggle={toggleSidebar}
         user={user}
+        userPlan={userPlan}
         onSignOut={signOut}
       >
         <DashboardSidebarContent

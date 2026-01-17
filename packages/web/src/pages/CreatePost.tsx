@@ -6,6 +6,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@shared/contexts/AuthContext";
+import { useUserPlan } from "@shared/hooks/useUserPlan";
 import { useUserRole } from "@shared/hooks/useUserRole";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -128,6 +129,7 @@ export default function CreatePost() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
+  const { plan: userPlan } = useUserPlan(user?.id);
   const { isAdmin } = useUserRole();
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -739,6 +741,7 @@ export default function CreatePost() {
           isOpen={sidebarOpen}
           onToggle={toggleSidebar}
           user={user}
+          userPlan={userPlan}
           onLoginClick={() => setShowLoginModal(true)}
           hidePlanCard
         >
