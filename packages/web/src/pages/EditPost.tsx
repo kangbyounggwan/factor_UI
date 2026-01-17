@@ -38,8 +38,6 @@ import {
   X,
   ChevronDown,
   AlertTriangle,
-  Wrench,
-  Thermometer,
   Box,
   ArrowLeft,
 } from "lucide-react";
@@ -77,9 +75,7 @@ import type { AIGeneratedModel } from "@shared/types/aiModelType";
 // Shared constants
 import {
   getCategoryOptions,
-  FIRMWARE_OPTIONS,
   FILAMENT_OPTIONS,
-  SLICER_OPTIONS,
 } from "@shared/constants/community";
 
 // 카테고리 옵션은 useUserRole hook에서 isAdmin 상태에 따라 동적으로 결정됨
@@ -153,8 +149,6 @@ export default function EditPost() {
 
   // 섹션 열림 상태
   const [printerSectionOpen, setPrinterSectionOpen] = useState(true);
-  const [filamentSectionOpen, setFilamentSectionOpen] = useState(true);
-  const [slicerSectionOpen, setSlicerSectionOpen] = useState(false);
   const [symptomSectionOpen, setSymptomSectionOpen] = useState(true);
   const [showTroubleshootingPanel, setShowTroubleshootingPanel] = useState(false);
 
@@ -652,7 +646,7 @@ export default function EditPost() {
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="px-4 py-4 bg-muted/20 border-b space-y-4">
-                      {/* 프린터 정보 */}
+                      {/* 프린터 정보 (프린터 모델, 필라멘트 종류, 노즐 크기, 건조 여부 통합) */}
                       <Collapsible open={printerSectionOpen} onOpenChange={setPrinterSectionOpen}>
                         <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium w-full">
                           <Box className="w-4 h-4" />
@@ -672,13 +666,13 @@ export default function EditPost() {
                               />
                             </div>
                             <div>
-                              <Label className="text-xs text-muted-foreground">펌웨어</Label>
-                              <Select value={troubleshootingMeta.firmware || ''} onValueChange={(v) => updateMeta('firmware', v)}>
+                              <Label className="text-xs text-muted-foreground">필라멘트 종류</Label>
+                              <Select value={troubleshootingMeta.filament_type || ''} onValueChange={(v) => updateMeta('filament_type', v)}>
                                 <SelectTrigger className="h-8 text-sm">
                                   <SelectValue placeholder="선택" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {FIRMWARE_OPTIONS.map(opt => (
+                                  {FILAMENT_OPTIONS.map(opt => (
                                     <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                                   ))}
                                 </SelectContent>
@@ -693,135 +687,15 @@ export default function EditPost() {
                                 className="h-8 text-sm"
                               />
                             </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">베드 타입</Label>
-                              <Input
-                                placeholder="예: PEI"
-                                value={troubleshootingMeta.bed_type || ''}
-                                onChange={(e) => updateMeta('bed_type', e.target.value)}
-                                className="h-8 text-sm"
-                              />
-                            </div>
-                          </div>
-                        </CollapsibleContent>
-                      </Collapsible>
-
-                      <Separator />
-
-                      {/* 필라멘트 정보 */}
-                      <Collapsible open={filamentSectionOpen} onOpenChange={setFilamentSectionOpen}>
-                        <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium w-full">
-                          <Thermometer className="w-4 h-4" />
-                          필라멘트 정보
-                          {category === 'troubleshooting' && <span className="text-destructive">*</span>}
-                          <ChevronDown className={cn("w-3 h-3 ml-auto transition-transform", filamentSectionOpen && "rotate-180")} />
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="pt-3">
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <div>
-                              <Label className="text-xs text-muted-foreground">필라멘트 종류</Label>
-                              <Select value={troubleshootingMeta.filament_type || ''} onValueChange={(v) => updateMeta('filament_type', v)}>
-                                <SelectTrigger className="h-8 text-sm">
-                                  <SelectValue placeholder="선택" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {FILAMENT_OPTIONS.map(opt => (
-                                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">브랜드</Label>
-                              <Input
-                                placeholder="예: eSUN"
-                                value={troubleshootingMeta.filament_brand || ''}
-                                onChange={(e) => updateMeta('filament_brand', e.target.value)}
-                                className="h-8 text-sm"
-                              />
-                            </div>
-                            <div className="col-span-2 flex items-center gap-2 pt-5">
+                            <div className="flex items-center gap-2 pt-5">
                               <Checkbox
-                                id="filament_dried"
+                                id="filament_dried_edit"
                                 checked={troubleshootingMeta.filament_dried || false}
                                 onCheckedChange={(checked) => updateMeta('filament_dried', checked as boolean)}
                               />
-                              <Label htmlFor="filament_dried" className="text-sm cursor-pointer">
+                              <Label htmlFor="filament_dried_edit" className="text-sm cursor-pointer">
                                 필라멘트 건조함
                               </Label>
-                            </div>
-                          </div>
-                        </CollapsibleContent>
-                      </Collapsible>
-
-                      <Separator />
-
-                      {/* 슬라이서 설정 */}
-                      <Collapsible open={slicerSectionOpen} onOpenChange={setSlicerSectionOpen}>
-                        <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium w-full">
-                          <Wrench className="w-4 h-4" />
-                          슬라이서 설정
-                          <ChevronDown className={cn("w-3 h-3 ml-auto transition-transform", slicerSectionOpen && "rotate-180")} />
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="pt-3">
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <div>
-                              <Label className="text-xs text-muted-foreground">슬라이서</Label>
-                              <Select value={troubleshootingMeta.slicer || ''} onValueChange={(v) => updateMeta('slicer', v)}>
-                                <SelectTrigger className="h-8 text-sm">
-                                  <SelectValue placeholder="선택" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {SLICER_OPTIONS.map(opt => (
-                                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">출력 속도</Label>
-                              <Input
-                                placeholder="예: 60mm/s"
-                                value={troubleshootingMeta.print_speed || ''}
-                                onChange={(e) => updateMeta('print_speed', e.target.value)}
-                                className="h-8 text-sm"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">노즐 온도</Label>
-                              <Input
-                                placeholder="예: 210°C"
-                                value={troubleshootingMeta.nozzle_temp || ''}
-                                onChange={(e) => updateMeta('nozzle_temp', e.target.value)}
-                                className="h-8 text-sm"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">베드 온도</Label>
-                              <Input
-                                placeholder="예: 60°C"
-                                value={troubleshootingMeta.bed_temp || ''}
-                                onChange={(e) => updateMeta('bed_temp', e.target.value)}
-                                className="h-8 text-sm"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">리트랙션</Label>
-                              <Input
-                                placeholder="예: 0.8mm"
-                                value={troubleshootingMeta.retraction || ''}
-                                onChange={(e) => updateMeta('retraction', e.target.value)}
-                                className="h-8 text-sm"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">레이어 높이</Label>
-                              <Input
-                                placeholder="예: 0.2mm"
-                                value={troubleshootingMeta.layer_height || ''}
-                                onChange={(e) => updateMeta('layer_height', e.target.value)}
-                                className="h-8 text-sm"
-                              />
                             </div>
                           </div>
                         </CollapsibleContent>

@@ -1629,13 +1629,7 @@ export async function getAnnouncements(limit: number = 5): Promise<CommunityPost
         comment_count,
         created_at,
         updated_at,
-        user_id,
-        profiles!community_posts_user_id_fkey (
-          user_id,
-          full_name,
-          display_name,
-          avatar_url
-        )
+        user_id
       `)
       .eq('category', 'announcement')
       .order('created_at', { ascending: false })
@@ -1646,9 +1640,22 @@ export async function getAnnouncements(limit: number = 5): Promise<CommunityPost
       return [];
     }
 
-    return (data || []).map(post => ({
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    // 별도로 프로필 조회
+    const userIds = [...new Set(data.map(p => p.user_id))];
+    const profileMap = await getProfilesMap(userIds);
+
+    return data.map(post => ({
       ...post,
-      profiles: post.profiles as unknown as CommunityPost['profiles'],
+      profiles: profileMap.get(post.user_id) ? {
+        user_id: post.user_id,
+        full_name: profileMap.get(post.user_id)?.full_name || null,
+        display_name: profileMap.get(post.user_id)?.username || null,
+        avatar_url: profileMap.get(post.user_id)?.avatar_url || null,
+      } : null,
     })) as CommunityPost[];
   } catch (error) {
     console.error('[community] Error fetching announcements:', error);

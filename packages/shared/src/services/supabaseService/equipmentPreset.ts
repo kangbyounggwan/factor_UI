@@ -5,6 +5,20 @@
  */
 import { supabase } from '../../integrations/supabase/client';
 
+// crypto.randomUUID() 폴백 (HTTP 환경에서도 작동)
+function generateUUID(): string {
+  // crypto.randomUUID()가 사용 가능하면 사용 (HTTPS 환경)
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // 폴백: Math.random() 기반 UUID v4 생성
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 // ============================================================================
 // 타입 정의
 // ============================================================================
@@ -97,7 +111,7 @@ export async function addEquipmentPreset(userId: string, input: EquipmentPresetI
 
   const now = new Date().toISOString();
   const newPreset: EquipmentPreset = {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     name: input.name,
     is_default: input.is_default ?? (presets.length === 0), // 첫 프리셋은 자동으로 기본값
     printer: input.printer || {},
