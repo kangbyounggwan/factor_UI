@@ -18,8 +18,7 @@ export const CATEGORY_ICONS: Record<PostCategory, string> = {
   showcase: '🎨',
   question: '❓',
   troubleshooting: '🔧',
-  tip: '💡',
-  review: '⭐',
+  failure: '😅',
   free: '💬',
 };
 
@@ -31,8 +30,7 @@ export const CATEGORY_COLORS: Record<PostCategory, string> = {
   showcase: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
   question: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
   troubleshooting: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  tip: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-  review: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  failure: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
   free: 'bg-gray-100 text-gray-800 dark:bg-gray-800/50 dark:text-gray-400',
 };
 
@@ -44,8 +42,7 @@ export const CATEGORY_LABEL_KEYS: Record<PostCategory, string> = {
   showcase: 'community.category.showcase',
   question: 'community.category.question',
   troubleshooting: 'community.category.troubleshooting',
-  tip: 'community.category.tip',
-  review: 'community.category.review',
+  failure: 'community.category.failure',
   free: 'community.category.free',
 };
 
@@ -57,8 +54,7 @@ export const CATEGORY_DESCRIPTIONS: Record<PostCategory, string> = {
   showcase: '출력물 공유',
   question: '일반 질문',
   troubleshooting: '출력 문제 해결',
-  tip: '노하우 공유',
-  review: '장비/재료 리뷰',
+  failure: '실패 자랑하기',
   free: '자유 주제',
 };
 
@@ -69,8 +65,7 @@ export const POST_CATEGORIES: PostCategory[] = [
   'showcase',
   'question',
   'troubleshooting',
-  'tip',
-  'review',
+  'failure',
   'free',
 ];
 

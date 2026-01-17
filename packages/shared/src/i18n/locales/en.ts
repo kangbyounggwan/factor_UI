@@ -2741,8 +2741,7 @@ export default {
       showcase: "Showcase",
       question: "Question",
       troubleshooting: "Troubleshooting",
-      tip: "Tips",
-      review: "Review",
+      failure: "Fails",
       free: "General"
     },
     unsolved: "Unsolved",

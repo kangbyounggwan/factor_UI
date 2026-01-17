@@ -447,11 +447,6 @@ export function formatMessagesForLLM(
   return messages;
 }
 
-/**
- * 세션 제목 자동 생성
- */
-export function generateSessionTitle(firstMessage: string): string {
-  // 첫 30자 + "..."
-  const title = firstMessage.trim().substring(0, 30);
-  return title.length < firstMessage.trim().length ? `${title}...` : title;
-}
+// generateSessionTitle 함수는 utils/string.ts로 이동됨
+// 하위 호환성을 위해 re-export
+export { generateSessionTitle } from '../../utils/string';

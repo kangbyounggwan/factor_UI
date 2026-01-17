@@ -373,10 +373,10 @@ export function createCommunityPostSEO(post: {
   thumbnail?: string;
 }): SEOData {
   const categoryLabels: Record<string, string> = {
+    announcement: '공지',
     showcase: '쇼케이스',
     question: '질문',
-    tip: '팁',
-    review: '리뷰',
+    failure: '실패',
     free: '자유',
     troubleshooting: '트러블슈팅',
   };

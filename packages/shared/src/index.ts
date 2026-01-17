@@ -4,6 +4,9 @@ export * from "./utils/imageValidation";
 // Import directly from "@shared/utils/stlThumbnail" where needed
 export * from "./utils/printerStatus";
 export * from "./utils/ai";
+export * from "./utils/file";
+export * from "./utils/filename";
+export * from "./utils/string";
 export * from "./component/websocket";
 
 // i18n

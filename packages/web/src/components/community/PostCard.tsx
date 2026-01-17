@@ -152,11 +152,11 @@ export function PostCard({ post, onClick, onTagClick, className }: PostCardProps
   // 카테고리 라벨
   const getCategoryLabel = (category: PostCategory) => {
     const labels: Record<PostCategory, string> = {
+      announcement: t('community.category.announcement', '공지'),
       showcase: t('community.category.showcase', '자랑'),
       question: t('community.category.question', '질문'),
       troubleshooting: t('community.category.troubleshooting', '트러블슈팅'),
-      tip: t('community.category.tip', '팁'),
-      review: t('community.category.review', '리뷰'),
+      failure: t('community.category.failure', '실패'),
       free: t('community.category.free', '자유'),
     };
     return labels[category];

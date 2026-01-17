@@ -369,22 +369,10 @@ export async function checkModellingStatus(taskId: string): Promise<ModellingDat
 // 유틸리티 함수
 // ============================================
 
-/**
- * File을 base64로 변환
- */
-export async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // data:image/png;base64, 부분 제거
-      const base64 = result.split(',')[1] || result;
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
+// fileToBase64 함수는 utils/file.ts로 이동됨
+import { fileToBase64 } from '../utils/file';
+// 하위 호환성을 위해 re-export
+export { fileToBase64 } from '../utils/file';
 
 /**
  * 이미지 파일들을 ChatAttachment 배열로 변환

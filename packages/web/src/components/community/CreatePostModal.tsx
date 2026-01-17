@@ -54,8 +54,7 @@ const CATEGORIES: { value: PostCategory; label: string; icon: string; descriptio
   { value: 'showcase', label: '자랑', icon: '🎨', description: '출력물 공유' },
   { value: 'question', label: '질문', icon: '❓', description: '일반 질문' },
   { value: 'troubleshooting', label: '트러블슈팅', icon: '🔧', description: '출력 문제 해결' },
-  { value: 'tip', label: '팁', icon: '💡', description: '노하우 공유' },
-  { value: 'review', label: '리뷰', icon: '⭐', description: '장비/재료 리뷰' },
+  { value: 'failure', label: '실패', icon: '😅', description: '실패 자랑하기' },
   { value: 'free', label: '자유', icon: '💬', description: '자유 주제' },
 ];
 

@@ -66,6 +66,10 @@ import {
   type Message,
   type ChatFiles,
   type ChatRequestContext,
+  type ChatTool,
+  type ChatSession,
+  type ReportArchiveItem,
+  type CodeFix,
 } from "@/features/ai-chat";
 
 const AIChat = () => {
@@ -512,22 +516,37 @@ const AIChat = () => {
     chatSessions.setCurrentSessionId(sessionId);
     const messages = await getChatMessages(sessionId);
 
-    const formattedMessages: Message[] = messages.map(m => ({
-      id: m.id,
-      dbMessageId: m.id,
-      role: m.type === 'user' ? 'user' : 'assistant',
-      content: m.content,
-      timestamp: new Date(m.created_at),
-      images: m.images || undefined,
-      reportCard: (m.metadata as any)?.reportCard,
-      codeFixes: (m.metadata as any)?.codeFixes,
-      analysisReportId: (m.metadata as any)?.analysisReportId,
-      gcodeContext: (m.metadata as any)?.gcodeContext,
-      references: (m.metadata as any)?.references,
-      referenceImages: (m.metadata as any)?.referenceImages,
-      suggestedActions: (m.metadata as any)?.suggestedActions,
-      priceComparisonData: (m.metadata as any)?.priceComparisonData,
-    }));
+    // 메시지 메타데이터 타입
+    interface MessageMetadata {
+      reportCard?: Message['reportCard'];
+      codeFixes?: Message['codeFixes'];
+      analysisReportId?: string;
+      gcodeContext?: string;
+      references?: Message['references'];
+      referenceImages?: Message['referenceImages'];
+      suggestedActions?: Message['suggestedActions'];
+      priceComparisonData?: Message['priceComparisonData'];
+    }
+
+    const formattedMessages: Message[] = messages.map(m => {
+      const metadata = m.metadata as MessageMetadata | null;
+      return {
+        id: m.id,
+        dbMessageId: m.id,
+        role: m.type === 'user' ? 'user' : 'assistant',
+        content: m.content,
+        timestamp: new Date(m.created_at),
+        images: m.images || undefined,
+        reportCard: metadata?.reportCard,
+        codeFixes: metadata?.codeFixes,
+        analysisReportId: metadata?.analysisReportId,
+        gcodeContext: metadata?.gcodeContext,
+        references: metadata?.references,
+        referenceImages: metadata?.referenceImages,
+        suggestedActions: metadata?.suggestedActions,
+        priceComparisonData: metadata?.priceComparisonData,
+      };
+    });
 
     chatMessages.loadSessionMessages(formattedMessages);
   }, [user?.id, chatSessions, chatMessages]);
@@ -557,14 +576,14 @@ const AIChat = () => {
       setShowNewChatModal(true);
       return;
     }
-    composer.setSelectedTool(toolId as any);
+    composer.setSelectedTool(toolId as ChatTool | null);
   }, [chatMessages.messages.length, composer]);
 
   // 새 채팅 모달 확인
   const handleStartNewChatWithTool = useCallback(() => {
     handleNewChat();
     if (pendingToolId) {
-      composer.setSelectedTool(pendingToolId as any);
+      composer.setSelectedTool(pendingToolId as ChatTool);
     }
     setShowNewChatModal(false);
     setPendingToolId(null);
@@ -607,11 +626,11 @@ const AIChat = () => {
         >
           <ChatSidebarContent
             user={user}
-            sessions={chatSessions.sessions as any}
+            sessions={chatSessions.sessions as ChatSession[]}
             currentSessionId={chatSessions.currentSessionId}
             onLoadSession={handleLoadSession}
             onDeleteSession={handleDeleteSession}
-            reports={gcode.reportArchive as any}
+            reports={gcode.reportArchive as ReportArchiveItem[]}
             currentReportId={urlReportId || gcode.activeReportId}
             onSelectReport={(report) => {
               // URL 네비게이션으로 전체 화면 보고서 뷰로 이동
@@ -770,8 +789,8 @@ const AIChat = () => {
                             uploadedImages={fileUpload.uploadedImages}
                             gcodeFile={fileUpload.gcodeFile}
                             selectedTool={composer.selectedTool}
-                            setSelectedTool={handleToolSelect as any}
-                            selectedModel={composer.selectedModel as any}
+                            setSelectedTool={handleToolSelect}
+                            selectedModel={composer.selectedModel}
                             setSelectedModel={composer.setSelectedModel}
                             user={user}
                             userPlan={userPlan}
@@ -793,8 +812,8 @@ const AIChat = () => {
                         {chatMessages.messages.map((message) => (
                           <ChatMessage
                             key={message.id}
-                            message={message as any}
-                            onCodeFixClick={(fix) => gcode.handleViewCodeFix(fix as any, chatMessages.messages)}
+                            message={message}
+                            onCodeFixClick={(fix) => gcode.handleViewCodeFix(fix as CodeFix, chatMessages.messages)}
                             reportPanelOpen={gcode.reportPanelOpen}
                             activeReportId={gcode.activeReportId}
                             onRevert={(lineNumber) => gcode.handleRevert(lineNumber)}
@@ -870,7 +889,7 @@ const AIChat = () => {
                         uploadedImages={fileUpload.uploadedImages}
                         gcodeFile={fileUpload.gcodeFile}
                         selectedTool={composer.selectedTool}
-                        setSelectedTool={handleToolSelect as any}
+                        setSelectedTool={handleToolSelect}
                         selectedModel={composer.selectedModel}
                         setSelectedModel={composer.setSelectedModel}
                         user={user}

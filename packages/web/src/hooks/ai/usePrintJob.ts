@@ -34,9 +34,10 @@ import {
 
 import type { PrinterData as Printer, PrintSettings, GCodeInfo } from "@/types/ai";
 import type { AIGeneratedModel } from "@shared/types/aiModelType";
+import type { User } from "@supabase/supabase-js";
 
 interface UsePrintJobProps {
-    user: any;
+    user: User | null;
     printers: Printer[];
     currentModelId: string | null;
     currentGCodeUrl: string | null;
@@ -262,7 +263,7 @@ export function usePrintJob({
             };
 
             let printerFilename = printerToConfirm.model || printerToConfirm.name;
-            let printerInfoForGCode: any = {};
+            let printerInfoForGCode: Record<string, string | number | number[]> = {};
 
             if (printerToConfirm.manufacture_id) {
                 const { data: manufacturingPrinter } = await supabase
@@ -385,10 +386,10 @@ export function usePrintJob({
                 completed_at: null,
             }).catch(e => console.error(e));
 
-        } catch (error: any) {
+        } catch (error) {
             console.error(error);
             setIsSlicing(false);
-            toast({ title: '슬라이싱 실패', description: error.message, variant: 'destructive' });
+            toast({ title: '슬라이싱 실패', description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
         }
     };
 
@@ -490,9 +491,9 @@ export function usePrintJob({
             setCurrentGCodeUrl(gcodeUrlWithTimestamp);
             toast({ title: t('ai.resliceComplete'), description: t('ai.resliceCompleteDesc') });
 
-        } catch (error: any) {
+        } catch (error) {
             console.error(error);
-            toast({ title: t('ai.resliceFailed'), description: error.message, variant: 'destructive' });
+            toast({ title: t('ai.resliceFailed'), description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
         } finally {
             setIsSlicing(false);
         }
@@ -513,7 +514,7 @@ export function usePrintJob({
             setSendProgress(0);
 
             const sanitizedInput = printFileName.trim().replace(/[^a-zA-Z0-9가-힣\-_]/g, '_').replace(/^_|_$/g, '');
-            let fileName = sanitizedInput.length > 0
+            const fileName = sanitizedInput.length > 0
                 ? (sanitizedInput.endsWith('.gcode') ? sanitizedInput : `${sanitizedInput}.gcode`)
                 : `print_${Date.now()}.gcode`;
 
@@ -604,11 +605,11 @@ export function usePrintJob({
                 navigate(`/printer/${selectedPrinter.id}`);
             }
 
-        } catch (error: any) {
+        } catch (error) {
             console.error(error);
             setIsSendingGCode(false);
             setSendProgress(0);
-            toast({ title: t('ai.printStartFailed'), description: error.message, variant: 'destructive' });
+            toast({ title: t('ai.printStartFailed'), description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
         }
     };
 

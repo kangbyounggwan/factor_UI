@@ -97,6 +97,7 @@ const Admin = () => {
 
   useEffect(() => {
     loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 시 1회만 실행
   }, []);
 
   // Load printers for command UI
@@ -111,6 +112,7 @@ const Admin = () => {
         console.error(e);
       }
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deviceId는 초기화용, user 변경 시만 실행
   }, [user?.id]);
 
   const publishAdminCommand = async () => {

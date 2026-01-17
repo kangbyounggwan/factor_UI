@@ -418,7 +418,8 @@ const AI = () => {
   useEffect(() => {
     const state = location.state as Record<string, unknown> | null;
     if (state?.autoLoadGCode && user) {
-      const { modelId, gcodeUrl, printerModelId } = (state?.autoLoadGCode || {}) as any;
+      const autoLoadData = state.autoLoadGCode as { modelId?: string; gcodeUrl?: string; printerModelId?: string };
+      const { modelId, gcodeUrl, printerModelId } = autoLoadData;
       console.log('[AI] Auto-loading GCode from notification:', { modelId, gcodeUrl, printerModelId });
 
       // GCode 정보 로드

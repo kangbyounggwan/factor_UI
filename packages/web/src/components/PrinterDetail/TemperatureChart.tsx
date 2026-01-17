@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Thermometer, Clock } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart, TooltipProps } from 'recharts';
+import type { ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent';
 import { useTranslation } from "react-i18next";
 
 export interface TemperatureDataPoint {
@@ -50,7 +51,7 @@ const LegendButton = ({
 );
 
 // 커스텀 툴팁 컴포넌트
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameType>) => {
   if (!active || !payload || !payload.length) return null;
 
   return (
@@ -60,7 +61,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         {label}
       </p>
       <div className="space-y-2">
-        {payload.map((item: any, index: number) => (
+        {payload.map((item, index) => (
           <div key={index} className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <div
@@ -70,7 +71,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
               <span className="text-sm">{item.name}</span>
             </div>
             <span className="text-sm font-bold tabular-nums">
-              {item.value?.toFixed(1)}°C
+              {typeof item.value === 'number' ? item.value.toFixed(1) : item.value}°C
             </span>
           </div>
         ))}

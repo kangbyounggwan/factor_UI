@@ -120,6 +120,7 @@ const AdminUsers = () => {
     if (stats.totalUsers > 0 && currentPage > 1) {
       loadUsers(currentPage);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- stats.totalUsers는 조건 체크용, 페이지 변경 시만 실행
   }, [currentPage]);
 
   // Edge Function을 통해 관리자 통계 데이터 로드 (서비스 롤 사용)

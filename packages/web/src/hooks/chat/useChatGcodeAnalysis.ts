@@ -5,23 +5,30 @@
  */
 
 import { useCallback, useRef } from "react";
-import { saveSegmentData } from "@/lib/gcodeSegmentService";
+import { saveSegmentData, type SegmentMetadata } from "@/lib/gcodeSegmentService";
+import type { LayerSegmentData } from "@/lib/api/gcode";
+import type { GCodeAnalysisData } from "@/components/ai/GCodeAnalytics/GCodeAnalysisReport";
+
+interface GcodeSegmentsData {
+  layers: LayerSegmentData[];
+  metadata?: SegmentMetadata;
+}
 
 interface GcodeApiResult {
   response: string;
   analysisId?: string;
   fileName?: string;
   segments?: {
-    layers?: any[];
-    metadata?: any;
+    layers?: LayerSegmentData[];
+    metadata?: SegmentMetadata;
   };
 }
 
 interface UseChatGcodeAnalysisOptions {
   userId?: string;
-  setGcodeSegments: (data: { layers: any[]; metadata?: any } | null) => void;
+  setGcodeSegments: (data: GcodeSegmentsData | null) => void;
   setReportPanelOpen: (open: boolean) => void;
-  setGcodeReportData: (data: any) => void;
+  setGcodeReportData: (data: GCodeAnalysisData | null) => void;
   setActiveReportId: (id: string | null) => void;
   setGcodeAnalysisMessageId: (id: string | null) => void;
   handleGcodeAnalysisStream: (

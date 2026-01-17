@@ -468,17 +468,9 @@ export async function updateMessageReportId(
 // 유틸리티
 // ============================================
 
-/**
- * 첫 번째 메시지로 세션 제목 자동 생성
- * (첫 30자 + "..." 형태)
- */
-export function generateSessionTitle(firstMessage: string): string {
-  const cleaned = firstMessage.replace(/\s+/g, ' ').trim();
-  if (cleaned.length <= 30) {
-    return cleaned;
-  }
-  return cleaned.substring(0, 30) + '...';
-}
+// generateSessionTitle 함수는 utils/string.ts로 이동됨
+// 하위 호환성을 위해 re-export
+export { generateSessionTitle } from '../../utils/string';
 
 /**
  * 세션과 메시지를 함께 조회

@@ -18,6 +18,7 @@
 8. **realtime-engineer** - MQTT/실시간 통신
 9. **page-documenter** - 페이지별 종합 문서화 (15개 섹션 구조)
 10. **dev-finalize** - 개발 마무리 파이프라인 ⭐ (품질검사 → 마이그레이션 → 문서정리 → docs 업데이트)
+11. **db-schema-sync** - DB 스키마 동기화 ⭐ (Supabase 실제 스키마 조회 → 코드 수정 → 문서 업데이트)
 
 ## 사용 방법
 
@@ -114,6 +115,31 @@
 개발 마무리
 ```
 
+### 패턴 7: DB 스키마 동기화 워크플로우 ⭐
+
+```
+@db-schema-sync (5단계 자동 파이프라인)
+```
+
+1. **Schema Query** - Supabase REST API로 실제 테이블 스키마 조회
+2. **Code Search** - 해당 컬럼 사용하는 코드 검색
+3. **Code Fix** - 존재하지 않는 컬럼 참조 제거/수정
+4. **Docs Update** - docs/database/schema.md 업데이트
+5. **Migration Cleanup** - 불필요한 마이그레이션 파일 정리
+
+**사용법:**
+```
+@db-schema-sync cameras 테이블 스키마 동기화
+또는
+DB 스키마 최신화
+```
+
+**에러 발생 시:**
+```
+"Could not find the 'column_name' column" 에러 발생
+→ @db-schema-sync 실행
+```
+
 ## 에이전트 선택 가이드
 
 | 작업 유형 | 추천 에이전트 | 비고 |
@@ -128,6 +154,7 @@
 | iOS/Android 배포 | mobile-builder | Capacitor, Xcode |
 | 페이지 문서화 | page-documenter | 15개 섹션 구조 |
 | **개발 마무리** | **dev-finalize** | 4단계 자동 파이프라인 ⭐ |
+| **DB 컬럼 에러** | **db-schema-sync** | Supabase 스키마 동기화 ⭐ |
 
 ## 주의사항
 
@@ -138,6 +165,6 @@
 
 ## 버전
 
-- **Version**: 1.1.0
-- **Last Updated**: 2026-01-12
+- **Version**: 1.2.0
+- **Last Updated**: 2026-01-18
 - **Compatible with**: FACTOR UI v1.2.0

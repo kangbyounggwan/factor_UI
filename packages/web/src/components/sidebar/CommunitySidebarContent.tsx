@@ -29,8 +29,7 @@ interface CommunitySidebarContentProps {
 const CATEGORY_STYLES: Record<string, { color: string }> = {
   showcase: { color: 'text-purple-500' },
   question: { color: 'text-blue-500' },
-  tip: { color: 'text-green-500' },
-  review: { color: 'text-amber-500' },
+  failure: { color: 'text-orange-500' },
   free: { color: 'text-gray-500' },
   troubleshooting: { color: 'text-red-500' },
 };

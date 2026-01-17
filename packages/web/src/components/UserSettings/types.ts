@@ -1,7 +1,7 @@
 /**
  * UserSettings 공통 타입 정의
  */
-import type { User } from "@supabase/supabase-js";
+import type { User, UserIdentity } from "@supabase/supabase-js";
 import type { SubscriptionPlan } from "@shared/types/subscription";
 import type { PaymentHistory } from "@shared/services/supabaseService/subscription";
 import type { PaymentMethod } from "@shared/services/supabaseService/paymentMethod";
@@ -32,7 +32,7 @@ export interface ProfileTabProps {
 export interface AccountTabProps {
   user: User | null;
   isGoogleLinked: boolean;
-  googleIdentity: any;
+  googleIdentity: UserIdentity | undefined;
   onLinkGoogle: () => Promise<void>;
   onUnlinkGoogle: () => Promise<void>;
   onDeleteAccount: () => Promise<void>;

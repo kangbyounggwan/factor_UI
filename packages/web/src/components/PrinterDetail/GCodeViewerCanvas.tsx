@@ -383,7 +383,7 @@ export const GCodeViewerCanvas = ({
   useEffect(() => {
     if (rendererRef.current && model) {
       // 렌더러에 이미 같은 model이 설정되어 있으면 스킵
-      const currentRendererModel = (rendererRef.current as any).model;
+      const currentRendererModel = (rendererRef.current as unknown as { model: typeof model }).model;
       if (currentRendererModel === model) {
         return;
       }
@@ -530,7 +530,7 @@ export const GCodeViewerCanvas = ({
         onLayerChange(newLayer);
       }
     },
-    [onLayerChange, currentLayer, model]
+    [onLayerChange, model]
   );
 
   // 마우스 드래그 핸들러

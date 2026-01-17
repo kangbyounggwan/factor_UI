@@ -323,17 +323,18 @@ export async function saveAnalysisReport(
     if (options?.storagePath) {
       insertData.file_storage_path = options.storagePath;
     }
-    // segment_data_id 추가
+    // segment_data_id 추가 (DB에는 있지만 타입 정의에 없는 필드)
+    const insertDataWithSegment = insertData as GCodeAnalysisReportInsert & { segment_data_id?: string };
     if (options?.segmentDataId) {
-      (insertData as any).segment_data_id = options.segmentDataId;
+      insertDataWithSegment.segment_data_id = options.segmentDataId;
     }
 
     console.log('[DEBUG] gcodeAnalysisDbService.saveAnalysisReport - segmentDataId received:', options?.segmentDataId);
-    console.log('[DEBUG] gcodeAnalysisDbService.saveAnalysisReport - insertData.segment_data_id:', (insertData as any).segment_data_id);
+    console.log('[DEBUG] gcodeAnalysisDbService.saveAnalysisReport - insertData.segment_data_id:', insertDataWithSegment.segment_data_id);
 
     const { data, error } = await supabase
       .from('gcode_analysis_reports')
-      .insert(insertData)
+      .insert(insertDataWithSegment)
       .select()
       .single();
 
@@ -342,7 +343,8 @@ export async function saveAnalysisReport(
       return { data: null, error: new Error(error.message) };
     }
 
-    console.log('[DEBUG] gcodeAnalysisDbService INSERT SUCCESS - reportId:', data?.id, 'segment_data_id in DB:', (data as any)?.segment_data_id);
+    const dataWithSegment = data as GCodeAnalysisReport & { segment_data_id?: string };
+    console.log('[DEBUG] gcodeAnalysisDbService INSERT SUCCESS - reportId:', data?.id, 'segment_data_id in DB:', dataWithSegment?.segment_data_id);
     return { data: data as GCodeAnalysisReport, error: null };
   } catch (err) {
     console.log('[DEBUG] gcodeAnalysisDbService exception:', err);

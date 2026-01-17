@@ -254,62 +254,6 @@ export async function needsUpgradeForFeature(
   }
 }
 
-// ============================================
-// 레거시 호환 함수들 (deprecated - 마이그레이션 완료 후 제거)
-// ============================================
-
-/**
- * @deprecated DB 기반으로 전환됨. canAddPrinterAsync() 또는 canAddPrinterWithPlanInfo() 사용
- */
-export function canAddPrinter(plan: SubscriptionPlan, currentPrinterCount: number): boolean {
-  console.warn('[Subscription] canAddPrinter() is deprecated. Use canAddPrinterAsync() instead.');
-  // 폴백: 하드코딩된 기본값 사용
-  const defaultLimits: Record<string, number> = { free: 1, starter: 2, pro: 5, enterprise: -1 };
-  const limit = defaultLimits[plan] ?? 1;
-  if (limit === -1) return true;
-  return currentPrinterCount < limit;
-}
-
-/**
- * @deprecated DB 기반으로 전환됨. getMaxPrintersFromPlanInfo() 사용
- */
-export function getMaxPrinters(plan: SubscriptionPlan): number | 'unlimited' {
-  console.warn('[Subscription] getMaxPrinters() is deprecated. Use getMaxPrintersFromPlanInfo() instead.');
-  const defaultLimits: Record<string, number> = { free: 1, starter: 2, pro: 5, enterprise: -1 };
-  const limit = defaultLimits[plan] ?? 1;
-  return limit === -1 ? 'unlimited' : limit;
-}
-
-/**
- * @deprecated DB 기반으로 전환됨. getAiGenerationLimitFromPlanInfo() 사용
- */
-export function getAiGenerationLimit(plan: SubscriptionPlan): number | 'unlimited' {
-  console.warn('[Subscription] getAiGenerationLimit() is deprecated. Use getAiGenerationLimitFromPlanInfo() instead.');
-  const defaultLimits: Record<string, number> = { free: 5, starter: -1, pro: 50, enterprise: -1 };
-  const limit = defaultLimits[plan] ?? 5;
-  return limit === -1 ? 'unlimited' : limit;
-}
-
-/**
- * @deprecated DB 기반으로 전환됨. canGenerateAiModelAsync() 또는 canGenerateAiModelWithPlanInfo() 사용
- */
-export function canGenerateAiModel(plan: SubscriptionPlan, currentMonthlyUsage: number): boolean {
-  console.warn('[Subscription] canGenerateAiModel() is deprecated. Use canGenerateAiModelAsync() instead.');
-  const limit = getAiGenerationLimit(plan);
-  if (limit === 'unlimited') return true;
-  return currentMonthlyUsage < limit;
-}
-
-/**
- * @deprecated DB 기반으로 전환됨. getRemainingAiGenerationsFromPlanInfo() 사용
- */
-export function getRemainingAiGenerations(plan: SubscriptionPlan, currentMonthlyUsage: number): number | 'unlimited' {
-  console.warn('[Subscription] getRemainingAiGenerations() is deprecated. Use getRemainingAiGenerationsFromPlanInfo() instead.');
-  const limit = getAiGenerationLimit(plan);
-  if (limit === 'unlimited') return 'unlimited';
-  return Math.max(0, limit - currentMonthlyUsage);
-}
-
 /**
  * 플랜에 따른 웹캠 재연결 간격(ms) 반환
  * 무료 플랜은 더 긴 간격, 유료 플랜은 짧은 간격

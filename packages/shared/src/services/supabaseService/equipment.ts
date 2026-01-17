@@ -56,13 +56,12 @@ export async function saveRegistration(payload: Payload, userId: string) {
     }
   }
 
-  // 3) cameras upsert (옵션, camera_uuid 없어도 device_uuid 기준으로 한 줄 유지)
+  // 3) cameras upsert (device_uuid 기준으로 한 줄 유지)
   {
     const { error } = await supabase.from("cameras").upsert(
       [{
         user_id: userId,
         device_uuid,
-        camera_uuid: payload.camera.uuid ?? null,
         resolution: payload.camera.resolution ?? null,
       }],
       { onConflict: "device_uuid" }

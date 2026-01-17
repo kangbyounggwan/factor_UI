@@ -251,9 +251,6 @@ function extractFallbackFilename(modelName: string): string {
   return filename.replace(/[^a-z0-9_]/g, '').slice(0, 20);
 }
 
-/**
- * 파일명에 .gcode 확장자 추가
- */
-export function toGcodeFilename(shortName: string): string {
-  return `${shortName}.gcode`;
-}
+// toGcodeFilename 함수는 utils/filename.ts로 이동됨
+// 하위 호환성을 위해 re-export
+export { toGcodeFilename } from '../utils/filename';

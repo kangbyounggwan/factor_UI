@@ -1,8 +1,19 @@
 # FACTOR HIBRID - Database Schema
 
-> **Last Updated:** 2026-01-16
+> **Last Updated:** 2026-01-18
 > **Database:** Supabase (PostgreSQL)
-> **Total Tables:** 30+
+> **Total Tables:** 37+
+
+---
+
+## 📚 상세 문서 (기능별)
+
+| 문서 | 설명 | 테이블 수 |
+|-----|------|----------|
+| [ai-chat.md](./ai-chat.md) | AI 채팅, 트러블슈팅, 공유 | 8개 |
+| [gcode-analysis.md](./gcode-analysis.md) | G-code 분석, 이슈 관리 | 5개 |
+| [printer-management.md](./printer-management.md) | 프린터 그룹, 클라이언트, 출력 이력 | 5개 |
+| [payment-notifications.md](./payment-notifications.md) | 결제, 알림, 사용량 | 6개 |
 
 ---
 
@@ -23,59 +34,71 @@
 ## 테이블 목록
 
 ### 핵심 테이블
-| 테이블명 | 설명 |
-|---------|------|
-| `profiles` | 사용자 프로필 |
-| `user_notification_settings` | 알림 설정 |
-| `user_device_tokens` | 푸시 알림 토큰 |
-| `notifications` | 사용자 알림 |
-| `api_keys` | API 키 관리 |
+| 테이블명 | 설명 | 상세 문서 |
+|---------|------|----------|
+| `profiles` | 사용자 프로필 | 이 문서 |
+| `user_notification_settings` | 알림 설정 | [payment-notifications.md](./payment-notifications.md) |
+| `user_device_tokens` | 푸시 알림 토큰 | [payment-notifications.md](./payment-notifications.md) |
+| `notifications` | 사용자 알림 | [payment-notifications.md](./payment-notifications.md) |
+| `api_keys` | API 키 관리 | [printer-management.md](./printer-management.md) |
 
 ### 커뮤니티 테이블
-| 테이블명 | 설명 |
-|---------|------|
-| `community_posts` | 게시물 |
-| `community_comments` | 댓글 |
-| `community_post_votes` | 게시물 투표 (좋아요/싫어요/유용함) |
-| `community_comment_votes` | 댓글 투표 (좋아요/싫어요/유용함) |
+| 테이블명 | 설명 | 상세 문서 |
+|---------|------|----------|
+| `community_posts` | 게시물 | 이 문서 |
+| `community_comments` | 댓글 | 이 문서 |
+| `community_post_votes` | 게시물 투표 | 이 문서 |
+| `community_comment_votes` | 댓글 투표 | 이 문서 |
 
-### AI/3D 모델 테이블
-| 테이블명 | 설명 |
-|---------|------|
-| `ai_generated_models` | AI 생성 3D 모델 |
-| `gcode_files` | GCode 파일 메타데이터 |
-| `gcode_analysis_results` | G-code 분석 결과 |
-| `gcode_segment_data` | G-code 세그먼트 데이터 |
-| `background_tasks` | 백그라운드 작업 |
-| `chat_sessions` | 채팅 세션 |
-| `chat_messages` | 채팅 메시지 |
+### AI/채팅 테이블
+| 테이블명 | 설명 | 상세 문서 |
+|---------|------|----------|
+| `ai_generated_models` | AI 생성 3D 모델 | 이 문서 |
+| `gcode_files` | GCode 파일 메타데이터 | 이 문서 |
+| `chat_sessions` | AI 채팅 세션 | [ai-chat.md](./ai-chat.md) |
+| `chat_messages` | 채팅 메시지 | [ai-chat.md](./ai-chat.md) |
+| `troubleshooting_sessions` | 트러블슈팅 세션 | [ai-chat.md](./ai-chat.md) |
+| `troubleshooting_messages` | 트러블슈팅 메시지 | [ai-chat.md](./ai-chat.md) |
+| `shared_chats` | 공유 채팅 | [ai-chat.md](./ai-chat.md) |
+| `shared_reports` | 공유 리포트 | [ai-chat.md](./ai-chat.md) |
+| `admin_ai_stats` | 관리자 AI 통계 | [ai-chat.md](./ai-chat.md) |
+| `keyword_analytics` | 키워드 분석 | [ai-chat.md](./ai-chat.md) |
+
+### G-code 분석 테이블
+| 테이블명 | 설명 | 상세 문서 |
+|---------|------|----------|
+| `gcode_analysis_reports` | G-code 분석 리포트 | [gcode-analysis.md](./gcode-analysis.md) |
+| `gcode_segment_data` | G-code 세그먼트 데이터 | [gcode-analysis.md](./gcode-analysis.md) |
+| `gcode_issue_types` | G-code 이슈 타입 정의 | [gcode-analysis.md](./gcode-analysis.md) |
+| `gcode_issue_edits` | G-code 이슈 수정 이력 | [gcode-analysis.md](./gcode-analysis.md) |
+| `background_tasks` | 백그라운드 작업 | [gcode-analysis.md](./gcode-analysis.md) |
 
 ### 프린터 관리 테이블
-| 테이블명 | 설명 |
-|---------|------|
-| `printers` | 사용자 프린터 |
-| `printer_groups` | 프린터 그룹 |
-| `printer_temperature_logs` | 실시간 온도 로그 |
-| `printer_temperature_sessions` | 온도 세션 (아카이브) |
-| `manufacturing_printers` | Cura 프린터 정의 |
-| `clients` | OctoPrint 클라이언트 |
-| `edge_devices` | 엣지 디바이스 |
-| `cameras` | 카메라 설정 |
-| `model_print_history` | 모델 출력 이력 |
+| 테이블명 | 설명 | 상세 문서 |
+|---------|------|----------|
+| `printers` | 사용자 프린터 | 이 문서 |
+| `printer_groups` | 프린터 그룹 | [printer-management.md](./printer-management.md) |
+| `printer_temperature_logs` | 실시간 온도 로그 | 이 문서 |
+| `printer_temperature_sessions` | 온도 세션 (아카이브) | 이 문서 |
+| `manufacturing_printers` | Cura 프린터 정의 | [printer-management.md](./printer-management.md) |
+| `clients` | OctoPrint 클라이언트 | [printer-management.md](./printer-management.md) |
+| `edge_devices` | 엣지 디바이스 | 이 문서 |
+| `cameras` | 카메라 설정 | 이 문서 |
+| `model_print_history` | 모델 출력 이력 | [printer-management.md](./printer-management.md) |
 
 ### 결제/구독 테이블
-| 테이블명 | 설명 |
-|---------|------|
-| `subscription_plans` | 구독 플랜 정의 |
-| `user_subscriptions` | 사용자 구독 정보 |
-| `payment_history` | 결제 내역 |
-| `payment_methods` | 결제 수단 |
+| 테이블명 | 설명 | 상세 문서 |
+|---------|------|----------|
+| `subscription_plans` | 구독 플랜 정의 | 이 문서 |
+| `user_subscriptions` | 사용자 구독 정보 | 이 문서 |
+| `payment_history` | 결제 내역 | [payment-notifications.md](./payment-notifications.md) |
+| `payment_methods` | 결제 수단 | [payment-notifications.md](./payment-notifications.md) |
 
 ### 사용량 추적 테이블
-| 테이블명 | 설명 |
-|---------|------|
-| `user_usage` | 유저별 사용량 추적 |
-| `usage_logs` | 사용량 상세 로그 |
+| 테이블명 | 설명 | 상세 문서 |
+|---------|------|----------|
+| `user_usage` | 유저별 사용량 추적 | 이 문서 |
+| `usage_logs` | 사용량 상세 로그 | [payment-notifications.md](./payment-notifications.md) |
 
 ---
 
@@ -338,6 +361,28 @@ CREATE TABLE printers (
 -- Realtime enabled for status monitoring
 ```
 
+### cameras (카메라 설정)
+
+```sql
+CREATE TABLE cameras (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  device_uuid TEXT NOT NULL,              -- 프린터와 연결된 디바이스 UUID
+  stream_url TEXT,                        -- 카메라 스트림 URL (MJPEG, HLS 등)
+  resolution TEXT,                        -- 해상도 (예: "1280x720")
+  camera_type TEXT DEFAULT 'octoprint',   -- 'octoprint' 또는 'external'
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT cameras_camera_type_check CHECK (camera_type IN ('octoprint', 'external'))
+);
+```
+
+**camera_type 값:**
+| 타입 | 설명 |
+|-----|------|
+| `octoprint` | Raspberry Pi + MQTT + WebRTC (기본값) |
+| `external` | 직접 외부 카메라 URL (MJPEG/HTTP 스트림) |
+
 ### printer_temperature_logs (실시간 온도 로그)
 
 ```sql
@@ -513,6 +558,7 @@ CREATE POLICY "Users can delete their own posts" ON community_posts
 
 | 날짜 | 변경 내용 |
 |------|----------|
+| 2026-01-18 | cameras 테이블 문서 추가 (stream_url, camera_type 컬럼 포함) |
 | 2026-01-16 | 투표 테이블 통합 (6개 → 2개) |
 | 2026-01-16 | profiles에 equipment_presets 컬럼 추가 |
 | 2026-01-16 | community_posts에 author_display_type 컬럼 추가 |

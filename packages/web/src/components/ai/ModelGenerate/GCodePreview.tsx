@@ -266,7 +266,8 @@ function GCodeLayers({ layers, maxLayer, onModelInfoCalculated, showTravels, fir
     // GCode 원본 좌표를 그대로 사용 (오프셋 없음)
     console.log('[GCodeLayers] Using original GCode coordinates (no offset)');
     return new Vector3(0, 0, 0);
-  }, [layers, firstExtrusionPoint]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 항상 (0,0,0) 반환, 의존성 불필요
+  }, []);
 
   // 카메라 자동 조정
   useEffect(() => {

@@ -577,7 +577,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCo
                 setFileSource('LOCAL');
                 try {
                   if (deviceUuid) await mqttConnect();
-                } catch {}
+                } catch { /* ignore connection errors */ }
               }}
               disabled={!isConnected}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
@@ -594,7 +594,7 @@ export const GCodeUpload = ({ deviceUuid, isConnected = false, onViewFile }: GCo
                 setFileSource('SDCARD');
                 try {
                   if (deviceUuid) await mqttConnect();
-                } catch {}
+                } catch { /* ignore connection errors */ }
               }}
               disabled={!isConnected}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${

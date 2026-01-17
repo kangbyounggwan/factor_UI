@@ -374,6 +374,101 @@ iPad에서 버튼이 잘리는 긴급 버그를 수정해야 합니다.
 | 번역 누락 | i18n-manager |
 | 타입 에러 | type-safety |
 | MQTT 연결 문제 | realtime-engineer |
+| DB 스키마 불일치 | db-schema-sync |
+| 컬럼 없음 에러 | db-schema-sync → type-safety |
+
+## 시나리오 9: DB 스키마 동기화
+
+### 요구사항
+Supabase에서 "Could not find column" 에러가 발생하여 실제 DB 스키마와 코드를 동기화해야 합니다.
+
+### 에이전트 워크플로우
+
+#### Step 1: 실제 DB 스키마 조회
+```
+@db-schema-sync: Query actual schema from Supabase
+
+Tasks:
+1. Read .env for Supabase credentials
+2. Query table with curl to see actual columns
+3. Compare with code usage
+```
+
+**Example curl**:
+```bash
+curl -s "https://{PROJECT_ID}.supabase.co/rest/v1/cameras?limit=1" \
+  -H "apikey: {ANON_KEY}" \
+  -H "Authorization: Bearer {SERVICE_ROLE_KEY}"
+```
+
+#### Step 2: 불일치 코드 수정
+```
+@db-schema-sync: Fix code referencing non-existent columns
+
+Tasks:
+1. Search for column usage in codebase
+2. Remove or update references to non-existent columns
+3. Update service files (supabaseService/*.ts)
+```
+
+#### Step 3: 문서 업데이트
+```
+@db-schema-sync: Update schema documentation
+
+Tasks:
+1. Update docs/database/schema.md with actual schema
+2. Add entry to change history
+3. Remove non-existent columns from documentation
+```
+
+#### Step 4: 타입 정의 동기화 (필요시)
+```
+@type-safety: Sync types with DB schema
+
+Tasks:
+1. Update interface definitions
+2. Remove non-existent properties
+3. Verify TypeScript compilation
+```
+
+### 결과 예시
+
+**Before** (코드에서 존재하지 않는 컬럼 사용):
+```typescript
+await supabase.from("cameras").upsert({
+  user_id: userId,
+  device_uuid,
+  camera_uuid: payload.camera.uuid,  // DB에 없는 컬럼!
+  resolution: payload.camera.resolution,
+});
+```
+
+**After** (실제 스키마에 맞게 수정):
+```typescript
+await supabase.from("cameras").upsert({
+  user_id: userId,
+  device_uuid,
+  resolution: payload.camera.resolution,
+});
+```
+
+**문서 업데이트**:
+```markdown
+### cameras (카메라 설정)
+| 컬럼명 | 타입 | 설명 |
+|-------|------|------|
+| id | UUID | PK |
+| user_id | UUID | FK to auth.users |
+| device_uuid | TEXT | 디바이스 UUID |
+| stream_url | TEXT | 스트림 URL |
+| resolution | TEXT | 해상도 |
+| camera_type | TEXT | 카메라 타입 |
+| created_at | TIMESTAMPTZ | 생성일 |
+| updated_at | TIMESTAMPTZ | 수정일 |
+
+변경 이력:
+| 2026-01-18 | cameras 테이블 동기화, camera_uuid 컬럼 제거 |
+```
 
 ## 주의사항
 

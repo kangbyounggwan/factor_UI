@@ -154,7 +154,7 @@ async function getProfileInfo(userId: string): Promise<ProfileInfo> {
 }
 
 // 게시물 카테고리
-export type PostCategory = 'showcase' | 'question' | 'tip' | 'review' | 'free' | 'troubleshooting' | 'announcement';
+export type PostCategory = 'showcase' | 'question' | 'failure' | 'free' | 'troubleshooting' | 'announcement';
 
 // 작성자 표시 방식
 export type AuthorDisplayType = 'nickname' | 'realname' | 'anonymous';

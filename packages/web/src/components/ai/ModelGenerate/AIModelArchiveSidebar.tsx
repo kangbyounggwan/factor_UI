@@ -371,7 +371,7 @@ export function AIModelArchiveSidebar({
                                         key={printer.id}
                                         id={printer.id}
                                         name={printer.name}
-                                        status={printer.state as any}
+                                        status={printer.state}
                                         temperature={printer.temperature}
                                         progress={printer.completion}
                                         onClick={() => openPrinterSettings(printer)}

@@ -16,6 +16,8 @@ import type { TimelineStep, AnalysisResult } from '@shared/types/gcodeAnalysisTy
 import { calculateIssueStatistics, ISSUE_TYPE_LABELS } from '@shared/types/gcodeAnalysisTypes';
 import type { GCodeAnalysisData } from './GCodeAnalysisReport';
 import { completeAnalysisDbOperations } from './gcodeAnalysisCompleteService';
+import type { LayerSegmentData, TemperatureData } from '@/lib/api/gcode';
+import type { SegmentMetadata } from '@/lib/gcodeSegmentService';
 
 // 보고서 카드 정보 타입
 export interface ReportCardData {
@@ -30,9 +32,9 @@ export interface ReportCardData {
 
 // 세그먼트 데이터 타입
 export interface SegmentData {
-  layers: any[];
-  metadata?: any;
-  temperatures?: any[];
+  layers: LayerSegmentData[];
+  metadata?: SegmentMetadata;
+  temperatures?: TemperatureData[];
 }
 
 // 훅 반환 타입

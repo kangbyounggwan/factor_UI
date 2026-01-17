@@ -573,29 +573,9 @@ export async function postTroubleshootingDiagnose(
   }
 }
 
-/**
- * 이미지 파일을 Base64로 변환
- */
-export async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // data:image/...;base64, 부분 제거하고 순수 base64만 반환
-      const base64 = result.split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-/**
- * 여러 이미지 파일을 Base64 배열로 변환
- */
-export async function filesToBase64(files: File[]): Promise<string[]> {
-  return Promise.all(files.map(fileToBase64));
-}
+// fileToBase64, filesToBase64 함수는 utils/file.ts로 이동됨
+// 하위 호환성을 위해 re-export
+export { fileToBase64, filesToBase64 } from '../utils/file';
 
 // =====================================================
 // STL 업로드 및 슬라이싱 API

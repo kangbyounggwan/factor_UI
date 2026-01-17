@@ -241,6 +241,8 @@ export function PrinterSetupModal({
           return;
         }
 
+        const deviceUuid = formData.device_uuid.trim();
+
         const { error } = await supabase
           .from("printers")
           .insert({
@@ -249,14 +251,31 @@ export function PrinterSetupModal({
             model: selectedModelInfo.display_name,
             manufacture_id: selectedModel,
             group_id: formData.group_id || null,
-            device_uuid: formData.device_uuid.trim(),
-            stream_url: formData.stream_url.trim() || null,
+            device_uuid: deviceUuid,
             ip_address: "0.0.0.0", // MQTT 기반이므로 기본값
             port: 80,
             firmware: "klipper", // 기본값
           });
 
         if (error) throw error;
+
+        // cameras 테이블에 stream_url 저장 (device_uuid 기준 upsert)
+        if (formData.stream_url.trim()) {
+          const { error: cameraError } = await supabase
+            .from("cameras")
+            .upsert({
+              user_id: user.id,
+              device_uuid: deviceUuid,
+              stream_url: formData.stream_url.trim(),
+            }, {
+              onConflict: 'device_uuid'
+            });
+
+          if (cameraError) {
+            console.error("Failed to save camera stream URL:", cameraError);
+            // 프린터는 저장되었으므로 카메라 URL 저장 실패는 경고만 표시
+          }
+        }
 
         toast({
           title: t("common.success"),

@@ -2692,8 +2692,7 @@ export default {
       showcase: "자랑",
       question: "질문",
       troubleshooting: "트러블슈팅",
-      tip: "팁",
-      review: "리뷰",
+      failure: "실패",
       free: "자유"
     },
     unsolved: "미해결",

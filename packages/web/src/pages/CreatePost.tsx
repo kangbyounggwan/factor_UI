@@ -78,6 +78,7 @@ import { listAIModels } from "@shared/services/supabaseService/aiModel";
 import {
   getEquipmentPresets,
   addEquipmentPreset,
+  updateEquipmentPreset,
   presetToTroubleshootingMeta,
   troubleshootingMetaToPresetInput,
   type EquipmentPreset,
@@ -174,6 +175,7 @@ export default function CreatePost() {
 
   // 장비 프리셋 상태
   const [equipmentPresets, setEquipmentPresets] = useState<EquipmentPreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null); // 현재 선택된 프리셋 ID
   const [loadingPresets, setLoadingPresets] = useState(false);
   const [savingPreset, setSavingPreset] = useState(false);
 
@@ -296,6 +298,7 @@ export default function CreatePost() {
         if (defaultPreset && showTroubleshootingForm) {
           const meta = presetToTroubleshootingMeta(defaultPreset);
           setTroubleshootingMeta(meta);
+          setSelectedPresetId(defaultPreset.id); // 선택된 프리셋 ID도 설정
         }
       } catch (error) {
         console.error('[CreatePost] Error loading presets:', error);
@@ -654,29 +657,55 @@ export default function CreatePost() {
   const handleApplyPreset = (preset: EquipmentPreset) => {
     const meta = presetToTroubleshootingMeta(preset);
     setTroubleshootingMeta(prev => ({ ...prev, ...meta }));
+    setSelectedPresetId(preset.id); // 선택된 프리셋 ID 저장
     toast({
       title: `'${preset.name}' 프리셋이 적용되었습니다`,
     });
   };
 
-  // 현재 설정을 프리셋으로 저장
+  // 현재 설정을 프리셋으로 저장 (선택된 프리셋이 있으면 업데이트, 없으면 신규 생성)
   const handleSaveAsPreset = async () => {
     if (!user) return;
 
-    const presetName = prompt('프리셋 이름을 입력하세요:', '내 프린터');
-    if (!presetName || !presetName.trim()) return;
+    const selectedPreset = equipmentPresets.find(p => p.id === selectedPresetId);
 
     setSavingPreset(true);
     try {
-      const input = troubleshootingMetaToPresetInput(presetName.trim(), troubleshootingMeta);
-      const newPreset = await addEquipmentPreset(user.id, input);
-      if (newPreset) {
-        setEquipmentPresets(prev => [...prev, newPreset]);
-        toast({
-          title: `'${newPreset.name}' 프리셋이 저장되었습니다`,
-        });
+      const input = troubleshootingMetaToPresetInput(
+        selectedPreset?.name || '내 프린터',
+        troubleshootingMeta
+      );
+
+      if (selectedPreset) {
+        // 기존 프리셋 업데이트
+        const updated = await updateEquipmentPreset(user.id, selectedPreset.id, input);
+        if (updated) {
+          setEquipmentPresets(prev => prev.map(p => p.id === updated.id ? updated : p));
+          toast({
+            title: `'${updated.name}' 프리셋이 업데이트되었습니다`,
+          });
+        } else {
+          throw new Error('Failed to update preset');
+        }
       } else {
-        throw new Error('Failed to save preset');
+        // 신규 프리셋 생성
+        const presetName = prompt('프리셋 이름을 입력하세요:', '내 프린터');
+        if (!presetName || !presetName.trim()) {
+          setSavingPreset(false);
+          return;
+        }
+        input.name = presetName.trim();
+
+        const newPreset = await addEquipmentPreset(user.id, input);
+        if (newPreset) {
+          setEquipmentPresets(prev => [...prev, newPreset]);
+          setSelectedPresetId(newPreset.id); // 새로 생성된 프리셋 선택
+          toast({
+            title: `'${newPreset.name}' 프리셋이 저장되었습니다`,
+          });
+        } else {
+          throw new Error('Failed to save preset');
+        }
       }
     } catch (error) {
       console.error('[CreatePost] Error saving preset:', error);
@@ -888,29 +917,38 @@ export default function CreatePost() {
                       {/* 프리셋 불러오기/저장 버튼 */}
                       <div className="flex items-center gap-2 flex-wrap">
                         {/* 프리셋 선택 드롭다운 */}
-                        {equipmentPresets.length > 0 && (
-                          <Select onValueChange={(presetId) => {
-                            const preset = equipmentPresets.find(p => p.id === presetId);
-                            if (preset) handleApplyPreset(preset);
-                          }}>
-                            <SelectTrigger className="h-8 text-xs w-auto gap-1">
-                              <FolderOpen className="w-3.5 h-3.5" />
-                              <SelectValue placeholder="프리셋 불러오기" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {equipmentPresets.map(preset => (
-                                <SelectItem key={preset.id} value={preset.id}>
-                                  <div className="flex items-center gap-2">
-                                    <span>{preset.name}</span>
-                                    {preset.is_default && (
-                                      <Badge variant="secondary" className="text-[10px] px-1 py-0">기본</Badge>
-                                    )}
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                        <Select
+                          value={selectedPresetId || '__new__'}
+                          onValueChange={(value) => {
+                            if (value === '__new__') {
+                              setSelectedPresetId(null);
+                              // 신규 선택 시 메타 초기화하지 않음 (사용자가 입력한 값 유지)
+                            } else {
+                              const preset = equipmentPresets.find(p => p.id === value);
+                              if (preset) handleApplyPreset(preset);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs w-auto gap-1 min-w-[140px]">
+                            <FolderOpen className="w-3.5 h-3.5" />
+                            <SelectValue placeholder="프리셋 선택" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__new__">
+                              <span className="text-muted-foreground">+ 새 프리셋으로 저장</span>
+                            </SelectItem>
+                            {equipmentPresets.map(preset => (
+                              <SelectItem key={preset.id} value={preset.id}>
+                                <div className="flex items-center gap-2">
+                                  <span>{preset.name}</span>
+                                  {preset.is_default && (
+                                    <Badge variant="secondary" className="text-[10px] px-1 py-0">기본</Badge>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         {loadingPresets && (
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Loader2 className="w-3 h-3 animate-spin" />
@@ -931,7 +969,7 @@ export default function CreatePost() {
                           ) : (
                             <Save className="w-3.5 h-3.5" />
                           )}
-                          <span>현재 설정 저장</span>
+                          <span>{selectedPresetId ? '프리셋 업데이트' : '새 프리셋 저장'}</span>
                         </Button>
                         {equipmentPresets.length === 0 && !loadingPresets && (
                           <span className="text-xs text-muted-foreground">

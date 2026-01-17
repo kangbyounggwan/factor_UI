@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -48,7 +48,7 @@ export function PrintHistory({ printerId, className }: PrintHistoryProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadHistory = async (showRefresh = false) => {
+  const loadHistory = useCallback(async (showRefresh = false) => {
     try {
       if (showRefresh) setRefreshing(true);
       else setLoading(true);
@@ -72,13 +72,13 @@ export function PrintHistory({ printerId, className }: PrintHistoryProps) {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [printerId]);
 
   useEffect(() => {
     if (printerId) {
       loadHistory();
     }
-  }, [printerId]);
+  }, [printerId, loadHistory]);
 
   // Realtime 구독
   useEffect(() => {
@@ -104,7 +104,7 @@ export function PrintHistory({ printerId, className }: PrintHistoryProps) {
     return () => {
       channel.unsubscribe();
     };
-  }, [printerId]);
+  }, [printerId, loadHistory]);
 
   const getStatusConfig = (status: PrintHistoryItem['print_status']) => {
     switch (status) {
