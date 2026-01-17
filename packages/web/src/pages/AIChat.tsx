@@ -407,6 +407,29 @@ const AIChat = () => {
             storagePath,
             sessionId,
             gcodeContent: currentGcodeContent,
+            // 분석 완료 시 reportCard를 메시지에 추가하고 DB 저장
+            onReportCardReady: async (reportCard, messageId) => {
+              // 메시지 상태에 reportCard 추가
+              if (messageId) {
+                chatMessages.updateMessageReportCard(messageId, reportCard);
+              }
+              // DB에 reportCard 메타데이터 저장
+              if (savedDbMessageId) {
+                try {
+                  await supabase
+                    .from('chat_messages')
+                    .update({
+                      metadata: {
+                        tool: 'gcode',
+                        reportCard: reportCard,
+                      }
+                    })
+                    .eq('id', savedDbMessageId);
+                } catch (e) {
+                  console.error('[AIChat] Failed to save reportCard to DB:', e);
+                }
+              }
+            },
           });
 
           // 세그먼트 DB 저장
@@ -643,13 +666,13 @@ const AIChat = () => {
 
             {/* 보고서 표시 */}
             {!isLoadingUrlReport && urlReportData && (
-              <div className="flex-1 overflow-auto p-4">
-                <div className="max-w-6xl mx-auto">
-                  <div className="bg-card rounded-2xl border border-border/50 shadow-lg overflow-hidden">
+              <div className="flex-1 overflow-hidden p-4">
+                <div className="h-full max-w-6xl mx-auto">
+                  <div className="h-full bg-card rounded-2xl border border-border/50 shadow-lg overflow-hidden">
                     <GCodeAnalysisReport
                       data={urlReportData}
                       embedded={false}
-                      className="w-full"
+                      className="w-full h-full"
                     />
                   </div>
                 </div>
@@ -689,11 +712,8 @@ const AIChat = () => {
 
         {/* 채팅 영역 (아카이브 뷰가 아니고 URL 보고서 뷰도 아닐 때) */}
         {!gcode.archiveViewActive && !(urlView === 'archive') && (
-          <div className={cn(
-            "flex-1 flex flex-col min-w-0 transition-all duration-300",
-            gcode.reportPanelOpen && "flex-[0_0_48%]"
-          )}>
-            {/* 헤더 */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* 헤더 - 전체 너비 유지 */}
             <AppHeader
               onLoginRequired={() => permissions.setShowLoginModal(true)}
               rightContent={
@@ -716,192 +736,204 @@ const AIChat = () => {
               }
             />
 
-            {/* 메시지 영역 */}
-            <ScrollArea className="flex-1 w-full">
-            <div className={cn(
-              "flex flex-col w-full h-full",
-              !hasMessages && "min-h-[calc(100vh-64px-64px)] justify-center",
-              isMobile && !hasMessages && "min-h-[calc(100vh-56px-64px)]"
-            )}>
-              {!hasMessages ? (
-                <WelcomeScreen
-                  uploadedImages={fileUpload.uploadedImages}
-                  gcodeFile={fileUpload.gcodeFile}
-                  onRemoveImage={fileUpload.removeImage}
-                  onRemoveGcode={fileUpload.removeGcodeFile}
-                  selectedTool={composer.selectedTool}
-                  setSelectedTool={handleToolSelect}
-                  setInput={composer.setInput}
-                  user={user}
-                  onLoginRequired={() => permissions.setShowLoginModal(true)}
-                  renderInputBox={(placeholder) => (
-                    <ChatInput
-                      input={composer.input}
-                      setInput={composer.setInput}
-                      isLoading={isLoading}
-                      isDragging={fileUpload.isDragging}
-                      uploadedImages={fileUpload.uploadedImages}
-                      gcodeFile={fileUpload.gcodeFile}
-                      selectedTool={composer.selectedTool}
-                      setSelectedTool={handleToolSelect as any}
-                      selectedModel={composer.selectedModel as any}
-                      setSelectedModel={composer.setSelectedModel}
-                      user={user}
-                      userPlan={userPlan}
-                      onSend={handleSend}
-                      onLoginRequired={() => permissions.setShowLoginModal(true)}
-                      fileInputRef={fileUpload.fileInputRef}
-                      gcodeInputRef={fileUpload.gcodeInputRef}
-                      onDragOver={fileUpload.handleDragOver}
-                      onDragEnter={fileUpload.handleDragEnter}
-                      onDragLeave={fileUpload.handleDragLeave}
-                      onDrop={fileUpload.handleDrop}
-                      onPaste={fileUpload.handlePaste}
-                      placeholder={placeholder}
-                    />
-                  )}
-                />
-              ) : (
-                <div className="flex-1">
-                  {chatMessages.messages.map((message) => (
-                    <ChatMessage
-                      key={message.id}
-                      message={message as any}
-                      onCodeFixClick={(fix) => gcode.handleViewCodeFix(fix as any, chatMessages.messages)}
-                      reportPanelOpen={gcode.reportPanelOpen}
-                      activeReportId={gcode.activeReportId}
-                      onRevert={(lineNumber) => gcode.handleRevert(lineNumber)}
-                      onReportCardClick={gcode.handleReportCardClick}
-                      onSuggestedAction={(action) => {
-                        if (action.action === 'follow_up' && action.data?.question) {
-                          composer.setInput(action.data.question as string);
-                        }
-                      }}
-                    />
-                  ))}
+            {/* 채팅 + 보고서 패널 컨테이너 (헤더 아래 flex row) */}
+            <div className="flex-1 flex min-h-0">
+              {/* 채팅 메시지 영역 */}
+              <div className={cn(
+                "flex-1 flex flex-col min-w-0 transition-all duration-300",
+                (gcode.isAnalyzing || gcode.reportPanelOpen) && "flex-[0_0_48%]"
+              )}>
+                {/* 메시지 영역 */}
+                <ScrollArea className="flex-1 w-full">
+                  <div className={cn(
+                    "flex flex-col w-full h-full",
+                    !hasMessages && "min-h-[calc(100vh-64px-64px)] justify-center",
+                    isMobile && !hasMessages && "min-h-[calc(100vh-56px-64px)]"
+                  )}>
+                    {!hasMessages ? (
+                      <WelcomeScreen
+                        uploadedImages={fileUpload.uploadedImages}
+                        gcodeFile={fileUpload.gcodeFile}
+                        onRemoveImage={fileUpload.removeImage}
+                        onRemoveGcode={fileUpload.removeGcodeFile}
+                        selectedTool={composer.selectedTool}
+                        setSelectedTool={handleToolSelect}
+                        setInput={composer.setInput}
+                        user={user}
+                        onLoginRequired={() => permissions.setShowLoginModal(true)}
+                        renderInputBox={(placeholder) => (
+                          <ChatInput
+                            input={composer.input}
+                            setInput={composer.setInput}
+                            isLoading={isLoading}
+                            isDragging={fileUpload.isDragging}
+                            uploadedImages={fileUpload.uploadedImages}
+                            gcodeFile={fileUpload.gcodeFile}
+                            selectedTool={composer.selectedTool}
+                            setSelectedTool={handleToolSelect as any}
+                            selectedModel={composer.selectedModel as any}
+                            setSelectedModel={composer.setSelectedModel}
+                            user={user}
+                            userPlan={userPlan}
+                            onSend={handleSend}
+                            onLoginRequired={() => permissions.setShowLoginModal(true)}
+                            fileInputRef={fileUpload.fileInputRef}
+                            gcodeInputRef={fileUpload.gcodeInputRef}
+                            onDragOver={fileUpload.handleDragOver}
+                            onDragEnter={fileUpload.handleDragEnter}
+                            onDragLeave={fileUpload.handleDragLeave}
+                            onDrop={fileUpload.handleDrop}
+                            onPaste={fileUpload.handlePaste}
+                            placeholder={placeholder}
+                          />
+                        )}
+                      />
+                    ) : (
+                      <div className="flex-1">
+                        {chatMessages.messages.map((message) => (
+                          <ChatMessage
+                            key={message.id}
+                            message={message as any}
+                            onCodeFixClick={(fix) => gcode.handleViewCodeFix(fix as any, chatMessages.messages)}
+                            reportPanelOpen={gcode.reportPanelOpen}
+                            activeReportId={gcode.activeReportId}
+                            onRevert={(lineNumber) => gcode.handleRevert(lineNumber)}
+                            onReportCardClick={gcode.handleReportCardClick}
+                            onSuggestedAction={(action) => {
+                              if (action.action === 'follow_up' && action.data?.question) {
+                                composer.setInput(action.data.question as string);
+                              }
+                            }}
+                          />
+                        ))}
 
-                  {/* 로딩 표시 */}
-                  {(isLoading || gcode.isAIResolving) && (
-                    <div className="bg-muted/30 w-full">
-                      <div className="max-w-4xl mx-auto px-6 py-5">
-                        <div className="flex items-center gap-2 mb-3">
-                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center">
-                            <Cpu className="w-3.5 h-3.5 text-white" />
+                        {/* 로딩 표시 */}
+                        {(isLoading || gcode.isAIResolving) && (
+                          <div className="bg-muted/30 w-full">
+                            <div className="max-w-4xl mx-auto px-6 py-5">
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center">
+                                  <Cpu className="w-3.5 h-3.5 text-white" />
+                                </div>
+                                <span className="text-sm font-semibold">FACTOR AI</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-muted-foreground pl-8">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span className="text-sm">{t('aiChat.thinkingText', '생각하는 중...')}</span>
+                              </div>
+                            </div>
                           </div>
-                          <span className="text-sm font-semibold">FACTOR AI</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-muted-foreground pl-8">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span className="text-sm">{t('aiChat.thinkingText', '생각하는 중...')}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                        )}
 
-                  {/* G-code 분석 진행률 */}
-                  {gcode.isAnalyzing && (
-                    <div className="bg-blue-50 dark:bg-blue-950/30 w-full border-y border-blue-100 dark:border-blue-900">
-                      <div className="max-w-4xl mx-auto px-6 py-5">
-                        <div className="flex items-center gap-2 mb-3">
-                          <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
-                            <FileCode2 className="w-3.5 h-3.5 text-white" />
+                        {/* G-code 분석 진행률 */}
+                        {gcode.isAnalyzing && (
+                          <div className="bg-blue-50 dark:bg-blue-950/30 w-full border-y border-blue-100 dark:border-blue-900">
+                            <div className="max-w-4xl mx-auto px-6 py-5">
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
+                                  <FileCode2 className="w-3.5 h-3.5 text-white" />
+                                </div>
+                                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                                  {t('aiChat.gcodeAnalysisInProgress', 'G-code 분석 중...')}
+                                </span>
+                                <span className="text-sm text-blue-600 dark:text-blue-400 ml-auto">
+                                  {gcode.analysisProgress}%
+                                </span>
+                              </div>
+                              <Progress value={gcode.analysisProgress} className="h-2 ml-8" />
+                            </div>
                           </div>
-                          <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-                            {t('aiChat.gcodeAnalysisInProgress', 'G-code 분석 중...')}
-                          </span>
-                          <span className="text-sm text-blue-600 dark:text-blue-400 ml-auto">
-                            {gcode.analysisProgress}%
-                          </span>
-                        </div>
-                        <Progress value={gcode.analysisProgress} className="h-2 ml-8" />
+                        )}
+
+                        <div ref={messagesEndRef} />
                       </div>
+                    )}
+                  </div>
+                </ScrollArea>
+
+                {/* 하단 입력창 */}
+                {hasMessages && (
+                  <div className="shrink-0 bg-background/95 backdrop-blur">
+                    <div className="max-w-4xl mx-auto px-6 py-4">
+                      <FilePreviewList
+                        images={fileUpload.uploadedImages}
+                        gcodeFile={fileUpload.gcodeFile}
+                        onRemoveImage={fileUpload.removeImage}
+                        onRemoveGcode={fileUpload.removeGcodeFile}
+                        className="mb-3"
+                      />
+                      <ChatInput
+                        input={composer.input}
+                        setInput={composer.setInput}
+                        isLoading={isLoading}
+                        isDragging={fileUpload.isDragging}
+                        uploadedImages={fileUpload.uploadedImages}
+                        gcodeFile={fileUpload.gcodeFile}
+                        selectedTool={composer.selectedTool}
+                        setSelectedTool={handleToolSelect as any}
+                        selectedModel={composer.selectedModel}
+                        setSelectedModel={composer.setSelectedModel}
+                        user={user}
+                        userPlan={userPlan}
+                        onSend={handleSend}
+                        onLoginRequired={() => permissions.setShowLoginModal(true)}
+                        fileInputRef={fileUpload.fileInputRef}
+                        gcodeInputRef={fileUpload.gcodeInputRef}
+                        onDragOver={fileUpload.handleDragOver}
+                        onDragEnter={fileUpload.handleDragEnter}
+                        onDragLeave={fileUpload.handleDragLeave}
+                        onDrop={fileUpload.handleDrop}
+                        onPaste={fileUpload.handlePaste}
+                      />
                     </div>
-                  )}
-
-                  <div ref={messagesEndRef} />
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-
-          {/* 하단 입력창 */}
-          {hasMessages && (
-            <div className="shrink-0 bg-background/95 backdrop-blur">
-              <div className="max-w-4xl mx-auto px-6 py-4">
-                <FilePreviewList
-                  images={fileUpload.uploadedImages}
-                  gcodeFile={fileUpload.gcodeFile}
-                  onRemoveImage={fileUpload.removeImage}
-                  onRemoveGcode={fileUpload.removeGcodeFile}
-                  className="mb-3"
-                />
-                <ChatInput
-                  input={composer.input}
-                  setInput={composer.setInput}
-                  isLoading={isLoading}
-                  isDragging={fileUpload.isDragging}
-                  uploadedImages={fileUpload.uploadedImages}
-                  gcodeFile={fileUpload.gcodeFile}
-                  selectedTool={composer.selectedTool}
-                  setSelectedTool={handleToolSelect as any}
-                  selectedModel={composer.selectedModel}
-                  setSelectedModel={composer.setSelectedModel}
-                  user={user}
-                  userPlan={userPlan}
-                  onSend={handleSend}
-                  onLoginRequired={() => permissions.setShowLoginModal(true)}
-                  fileInputRef={fileUpload.fileInputRef}
-                  gcodeInputRef={fileUpload.gcodeInputRef}
-                  onDragOver={fileUpload.handleDragOver}
-                  onDragEnter={fileUpload.handleDragEnter}
-                  onDragLeave={fileUpload.handleDragLeave}
-                  onDrop={fileUpload.handleDrop}
-                  onPaste={fileUpload.handlePaste}
-                />
+                  </div>
+                )}
               </div>
-            </div>
-          )}
-        </div>
-        )}
 
-        {/* G-code 보고서 패널 */}
-        {!gcode.archiveViewActive && (gcode.isAnalyzing || gcode.reportPanelOpen) && (
-          <div className="flex-[0_0_52%] w-full bg-muted/20 flex flex-col overflow-hidden h-full pr-4 py-4">
-            {(gcode.isAnalyzing || (gcode.reportPanelOpen && !gcode.reportData)) ? (
-              <div className="h-full rounded-2xl overflow-hidden bg-background border flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                  <Loader2 className="w-10 h-10 animate-spin text-primary" />
-                  <div className="text-center">
-                    <p className="text-lg font-medium">{t('aiChat.analyzingGcode', 'G-code 분석 중...')}</p>
-                    {gcode.analysisProgressMessage && (
-                      <p className="text-sm text-muted-foreground mt-1">{gcode.analysisProgressMessage}</p>
+              {/* G-code 보고서 패널 (채팅 영역 내부, 헤더 아래) */}
+              {(gcode.isAnalyzing || gcode.reportPanelOpen) && (
+                <div className="flex-[0_0_52%] flex flex-col min-w-0 bg-muted/20">
+                  {/* 보고서 콘텐츠 */}
+                  <div className="flex-1 overflow-hidden pr-4 pb-4">
+                    {(gcode.isAnalyzing || (gcode.reportPanelOpen && !gcode.reportData)) ? (
+                      <div className="h-full rounded-2xl overflow-hidden bg-background border flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-4">
+                          <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                          <div className="text-center">
+                            <p className="text-lg font-medium">{t('aiChat.analyzingGcode', 'G-code 분석 중...')}</p>
+                            {gcode.analysisProgressMessage && (
+                              <p className="text-sm text-muted-foreground mt-1">{gcode.analysisProgressMessage}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : gcode.reportData && (
+                      <div className="h-full rounded-2xl overflow-hidden">
+                        <GCodeAnalysisReport
+                          data={gcode.reportData}
+                          embedded={true}
+                          onClose={gcode.closeReportPanel}
+                          initialSegments={gcode.segmentData || undefined}
+                          onAIResolveStart={gcode.handleAIResolveStart}
+                          onAIResolveComplete={gcode.handleAIResolveComplete}
+                          onAIResolveError={gcode.handleAIResolveError}
+                          isAIResolving={gcode.isAIResolving}
+                          activeTab={gcode.reportPanelTab}
+                          onTabChange={gcode.setReportPanelTab}
+                          editorContent={gcode.editorContent}
+                          editorLoading={gcode.editorLoading}
+                          editorFixInfo={gcode.editorFixInfo}
+                          onEditorApplyFix={gcode.handleApplyFix}
+                          appliedPatchCount={gcode.resolvedLines.size}
+                          revertLineNumber={gcode.revertLineNumber}
+                          onSaveModifiedGCode={gcode.handleSaveModifiedGCode}
+                        />
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
-            ) : gcode.reportData && (
-              <div className="h-full rounded-2xl overflow-hidden">
-                <GCodeAnalysisReport
-                  data={gcode.reportData}
-                  embedded={true}
-                  onClose={gcode.closeReportPanel}
-                  initialSegments={gcode.segmentData || undefined}
-                  onAIResolveStart={gcode.handleAIResolveStart}
-                  onAIResolveComplete={gcode.handleAIResolveComplete}
-                  onAIResolveError={gcode.handleAIResolveError}
-                  isAIResolving={gcode.isAIResolving}
-                  activeTab={gcode.reportPanelTab}
-                  onTabChange={gcode.setReportPanelTab}
-                  editorContent={gcode.editorContent}
-                  editorLoading={gcode.editorLoading}
-                  editorFixInfo={gcode.editorFixInfo}
-                  onEditorApplyFix={gcode.handleApplyFix}
-                  appliedPatchCount={gcode.resolvedLines.size}
-                  revertLineNumber={gcode.revertLineNumber}
-                  onSaveModifiedGCode={gcode.handleSaveModifiedGCode}
-                />
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </div>
