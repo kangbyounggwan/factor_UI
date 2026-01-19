@@ -440,10 +440,81 @@ interface PostCardProps {
 }
 ```
 
+**레이아웃 구조 (v1.2.1):**
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [콘텐츠 - 왼쪽 고정]              [이미지 갤러리 - 오른쪽] │
+│  ┌─────────────────────────────┐   ┌──────────────────────┐ │
+│  │ [해결됨/미해결] [카테고리]   │   │ ┌────┐ ┌────┐       │ │
+│  │ 제목                        │   │ │img │ │img │ ...   │ │
+│  │ 본문 요약...                │   │ └────┘ └────┘       │ │
+│  │ #태그 #태그                 │   │     또는             │ │
+│  └─────────────────────────────┘   │ ┌────────────┐      │ │
+│                                     │ │ 3D 모델    │      │ │
+│  ─────────────────────────────────────────────────────────── │
+│  [작성자 정보 (왼쪽)]                    [통계 (오른쪽 고정)] │
+│  👤 닉네임 · 3시간 전                   👁 23 👍 5 👎 0 💬 3 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**핵심 레이아웃 특징:**
+- 콘텐츠(텍스트/배지)가 항상 왼쪽에 고정 (레이아웃 흔들림 방지)
+- 이미지/모델 갤러리가 오른쪽에 위치 (선택적)
+- 푸터 영역 분리: 작성자 정보(왼쪽) + 통계(오른쪽 `shrink-0`)
+
+**이미지 갤러리 (v1.2.1 신규):**
+- 1~4장 이미지 표시
+- 1장: 24x24 크기
+- 2~4장: 16x16 크기
+- 5장 이상: 4번째 이미지에 `+N` 오버레이 표시
+- 이미지가 없을 때만 3D 모델 썸네일 표시
+
+```tsx
+{/* 이미지 갤러리 */}
+{post.images && post.images.length > 0 && (
+  <div className="shrink-0 flex gap-1">
+    {post.images.slice(0, 4).map((imageUrl, index) => (
+      <div key={index} className="relative">
+        <img
+          src={imageUrl}
+          className={cn(
+            "object-cover rounded-lg bg-muted",
+            post.images!.length === 1 ? "w-24 h-24" : "w-16 h-16"
+          )}
+        />
+        {/* +N 오버레이 */}
+        {index === 3 && post.images!.length > 4 && (
+          <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
+            <span className="text-white text-sm font-medium">+{post.images!.length - 4}</span>
+          </div>
+        )}
+      </div>
+    ))}
+  </div>
+)}
+```
+
+**푸터 영역 (v1.2.1 분리):**
+```tsx
+{/* 푸터: 작성자 정보 (왼쪽) + 통계 (오른쪽 고정) */}
+<div className="flex items-center justify-between text-xs text-muted-foreground mt-3 pt-3 border-t border-border/50">
+  {/* 작성자 정보 */}
+  <div className="flex items-center gap-2">
+    <Avatar /><span>{작성자}</span><span>·</span><span>{시간}</span>
+  </div>
+  {/* 통계 - 항상 오른쪽 고정 */}
+  <div className="flex items-center gap-3 shrink-0">
+    <Eye />{조회수} <ThumbsUp />{추천} <ThumbsDown />{비추천} <MessageCircle />{댓글}
+  </div>
+</div>
+```
+
 **표시 정보:**
-- 썸네일 (이미지 또는 모델)
+- 해결/미해결 배지 (질문/트러블슈팅 카테고리)
 - 카테고리 배지 (색상 구분)
 - 제목, 요약 (본문에서 추출)
+- 태그 (최대 2개 + 추가 개수 표시)
+- 이미지 갤러리 또는 3D 모델 썸네일
 - 작성자 (아바타 + 닉네임)
 - 메타데이터 (생성일, 조회수, 추천/비추천, 댓글)
 - 핀/해결됨 상태
@@ -451,10 +522,10 @@ interface PostCardProps {
 **추천/비추천 표시:**
 - ThumbsUp 아이콘 + 추천 수
 - ThumbsDown 아이콘 + 비추천 수
-- 사용자가 추천/비추천한 경우 아이콘 색상 변경
+- 사용자가 추천/비추천한 경우 아이콘 색상 변경 (`fill-current`)
 
 **썸네일 추출 우선순위:**
-1. 첨부된 이미지 (`post.images[0]`)
+1. 첨부된 이미지 (`post.images`) → 갤러리로 표시
 2. 첨부된 3D 모델의 썸네일 (`post.model.thumbnail_url`)
 3. 본문 HTML에서 첫 번째 이미지 추출 (`<img src="...">`)
 4. 본문 HTML에서 3D 모델 임베드의 썸네일 추출 (`data-thumbnail`)
@@ -474,7 +545,7 @@ interface Model3DEmbedInfo {
 }
 function extractFirst3DModelFromContent(content: string): Model3DEmbedInfo | null;
 
-// 본문 요약 추출 (HTML 태그 제거)
+// 본문 요약 추출 (HTML 태그 및 3D 모델 임베드 정보 제거)
 function extractContentSummary(content: string, maxLength?: number): string;
 ```
 
@@ -485,8 +556,7 @@ function extractContentSummary(content: string, maxLength?: number): string;
 | showcase | Purple | 🎨 |
 | question | Blue | ❓ |
 | troubleshooting | Red | 🔧 |
-| tip | Amber | 💡 |
-| review | Green | ⭐ |
+| failure | Orange | 😅 |
 | free | Gray | 💬 |
 
 ### 6.3 RichTextEditor
@@ -1094,6 +1164,15 @@ community.deleteCommentDesc
 | 2026-01-12 | add_model_to_community_posts.sql | model_id 컬럼 추가 |
 | 2026-01-12 | add_gcode_files_to_community_posts.sql | gcode_segment_data 확장 |
 | 2026-01-15 | add_images_to_community_comments.sql | 댓글 이미지 첨부 기능 (images 컬럼) |
+
+### 13.1 UI 변경 이력
+
+| 날짜 | 컴포넌트 | 내용 |
+|------|----------|------|
+| 2026-01-20 | PostCard | 레이아웃 구조 변경 - 콘텐츠 왼쪽 고정, 이미지 오른쪽 배치 |
+| 2026-01-20 | PostCard | 푸터 영역 분리 - 작성자 정보(왼쪽) + 통계(오른쪽 shrink-0 고정) |
+| 2026-01-20 | PostCard | 이미지 갤러리 기능 추가 - 1~4장 표시, 5장 이상 시 +N 오버레이 |
+| 2026-01-20 | PostCard | 카테고리 색상표 업데이트 - tip/review 제거, failure 추가 |
 
 ---
 

@@ -1,12 +1,21 @@
 /**
  * PostCard 컴포넌트
  * 커뮤니티 게시물 카드
+ *
+ * v1.2.2 개선사항:
+ * - 상단 배지: 상태 + 카테고리만 (핀 제거)
+ * - 프린터/소재 정보는 푸터 메타 라인으로 이동
+ * - 태그 2개 + 스타일 톤다운
+ * - 좋아요/싫어요 hover에서만 표시, 조회/댓글만 기본 표시
+ * - 제목 1줄 크게, 요약 1줄 제한
+ * - 썸네일 크기/존재감 축소
  */
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ThumbsUp, ThumbsDown, MessageCircle, Eye, Pin, CheckCircle2, AlertCircle, Box } from "lucide-react";
+import { ThumbsUp, ThumbsDown, MessageCircle, Eye, CheckCircle2, AlertCircle, Box } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CommunityPost, PostCategory } from "@shared/services/supabaseService/community";
 import { getDisplayName, getDisplayAvatar } from "@shared/services/supabaseService/community";
@@ -91,6 +100,7 @@ interface PostCardProps {
 
 export function PostCard({ post, onClick, onTagClick, className }: PostCardProps) {
   const { t } = useTranslation();
+  const [isHovered, setIsHovered] = useState(false);
 
   // i18n 번역된 폴백 텍스트
   const authorFallbacks = {
@@ -162,189 +172,204 @@ export function PostCard({ post, onClick, onTagClick, className }: PostCardProps
     return labels[category];
   };
 
+  // 트러블슈팅 메타 정보 존재 여부
+  const hasTroubleshootingMeta = post.category === 'troubleshooting' && post.troubleshooting_meta;
+  const meta = post.troubleshooting_meta;
+
   return (
     <Card
       className={cn(
-        "cursor-pointer transition-all hover:shadow-md hover:border-primary/30",
-        post.is_pinned && "border-amber-400/50 bg-amber-50/30 dark:bg-amber-900/10",
+        "cursor-pointer transition-all hover:shadow-md hover:border-primary/20 group",
+        post.is_pinned && "border-amber-300/40 bg-amber-50/20 dark:bg-amber-900/5",
         className
       )}
       onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       <CardContent className="p-4">
         <div className="flex gap-3">
-          {/* 썸네일 (이미지, 모델 썸네일, 또는 3D 모델 임베드) */}
-          {thumbnail.type !== 'none' && (
-            <div className="shrink-0 relative">
-              {/* 이미지 또는 모델 썸네일 */}
-              {(thumbnail.type === 'image' || thumbnail.type === 'model') && thumbnail.url && (
-                <img
-                  src={thumbnail.url}
-                  alt=""
-                  className="w-20 h-20 object-cover rounded-lg bg-muted"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              )}
-              {/* 3D 모델 임베드 (썸네일 없음 - 아이콘 표시) */}
-              {thumbnail.type === '3d-embed' && thumbnail.model3d && (
-                <div className="w-20 h-20 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 dark:from-blue-500/30 dark:to-purple-500/30 border border-blue-500/30 flex flex-col items-center justify-center">
-                  <Box className="w-8 h-8 text-blue-500" />
-                  <span className="text-[9px] text-muted-foreground mt-1 uppercase font-medium">
-                    {thumbnail.model3d.type}
-                  </span>
-                </div>
-              )}
-              {/* 모델 썸네일인 경우 3D 아이콘 표시 */}
-              {thumbnail.type === 'model' && (
-                <div className="absolute bottom-1 right-1 bg-black/60 rounded p-0.5">
-                  <Box className="w-3 h-3 text-white" />
-                </div>
-              )}
-              {/* 여러 이미지가 있는 경우 표시 */}
-              {thumbnail.type === 'image' && post.images && post.images.length > 1 && (
-                <div className="absolute bottom-1 right-1 bg-black/60 rounded px-1 py-0.5">
-                  <span className="text-[10px] text-white font-medium">+{post.images.length - 1}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 콘텐츠 */}
+          {/* 콘텐츠 - 항상 왼쪽 고정 */}
           <div className="flex-1 min-w-0">
-            {/* 상단: 카테고리 + 고정 배지 */}
-            <div className="flex items-center gap-2 mb-1.5">
-              <Badge className={cn("text-xs", CATEGORY_COLORS[post.category])}>
-                <span className="mr-0.5">{CATEGORY_ICONS[post.category]}</span>
-                {getCategoryLabel(post.category)}
-              </Badge>
-              {post.is_pinned && (
-                <Badge variant="outline" className="text-xs text-amber-600 border-amber-400">
-                  <Pin className="w-3 h-3 mr-0.5" />
-                  {t('community.pinned', '고정')}
-                </Badge>
-              )}
+            {/* 상단 배지: 상태 + 카테고리만 (고정 배지 제거) */}
+            <div className="flex items-center gap-1.5 mb-2">
               {/* 해결됨/미해결 표시 (질문/트러블슈팅) */}
               {(post.category === 'question' || post.category === 'troubleshooting') && (
                 post.is_solved ? (
-                  <Badge className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                  <Badge className="text-[10px] px-1.5 py-0 h-5 font-medium bg-green-500/90 text-white hover:bg-green-500">
                     <CheckCircle2 className="w-3 h-3 mr-0.5" />
-                    {t('community.solved', '해결됨')}
+                    {t('community.solved', '해결')}
                   </Badge>
                 ) : (
-                  <Badge variant="outline" className="text-xs text-orange-600 border-orange-400">
+                  <Badge className="text-[10px] px-1.5 py-0 h-5 font-medium bg-orange-500/90 text-white hover:bg-orange-500">
                     <AlertCircle className="w-3 h-3 mr-0.5" />
                     {t('community.unsolved', '미해결')}
                   </Badge>
                 )
               )}
+              {/* 카테고리 배지 */}
+              <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-normal", CATEGORY_COLORS[post.category])}>
+                <span className="mr-0.5 text-[9px]">{CATEGORY_ICONS[post.category]}</span>
+                {getCategoryLabel(post.category)}
+              </Badge>
             </div>
 
-            {/* 제목 + 트러블슈팅 메타정보/태그 (오른쪽 상단 배치) */}
-            <div className="flex items-start justify-between gap-3 mb-1">
-              {/* 제목 */}
-              <h3 className="font-medium text-base line-clamp-1 flex-1 min-w-0">
-                {post.title}
-              </h3>
+            {/* 제목 - 1줄, 크게 */}
+            <h3 className="font-semibold text-[15px] leading-snug line-clamp-1 mb-1">
+              {post.title}
+            </h3>
 
-              {/* 트러블슈팅 메타 정보 (오른쪽 상단) */}
-              {post.category === 'troubleshooting' && post.troubleshooting_meta && (
-                <div className="flex flex-wrap gap-1 shrink-0 max-w-[200px] justify-end">
-                  {post.troubleshooting_meta.printer_model && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                      {post.troubleshooting_meta.printer_model}
-                    </span>
-                  )}
-                  {post.troubleshooting_meta.filament_type && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-                      {post.troubleshooting_meta.filament_type}
-                    </span>
-                  )}
-                  {post.troubleshooting_meta.slicer && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
-                      {post.troubleshooting_meta.slicer}
-                    </span>
-                  )}
-                  {post.troubleshooting_meta.symptom_tags && post.troubleshooting_meta.symptom_tags.length > 0 && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
-                      {post.troubleshooting_meta.symptom_tags[0]}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* 본문 요약 */}
+            {/* 본문 요약 - 1줄로 제한 */}
             {contentSummary && (
-              <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+              <p className="text-sm text-muted-foreground/80 line-clamp-1 mb-2">
                 {contentSummary}
               </p>
             )}
 
-            {/* 태그 */}
+            {/* 태그 - 2개만, 스타일 톤다운 */}
             {post.tags && post.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mb-2">
-                {post.tags.slice(0, 3).map((tag) => (
-                  <Badge
+              <div className="flex items-center gap-1">
+                {post.tags.slice(0, 2).map((tag) => (
+                  <span
                     key={tag}
-                    variant="secondary"
-                    className="text-xs cursor-pointer hover:bg-secondary/80"
+                    className="text-[11px] text-muted-foreground/70 hover:text-primary cursor-pointer"
                     onClick={(e) => {
                       e.stopPropagation();
                       onTagClick?.(tag);
                     }}
                   >
                     #{tag}
-                  </Badge>
+                  </span>
                 ))}
-                {post.tags.length > 3 && (
-                  <Badge variant="secondary" className="text-xs">
-                    +{post.tags.length - 3}
-                  </Badge>
+                {post.tags.length > 2 && (
+                  <span className="text-[11px] text-muted-foreground/50">
+                    +{post.tags.length - 2}
+                  </span>
                 )}
               </div>
             )}
+          </div>
 
-            {/* 하단: 작성자 정보 + 통계 */}
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <Avatar className="w-5 h-5">
-                  <AvatarImage src={getDisplayAvatar(post.author, post.author_display_type)} />
-                  <AvatarFallback className="text-[10px]">
-                    {getDisplayName(post.author, post.author_display_type, authorFallbacks).charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <span>{getDisplayName(post.author, post.author_display_type, authorFallbacks)}</span>
-                <span className="text-muted-foreground/50">·</span>
-                <span>{getRelativeTime(post.created_at)}</span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1">
-                  <Eye className="w-3.5 h-3.5" />
-                  {post.view_count}
-                </span>
-                <span className={cn(
-                  "flex items-center gap-1",
-                  post.is_liked && "text-primary"
-                )}>
-                  <ThumbsUp className={cn("w-3.5 h-3.5", post.is_liked && "fill-current")} />
-                  {post.like_count}
-                </span>
-                <span className={cn(
-                  "flex items-center gap-1",
-                  post.is_disliked && "text-destructive"
-                )}>
-                  <ThumbsDown className={cn("w-3.5 h-3.5", post.is_disliked && "fill-current")} />
-                  {post.dislike_count || 0}
-                </span>
-                <span className="flex items-center gap-1">
-                  <MessageCircle className="w-3.5 h-3.5" />
-                  {post.comment_count}
-                </span>
+          {/* 썸네일 - 적당한 크기 */}
+          {post.images && post.images.length > 0 ? (
+            <div className="shrink-0">
+              <div className="relative">
+                <img
+                  src={post.images[0]}
+                  alt=""
+                  className="w-20 h-20 object-cover rounded-lg bg-muted/50"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+                {/* 이미지 개수 표시 (2개 이상일 때) */}
+                {post.images.length > 1 && (
+                  <div className="absolute bottom-1 right-1 bg-black/70 rounded px-1.5 py-0.5">
+                    <span className="text-[10px] text-white font-medium">+{post.images.length - 1}</span>
+                  </div>
+                )}
               </div>
             </div>
+          ) : thumbnail.type !== 'none' && (
+            <div className="shrink-0">
+              {/* 모델 썸네일 */}
+              {(thumbnail.type === 'model' || thumbnail.type === 'image') && thumbnail.url && (
+                <div className="relative">
+                  <img
+                    src={thumbnail.url}
+                    alt=""
+                    className="w-20 h-20 object-cover rounded-lg bg-muted/50"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                  {thumbnail.type === 'model' && (
+                    <div className="absolute bottom-1 right-1 bg-black/70 rounded p-0.5">
+                      <Box className="w-3 h-3 text-white" />
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* 3D 모델 임베드 (썸네일 없음) */}
+              {thumbnail.type === '3d-embed' && thumbnail.model3d && (
+                <div className="w-20 h-20 rounded-lg bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-border/50 flex flex-col items-center justify-center">
+                  <Box className="w-7 h-7 text-blue-400" />
+                  <span className="text-[9px] text-muted-foreground mt-0.5 uppercase">
+                    {thumbnail.model3d.type}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 푸터: 작성자 + 메타정보(프린터/소재) + 통계 */}
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-2.5 pt-2.5 border-t border-border/30">
+          {/* 왼쪽: 작성자 + 시간 + 프린터/소재 메타 */}
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <Avatar className="w-4 h-4">
+              <AvatarImage src={getDisplayAvatar(post.author, post.author_display_type)} />
+              <AvatarFallback className="text-[8px]">
+                {getDisplayName(post.author, post.author_display_type, authorFallbacks).charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <span className="truncate max-w-[80px]">{getDisplayName(post.author, post.author_display_type, authorFallbacks)}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span className="shrink-0">{getRelativeTime(post.created_at)}</span>
+
+            {/* 트러블슈팅 메타 (프린터/소재) - 푸터로 이동 */}
+            {hasTroubleshootingMeta && (meta?.printer_model || meta?.filament_type) && (
+              <>
+                <span className="text-muted-foreground/40">·</span>
+                <div className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
+                  {meta?.printer_model && (
+                    <span className="truncate max-w-[60px]">{meta.printer_model}</span>
+                  )}
+                  {meta?.printer_model && meta?.filament_type && (
+                    <span className="text-muted-foreground/30">/</span>
+                  )}
+                  {meta?.filament_type && (
+                    <span>{meta.filament_type}</span>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* 오른쪽: 통계 - 조회/댓글 기본, 좋아요/싫어요는 hover시만 */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* 좋아요/싫어요 - hover시에만 표시 */}
+            <div className={cn(
+              "flex items-center gap-2 transition-opacity duration-200",
+              isHovered ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
+            )}>
+              <span className={cn(
+                "flex items-center gap-0.5",
+                post.is_liked && "text-primary"
+              )}>
+                <ThumbsUp className={cn("w-3 h-3", post.is_liked && "fill-current")} />
+                {post.like_count}
+              </span>
+              {(post.dislike_count ?? 0) > 0 && (
+                <span className={cn(
+                  "flex items-center gap-0.5",
+                  post.is_disliked && "text-destructive"
+                )}>
+                  <ThumbsDown className={cn("w-3 h-3", post.is_disliked && "fill-current")} />
+                  {post.dislike_count}
+                </span>
+              )}
+            </div>
+
+            {/* 조회수/댓글 - 항상 표시 */}
+            <span className="flex items-center gap-0.5">
+              <Eye className="w-3 h-3" />
+              {post.view_count}
+            </span>
+            <span className="flex items-center gap-0.5">
+              <MessageCircle className="w-3 h-3" />
+              {post.comment_count}
+            </span>
           </div>
         </div>
       </CardContent>

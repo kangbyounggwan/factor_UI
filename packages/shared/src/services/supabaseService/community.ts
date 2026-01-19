@@ -339,6 +339,8 @@ export interface GetPostsOptions {
   page?: number;
   limit?: number;
   userId?: string; // 현재 사용자 ID (좋아요 여부 확인용)
+  authorId?: string; // 특정 작성자 필터 (내 글 보기)
+  hasImage?: boolean; // 이미지 첨부 여부 필터
 }
 
 // 페이지네이션 결과
@@ -363,6 +365,8 @@ export async function getPosts(options: GetPostsOptions = {}): Promise<Paginated
     page = 1,
     limit = 20,
     userId,
+    authorId,
+    hasImage,
   } = options;
 
   try {
@@ -388,6 +392,17 @@ export async function getPosts(options: GetPostsOptions = {}): Promise<Paginated
     // 해결됨/미해결 필터
     if (isSolved !== undefined) {
       query = query.eq('is_solved', isSolved);
+    }
+
+    // 작성자 필터 (내 글 보기)
+    if (authorId) {
+      query = query.eq('user_id', authorId);
+    }
+
+    // 이미지 첨부 필터
+    if (hasImage) {
+      // images 배열이 비어있지 않은 게시물만 (PostgreSQL에서 배열 길이 > 0)
+      query = query.not('images', 'eq', '{}');
     }
 
     // 정렬
@@ -1148,6 +1163,43 @@ export async function getPopularPosts(limit: number = 5): Promise<CommunityPost[
     return posts;
   } catch (error) {
     console.error('[community] Error fetching popular posts:', error);
+    return [];
+  }
+}
+
+/**
+ * 미해결 게시물 조회 (질문/트러블슈팅 중 is_solved=false)
+ */
+export async function getUnsolvedPosts(limit: number = 5): Promise<CommunityPost[]> {
+  try {
+    const { data, error } = await supabase
+      .from('community_posts')
+      .select('*')
+      .in('category', ['question', 'troubleshooting'])
+      .eq('is_solved', false)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error || !data) {
+      console.error('[community] Error fetching unsolved posts:', error);
+      return [];
+    }
+
+    let posts = data as CommunityPost[];
+
+    // 작성자 정보 조회 (헬퍼 함수 사용)
+    if (posts.length > 0) {
+      const userIds = [...new Set(posts.map(p => p.user_id).filter(Boolean))];
+      const profileMap = await getProfilesMap(userIds);
+      posts = posts.map(post => ({
+        ...post,
+        author: profileMap.get(post.user_id) || { id: post.user_id, username: 'Unknown' },
+      }));
+    }
+
+    return posts;
+  } catch (error) {
+    console.error('[community] Error fetching unsolved posts:', error);
     return [];
   }
 }

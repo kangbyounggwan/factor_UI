@@ -86,6 +86,9 @@ import {
   type ApiKey,
 } from "@shared/services/supabaseService/apiKeys";
 import { useSidebarState } from "@/hooks/useSidebarState";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { SharedBottomNavigation } from "@/components/shared/SharedBottomNavigation";
+import { cn } from "@/lib/utils";
 
 // 한국 사용자 감지 (언어 또는 타임존 기반)
 const isKoreanUser = () => {
@@ -895,22 +898,25 @@ const UserSettings = () => {
 
   // 사이드바 상태 (페이지 간 공유)
   const { isOpen: sidebarOpen, toggle: toggleSidebar } = useSidebarState(true);
+  const isMobile = useIsMobile();
 
   return (
-    <div className="h-screen flex overflow-hidden">
-      {/* App Sidebar with Settings Menu */}
-      <AppSidebar
-        isOpen={sidebarOpen}
-        onToggle={toggleSidebar}
-        user={user}
-        userPlan={userPlan}
-        onSignOut={signOut}
-      >
-        <SettingsSidebarContent
-          activeSettingsTab={activeTab}
-          onSettingsTabChange={setActiveTab}
-        />
-      </AppSidebar>
+    <div className={cn("h-screen flex overflow-hidden", isMobile && "pb-16")}>
+      {/* App Sidebar with Settings Menu - 데스크탑에서만 표시 */}
+      {!isMobile && (
+        <AppSidebar
+          isOpen={sidebarOpen}
+          onToggle={toggleSidebar}
+          user={user}
+          userPlan={userPlan}
+          onSignOut={signOut}
+        >
+          <SettingsSidebarContent
+            activeSettingsTab={activeTab}
+            onSettingsTabChange={setActiveTab}
+          />
+        </AppSidebar>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -1924,6 +1930,9 @@ const UserSettings = () => {
       {/* End flex-1 overflow-y-auto */}
     </div>
     {/* End flex-1 flex-col */}
+
+      {/* 모바일 하단 네비게이션 */}
+      {isMobile && <SharedBottomNavigation />}
     </div>
   );
 };

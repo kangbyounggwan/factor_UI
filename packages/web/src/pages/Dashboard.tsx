@@ -16,6 +16,9 @@ import { supabase } from "@shared/integrations/supabase/client"
 import { getUserPrinterGroups, getUserPrintersWithGroup } from "@shared/services/supabaseService/printerList";
 import { useToast } from "@/hooks/use-toast";
 import { useSidebarState } from "@/hooks/useSidebarState";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { SharedBottomNavigation } from "@/components/shared/SharedBottomNavigation";
+import { cn } from "@/lib/utils";
 import { onDashStatusMessage } from "@shared/services/mqttService";
 import { PrinterStatusBadge } from "@/components/Dashboard/PrinterStatusBadge";
 import { computeDashboardSummary, publishDashboardSummary, useDashboardSummary } from "@shared/component/dashboardSummary";
@@ -283,6 +286,7 @@ const Home = () => {
   const { plan: userPlan } = useUserPlan(user?.id);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const [printers, setPrinters] = useState<PrinterOverview[]>([]); // localStorage 제거
   const [mqttStates, setMqttStates] = usePersistentState<MqttStateCache>('web:dashboard:mqtt_states', {}); // MQTT 상태만 저장
@@ -624,28 +628,30 @@ const Home = () => {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden">
-      {/* App Sidebar */}
-      <AppSidebar
-        isOpen={sidebarOpen}
-        onToggle={toggleSidebar}
-        user={user}
-        userPlan={userPlan}
-        onSignOut={signOut}
-      >
-        <DashboardSidebarContent
-          printers={printers.map((p): PrinterQuickItem => ({
-            id: p.id,
-            name: p.name,
-            model: p.model,
-            isOnline: p.connected,
-            progress: p.printing ? p.completion : undefined,
-            currentJob: p.current_file,
-          }))}
-          onSelectPrinter={(printer) => navigate(`/printer/${printer.id}`)}
-          alerts={[]}
-        />
-      </AppSidebar>
+    <div className={cn("h-screen flex overflow-hidden", isMobile && "pb-16")}>
+      {/* App Sidebar - 데스크탑에서만 표시 */}
+      {!isMobile && (
+        <AppSidebar
+          isOpen={sidebarOpen}
+          onToggle={toggleSidebar}
+          user={user}
+          userPlan={userPlan}
+          onSignOut={signOut}
+        >
+          <DashboardSidebarContent
+            printers={printers.map((p): PrinterQuickItem => ({
+              id: p.id,
+              name: p.name,
+              model: p.model,
+              isOnline: p.connected,
+              progress: p.printing ? p.completion : undefined,
+              currentJob: p.current_file,
+            }))}
+            onSelectPrinter={(printer) => navigate(`/printer/${printer.id}`)}
+            alerts={[]}
+          />
+        </AppSidebar>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -879,6 +885,9 @@ const Home = () => {
           />
         </Suspense>
       )}
+
+      {/* 모바일 하단 네비게이션 */}
+      {isMobile && <SharedBottomNavigation />}
     </div>
   );
 };
