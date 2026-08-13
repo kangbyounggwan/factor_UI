@@ -6,10 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Lazy load heavy components to reduce initial bundle size
-const ModelViewer = lazy(() => import("@/components/ai/ModelViewer"));
 const GCodeViewer = lazy(() => import("@/components/ai/ModelGenerate/GCodeViewer"));
 const GCodePreview = lazy(() => import("@/components/ai/ModelGenerate/GCodePreview"));
 const TextTo3DForm = lazy(() => import("@/components/ai/ModelGenerate/TextTo3DForm"));
@@ -18,12 +16,6 @@ const ModelPreview = lazy(() => import("@/components/ai/ModelGenerate/ModelPrevi
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 // Lazy load refactored components
 const PrintSettingsDialog = lazy(() => import("@/components/ai/ModelGenerate/PrintSettingsDialog").then(m => ({ default: m.PrintSettingsDialog })));
@@ -45,7 +37,6 @@ type SymmetryMode = 'off' | 'auto' | 'on';
 type ArtStyle = 'realistic' | 'sculpture';
 import {
   Upload,
-  Download,
   Play,
   MessageSquare,
   Pause,
@@ -59,7 +50,6 @@ import {
   AlertCircle,
   ArrowRight,
   Zap,
-  Sparkles,
   Monitor,
   Camera,
   Wand2,
@@ -1363,142 +1353,17 @@ const AI = () => {
                       onSubmit={generateModel}
                     />
 
-                    {/* 결과 영역 */}
-                    <Card className="h-fit lg:sticky top-4">
-                      <CardContent className="p-0">
-                        <div className="rounded-lg overflow-hidden h-[calc(85vh-4rem-2rem)] relative">
-                          <Suspense fallback={
-                            <div className="flex items-center justify-center h-full bg-muted">
-                              <div className="text-center">
-                                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                                <p className="text-sm text-muted-foreground">Loading 3D viewer...</p>
-                              </div>
-                            </div>
-                          }>
-                            <ModelViewer
-                              key={currentModelId || modelViewerUrl || 'default'} // 모델 변경 시 뷰어 재생성하여 카메라 리셋
-                              className="w-full h-full"
-                              modelUrl={modelViewerUrl ?? undefined}
-                              modelScale={1}
-                              enableRotationControls={true}
-                              modelId={currentModelId ?? undefined}
-                              onSave={handleModelSave}
-                            />
-                          </Suspense>
-
-                          {/* 다운로드 드롭다운 버튼 - 오른쪽 위 */}
-                          {(currentGlbUrl || currentStlUrl) && !isProcessing && (
-                            <div className="absolute top-4 right-4 z-20">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    className="flex items-center gap-2 shadow-lg"
-                                  >
-                                    <Download className="w-4 h-4" />
-                                    Download
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  {currentGlbUrl && (
-                                    <DropdownMenuItem onClick={async () => {
-                                      try {
-                                        toast({ title: t('ai.downloadStarted'), description: t('ai.downloadingGLB') });
-                                        const response = await fetch(currentGlbUrl);
-                                        const blob = await response.blob();
-                                        const url = window.URL.createObjectURL(blob);
-                                        const link = document.createElement('a');
-                                        link.href = url;
-                                        link.download = `model_${Date.now()}.glb`;
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        document.body.removeChild(link);
-                                        window.URL.revokeObjectURL(url);
-                                        toast({ title: t('ai.downloadComplete'), description: t('ai.glbDownloaded') });
-                                      } catch (error) {
-                                        toast({ title: t('ai.downloadFailed'), variant: 'destructive' });
-                                      }
-                                    }}>
-                                      <Download className="w-4 h-4 mr-2" />
-                                      {t('ai.downloadGLB')}
-                                    </DropdownMenuItem>
-                                  )}
-                                  {currentStlUrl && (
-                                    <DropdownMenuItem onClick={async () => {
-                                      try {
-                                        toast({ title: t('ai.downloadStarted'), description: t('ai.downloadingSTL') });
-                                        const response = await fetch(currentStlUrl);
-                                        const blob = await response.blob();
-                                        const url = window.URL.createObjectURL(blob);
-                                        const link = document.createElement('a');
-                                        link.href = url;
-                                        link.download = `model_${Date.now()}.stl`;
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        document.body.removeChild(link);
-                                        window.URL.revokeObjectURL(url);
-                                        toast({ title: t('ai.downloadComplete'), description: t('ai.stlDownloaded') });
-                                      } catch (error) {
-                                        toast({ title: t('ai.downloadFailed'), variant: 'destructive' });
-                                      }
-                                    }}>
-                                      <Download className="w-4 h-4 mr-2" />
-                                      {t('ai.downloadSTL')}
-                                    </DropdownMenuItem>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          )}
-
-                          {isProcessing && (
-                            <div className="absolute inset-0 bg-gray-900/95 flex items-center justify-center z-10">
-                              <div className="text-center space-y-6 max-w-md w-full px-8">
-                                {/* Circular spinning icon */}
-                                <div className="relative w-24 h-24 mx-auto">
-                                  <div className="absolute inset-0 border-4 border-blue-500/30 rounded-full"></div>
-                                  <div className="absolute inset-0 border-4 border-transparent border-t-blue-500 rounded-full animate-spin"></div>
-                                  <Sparkles className="absolute inset-0 m-auto w-12 h-12 text-blue-500" />
-                                </div>
-
-                                {/* Title */}
-                                <h2 className="text-2xl font-bold text-white">
-                                  {t('ai.generatingAI')}
-                                </h2>
-
-                                {/* Subtitle */}
-                                <p className="text-lg text-gray-300">{t('ai.generatingDesc')}</p>
-
-                                {/* Progress section */}
-                                {progress > 0 && (
-                                  <div className="space-y-3 mt-6">
-                                    {/* Progress label and percentage */}
-                                    <div className="flex justify-between items-center text-sm">
-                                      <span className="text-gray-400">{t('ai.progressLabel')}</span>
-                                      <span className="text-white font-semibold">{progress}%</span>
-                                    </div>
-
-                                    {/* Progress bar */}
-                                    <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
-                                      <div
-                                        className="bg-blue-500 h-full rounded-full transition-all duration-300 ease-out"
-                                        style={{ width: `${progress}%` }}
-                                      ></div>
-                                    </div>
-
-                                    {/* Estimated time */}
-                                    <p className="text-sm text-gray-400 text-center">
-                                      {t('ai.estimatedTime')}: 5m
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
+                    {/* 결과 영역 - 텍스트 탭과 동일한 ModelPreview 재사용 */}
+                    <ModelPreview
+                      isProcessing={isProcessing}
+                      modelUrl={modelViewerUrl ?? undefined}
+                      glbDownloadUrl={currentGlbUrl ?? undefined}
+                      stlDownloadUrl={currentStlUrl ?? undefined}
+                      progress={progress}
+                      progressStatus={progressStatus}
+                      modelId={currentModelId ?? undefined}
+                      onSave={handleModelSave}
+                    />
                     </div>
                   </Suspense>
                 </TabsContent>

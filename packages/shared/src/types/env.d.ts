@@ -15,7 +15,9 @@ interface ImportMetaEnv {
     readonly VITE_DEV_PORT?: string;
     readonly VITE_PRODUCTION?: string;
     readonly VITE_TOSS_CLIENT_KEY?: string;
-    readonly VITE_TOSS_SECRET_KEY?: string;
+    // ⚠ 시크릿 키는 VITE_ 접두사로 두지 않는다. VITE_ 변수는 빌드 시 JS 번들에
+    // 그대로 포함되어 브라우저에서 확인 가능하다. 서버 전용 키는 접두사 없이
+    // process.env 로만 사용하고, 서버 프록시(/api/ai/*)를 통해 호출한다.
   }
   interface ImportMeta {
     readonly env: ImportMetaEnv;

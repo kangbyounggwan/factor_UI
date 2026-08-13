@@ -1,9 +1,15 @@
 /**
  * Claude API Service
  * 사용자의 프롬프트 또는 이미지에서 의미있는 짧은 파일명을 생성하는 서비스
+ *
+ * ⚠ API 키는 클라이언트에 두지 않는다.
+ * 브라우저는 서버의 /api/ai/filename 프록시만 호출하며, Claude API 키는
+ * 서버 환경변수(CLAUDE_API_KEY)에만 존재한다. 프록시가 없거나 실패하면
+ * 로컬 fallback 규칙으로 파일명을 만든다.
  */
 
-const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
+const FILENAME_API_URL = '/api/ai/filename';
+const REQUEST_TIMEOUT_MS = 15000;
 
 interface GenerateFilenameOptions {
   prompt?: string;        // 사용자가 입력한 원본 프롬프트
@@ -20,215 +26,66 @@ interface GenerateFilenameOptions {
  */
 export async function generateShortFilename(options: GenerateFilenameOptions): Promise<string> {
   const { prompt, imageUrl, modelName } = options;
-  const apiKey = import.meta.env.VITE_CLAUDE_API_KEY;
 
   // 프롬프트가 있으면 텍스트 기반으로 처리
   if (prompt) {
-    return generateFilenameFromText(prompt, apiKey);
+    return (await requestFilename({ prompt })) || extractFallbackFilename(prompt);
   }
 
   // 이미지가 있으면 Vision API로 처리
   if (imageUrl) {
-    return generateFilenameFromImage(imageUrl, apiKey);
+    return (await requestFilename({ imageUrl })) || randomFilename();
   }
 
   // 모델명에서 추출 (fallback)
   if (modelName) {
-    return generateFilenameFromText(modelName, apiKey);
+    return (await requestFilename({ prompt: modelName })) || extractFallbackFilename(modelName);
   }
 
   console.warn('[claudeService] No input provided, using random filename');
-  return `model_${Date.now().toString(36).slice(-4)}`;
+  return randomFilename();
 }
 
 /**
- * 텍스트 프롬프트에서 파일명 생성
+ * 서버 프록시에 파일명 생성을 요청한다.
+ * 실패 시 null 을 반환하여 호출부가 fallback 을 쓰도록 한다.
  */
-async function generateFilenameFromText(inputText: string, apiKey?: string): Promise<string> {
-  if (!apiKey) {
-    console.warn('[claudeService] No API key, using fallback extraction');
-    return extractFallbackFilename(inputText);
-  }
+async function requestFilename(body: { prompt?: string; imageUrl?: string }): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(CLAUDE_API_URL, {
+    const response = await fetch(FILENAME_API_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 50,
-        messages: [
-          {
-            role: 'user',
-            content: `You are a filename generator. Extract the main subject/object from the user's 3D model request and return ONLY a short English filename.
-
-Rules:
-- 1-2 words maximum
-- Lowercase only
-- No spaces (use underscore if needed)
-- No file extension
-- Translate to English if input is in another language
-
-User's request: "${inputText}"
-
-Examples:
-- "귀여운 눈사람 만들어줘" → "snowman"
-- "날개 달린 드래곤" → "dragon"
-- "고양이 피규어" → "cat"
-- "cute bunny for 3D printing" → "bunny"
-- "realistic human hand" → "hand"
-- "Text-to-3D__3D-printable_snowman" → "snowman"
-
-Return ONLY the filename:`
-          }
-        ]
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[claudeService] API error:', response.status, errorText);
-      return extractFallbackFilename(inputText);
-    }
-
-    const data = await response.json();
-    const filename = data.content?.[0]?.text?.trim().toLowerCase().replace(/[^a-z0-9_]/g, '') || '';
-
-    if (filename && filename.length > 0 && filename.length <= 30) {
-      console.log('[claudeService] Generated filename from prompt:', filename);
-      return filename;
-    }
-
-    return extractFallbackFilename(inputText);
-  } catch (error) {
-    console.error('[claudeService] Error:', error);
-    return extractFallbackFilename(inputText);
-  }
-}
-
-/**
- * 이미지에서 Claude Vision API로 파일명 생성
- */
-async function generateFilenameFromImage(imageUrl: string, apiKey?: string): Promise<string> {
-  if (!apiKey) {
-    console.warn('[claudeService] No API key, using default image filename');
-    return `model_${Date.now().toString(36).slice(-4)}`;
-  }
-
-  try {
-    // 이미지를 Base64로 변환
-    const imageBase64 = await fetchImageAsBase64(imageUrl);
-    if (!imageBase64) {
-      console.warn('[claudeService] Failed to fetch image, using default filename');
-      return `model_${Date.now().toString(36).slice(-4)}`;
-    }
-
-    const response = await fetch(CLAUDE_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 50,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: imageBase64.mediaType,
-                  data: imageBase64.data,
-                }
-              },
-              {
-                type: 'text',
-                text: `Look at this image and identify the main object/subject. Return ONLY a short English filename for a 3D model of this object.
-
-Rules:
-- 1-2 words maximum
-- Lowercase only
-- No spaces (use underscore if needed)
-- No file extension
-
-Examples:
-- Image of a cat → "cat"
-- Image of a cup → "cup"
-- Image of a dragon figurine → "dragon"
-- Image of a car → "car"
-- Image of a shoe → "shoe"
-
-Return ONLY the filename:`
-              }
-            ]
-          }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[claudeService] Vision API error:', response.status, errorText);
-      return `model_${Date.now().toString(36).slice(-4)}`;
-    }
-
-    const data = await response.json();
-    const filename = data.content?.[0]?.text?.trim().toLowerCase().replace(/[^a-z0-9_]/g, '') || '';
-
-    if (filename && filename.length > 0 && filename.length <= 30) {
-      console.log('[claudeService] Generated filename from image:', filename);
-      return filename;
-    }
-
-    return `model_${Date.now().toString(36).slice(-4)}`;
-  } catch (error) {
-    console.error('[claudeService] Vision API error:', error);
-    return `model_${Date.now().toString(36).slice(-4)}`;
-  }
-}
-
-/**
- * 이미지 URL을 Base64로 변환
- */
-async function fetchImageAsBase64(imageUrl: string): Promise<{ data: string; mediaType: string } | null> {
-  try {
-    const response = await fetch(imageUrl);
-    if (!response.ok) {
-      console.error('[claudeService] Failed to fetch image:', response.status);
+      console.warn('[claudeService] 파일명 프록시 응답 실패:', response.status);
       return null;
     }
 
-    const blob = await response.blob();
-    const mediaType = blob.type || 'image/jpeg';
+    const data = await response.json();
+    const filename = typeof data?.filename === 'string' ? data.filename : '';
 
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        // Remove data URL prefix (e.g., "data:image/jpeg;base64,")
-        const data = base64.split(',')[1];
-        resolve({ data, mediaType });
-      };
-      reader.onerror = () => {
-        console.error('[claudeService] FileReader error');
-        resolve(null);
-      };
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    console.error('[claudeService] Error fetching image:', error);
+    if (filename && filename.length <= 30) {
+      console.log('[claudeService] Generated filename:', filename);
+      return filename;
+    }
+
     return null;
+  } catch (error) {
+    console.warn('[claudeService] 파일명 프록시 호출 오류:', error);
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+function randomFilename(): string {
+  return `model_${Date.now().toString(36).slice(-4)}`;
 }
 
 /**
@@ -245,7 +102,7 @@ function extractFallbackFilename(modelName: string): string {
     .filter(w => w.length > 2 && !stopWords.includes(w));
 
   // 첫 번째 의미있는 단어 반환
-  const filename = words[0] || `model_${Date.now().toString(36).slice(-4)}`;
+  const filename = words[0] || randomFilename();
 
   console.log('[claudeService] Fallback filename:', filename);
   return filename.replace(/[^a-z0-9_]/g, '').slice(0, 20);

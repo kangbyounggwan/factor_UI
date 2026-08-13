@@ -1,7 +1,7 @@
 import { lazy, Suspense } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Download, Sparkles } from "lucide-react";
+import { Loader2, Download, Sparkles, Box } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +15,9 @@ import WorkflowStatusCard from "./WorkflowStatusCard";
 import { WorkflowStep, WorkflowStepStatus } from "@factor/shared";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/ui/use-toast";
+
+// 생성 소요 시간 기준값(분). 남은 시간 안내에만 사용한다.
+const ESTIMATED_TOTAL_MINUTES = 5;
 
 interface ModelPreviewProps {
   isProcessing?: boolean;
@@ -57,24 +60,9 @@ export default function ModelPreview({
   const { toast } = useToast();
   const showWorkflowStatus = workflowState && isProcessing;
 
-  const getWorkflowMessage = () => {
-    if (!workflowState) return t('ai.processing');
-
-    switch (workflowState.currentStep) {
-      case "modelling":
-        return t('ai.workflowModelling');
-      case "optimization":
-        return t('ai.workflowOptimization');
-      case "gcode_generation":
-        return t('ai.workflowGcode');
-      default:
-        return t('ai.processing');
-    }
-  };
-
   const downloadFile = async (url: string, filename: string) => {
     try {
-      toast({ title: '다운로드 시작', description: `${filename} 다운로드 중...` });
+      toast({ title: t('ai.downloadStarted'), description: filename });
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -91,32 +79,32 @@ export default function ModelPreview({
       document.body.removeChild(link);
       window.URL.revokeObjectURL(downloadUrl);
 
-      toast({ title: '다운로드 완료', description: `${filename}이(가) 다운로드되었습니다.` });
+      toast({ title: t('ai.downloadComplete'), description: filename });
     } catch (error) {
       console.error('[ModelPreview] Download failed:', error);
       toast({
-        title: '다운로드 실패',
-        description: '파일 다운로드 중 오류가 발생했습니다.',
+        title: t('ai.downloadFailed'),
         variant: 'destructive'
       });
     }
   };
 
   const handleDownloadGLB = () => {
-    if (glbDownloadUrl) {
-      const filename = `model_${Date.now()}.glb`;
-      downloadFile(glbDownloadUrl, filename);
-    }
+    if (glbDownloadUrl) downloadFile(glbDownloadUrl, `model_${Date.now()}.glb`);
   };
 
   const handleDownloadSTL = () => {
-    if (stlDownloadUrl) {
-      const filename = `model_${Date.now()}.stl`;
-      downloadFile(stlDownloadUrl, filename);
-    }
+    if (stlDownloadUrl) downloadFile(stlDownloadUrl, `model_${Date.now()}.stl`);
   };
 
-  const hasDownloadableFiles = glbDownloadUrl || stlDownloadUrl;
+  const hasDownloadableFiles = Boolean(glbDownloadUrl || stlDownloadUrl);
+  const showEmptyState = !isProcessing && !modelUrl;
+
+  // 진행률 기준 남은 시간(분). 0%일 때는 아직 추정하지 않는다.
+  const remainingMinutes = Math.max(
+    1,
+    Math.ceil(((100 - progress) / 100) * ESTIMATED_TOTAL_MINUTES)
+  );
 
   return (
     <div className="space-y-4">
@@ -130,7 +118,7 @@ export default function ModelPreview({
       )}
 
       {/* 모델 뷰어 */}
-      <Card className="h-fit lg:sticky top-4">
+      <Card className="h-fit lg:sticky top-4 overflow-hidden">
         <CardContent className="p-0">
           <div className="bg-muted rounded-lg flex items-center justify-center h-[calc(85vh-4rem-2rem)] relative overflow-hidden">
             <Suspense fallback={
@@ -144,12 +132,29 @@ export default function ModelPreview({
               <ModelViewer
                 className="w-full h-full"
                 modelUrl={modelUrl}
-                placeholderMessage={t('ai.generatePrompt')}
+                placeholderMessage=""
                 enableRotationControls={true}
                 modelId={modelId}
                 onSave={onSave}
               />
             </Suspense>
+
+            {/* 빈 상태 — 무엇을 해야 하는지 안내 */}
+            {showEmptyState && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8">
+                <div className="text-center max-w-xs">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-border bg-background/80 shadow-sm">
+                    <Box className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                  <p className="text-sm font-medium text-foreground">
+                    {t('ai.emptyStateTitle')}
+                  </p>
+                  <p className="mt-1.5 text-sm text-muted-foreground">
+                    {t('ai.emptyStateDesc')}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* 다운로드 드롭다운 버튼 - 오른쪽 위 */}
             {hasDownloadableFiles && !isProcessing && (
@@ -162,20 +167,20 @@ export default function ModelPreview({
                       className="flex items-center gap-2 shadow-lg"
                     >
                       <Download className="w-4 h-4" />
-                      Download
+                      {t('ai.download')}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     {glbDownloadUrl && (
                       <DropdownMenuItem onClick={handleDownloadGLB}>
                         <Download className="w-4 h-4 mr-2" />
-                        GLB 다운로드
+                        {t('ai.downloadGLB')}
                       </DropdownMenuItem>
                     )}
                     {stlDownloadUrl && (
                       <DropdownMenuItem onClick={handleDownloadSTL}>
                         <Download className="w-4 h-4 mr-2" />
-                        STL 다운로드
+                        {t('ai.downloadSTL')}
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
@@ -183,44 +188,41 @@ export default function ModelPreview({
               </div>
             )}
 
+            {/* 생성 진행 오버레이 — 디자인 토큰 기반이라 라이트/다크 모두 대응 */}
             {isProcessing && (
-              <div className="absolute inset-0 bg-gray-900/95 flex items-center justify-center z-10">
-                <div className="text-center space-y-6 max-w-md w-full px-8">
-                  {/* Circular spinning icon */}
-                  <div className="relative w-24 h-24 mx-auto">
-                    <div className="absolute inset-0 border-4 border-blue-500/30 rounded-full"></div>
-                    <div className="absolute inset-0 border-4 border-transparent border-t-blue-500 rounded-full animate-spin"></div>
-                    <Sparkles className="absolute inset-0 m-auto w-12 h-12 text-blue-500" />
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/95 backdrop-blur-sm">
+                <div className="w-full max-w-sm space-y-6 px-8 text-center">
+                  <div className="relative mx-auto h-20 w-20">
+                    <div className="absolute inset-0 rounded-full border-4 border-primary/20" />
+                    <div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-primary" />
+                    <Sparkles className="absolute inset-0 m-auto h-8 w-8 text-primary" />
                   </div>
 
-                  {/* Title */}
-                  <h2 className="text-2xl font-bold text-white">
-                    {t('ai.generatingAI')}
-                  </h2>
+                  <div className="space-y-1.5">
+                    <h2 className="text-xl font-semibold text-foreground">
+                      {t('ai.generatingAI')}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      {progressStatus || t('ai.generatingDesc')}
+                    </p>
+                  </div>
 
-                  {/* Subtitle */}
-                  <p className="text-lg text-gray-300">{t('ai.generatingDesc')}</p>
-
-                  {/* Progress section */}
                   {progress > 0 && (
-                    <div className="space-y-3 mt-6">
-                      {/* Progress label and percentage */}
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-400">{t('ai.progressLabel')}</span>
-                        <span className="text-white font-semibold">{progress}%</span>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">{t('ai.progressLabel')}</span>
+                        <span className="font-semibold tabular-nums text-foreground">{progress}%</span>
                       </div>
 
-                      {/* Progress bar */}
-                      <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                         <div
-                          className="bg-blue-500 h-full rounded-full transition-all duration-300 ease-out"
+                          className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
                           style={{ width: `${progress}%` }}
-                        ></div>
+                        />
                       </div>
 
-                      {/* Estimated time */}
-                      <p className="text-sm text-gray-400 text-center">
-                        {t('ai.estimatedTime')}: {Math.max(1, Math.ceil((100 - progress) / 25))}s
+                      <p className="text-xs text-muted-foreground">
+                        {t('ai.remainingTime', { min: remainingMinutes })}
                       </p>
                     </div>
                   )}
@@ -233,5 +235,3 @@ export default function ModelPreview({
     </div>
   );
 }
-
-

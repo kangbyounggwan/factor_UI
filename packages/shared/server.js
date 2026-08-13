@@ -747,6 +747,166 @@ function setupMqttSubscriber() {
 }
 
 function mountRest(app) {
+  // ──────────────────────────────────────────────────────────────
+  // AI 파일명 생성 프록시
+  // Claude API 키를 서버에만 보관한다. 클라이언트 번들에 키가 포함되지
+  // 않도록 VITE_ 접두사가 없는 CLAUDE_API_KEY 를 사용한다.
+  // ──────────────────────────────────────────────────────────────
+  app.post('/api/ai/filename', async (req, res) => {
+    const apiKey = process.env.CLAUDE_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ success: false, message: 'CLAUDE_API_KEY가 설정되지 않았습니다.' });
+    }
+
+    const { prompt, imageUrl } = req.body || {};
+    if (!prompt && !imageUrl) {
+      return res.status(400).json({ success: false, message: 'prompt 또는 imageUrl이 필요합니다.' });
+    }
+
+    const TEXT_RULES = `Rules:
+- 1-2 words maximum
+- Lowercase only
+- No spaces (use underscore if needed)
+- No file extension
+- Translate to English if input is in another language`;
+
+    try {
+      let content;
+
+      if (prompt) {
+        content = `You are a filename generator. Extract the main subject/object from the user's 3D model request and return ONLY a short English filename.
+
+${TEXT_RULES}
+
+User's request: "${String(prompt).slice(0, 500)}"
+
+Examples:
+- "귀여운 눈사람 만들어줘" → "snowman"
+- "날개 달린 드래곤" → "dragon"
+- "cute bunny for 3D printing" → "bunny"
+
+Return ONLY the filename:`;
+      } else {
+        // 이미지는 서버에서 받아 base64로 변환한다 (브라우저가 키를 다루지 않도록)
+        const imgRes = await fetch(imageUrl);
+        if (!imgRes.ok) {
+          return res.status(400).json({ success: false, message: '이미지를 가져올 수 없습니다.' });
+        }
+        const buf = Buffer.from(await imgRes.arrayBuffer());
+        if (buf.length > 5 * 1024 * 1024) {
+          return res.status(413).json({ success: false, message: '이미지가 너무 큽니다 (5MB 초과).' });
+        }
+        content = [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: imgRes.headers.get('content-type') || 'image/jpeg',
+              data: buf.toString('base64'),
+            },
+          },
+          {
+            type: 'text',
+            text: `Look at this image and identify the main object/subject. Return ONLY a short English filename for a 3D model of this object.
+
+${TEXT_RULES}
+
+Return ONLY the filename:`,
+          },
+        ];
+      }
+
+      const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: process.env.CLAUDE_FILENAME_MODEL || 'claude-haiku-4-5-20251001',
+          max_tokens: 50,
+          messages: [{ role: 'user', content }],
+        }),
+      });
+
+      if (!apiRes.ok) {
+        const errorText = await apiRes.text();
+        console.error('[ai/filename] Claude API 오류:', apiRes.status, errorText.slice(0, 300));
+        return res.status(502).json({ success: false, message: 'Claude API 호출 실패' });
+      }
+
+      const data = await apiRes.json();
+      const filename = (data.content?.[0]?.text || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+      if (!filename || filename.length > 30) {
+        return res.status(422).json({ success: false, message: '유효한 파일명을 생성하지 못했습니다.' });
+      }
+      return res.json({ success: true, filename });
+    } catch (error) {
+      console.error('[ai/filename] 오류:', error);
+      return res.status(500).json({ success: false, message: '서버 오류가 발생했습니다.' });
+    }
+  });
+
+  // 채팅 제목 생성 프록시 (동일하게 서버 키만 사용)
+  app.post('/api/ai/chat-title', async (req, res) => {
+    const apiKey = process.env.CLAUDE_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ success: false, message: 'CLAUDE_API_KEY가 설정되지 않았습니다.' });
+    }
+
+    const message = String(req.body?.message || '').trim();
+    if (!message) {
+      return res.status(400).json({ success: false, message: 'message가 필요합니다.' });
+    }
+
+    try {
+      const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: process.env.CLAUDE_FILENAME_MODEL || 'claude-haiku-4-5-20251001',
+          max_tokens: 40,
+          messages: [{
+            role: 'user',
+            content: `다음 사용자 질문을 10자 이내의 짧은 제목으로 요약해주세요.
+핵심 키워드만 포함하고, 조사나 불필요한 단어는 제외합니다.
+반드시 한국어로 응답하세요.
+
+사용자 질문: "${message.slice(0, 500)}"
+
+예시:
+- "가성비 좋은 3D 프린터 추천해줘" → "가성비 프린터 추천"
+- "PLA와 ABS의 차이점이 뭐야?" → "PLA vs ABS 차이"
+- "베드 레벨링 하는 방법 알려줘" → "베드 레벨링 방법"
+
+제목만 반환하세요:`,
+          }],
+        }),
+      });
+
+      if (!apiRes.ok) {
+        const errorText = await apiRes.text();
+        console.error('[ai/chat-title] Claude API 오류:', apiRes.status, errorText.slice(0, 300));
+        return res.status(502).json({ success: false, message: 'Claude API 호출 실패' });
+      }
+
+      const data = await apiRes.json();
+      const title = (data.content?.[0]?.text || '').trim();
+      if (!title || title.length > 20) {
+        return res.status(422).json({ success: false, message: '유효한 제목을 생성하지 못했습니다.' });
+      }
+      return res.json({ success: true, title });
+    } catch (error) {
+      console.error('[ai/chat-title] 오류:', error);
+      return res.status(500).json({ success: false, message: '서버 오류가 발생했습니다.' });
+    }
+  });
+
   app.post('/api/auth/login', async (req, res) => {
     try {
       const { email, password } = req.body || {};
