@@ -1,7 +1,7 @@
 import { lazy, Suspense } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Download, Sparkles, Box } from "lucide-react";
+import { Loader2, Download } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -98,7 +98,6 @@ export default function ModelPreview({
   };
 
   const hasDownloadableFiles = Boolean(glbDownloadUrl || stlDownloadUrl);
-  const showEmptyState = !isProcessing && !modelUrl;
 
   // 진행률 기준 남은 시간(분). 0%일 때는 아직 추정하지 않는다.
   const remainingMinutes = Math.max(
@@ -132,29 +131,12 @@ export default function ModelPreview({
               <ModelViewer
                 className="w-full h-full"
                 modelUrl={modelUrl}
-                placeholderMessage=""
+                placeholderMessage={t('ai.emptyStateDesc')}
                 enableRotationControls={true}
                 modelId={modelId}
                 onSave={onSave}
               />
             </Suspense>
-
-            {/* 빈 상태 — 무엇을 해야 하는지 안내 */}
-            {showEmptyState && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-8">
-                <div className="text-center max-w-xs">
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-border bg-background/80 shadow-sm">
-                    <Box className="h-6 w-6 text-muted-foreground" />
-                  </div>
-                  <p className="text-sm font-medium text-foreground">
-                    {t('ai.emptyStateTitle')}
-                  </p>
-                  <p className="mt-1.5 text-sm text-muted-foreground">
-                    {t('ai.emptyStateDesc')}
-                  </p>
-                </div>
-              </div>
-            )}
 
             {/* 다운로드 드롭다운 버튼 - 오른쪽 위 */}
             {hasDownloadableFiles && !isProcessing && (
@@ -195,7 +177,6 @@ export default function ModelPreview({
                   <div className="relative mx-auto h-20 w-20">
                     <div className="absolute inset-0 rounded-full border-4 border-primary/20" />
                     <div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-primary" />
-                    <Sparkles className="absolute inset-0 m-auto h-8 w-8 text-primary" />
                   </div>
 
                   <div className="space-y-1.5">

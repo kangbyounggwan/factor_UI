@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, Wand2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
@@ -65,10 +65,7 @@ export default function TextTo3DForm(props: TextTo3DFormProps) {
   return (
     <Card className="lg:sticky top-4 max-h-[calc(85vh-4rem-2rem)] flex flex-col">
       <CardHeader className="pb-4">
-        <CardTitle className="flex items-center gap-2">
-          <Wand2 className="w-5 h-5 text-primary" />
-          {t('ai.textTo3DTitle')}
-        </CardTitle>
+        <CardTitle>{t('ai.textTo3DTitle')}</CardTitle>
         <CardDescription>{t('ai.textTo3DDescription')}</CardDescription>
       </CardHeader>
 
@@ -113,13 +110,12 @@ export default function TextTo3DForm(props: TextTo3DFormProps) {
                 disabled={isProcessing}
                 onClick={() => onChangePrompt(example)}
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full border border-border",
+                  "rounded-full border border-border",
                   "bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground",
                   "transition-colors hover:bg-accent hover:text-accent-foreground",
                   "disabled:pointer-events-none disabled:opacity-50"
                 )}
               >
-                <Sparkles className="h-3 w-3" />
                 {example}
               </button>
             ))}
@@ -222,10 +218,7 @@ export default function TextTo3DForm(props: TextTo3DFormProps) {
               {t('ai.generating')}
             </>
           ) : (
-            <>
-              <Wand2 className="mr-2 h-4 w-4" />
-              {t('ai.generate')}
-            </>
+            t('ai.generate')
           )}
         </Button>
       </div>
