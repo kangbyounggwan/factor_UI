@@ -57,7 +57,9 @@ export const AccountAPI = {
       const [printersRes, clientsRes, aiImagesRes, camerasRes] = await Promise.all([
         supabase.from('printers').select('id', { count: 'exact', head: true }).eq('user_id', userId),
         supabase.from('clients').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-        supabase.from('ai_training_images').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+        // ai_training_images 는 DB에 존재하지 않아 항상 0을 반환했다.
+        // 실제 사용자 AI 자산은 ai_generated_models 이므로 이쪽을 센다.
+        supabase.from('ai_generated_models').select('id', { count: 'exact', head: true }).eq('user_id', userId),
         supabase.from('cameras').select('id', { count: 'exact', head: true }).eq('user_id', userId),
       ]);
 

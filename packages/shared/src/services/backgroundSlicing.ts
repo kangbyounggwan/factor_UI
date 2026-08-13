@@ -308,8 +308,10 @@ export function subscribeToTaskUpdates(
   userId: string,
   callback: (task: BackgroundTask) => void
 ) {
+  // 채널명은 사용자별로 분리한다. 고정 이름을 쓰면 web/mobile 또는 재구독 시
+  // 동일 토픽 채널이 중복 생성되어 두 번째 구독이 동작하지 않는다.
   const subscription = supabase
-    .channel('background_tasks_updates')
+    .channel(`background_tasks_updates_${userId}`)
     .on(
       'postgres_changes',
       {

@@ -115,23 +115,28 @@ export const Header = () => {
   ];
 
   // 실제 프린터 상태 로드 (프로필 설정이 완료된 경우에만)
+  // deps 는 user 객체가 아닌 user.id 를 쓴다. AuthContext 가 auth 이벤트마다
+  // setUser 로 새 객체를 만들기 때문에, 객체를 의존하면 effect 가 반복 실행되어
+  // Realtime 채널이 계속 새로 생성된다.
+  const userId = user?.id;
   useEffect(() => {
-    if (user && !needsProfileSetup) {
+    if (userId && !needsProfileSetup) {
       loadPrinterStatus();
       loadUserPlan();
       loadNotifications();
 
-      // 실시간 알림 구독 (고유 채널명 사용)
-      const channelName = `notifications_${user.id}_${Date.now()}`;
+      // 실시간 알림 구독
+      // 채널명은 사용자별로 고정한다. Date.now() 를 붙이면 재실행 때마다
+      // 서로 다른 채널이 생성되어 서버 쪽에 누적된다.
       const notificationSubscription = supabase
-        .channel(channelName)
+        .channel(`notifications_${userId}`)
         .on(
           'postgres_changes',
           {
             event: 'INSERT',
             schema: 'public',
             table: 'notifications',
-            filter: `user_id=eq.${user.id}`,
+            filter: `user_id=eq.${userId}`,
           },
           (payload) => {
             console.log('[Header] New notification received:', payload);
@@ -155,10 +160,12 @@ export const Header = () => {
 
       return () => {
         console.log('[Header] Unsubscribing from notifications');
-        notificationSubscription.unsubscribe();
+        // removeChannel 은 unsubscribe 후 클라이언트 내부 목록에서도 제거한다.
+        // unsubscribe 만 하면 채널 객체가 남아 재구독 시 충돌할 수 있다.
+        supabase.removeChannel(notificationSubscription);
       };
     }
-  }, [user, needsProfileSetup]);
+  }, [userId, needsProfileSetup]);
 
   const loadPrinterStatus = async () => {
     try {

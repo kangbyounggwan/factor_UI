@@ -81,8 +81,19 @@ export function PrintHistory({ printerId, className }: PrintHistoryProps) {
   }, [printerId, loadHistory]);
 
   // Realtime 구독
+  // 출력 중에는 진행률 UPDATE 가 초 단위로 들어오므로, 이벤트마다 전체 목록을
+  // 다시 조회하지 않도록 디바운스한다.
   useEffect(() => {
     if (!printerId) return;
+
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleReload = () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        reloadTimer = null;
+        loadHistory();
+      }, 800);
+    };
 
     const channel = supabase
       .channel(`print_history:${printerId}`)
@@ -94,15 +105,13 @@ export function PrintHistory({ printerId, className }: PrintHistoryProps) {
           table: 'model_print_history',
           filter: `printer_id=eq.${printerId}`,
         },
-        () => {
-          // 변경 감지 시 목록 새로고침
-          loadHistory();
-        }
+        scheduleReload
       )
       .subscribe();
 
     return () => {
-      channel.unsubscribe();
+      if (reloadTimer) clearTimeout(reloadTimer);
+      supabase.removeChannel(channel);
     };
   }, [printerId, loadHistory]);
 
