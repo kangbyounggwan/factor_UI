@@ -837,8 +837,18 @@ Return ONLY the filename:`,
       }
 
       const data = await apiRes.json();
-      const filename = (data.content?.[0]?.text || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
-      if (!filename || filename.length > 30) {
+      const raw = (data.content?.[0]?.text || '').trim().toLowerCase();
+      // 모델이 문장이나 한글을 섞어 답하는 경우가 있어, 거부하지 않고 정규화한다.
+      const filename = raw
+        .replace(/[^a-z0-9\s_-]/g, '')   // 영문/숫자/공백/_/- 만 남김
+        .trim()
+        .replace(/[\s-]+/g, '_')          // 공백·하이픈 -> _
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 30)
+        .replace(/_+$/, '');
+      if (!filename) {
+        console.warn('[ai/filename] 정규화 후 빈 문자열. 원본 응답:', JSON.stringify(raw).slice(0, 200));
         return res.status(422).json({ success: false, message: '유효한 파일명을 생성하지 못했습니다.' });
       }
       return res.json({ success: true, filename });
@@ -896,8 +906,14 @@ Return ONLY the filename:`,
       }
 
       const data = await apiRes.json();
-      const title = (data.content?.[0]?.text || '').trim();
-      if (!title || title.length > 20) {
+      // 따옴표로 감싸 오거나 길게 답하는 경우가 있어 다듬은 뒤 자른다.
+      const title = (data.content?.[0]?.text || '')
+        .trim()
+        .replace(/^["'`]|["'`]$/g, '')
+        .split('\n')[0]
+        .trim()
+        .slice(0, 20);
+      if (!title) {
         return res.status(422).json({ success: false, message: '유효한 제목을 생성하지 못했습니다.' });
       }
       return res.json({ success: true, title });
