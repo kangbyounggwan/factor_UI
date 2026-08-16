@@ -1,6 +1,7 @@
 // packages/host/vite.config.ts
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 // vite-tsconfig-paths는 타입 선언이 없어 any로 사용
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -20,6 +21,7 @@ export default defineConfig({
       ],
     }),
     react(),
+    tailwindcss(),
     {
       name: "rest-middleware",
       configureServer(server) {

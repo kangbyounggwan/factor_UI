@@ -1,12 +1,13 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
+import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // 루트 .env 사용
-  const rootEnvDir = path.resolve(__dirname, "../../");
+  const rootEnvDir = path.resolve(import.meta.dirname, "../../");
   const env = loadEnv(mode, rootEnvDir, "");
 
   return {
@@ -18,20 +19,21 @@ export default defineConfig(({ mode }) => {
       fs: {
         // 루트(monorepo) 경로까지 파일 서빙 허용 (/@fs 사용)
         allow: [
-          path.resolve(__dirname, "."),
-          path.resolve(__dirname, "../../"),
+          path.resolve(import.meta.dirname, "."),
+          path.resolve(import.meta.dirname, "../../"),
         ],
       },
     },
     plugins: [
       react(),
+      tailwindcss(),
       mode === 'development' &&
       componentTagger(),
     ].filter(Boolean),
     resolve: {
       alias: {
-        "@": path.resolve(__dirname, "./src"),
-        "@shared": path.resolve(__dirname, "../shared/src"),
+        "@": path.resolve(import.meta.dirname, "./src"),
+        "@shared": path.resolve(import.meta.dirname, "../shared/src"),
       },
     },
     preview: {
@@ -51,41 +53,33 @@ export default defineConfig(({ mode }) => {
           '@capacitor/preferences',
         ],
         output: {
-          manualChunks: {
+          // vite 8(rolldown)은 manualChunks의 object 형태를 지원하지 않아 function 형태로 변환
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return;
+            const pkg = (name) =>
+              id.includes(`/node_modules/${name}/`) || id.includes(`\\node_modules\\${name}\\`);
             // Three.js and 3D rendering libraries in separate chunk
-            'three-bundle': [
-              'three',
-              'three-stdlib',
-              '@react-three/fiber',
-              '@react-three/drei',
-            ],
+            if (pkg('three') || pkg('three-stdlib') || pkg('@react-three/fiber') || pkg('@react-three/drei')) {
+              return 'three-bundle';
+            }
             // MQTT - 프린터 연결 시에만 필요
-            'mqtt-bundle': [
-              'mqtt',
-            ],
+            if (pkg('mqtt')) return 'mqtt-bundle';
             // Vendor chunk for React
-            'vendor': [
-              'react',
-              'react-dom',
-              'react-router-dom',
-            ],
+            if (pkg('react') || pkg('react-dom') || pkg('react-router-dom')) return 'vendor';
             // UI components - 필수 컴포넌트만
-            'ui': [
-              '@radix-ui/react-dialog',
-              '@radix-ui/react-dropdown-menu',
-              '@radix-ui/react-toast',
-              '@radix-ui/react-tabs',
-              '@radix-ui/react-select',
-            ],
+            if (
+              pkg('@radix-ui/react-dialog') ||
+              pkg('@radix-ui/react-dropdown-menu') ||
+              pkg('@radix-ui/react-toast') ||
+              pkg('@radix-ui/react-tabs') ||
+              pkg('@radix-ui/react-select')
+            ) {
+              return 'ui';
+            }
             // Supabase
-            'supabase': [
-              '@supabase/supabase-js',
-            ],
+            if (pkg('@supabase/supabase-js')) return 'supabase';
             // i18n
-            'i18n': [
-              'i18next',
-              'react-i18next',
-            ],
+            if (pkg('i18next') || pkg('react-i18next')) return 'i18n';
           },
         },
       },

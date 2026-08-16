@@ -1488,7 +1488,7 @@ const AI = () => {
   ), []);
 
   // Throttle progress display to every 5% to reduce re-renders
-  const displayProgress = useMemo(() => Math.floor(progress / 5) * 5, [Math.floor(progress / 5)]);
+  const displayProgress = useMemo(() => Math.floor(progress / 5) * 5, [progress]);
 
   // Fixed estimated time: 5 minutes
   const estimatedTime = '5m';

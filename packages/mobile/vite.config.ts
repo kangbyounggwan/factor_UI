@@ -1,13 +1,14 @@
 // packages/mobile/vite.config.ts
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
+import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { componentTagger } from "lovable-tagger";
 import { visualizer } from "rollup-plugin-visualizer";
 
 export default defineConfig(({ mode }) => {
-  const rootEnvDir = path.resolve(__dirname, "../../");
+  const rootEnvDir = path.resolve(import.meta.dirname, "../../");
   const env = loadEnv(mode, rootEnvDir, "");
 
   // 개발 편의용 기본값
@@ -22,6 +23,7 @@ export default defineConfig(({ mode }) => {
 
     plugins: [
       react(),
+      tailwindcss(),
       tsconfigPaths(),            // ✅ tsconfig paths 적용 (@shared/* 등)
       mode === "development" && componentTagger(),
       visualizer({
@@ -34,11 +36,11 @@ export default defineConfig(({ mode }) => {
 
     resolve: {
       alias: {
-        "@":        path.resolve(__dirname, "./src"),        // 모바일 전용 @
-        "@mobile":  path.resolve(__dirname, "./src"),
-        "@shared":  path.resolve(__dirname, "../shared/src"),
+        "@":        path.resolve(import.meta.dirname, "./src"),        // 모바일 전용 @
+        "@mobile":  path.resolve(import.meta.dirname, "./src"),
+        "@shared":  path.resolve(import.meta.dirname, "../shared/src"),
         // 필요하면 웹 코드도 참고
-        "@web":     path.resolve(__dirname, "../web/src"),
+        "@web":     path.resolve(import.meta.dirname, "../web/src"),
       },
       preserveSymlinks: true,
       dedupe: ["react", "react-dom"],
@@ -55,9 +57,9 @@ export default defineConfig(({ mode }) => {
       fs: {
         allow: [
           rootEnvDir,                                   // 모노레포 루트
-          path.resolve(__dirname, "../"),               // packages/*
-          path.resolve(__dirname, "../shared"),         // shared 접근 허용
-          path.resolve(__dirname, "../web"),            // (필요 시) web 접근 허용
+          path.resolve(import.meta.dirname, "../"),               // packages/*
+          path.resolve(import.meta.dirname, "../shared"),         // shared 접근 허용
+          path.resolve(import.meta.dirname, "../web"),            // (필요 시) web 접근 허용
         ],
       },
     },
@@ -72,26 +74,26 @@ export default defineConfig(({ mode }) => {
           '@capacitor-community/apple-sign-in',
         ],
         output: {
-          manualChunks: {
+          // vite 8(rolldown)은 manualChunks의 object 형태를 지원하지 않아 function 형태로 변환
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return;
+            const pkg = (name) =>
+              id.includes(`/node_modules/${name}/`) || id.includes(`\\node_modules\\${name}\\`);
             // Three.js and 3D rendering libraries in separate chunk
-            'three-bundle': [
-              'three',
-              '@react-three/fiber',
-              '@react-three/drei',
-            ],
+            if (pkg('three') || pkg('@react-three/fiber') || pkg('@react-three/drei')) {
+              return 'three-bundle';
+            }
             // Vendor chunk for React
-            'vendor': [
-              'react',
-              'react-dom',
-              'react-router-dom',
-            ],
+            if (pkg('react') || pkg('react-dom') || pkg('react-router-dom')) return 'vendor';
             // UI components
-            'ui': [
-              '@radix-ui/react-dialog',
-              '@radix-ui/react-dropdown-menu',
-              '@radix-ui/react-toast',
-              '@radix-ui/react-tabs',
-            ],
+            if (
+              pkg('@radix-ui/react-dialog') ||
+              pkg('@radix-ui/react-dropdown-menu') ||
+              pkg('@radix-ui/react-toast') ||
+              pkg('@radix-ui/react-tabs')
+            ) {
+              return 'ui';
+            }
           },
         },
       },

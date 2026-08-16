@@ -59,9 +59,7 @@ import {
 } from "@shared/services/supabaseService/chat";
 
 // 메시지 타입 (ChatMessageData 확장)
-interface Message extends ChatMessageData {
-  // ChatMessageData와 동일한 타입 사용
-}
+type Message = ChatMessageData;
 
 // 도구 정의
 const tools = [

@@ -2803,7 +2803,7 @@ function MetricCard({ icon, label, value, subValue, color }: MetricCardProps) {
       <div className="flex items-center justify-between gap-2 mb-3">
         <span className="text-xs font-heading font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">{label}</span>
         <div className={cn("flex-shrink-0 p-2 rounded-xl transition-transform group-hover:scale-110", iconBgStyles[color])}>
-          {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement, { className: "h-4 w-4" }) : icon}
+          {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<{ className?: string }>, { className: "h-4 w-4" }) : icon}
         </div>
       </div>
       {/* 값 영역 */}

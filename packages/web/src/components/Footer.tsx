@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Activity, Github, Mail, MessageCircle, BookOpen } from "lucide-react";
+import { Activity, GitFork as Github, Mail, MessageCircle, BookOpen } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
 export const Footer = () => {

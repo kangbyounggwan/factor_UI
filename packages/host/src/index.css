@@ -1,9 +1,8 @@
+@import "tailwindcss";
+@import "tw-animate-css";
 @import "@shared/styles/tokens.css";
 @import "@shared/styles/mobile-overrides.css";
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@config "../tailwind.config.ts";
 
 html, body, #root { height: 100%; }
 

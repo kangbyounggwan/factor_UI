@@ -398,7 +398,7 @@ export const GCodeViewerModal: React.FC<GCodeViewerModalProps> = ({
                 }
             }
 
-            let sortPriority = 0;
+            let sortPriority: number;
             if (!hasPatch) {
                 sortPriority = 2; // 패치 없음
             } else {

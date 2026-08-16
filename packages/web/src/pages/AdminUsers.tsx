@@ -448,8 +448,8 @@ const AdminUsers = () => {
                             border: '1px solid hsl(var(--border))',
                             borderRadius: '8px',
                           }}
-                          formatter={(value: number, name: string, props: { payload: PlanUsage }) => [
-                            `${value}명 (${props.payload.percentage}%)`,
+                          formatter={(value, name, item) => [
+                            `${value}명 (${(item.payload as PlanUsage).percentage}%)`,
                             '사용자 수'
                           ]}
                         />

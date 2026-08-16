@@ -386,7 +386,7 @@ export class GCodeReader {
    */
   decompressLayer(layer: GCodeCommand[] | Uint8Array): GCodeCommand[] {
     if (layer instanceof Uint8Array) {
-      const inflated = pako.inflate(layer, { to: 'string' });
+      const inflated = pako.inflate(layer, { toText: true });
       return JSON.parse(inflated);
     }
     return layer;

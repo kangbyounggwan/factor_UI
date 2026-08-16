@@ -206,7 +206,7 @@ export function AIModelArchiveSidebar({
                         <ModelArchive
                             items={generatedModels
                                 .filter(model => {
-                                    let typeMatch = false;
+                                    let typeMatch: boolean;
                                     switch (archiveFilter) {
                                         case 'all': typeMatch = true; break;
                                         case 'text-to-3d': typeMatch = model.generation_type === 'text_to_3d'; break;

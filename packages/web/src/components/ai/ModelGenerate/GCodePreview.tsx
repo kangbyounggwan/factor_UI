@@ -11,7 +11,7 @@ import { OrbitControls, Grid } from "@react-three/drei";
 import { Box3, Vector3, PerspectiveCamera } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { Slider } from "@/components/ui/slider";
-import pako from "pako";
+import * as pako from "pako";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "next-themes";
 
@@ -495,7 +495,7 @@ export default function GCodePreview({
           if (isCompressed) {
             // 압축 해제
             const arrayBuffer = await response.arrayBuffer();
-            const decompressed = pako.ungzip(new Uint8Array(arrayBuffer), { to: 'string' });
+            const decompressed = pako.ungzip(new Uint8Array(arrayBuffer), { toText: true });
             text = decompressed;
             console.log('[GCodePreview] GCode decompressed, size:', text.length, 'characters');
           } else {

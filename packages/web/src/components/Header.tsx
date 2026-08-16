@@ -497,7 +497,7 @@ export const Header = () => {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="center" className="p-4">
                     <div className="flex gap-6">
-                      {item.submenu.map((subItem: { name: string; href: string; icon: React.ElementType; description?: string }) => {
+                      {item.submenu.map((subItem) => {
                         const SubIcon = subItem.icon;
                         const isSubActive = location.pathname === subItem.href;
                         return (

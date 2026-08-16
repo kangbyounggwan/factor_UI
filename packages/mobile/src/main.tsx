@@ -4,7 +4,7 @@ import './index.css'
 import { AuthProvider } from '@shared/contexts/AuthContext'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar } from '@capacitor/status-bar'
-import { SafeArea, initialize as initSafeArea } from '@capacitor-community/safe-area'
+import { SafeArea, SystemBarsStyle } from '@capacitor-community/safe-area'
 import './i18n' // i18n 초기화
 
 // 프로덕션 환경에서 console 로그 제거 (현재 비활성화 - 디버깅용)
@@ -41,18 +41,11 @@ async function initializeApp() {
       });
 
       try {
-        // SafeArea 단일 소스로 시스템 바와 CSS 안전영역 관리
-        await SafeArea.enable({
-          config: {
-            customColorsForSystemBars: true,
-            statusBarColor: '#000000',
-            statusBarContent: 'light',
-            navigationBarColor: '#000000',
-            navigationBarContent: 'light',
-            offset: 0,
-          },
-        })
-        initSafeArea()
+        // SafeArea v8: enable()/커스텀 배경색(customColorsForSystemBars 등) API가 제거되고
+        // 시스템 바는 자동으로 활성화됨. 아이콘/텍스트 밝기만 설정 가능 (배경색 지정 불가 - 네이티브 설계 변경).
+        // TODO: 기존 statusBarColor/navigationBarColor(#000000) 커스텀 배경색과 동일한 시각효과가 필요하면
+        // capacitor.config.json의 SystemBars 설정 및 웹 레이어 CSS로 별도 구현 필요 (프로덕트/디자인 검토 필요).
+        await SafeArea.setSystemBarsStyle({ style: SystemBarsStyle.Light })
         const top = getComputedStyle(document.documentElement)
           .getPropertyValue('--safe-area-inset-top')
           .trim() || '0px'

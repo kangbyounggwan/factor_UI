@@ -617,7 +617,7 @@ const GCodeAnalytics = () => {
       // 통합 API 호출: /api/v1/gcode/analyze-with-segments
       // - 세그먼트 데이터 즉시 반환 (3D 렌더링용)
       // - LLM 분석을 백그라운드에서 시작 (analysis_id 제공)
-      let segmentResult: GCodeAnalysisResponse | null = null;
+      let segmentResult: GCodeAnalysisResponse;
       try {
         segmentResult = await analyzeGCodeWithSegments(content, {
           binaryFormat: true,
@@ -1356,8 +1356,8 @@ const GCodeAnalytics = () => {
                                 fontSize: '12px',
                               }}
                               labelStyle={{ color: isDarkMode ? '#f3f4f6' : '#111827' }}
-                              formatter={(value: number | null, name: string) => {
-                                if (value === null) return ['N/A', name === 'nozzleTemp' ? '노즐' : '베드'];
+                              formatter={(value, name) => {
+                                if (value === null || value === undefined) return ['N/A', name === 'nozzleTemp' ? '노즐' : '베드'];
                                 return [`${value}°C`, name === 'nozzleTemp' ? '노즐' : '베드'];
                               }}
                               labelFormatter={(label) => `레이어 ${label}`}
