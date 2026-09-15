@@ -41,6 +41,16 @@ type AppVariant = "web" | "mobile";
 const IOS_REDIRECT = "com.byeonggwan.factor://auth/callback";
 const ANDROID_REDIRECT = "com.factor.app://auth/callback";
 
+/**
+ * 회원가입 시 받은 항목별 동의.
+ * terms 와 privacy 는 필수, marketing 은 선택이다.
+ */
+export interface SignUpConsent {
+  terms: boolean;
+  privacy: boolean;
+  marketing: boolean;
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -49,7 +59,13 @@ interface AuthContextType {
   loading: boolean;
   needsProfileSetup: boolean;
   profileCheckComplete: boolean;  // 프로필 체크가 완료되었는지 여부
-  signUp: (email: string, password: string, displayName?: string, phone?: string) => Promise<{ error: any }>;
+  signUp: (
+    email: string,
+    password: string,
+    displayName?: string,
+    phone?: string,
+    consent?: SignUpConsent
+  ) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
   signInWithApple: () => Promise<{ error: any }>;
@@ -625,10 +641,29 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
   // Supabase multiTab: true 설정으로 탭 간 세션 동기화 자동 처리
   // ============================================
 
-  const signUp = async (email: string, password: string, displayName?: string, phone?: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    displayName?: string,
+    phone?: string,
+    consent?: SignUpConsent
+  ) => {
     const redirectUrl = ((import.meta as any).env?.VITE_AUTH_REDIRECT_URL as string) || `${window.location.origin}/`;
 
     console.log('[SignUp] 회원가입 시작:', { email, displayName, phone, redirectUrl });
+
+    // 동의 사실은 입증할 수 있어야 하므로(개인정보보호법 제22조) 항목별 동의
+    // 여부와 시각을 계정 메타데이터에 남긴다. 동의를 받지 못한 채로 가입이
+    // 진행되는 일이 없도록 필수 항목은 호출부에서 먼저 막는다.
+    const consentedAt = new Date().toISOString();
+    const consentMeta = consent
+      ? {
+          consent_terms: consent.terms,
+          consent_privacy: consent.privacy,
+          consent_marketing: consent.marketing,
+          consent_at: consentedAt,
+        }
+      : {};
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -638,6 +673,7 @@ export function AuthProvider({ children, variant = "web" }: { children: React.Re
         data: {
           display_name: displayName || email.split("@")[0],
           phone: phone || null,
+          ...consentMeta,
         }
       },
     });

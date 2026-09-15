@@ -16,6 +16,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Loader2, User, Lock, Mail, Activity, Moon, Sun, Phone, AlertTriangle } from "lucide-react";
+import { ConsentAgreements } from "@/components/auth/ConsentAgreements";
+import {
+  EMPTY_CONSENT,
+  hasRequiredConsent,
+  type ConsentState,
+} from "@/components/auth/consent";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { startDashStatusSubscriptionsForUser, subscribeControlResultForUser } from "@shared/component/mqtt";
 import { useToast } from "@/hooks/use-toast";
@@ -60,6 +66,9 @@ const Auth = () => {
     displayName: "",
     phone: "",
   });
+
+  // 회원가입 동의. 필수 항목에 동의하지 않으면 가입을 진행하지 않는다.
+  const [consent, setConsent] = useState<ConsentState>(EMPTY_CONSENT);
 
   // 계정 통합 모달 상태
   const [showAccountLinkModal, setShowAccountLinkModal] = useState(false);
@@ -177,8 +186,10 @@ const Auth = () => {
       return;
     }
 
-    if (!signUpData.phone.trim()) {
-      setError(t('auth.phoneRequired', '전화번호를 입력해주세요.'));
+
+    // 필수 동의 없이는 개인정보를 수집하지 않는다 (개인정보보호법 제15조)
+    if (!hasRequiredConsent(consent)) {
+      setError(t('auth.consentNotAgreed', '필수 항목에 동의해야 가입할 수 있습니다.'));
       setIsSubmitting(false);
       return;
     }
@@ -189,7 +200,8 @@ const Auth = () => {
         signUpData.email,
         signUpData.password,
         signUpData.displayName,
-        signUpData.phone
+        signUpData.phone,
+        consent
       );
 
       if (error) {
@@ -450,7 +462,9 @@ const Auth = () => {
                         <Label htmlFor="signup-phone" className="flex items-center gap-1">
                           <Phone className="h-4 w-4" />
                           {t('auth.phone', '전화번호')}
-                          <span className="text-destructive">*</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({t('auth.optional', '선택')})
+                          </span>
                         </Label>
                         <Input
                           id="signup-phone"
@@ -460,7 +474,6 @@ const Auth = () => {
                           onChange={(e) =>
                             setSignUpData({ ...signUpData, phone: e.target.value })
                           }
-                          required
                           disabled={isSubmitting}
                         />
                       </div>
@@ -501,7 +514,16 @@ const Auth = () => {
                           disabled={isSubmitting}
                         />
                       </div>
-                      <Button type="submit" className="w-full" disabled={isSubmitting}>
+                      <ConsentAgreements
+                        value={consent}
+                        onChange={setConsent}
+                        disabled={isSubmitting}
+                      />
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={isSubmitting || !hasRequiredConsent(consent)}
+                      >
                         {isSubmitting ? (
                           <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -575,13 +597,13 @@ const Auth = () => {
             <div className="text-center text-sm text-muted-foreground">
               <p>
                 {t('auth.byContinuing', 'By continuing, you agree to our')}{" "}
-                <a href="#" className="underline hover:text-foreground">
+                <Link to="/terms" className="underline hover:text-foreground">
                   {t('auth.termsOfService', 'Terms of Service')}
-                </a>{" "}
+                </Link>{" "}
                 {t('auth.and', 'and')}{" "}
-                <a href="#" className="underline hover:text-foreground">
+                <Link to="/privacy" className="underline hover:text-foreground">
                   {t('auth.privacyPolicy', 'Privacy Policy')}
-                </a>
+                </Link>
                 .
               </p>
             </div>

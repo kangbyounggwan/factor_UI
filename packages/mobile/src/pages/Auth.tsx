@@ -7,6 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Mail, Lock, User, Eye, EyeOff, Phone } from "lucide-react";
+import { ConsentAgreements } from "@/components/auth/ConsentAgreements";
+import {
+  EMPTY_CONSENT,
+  hasRequiredConsent,
+  type ConsentState,
+} from "@/components/auth/consent";
 import { useAuth } from "@shared/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { startDashStatusSubscriptionsForUser } from "@shared/component/mqtt";
@@ -65,6 +71,9 @@ const Auth = () => {
     displayName: "",
     phone: "",
   });
+
+  // 회원가입 동의. 필수 항목에 동의하지 않으면 가입을 진행하지 않는다.
+  const [consent, setConsent] = useState<ConsentState>(EMPTY_CONSENT);
 
   // 로그인된 사용자는 프로필 설정 필요 여부에 따라 리다이렉트
   if (user && profileCheckComplete) {
@@ -127,8 +136,10 @@ const Auth = () => {
       return;
     }
 
-    if (!signUpData.phone.trim()) {
-      setError(t('auth.phoneRequired', '전화번호를 입력해주세요.'));
+
+    // 필수 동의 없이는 개인정보를 수집하지 않는다 (개인정보보호법 제15조)
+    if (!hasRequiredConsent(consent)) {
+      setError(t('auth.consentNotAgreed', '필수 항목에 동의해야 가입할 수 있습니다.'));
       setIsSubmitting(false);
       return;
     }
@@ -138,7 +149,8 @@ const Auth = () => {
         signUpData.email,
         signUpData.password,
         signUpData.displayName,
-        signUpData.phone
+        signUpData.phone,
+        consent
       );
 
       if (error) {
@@ -341,10 +353,15 @@ const Auth = () => {
                 </div>
               </div>
 
+              <ConsentAgreements
+                value={consent}
+                onChange={setConsent}
+                disabled={isSubmitting}
+              />
               <Button
                 type="submit"
                 className="w-full h-10 md:h-12 lg:h-14 text-sm md:text-base lg:text-lg font-semibold bg-primary hover:bg-primary/90 shadow-lg"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !hasRequiredConsent(consent)}
               >
                 {isSubmitting ? (
                   <>
@@ -429,7 +446,10 @@ const Auth = () => {
 
               <div className="space-y-1 md:space-y-2">
                 <Label htmlFor="signup-phone" className="text-sm md:text-base text-foreground font-medium">
-                  {t('auth.phone', '전화번호')} <span className="text-destructive">*</span>
+                  {t('auth.phone', '전화번호')}{' '}
+                  <span className="text-xs text-muted-foreground">
+                    ({t('auth.optional', '선택')})
+                  </span>
                 </Label>
                 <div className="relative">
                   <Phone className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
@@ -442,7 +462,6 @@ const Auth = () => {
                     value={signUpData.phone}
                     onChange={(e) => setSignUpData({ ...signUpData, phone: e.target.value })}
                     className="pl-9 md:pl-11 h-10 md:h-12 lg:h-14 bg-muted/50 border-muted text-sm md:text-base"
-                    required
                     disabled={isSubmitting}
                   />
                 </div>
