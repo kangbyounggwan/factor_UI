@@ -28,7 +28,7 @@ const PrivacyPolicy = () => {
       {/* 내용 */}
       <div className="px-4 py-6 space-y-6 pb-safe">
         <div className="text-sm text-muted-foreground">
-          {t('legal.effectiveDate', '시행일')}: {isKorean ? '2025년 11월 10일' : 'November 10, 2025'}
+          {t('legal.effectiveDate', '시행일')}: {isKorean ? '2026년 10월 9일' : 'October 9, 2026'}
         </div>
 
         {isKorean ? (
@@ -65,6 +65,9 @@ const PrivacyPolicy = () => {
                     <li>• 프로필 사진, 전화번호, 회사명</li>
                   </ul>
                 </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  이용자는 개인정보 수집·이용에 대한 동의를 거부할 권리가 있습니다. 다만 필수 항목에 대한 동의를 거부하면 회원가입 및 서비스 이용이 제한되며, 선택 항목에 대한 동의를 거부하더라도 서비스 이용에는 제한이 없습니다.
+                </p>
               </div>
             </section>
 
@@ -145,7 +148,7 @@ const PrivacyPolicy = () => {
             <section className="space-y-3">
               <h2 className="text-base font-semibold">10. 개인정보처리방침 변경</h2>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                본 개인정보처리방침은 시행일로부터 적용되며, 법령 및 방침에 따른 변경내용의 추가, 삭제 및 정정이 있는 경우에는 변경사항의 시행 7일 전부터 공지사항을 통하여 고지할 것입니다.
+                본 개인정보처리방침은 시행일로부터 적용되며, 법령 및 방침에 따른 변경내용의 추가, 삭제 및 정정이 있는 경우에는 변경사항의 시행 7일 전부터 공지사항을 통하여 고지할 것입니다. 이전 개인정보처리방침은 2025년 11월 10일부터 2026년 10월 8일까지 적용되었습니다.
               </p>
             </section>
           </>
@@ -182,6 +185,9 @@ const PrivacyPolicy = () => {
                     <li>• Profile picture, phone number, company name</li>
                   </ul>
                 </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  You have the right to refuse consent to the collection and use of your personal information. If you refuse consent to the required items, you cannot sign up or use the service; refusing consent to the optional items does not restrict your use of the service.
+                </p>
               </div>
             </section>
 

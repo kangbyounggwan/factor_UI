@@ -20,7 +20,7 @@ const PrivacyPolicy = () => {
           </Link>
           <h1 className="text-4xl font-bold mb-4">{t('legal.privacyPolicy.title')}</h1>
           <p className="text-muted-foreground">
-            {t('legal.effectiveDate')}: {isKorean ? '2025년 11월 10일' : 'November 10, 2025'} | {t('legal.privacyPolicy.subtitle')}
+            {t('legal.effectiveDate')}: {isKorean ? '2026년 10월 9일' : 'October 9, 2026'} | {t('legal.privacyPolicy.subtitle')}
           </p>
         </div>
 
@@ -61,6 +61,9 @@ const PrivacyPolicy = () => {
                   <li>회사명</li>
                 </ul>
               </div>
+              <p className="text-muted-foreground leading-relaxed">
+                이용자는 개인정보 수집·이용에 대한 동의를 거부할 권리가 있습니다. 다만 필수 항목에 대한 동의를 거부하면 회원가입 및 서비스 이용이 제한되며, 선택 항목에 대한 동의를 거부하더라도 서비스 이용에는 제한이 없습니다.
+              </p>
             </div>
           </section>
 
@@ -207,7 +210,7 @@ const PrivacyPolicy = () => {
           <section className="space-y-3">
             <h2 className="text-2xl font-semibold">12. 개인정보 처리방침 변경</h2>
             <p className="text-muted-foreground leading-relaxed">
-              이 개인정보 처리방침은 2025년 11월 10일부터 적용됩니다. 법령 및 방침에 따른 변경내용의 추가, 삭제 및 정정이 있는 경우에는 변경사항의 시행 7일 전부터 공지사항을 통하여 고지할 것입니다.
+              이 개인정보 처리방침은 2026년 10월 9일부터 적용됩니다. 이전 개인정보 처리방침은 2025년 11월 10일부터 2026년 10월 8일까지 적용되었습니다. 법령 및 방침에 따른 변경내용의 추가, 삭제 및 정정이 있는 경우에는 변경사항의 시행 7일 전부터 공지사항을 통하여 고지할 것입니다.
             </p>
           </section>
 
@@ -256,6 +259,9 @@ const PrivacyPolicy = () => {
                   <li>Company name</li>
                 </ul>
               </div>
+              <p className="text-muted-foreground leading-relaxed">
+                You have the right to refuse consent to the collection and use of your personal information. If you refuse consent to the required items, you cannot sign up or use the service; refusing consent to the optional items does not restrict your use of the service.
+              </p>
             </div>
           </section>
 
@@ -402,7 +408,7 @@ const PrivacyPolicy = () => {
           <section className="space-y-3">
             <h2 className="text-2xl font-semibold">12. Changes to Privacy Policy</h2>
             <p className="text-muted-foreground leading-relaxed">
-              This Privacy Policy applies from November 10, 2025. If there are additions, deletions, or corrections to changes according to laws and policies, they will be announced through notices 7 days before the implementation of the changes.
+              This Privacy Policy applies from October 9, 2026. The previous Privacy Policy applied from November 10, 2025 to October 8, 2026. If there are additions, deletions, or corrections to changes according to laws and policies, they will be announced through notices 7 days before the implementation of the changes.
             </p>
           </section>
 

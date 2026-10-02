@@ -145,6 +145,7 @@ export default {
     consentView: "View",
     consentPrivacyDetail: "Collected: (required) email, password, name · (optional) mobile number — Purpose: member identification and service delivery · Retention: until account deletion",
     consentMarketingDetail: "Receive event and benefit information. You can use the service without agreeing.",
+    consentRefusalNotice: "You have the right to refuse consent to the collection and use of your personal information. You cannot sign up without agreeing to the required items; declining the optional items does not restrict your use of the service.",
     consentNotAgreed: "You must agree to the required items to sign up.",
     userAlreadyRegistered: "This email is already registered.",
     welcome: "Welcome!",

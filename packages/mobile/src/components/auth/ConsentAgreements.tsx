@@ -11,6 +11,9 @@ import type { ConsentState } from "./consent";
  * 개인정보보호법은 수집·이용에 대한 동의를 항목별로 구분해 받고(제22조),
  * 선택 항목에 동의하지 않아도 서비스를 이용할 수 있게 하도록 정한다.
  * 그래서 필수와 선택을 한 덩어리로 묶지 않고 따로 받는다.
+ *
+ * 동의를 받을 때는 거부할 권리가 있다는 것과, 거부하면 무엇이 막히는지도
+ * 함께 알려야 한다(제15조 제2항 제4호). 그 안내를 맨 아래에 둔다.
  */
 interface Props {
   value: ConsentState;
@@ -97,7 +100,7 @@ export function ConsentAgreements({ value, onChange, disabled }: Props) {
           <p className="text-xs text-muted-foreground">
             {t(
               "auth.consentPrivacyDetail",
-              "수집 항목: 이메일, 비밀번호, 이름, 휴대전화번호 · 이용 목적: 회원 식별과 서비스 제공 · 보유 기간: 회원 탈퇴 시까지"
+              "수집 항목: (필수) 이메일, 비밀번호, 이름 · (선택) 휴대전화번호 — 이용 목적: 회원 식별과 서비스 제공 · 보유 기간: 회원 탈퇴 시까지"
             )}
           </p>
         </div>
@@ -135,6 +138,14 @@ export function ConsentAgreements({ value, onChange, disabled }: Props) {
           </p>
         </div>
       </div>
+
+      {/* 동의 거부권과 거부에 따른 불이익 */}
+      <p className="border-t pt-3 text-xs leading-relaxed text-muted-foreground">
+        {t(
+          "auth.consentRefusalNotice",
+          "개인정보 수집·이용 동의를 거부할 권리가 있습니다. 필수 항목에 동의하지 않으면 회원가입을 할 수 없으며, 선택 항목은 동의하지 않아도 서비스 이용에 제한이 없습니다."
+        )}
+      </p>
     </div>
   );
 }

@@ -145,6 +145,7 @@ export default {
     consentView: "보기",
     consentPrivacyDetail: "수집 항목: (필수) 이메일, 비밀번호, 이름 · (선택) 휴대전화번호 — 이용 목적: 회원 식별과 서비스 제공 · 보유 기간: 회원 탈퇴 시까지",
     consentMarketingDetail: "이벤트·혜택 안내를 받습니다. 동의하지 않아도 서비스를 이용할 수 있습니다.",
+    consentRefusalNotice: "개인정보 수집·이용 동의를 거부할 권리가 있습니다. 필수 항목에 동의하지 않으면 회원가입을 할 수 없으며, 선택 항목은 동의하지 않아도 서비스 이용에 제한이 없습니다.",
     consentNotAgreed: "필수 항목에 동의해야 가입할 수 있습니다.",
     userAlreadyRegistered: "이미 등록된 이메일입니다.",
     welcome: "환영합니다!",
