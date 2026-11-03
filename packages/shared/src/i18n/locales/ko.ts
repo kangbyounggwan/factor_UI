@@ -2350,13 +2350,13 @@ export default {
     // 사업자 정보
     businessInfo: "사업자 정보",
     ceo: "대표자명",
-    ceoName: "강동수",
+    ceoName: "강병관",
     businessNumber: "사업자 등록번호",
-    businessNumberValue: "223-13-02881",
+    businessNumberValue: "844-03-04009",
     address: "사업장 주소",
-    addressValue: "대전광역시 동구 대학로 50번길 46 1층 101호",
+    addressValue: "대전광역시 동구 대학로50번길 46, 601호(용운동)",
     phone: "상점 전화번호",
-    phoneValue: "010-4100-8579"
+    phoneValue: "010-2881-1471"
   },
   legal: {
     effectiveDate: "시행일",

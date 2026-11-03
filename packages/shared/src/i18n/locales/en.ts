@@ -2212,13 +2212,13 @@ export default {
     // Business Information
     businessInfo: "Business Information",
     ceo: "CEO",
-    ceoName: "Dongsu Kang",
+    ceoName: "Byounggwan Kang",
     businessNumber: "Business Registration No.",
-    businessNumberValue: "223-13-02881",
+    businessNumberValue: "844-03-04009",
     address: "Address",
-    addressValue: "1F 101, 46 Daehak-ro 50beon-gil, Dong-gu, Daejeon, South Korea",
+    addressValue: "#601, 46 Daehak-ro 50beon-gil, Dong-gu, Daejeon, South Korea",
     phone: "Phone",
-    phoneValue: "010-4100-8579"
+    phoneValue: "010-2881-1471"
   },
   legal: {
     effectiveDate: "Effective Date",
